@@ -693,3 +693,60 @@ screen recordings, where quick screens matter most. The bound that counts is the
 frame is marked `no frame (evidence room)` on its own line (RM03's 3 of 183), and L-234 gives RM03 as its measured
 example. Recording each found change's time and reason in the campaign's report, so that a later spacing review can be
 simulated from one run, goes to the pull request for sections 7 to 9.
+
+## Implementation note, 2026-10-29 (the third pull request: sections 7 to 9)
+
+What the pull request for sections 7 to 9 built, under the planner's two rulings of 2026-10-29.
+
+- **How the use case hears of the job (call 1, option (a)).** `WatchSteps::prepare` takes a `&dyn WatchProgress`,
+  told `published()` after each chunk of speech (when a part may have been published) and `visual_indexed()` when the
+  visual stream has indexed the whole video (its last batch reports every window, the `StreamEnd::Indexed` point).
+  The callback only records, in a small signal; the use case polls a follower beside the job on the same task (a
+  `std` join, no runtime in the application), which writes a snapshot at most every 10 s by the `Clock` port, after a
+  `--since` read of the open revision, and the frames and `screen-changes.txt` once the visual stream is done. In the
+  engine the job's progress observer must outlive the call, so it queues each notice on a channel, and the adapter
+  hands it to the callback between the job's steps (a `select` on the same task; no thread, no poll).
+- **Where the claimed names live (call 2).** A versioned record `watch-outputs.json` (format `vsift.watch_claim`, v1)
+  beside the `prepare` job, in the session: the absolute folder and the three names, nothing else
+  (`WatchClaimLog`). Checked in the storage code before it was written: no `VSift` reads a job directory's entries
+  (only `job.json`, the locks, `chunks/` and, since #510, `progress.json`, by name), so an older one ignores it; the
+  storage layout version did not move; session cleanup removes the session's whole tree, pruning removes a job's
+  folder, and a retained bundle never holds `jobs/`. A record that fails any check is never read as a claim.
+  **The planner's condition (2026-10-29):** the record is untrusted session content and only a key to find the
+  session, never a place to write. A rerun canonicalises its own output folder again; the record must name exactly
+  that folder and those names, and the run writes only to the paths it resolved itself. A record that does not parse,
+  or names another folder, matches nothing, so the files in the way are refused by section 5 (the opt-in engine test
+  `a_record_that_names_another_folder_is_refused`).
+- **Growing files (section 7).** Every write of `<stem>.txt`, `<stem>.srt` and `screen-changes.txt` goes through
+  `replace_claimed`: an exclusive temporary file `.<name>.<random>.vsift-partial` (random part from the identifier
+  source), flushed, then moved over the claimed path. The claim now creates the two files empty and closes them, so
+  no handle of this process stands in the way of a move on Windows. Tests: a temporary name taken in advance and a
+  link planted there (Unix) each fail the update and write nothing through; a reader never sees a partial file
+  (Unix); a handle held without delete sharing (Windows) skips the snapshot and fails the final write with `Held`
+  after its wait, leaving the last snapshot (L-237).
+- **Frames during the transcription (section 3, step 5).** Taken when `visual_indexed()` arrives. The room they fit is
+  measured as if the session held no evidence (`evidence_slots_if_reused`): the session holds only this run's frames,
+  and `frame get` gives a stored frame again without a new slot, so a run that continues an interrupted one spreads
+  its frames over the same changes and the copies, already in the folder with the same digest, are accepted.
+- **Ctrl-C (section 8).** The engine's run, cancelled by the caller, leaves the job `interrupted` with its chunks and
+  the open revision as published (not sealed `stopped`, as section 8 put it: that is `job cancel`'s path, and an
+  interrupted job is the one `job resume` continues). The use case writes one last snapshot, keeps the files and
+  the session, and fails with `Stopped`, which the engine maps to `WatchFailure::Stopped` (`CANCELLED`). A rerun whose
+  claim finds a name taken resolves the planned paths, then lists the open, unexpired sessions; for a job whose
+  record names exactly those paths and which is not ended, it hashes the video (only then) and compares the
+  session's source. A match is taken over (each output must still be a regular file or a folder, never a link) and
+  its job resumed; anything else refuses as section 5 says. A release after a failure of a taken-over run removes
+  nothing the earlier run created.
+- **The bars (section 9)** are the CLI's (`human::watch_progress`, pure renders with golden files for the terminal,
+  `NO_COLOR` and `TERM=dumb`; `watch_lines`, the board built from the `prepare` job's progress, a once-a-second gate
+  tested with given times, and the drawing on standard error). Three differences from section 9's picture: the screen
+  line says `done` without `14 found`, because the visual stream's progress counts windows, not changes; the copy line
+  has no byte figures, because `ingest` reports no progress during the copy; and on Windows with standard output
+  redirected, the console cannot take escape sequences, so the plain lines are shown.
+- **The stopped line.** The failure's remediation starts `Stopped at 12:30 of 48:00. Run the same command again to
+  continue.`, from the published time and the video's length (left out when no part had been published).
+- **No new failure code and no JSON change.** The three "already exists" remediations now say how a leftover of an
+  expired run is told apart; `WATCH_OUTPUT_HELD_REMEDIATION` and `WATCH_STOPPED_REMEDIATION` are new texts.
+- **The campaign's watch report** records each found change's time and reason (from the item's own `candidates`
+  step), and the speech measurement each unplaced range's start and end.
+- **Register:** L-237 added.
