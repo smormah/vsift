@@ -1,14 +1,17 @@
-use std::{error::Error, ffi::OsStr, fs};
+use std::{error::Error, ffi::OsStr, fs, path::Path, time::Duration};
 
 use vsift_application::{
-    ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchDocuments, WatchOutputError,
-    WatchOutputKind, WatchOutputs as _, WatchProvenance, WrittenFrame,
+    ClaimedOutputs, IdentifierGenerationError, IdentifierSource, ScreenChangeEntry,
+    ScreenChangeSummary, SnapshotState, TranscriptEntry, WatchDocuments, WatchOutputError,
+    WatchOutputKind, WatchOutputs as _, WatchProvenance, WatchSnapshot, WrittenFrame,
 };
-use vsift_domain::{CandidateReason, MediaTime, TranscriptRevisionId, WatchOutputNames};
+use vsift_domain::{
+    CandidateReason, MediaTime, OperationId, SessionId, TranscriptRevisionId, WatchOutputNames,
+};
 
 use super::{
-    FolderWatchOutputs, WatchClaim, hex_sha256, render_screen_changes, render_subrip,
-    render_transcript,
+    FolderWatchOutputs, PARTIAL_SUFFIX, WatchClaim, hex_sha256, render_screen_changes,
+    render_subrip, render_transcript,
 };
 use crate::test_folder::TestFolder;
 
@@ -38,18 +41,291 @@ fn line(start_s: u64, end_s: u64, text: &str) -> TranscriptEntry {
     }
 }
 
+/// The temporary files' random parts, fixed so a test can take a name first.
+struct FixedRandom;
+
+impl IdentifierSource for FixedRandom {
+    fn session_id(&self) -> Result<SessionId, IdentifierGenerationError> {
+        SessionId::parse("ses_0123456789abcdef")
+            .map_err(|_| IdentifierGenerationError::NonCanonical)
+    }
+
+    fn operation_id(&self) -> Result<OperationId, IdentifierGenerationError> {
+        OperationId::parse("op_00000000000000000000000000000000")
+            .map_err(|_| IdentifierGenerationError::NonCanonical)
+    }
+}
+
+/// The temporary name [`FixedRandom`] gives the transcript.
+const FIXED_PARTIAL: &str = ".meeting.txt.0000000000000000.vsift-partial";
+
+fn fixed_outputs() -> FolderWatchOutputs {
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.identifiers = Box::new(FixedRandom);
+    outputs
+}
+
+fn snapshot(published_s: u64) -> WatchSnapshot {
+    WatchSnapshot {
+        state: SnapshotState::Running,
+        provenance: provenance(),
+        revision: None,
+        entries: vec![line(1, 4, "Good morning.")],
+        published_until: MediaTime::from_micros(published_s * 1_000_000),
+        duration: Some(MediaTime::from_micros(2_880 * 1_000_000)),
+    }
+}
+
+/// The names in `folder` that are temporary files.
+fn partials(folder: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+    Ok(fs::read_dir(folder)?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|name| name.ends_with(PARTIAL_SUFFIX))
+        .collect())
+}
+
 #[test]
-fn a_claim_creates_the_three_outputs_and_writes_each_once() -> TestResult {
+fn a_claim_creates_the_three_outputs_and_each_write_replaces_the_whole_file() -> TestResult {
     let folder = TestFolder::new("vsift-watch-claim")?;
     let mut claim = WatchClaim::claim(&folder, &names()?)?;
-    claim.write_transcript("text\n")?;
-    claim.write_subtitles("1\n")?;
+    assert_eq!(fs::read_to_string(folder.join("meeting.txt"))?, "");
+    claim.write_transcript("text\n", "r1", Duration::ZERO)?;
+    claim.write_subtitles("1\n", "r2", Duration::ZERO)?;
     assert_eq!(fs::read_to_string(folder.join("meeting.txt"))?, "text\n");
     assert_eq!(fs::read_to_string(folder.join("meeting.srt"))?, "1\n");
     assert!(folder.join("meeting-vsift").is_dir());
+    claim.write_transcript("again\n", "r3", Duration::ZERO)?;
+    assert_eq!(fs::read_to_string(folder.join("meeting.txt"))?, "again\n");
+    assert_eq!(
+        partials(&folder)?,
+        Vec::<String>::new(),
+        "no temporary file is left"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_snapshot_says_it_is_unfinished_and_the_final_write_does_not() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-snapshot")?;
+    let mut outputs = fixed_outputs();
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    outputs.write_snapshot(&snapshot(750))?;
+    let text = fs::read_to_string(folder.join("meeting.txt"))?;
+    assert!(
+        text.starts_with("IN PROGRESS: transcribed up to 00:12:30 of 00:48:00. VSift is still working; this file is replaced when it finishes.\n"),
+        "{text}"
+    );
+    assert!(text.contains("[00:00:01] Good morning."), "{text}");
+    let subtitles = fs::read_to_string(folder.join("meeting.srt"))?;
+    assert!(
+        subtitles.ends_with(
+            "2\n00:12:30,000 --> 00:48:00,000\n(VSift is still transcribing from here)\n\n"
+        ),
+        "{subtitles}"
+    );
+    assert_eq!(partials(&folder)?, Vec::<String>::new());
+
+    outputs.finalise(&documents(true)?)?;
+    let text = fs::read_to_string(folder.join("meeting.txt"))?;
+    assert!(!text.contains("IN PROGRESS"), "{text}");
+    let subtitles = fs::read_to_string(folder.join("meeting.srt"))?;
+    assert!(!subtitles.contains("still transcribing"), "{subtitles}");
+    Ok(())
+}
+
+/// The markers stay true (the planner's condition of 2026-10-29): a
+/// stopped run's files say where it stopped and that the same command
+/// continues it, a failed run's that they will not be finished; neither
+/// says `VSift` is still working.
+#[test]
+fn each_state_says_what_became_of_the_run() {
+    let render = |state| {
+        let snapshot = WatchSnapshot {
+            state,
+            ..snapshot(750)
+        };
+        (
+            super::render_transcript_snapshot(&snapshot),
+            super::render_subrip_snapshot(&snapshot),
+        )
+    };
+    let (text, subtitles) = render(SnapshotState::Stopped);
+    assert!(
+        text.starts_with("STOPPED: transcribed up to 00:12:30 of 00:48:00, where the run was stopped. Run the same command again to continue;"),
+        "{text}"
+    );
+    assert!(
+        subtitles.ends_with("(VSift stopped here; run the same command again to continue)\n\n"),
+        "{subtitles}"
+    );
+    let (failed, failed_subtitles) = render(SnapshotState::Failed);
+    assert!(
+        failed.starts_with("STOPPED WITH AN ERROR: transcribed up to 00:12:30 of 00:48:00. This file will not be finished;"),
+        "{failed}"
+    );
+    assert!(
+        failed_subtitles.ends_with(
+            "(VSift stopped here with an error; these subtitles will not be finished)\n\n"
+        ),
+        "{failed_subtitles}"
+    );
+    for written in [&text, &subtitles, &failed, &failed_subtitles] {
+        assert!(!written.contains("still"), "{written}");
+    }
+    let (running, _) = render(SnapshotState::Running);
+    assert!(running.contains("VSift is still working"), "{running}");
+}
+
+/// The planner's condition B: a temporary name taken in advance fails the
+/// update; it is never written through, and the claimed file keeps what it
+/// held.
+#[test]
+fn a_temporary_name_taken_in_advance_fails_the_update() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-partial-taken")?;
+    let mut outputs = fixed_outputs();
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    fs::write(folder.join(FIXED_PARTIAL), "someone else's")?;
     assert!(matches!(
-        claim.write_transcript("again"),
-        Err(WatchOutputError::Refused(WatchOutputKind::Transcript, _))
+        outputs.write_snapshot(&snapshot(30)),
+        Err(WatchOutputError::Exists(WatchOutputKind::Transcript))
+    ));
+    assert_eq!(
+        fs::read_to_string(folder.join(FIXED_PARTIAL))?,
+        "someone else's"
+    );
+    assert_eq!(fs::read_to_string(folder.join("meeting.txt"))?, "");
+    Ok(())
+}
+
+/// The planner's condition B: a link planted at the temporary name is never
+/// followed.
+#[cfg(unix)]
+#[test]
+fn a_link_planted_at_the_temporary_name_is_not_followed() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-partial-link")?;
+    let mut outputs = fixed_outputs();
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    let target = folder.join("elsewhere.txt");
+    std::os::unix::fs::symlink(&target, folder.join(FIXED_PARTIAL))?;
+    assert!(matches!(
+        outputs.write_snapshot(&snapshot(30)),
+        Err(WatchOutputError::Exists(WatchOutputKind::Transcript))
+    ));
+    assert!(!target.exists(), "nothing was written through the link");
+    Ok(())
+}
+
+/// A reader never sees a partial file: every read, however it falls between
+/// the updates, is one whole snapshot.
+#[cfg(unix)]
+#[test]
+fn a_reader_never_sees_a_partial_file() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-reader")?;
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    outputs.write_snapshot(&snapshot(1))?;
+    let path = folder.join("meeting.txt");
+    let wholes: Vec<String> = (1..=40)
+        .map(|seconds| super::render_transcript_snapshot(&snapshot(seconds)))
+        .collect();
+    let reader = {
+        let path = path.clone();
+        std::thread::spawn(move || {
+            (0..400)
+                .map(|_| fs::read_to_string(&path).unwrap_or_default())
+                .collect::<Vec<_>>()
+        })
+    };
+    for seconds in 1..=40 {
+        outputs.write_snapshot(&snapshot(seconds))?;
+    }
+    let reads = reader.join().map_err(|_| "the reader stopped")?;
+    for read in reads {
+        assert!(wholes.contains(&read), "a partial read: {read:?}");
+    }
+    Ok(())
+}
+
+/// A file another program holds open (a Windows editor that locks it) skips
+/// the snapshot, and the final write fails with `Held` after its wait,
+/// leaving the last snapshot (known limit L-237).
+#[cfg(windows)]
+#[test]
+fn a_file_held_open_skips_the_snapshot_and_fails_the_final_write() -> TestResult {
+    use std::os::windows::fs::OpenOptionsExt as _;
+
+    const SHARE_READ_WRITE: u32 = 0x1 | 0x2;
+    let folder = TestFolder::new("vsift-watch-held")?;
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.held_wait = Duration::from_millis(600);
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    outputs.write_snapshot(&snapshot(30))?;
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(SHARE_READ_WRITE)
+        .open(folder.join("meeting.txt"))?;
+    assert!(matches!(
+        outputs.write_snapshot(&snapshot(60)),
+        Err(WatchOutputError::Held(WatchOutputKind::Transcript))
+    ));
+    assert!(matches!(
+        outputs.finalise(&documents(true)?),
+        Err(WatchOutputError::Held(WatchOutputKind::Transcript))
+    ));
+    drop(held);
+    let text = fs::read_to_string(folder.join("meeting.txt"))?;
+    assert!(
+        text.starts_with("IN PROGRESS: transcribed up to 00:00:30"),
+        "the last snapshot stays: {text}"
+    );
+    assert_eq!(partials(&folder)?, Vec::<String>::new());
+    Ok(())
+}
+
+#[test]
+fn a_rerun_takes_over_only_what_the_interrupted_run_created() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-take-over")?;
+    let source = folder.join("artifact.png");
+    fs::write(&source, b"png bytes")?;
+    let digest = hex_sha256(b"png bytes");
+    let mut first = FolderWatchOutputs::new(Vec::new());
+    let claimed = first.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    first
+        .claimed()?
+        .copy_frame(&source, "00-00-01.000.png", &digest)?;
+
+    let mut again = FolderWatchOutputs::new(Vec::new());
+    assert!(matches!(
+        again.claim(&folder.join("meeting.mp4"), None, &names()?),
+        Err(WatchOutputError::Exists(WatchOutputKind::Transcript))
+    ));
+    let planned = again.planned(&folder.join("meeting.mp4"), None, &names()?)?;
+    assert_eq!(planned, claimed);
+    again.reclaim(&planned)?;
+    let copied = again
+        .claimed()?
+        .copy_frame(&source, "00-00-01.000.png", &digest)?;
+    assert_eq!(
+        fs::read(copied)?,
+        b"png bytes",
+        "the same frame is accepted"
+    );
+    again.release();
+    assert!(
+        folder
+            .join("meeting-vsift")
+            .join("00-00-01.000.png")
+            .is_file(),
+        "a release never removes what the earlier run wrote"
+    );
+
+    fs::remove_file(&claimed.subtitles)?;
+    fs::create_dir(&claimed.subtitles)?;
+    assert!(matches!(
+        FolderWatchOutputs::new(Vec::new()).reclaim(&ClaimedOutputs { ..claimed }),
+        Err(WatchOutputError::Exists(WatchOutputKind::Subtitles))
     ));
     Ok(())
 }
@@ -92,12 +368,12 @@ fn a_link_at_an_output_name_is_refused_not_followed() -> TestResult {
 fn a_release_removes_what_the_claim_created_and_never_written_text() -> TestResult {
     let folder = TestFolder::new("vsift-watch-release")?;
     let mut claim = WatchClaim::claim(&folder, &names()?)?;
-    claim.write_screen_changes("list")?;
+    claim.write_screen_changes("list", "r1")?;
     claim.release();
     assert_eq!(fs::read_dir(&*folder)?.count(), 0);
 
     let mut claim = WatchClaim::claim(&folder, &names()?)?;
-    claim.write_transcript("kept")?;
+    claim.write_transcript("kept", "r2", Duration::ZERO)?;
     claim.release();
     assert_eq!(fs::read_to_string(folder.join("meeting.txt"))?, "kept");
     assert!(!folder.join("meeting.srt").exists());
@@ -231,14 +507,6 @@ fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {
             None
         },
         entries: vec![line(1, 4, "Good morning.")],
-        summary: ScreenChangeSummary {
-            index_id: "none".to_owned(),
-            changes_found: 0,
-            index_covers_to: MediaTime::from_micros(0),
-            beyond_index_bound: false,
-            stopped_for_room: false,
-        },
-        changes: Vec::new(),
     })
 }
 
@@ -252,6 +520,17 @@ fn the_folder_port_writes_beside_the_video_and_finishes_every_file() -> TestResu
         claimed.transcript.file_name(),
         Some(OsStr::new("meeting.txt"))
     );
+    let list = outputs.write_screen_changes(
+        &provenance(),
+        &ScreenChangeSummary {
+            index_id: "none".to_owned(),
+            changes_found: 0,
+            index_covers_to: MediaTime::from_micros(0),
+            beyond_index_bound: false,
+            stopped_for_room: false,
+        },
+        &[],
+    )?;
     let finished = outputs.finalise(&documents(true)?)?;
     let text = fs::read_to_string(&finished.transcript.path)?;
     assert!(text.contains("[00:00:01] Good morning."), "{text}");
@@ -260,10 +539,10 @@ fn the_folder_port_writes_beside_the_video_and_finishes_every_file() -> TestResu
         Some(hex_sha256(text.as_bytes()).as_str())
     );
     assert!(finished.subtitles.is_some());
-    assert!(finished.screen_changes.path.is_file());
+    assert!(list.path.is_file());
     outputs.release();
     assert!(
-        finished.screen_changes.path.is_file(),
+        list.path.is_file(),
         "a release after the files are finished removes nothing"
     );
     Ok(())

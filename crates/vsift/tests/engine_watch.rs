@@ -281,6 +281,135 @@ async fn a_second_run_is_refused_and_replaces_nothing() -> TestResult {
     Ok(())
 }
 
+/// ADR 0037 section 8: a run stopped once the speech starts keeps its files,
+/// each saying it is unfinished, and its session; the same request then
+/// continues the job in that session and finishes the same files.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_stopped_run_keeps_its_session_and_the_same_request_continues_it() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let video = video(&root)?;
+    let cancellation = Cancellation::new();
+    let stop = cancellation.clone();
+    let stopped = engine
+        .watch(WatchRequest {
+            source: video.clone(),
+            output: None,
+            cancellation,
+            progress: ProgressObserver::new(move |progress| {
+                if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
+                    stop.cancel();
+                }
+            }),
+        })
+        .await;
+    assert!(
+        matches!(
+            stopped,
+            Err(EngineError::Watch(WatchFailure::Stopped { .. }))
+        ),
+        "{stopped:?}"
+    );
+    let folder = video.parent().ok_or("no folder")?;
+    let text = fs::read_to_string(folder.join("team meeting.txt"))?;
+    assert!(text.starts_with("STOPPED: "), "{text}");
+
+    let outcome = engine.watch(request(&video, None)).await?;
+    let text = fs::read_to_string(folder.join("team meeting.txt"))?;
+    assert!(!text.contains("IN PROGRESS"), "{text}");
+    assert!(text.contains("] chunk 0 says hello --> world\n"), "{text}");
+    assert!(outcome.session_closed);
+    assert_eq!(
+        fs::read_dir(folder)?.count(),
+        4,
+        "the video and the three outputs, and no temporary file"
+    );
+    Ok(())
+}
+
+/// Every file called `name` under `folder`.
+fn files_named(folder: &Path, name: &str) -> Built<Vec<PathBuf>> {
+    let mut found = Vec::new();
+    for entry in fs::read_dir(folder)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            found.extend(files_named(&path, name)?);
+        } else if path.file_name() == Some(OsStr::new(name)) {
+            found.push(path);
+        }
+    }
+    Ok(found)
+}
+
+/// The planner's condition on call 2 (2026-10-29): the job's record of its
+/// claimed names is untrusted session content and only a key. A record that
+/// names another folder never matches the folder the rerun resolves for
+/// itself, so the rerun refuses the files in its way and writes nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_record_that_names_another_folder_is_refused() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let video = video(&root)?;
+    let cancellation = Cancellation::new();
+    let stop = cancellation.clone();
+    let stopped = engine
+        .watch(WatchRequest {
+            source: video.clone(),
+            output: None,
+            cancellation,
+            progress: ProgressObserver::new(move |progress| {
+                if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
+                    stop.cancel();
+                }
+            }),
+        })
+        .await;
+    assert!(
+        matches!(
+            stopped,
+            Err(EngineError::Watch(WatchFailure::Stopped { .. }))
+        ),
+        "{stopped:?}"
+    );
+    let records = files_named(&root.path("sessions"), "watch-outputs.json")?;
+    let [record] = records.as_slice() else {
+        return Err(format!("one record expected, found {records:?}").into());
+    };
+    let folder = fs::canonicalize(video.parent().ok_or("no folder")?)?;
+    let elsewhere = root.path("elsewhere");
+    fs::create_dir(&elsewhere)?;
+    let text = fs::read_to_string(record)?;
+    let recorded = serde_json::to_string(folder.to_str().ok_or("not unicode")?)?;
+    let moved = serde_json::to_string(
+        fs::canonicalize(&elsewhere)?
+            .to_str()
+            .ok_or("not unicode")?,
+    )?;
+    assert!(text.contains(&recorded), "{text}");
+    fs::write(record, text.replace(&recorded, &moved))?;
+    let before = fs::read(folder.join("team meeting.txt"))?;
+
+    let refused = engine.watch(request(&video, None)).await;
+    assert!(
+        matches!(
+            refused,
+            Err(EngineError::Watch(WatchFailure::OutputExists(
+                WatchOutputKind::Transcript
+            )))
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(fs::read(folder.join("team meeting.txt"))?, before);
+    assert_eq!(
+        fs::read_dir(&elsewhere)?.count(),
+        0,
+        "nothing is written there"
+    );
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires FFmpeg and FFprobe on PATH"]
 async fn an_output_folder_is_created_and_never_inside_the_session_root() -> TestResult {

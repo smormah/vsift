@@ -11,7 +11,10 @@ use vsift_contract::{
     WatchOutputsData, WatchRangeData,
 };
 
-use crate::{CommandFailure, command::Cli, command::WatchArguments};
+use crate::{
+    CommandFailure, command::Cli, command::WatchArguments, human::DisplayText,
+    watch_lines::WatchBoard,
+};
 
 type Response = OperationResponse<serde_json::Value>;
 
@@ -106,6 +109,40 @@ fn names_a_video(argument: &OsString) -> bool {
     separator || extension
 }
 
+/// The most characters of the video's name the live view shows, so its
+/// heading stays on one line of a terminal.
+const VIEW_NAME_CHARACTERS: usize = 48;
+
+/// The live view's starting state for `arguments` (ADR 0037 section 9): the
+/// private copy of the video, named by its file name in display form (it is
+/// untrusted text).
+///
+/// The view's "Writing as it goes" line is left out: the output names are
+/// the engine's to derive (shortened past the name budget, subtitles only
+/// with speech), and the engine does not report them before the run ends.
+pub(crate) fn progress_board(arguments: &WatchArguments) -> WatchBoard {
+    let source = &arguments.source;
+    let name = source
+        .file_name()
+        .unwrap_or(source.as_os_str())
+        .to_string_lossy();
+    // The names the run will claim, as the domain derives them; a name it
+    // cannot derive is refused by the run, so the line is then left out.
+    let writing = source
+        .file_name()
+        .and_then(|file_name| vsift::WatchOutputNames::from_video_name(file_name).ok())
+        .map(|names| {
+            [names.transcript(), names.subtitles()]
+                .map(|name| DisplayText::render_shortened(&name, VIEW_NAME_CHARACTERS))
+                .to_vec()
+        })
+        .unwrap_or_default();
+    WatchBoard::new(
+        DisplayText::render_shortened(&name, VIEW_NAME_CHARACTERS),
+        writing,
+    )
+}
+
 /// Watches one video and presents what the run wrote.
 pub(crate) async fn watch(
     engine: &Engine,
@@ -189,14 +226,32 @@ pub(crate) async fn watch(
         .map_err(|_| CommandFailure::from(vsift::FailureCode::Internal))
 }
 
-/// Fixed-prose remediation for a `watch` failure; never a path or a name.
-pub(crate) fn remediation(failure: WatchFailure) -> &'static str {
+/// The remediation for a `watch` failure: fixed prose, never a path or a
+/// name. A run the person stopped first says where it stopped, `Stopped at
+/// 12:30 of 48:00.` (ADR 0037 section 8).
+pub(crate) fn remediation(failure: WatchFailure) -> String {
+    match failure {
+        WatchFailure::Stopped {
+            transcribed_to_us,
+            duration_us: Some(duration_us),
+        } => format!(
+            "Stopped at {} of {}. Run the same command again to continue. {}",
+            crate::live_line::clock(transcribed_to_us),
+            crate::live_line::clock(duration_us),
+            vsift_contract::WATCH_STOPPED_REMEDIATION
+        ),
+        failure => fixed_remediation(failure).to_owned(),
+    }
+}
+
+fn fixed_remediation(failure: WatchFailure) -> &'static str {
     use vsift::{OutputNameError, WatchOutputKind};
     use vsift_contract::{
         WATCH_FOLDER_EXISTS_REMEDIATION, WATCH_FRAME_MISMATCH_REMEDIATION,
         WATCH_NAME_EMPTY_REMEDIATION, WATCH_NAME_NOT_UNICODE_REMEDIATION,
-        WATCH_OUTPUT_FOLDER_REMEDIATION, WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION,
-        WATCH_OUTPUT_REFUSED_REMEDIATION, WATCH_SUBTITLES_EXISTS_REMEDIATION,
+        WATCH_OUTPUT_FOLDER_REMEDIATION, WATCH_OUTPUT_HELD_REMEDIATION,
+        WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION, WATCH_OUTPUT_REFUSED_REMEDIATION,
+        WATCH_STOPPED_REMEDIATION, WATCH_SUBTITLES_EXISTS_REMEDIATION,
         WATCH_TRANSCRIPT_EXISTS_REMEDIATION,
     };
     match failure {
@@ -217,6 +272,8 @@ pub(crate) fn remediation(failure: WatchFailure) -> &'static str {
         WatchFailure::OutputInsideVsift => WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION,
         WatchFailure::OutputFolderUnusable => WATCH_OUTPUT_FOLDER_REMEDIATION,
         WatchFailure::FrameMismatch => WATCH_FRAME_MISMATCH_REMEDIATION,
+        WatchFailure::OutputHeld(_) => WATCH_OUTPUT_HELD_REMEDIATION,
+        WatchFailure::Stopped { .. } => WATCH_STOPPED_REMEDIATION,
     }
 }
 

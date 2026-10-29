@@ -190,7 +190,7 @@ pub use vsift_domain::{
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
 pub use watch::{
     OutputNameError, WatchFailure, WatchFile, WatchFrame, WatchOutcome, WatchOutputKind,
-    WatchRequest,
+    WatchOutputNames, WatchRequest,
 };
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};

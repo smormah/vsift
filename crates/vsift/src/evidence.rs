@@ -477,14 +477,20 @@ impl Engine {
         .await
     }
 
-    /// The evidence artifacts `session` can still take: the smaller of what is
-    /// left of its evidence sub-budget and of its artifact slots. `watch`
-    /// fits its frames to it before taking the first (ADR 0037 section 6).
-    pub(crate) fn evidence_slots_left(&self, session: &SessionId) -> Result<usize, EngineError> {
+    /// The evidence room `watch` fits its frames to before taking the first
+    /// (ADR 0037 section 6): the smaller of the evidence sub-budget and the
+    /// artifact slots, as if the session held no evidence yet. Its session
+    /// holds only its own frames, and `frame get` gives each again without
+    /// storing it twice, so a run that continues an interrupted one spreads
+    /// its frames over the same changes (section 8).
+    pub(crate) fn evidence_slots_if_reused(
+        &self,
+        session: &SessionId,
+    ) -> Result<usize, EngineError> {
         let (store, now) = self.evidence_store()?;
         Ok(store
             .read_evidence_records(session, now)?
-            .evidence_slots_left())
+            .evidence_slots_if_reused())
     }
 
     fn evidence_store(&self) -> Result<(FilesystemSessionStore, u64), EngineError> {

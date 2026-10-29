@@ -15,21 +15,35 @@
 //! ([`subrip_cue_text`]).
 
 use std::{
-    fmt::Write as _,
+    fmt::{self, Write as _},
     fs::{self, File, OpenOptions},
     io::{self, Read as _, Write as _},
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use sha2::{Digest as _, Sha256};
 use vsift_application::{
-    ClaimedOutputs, FinalisedOutputs, ScreenChangeEntry, ScreenChangeSummary, SessionFrame,
-    TranscriptEntry, WatchDocuments, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs,
-    WatchProvenance,
+    ClaimedOutputs, FinalisedOutputs, IdentifierSource, ScreenChangeEntry, ScreenChangeSummary,
+    SessionFrame, SnapshotState, TranscriptEntry, WatchDocuments, WatchFile, WatchOutputError,
+    WatchOutputKind, WatchOutputs, WatchProvenance, WatchSnapshot,
 };
 use vsift_domain::{
     CandidateReason, WatchOutputNames, readable_time, subrip_cue_text, subrip_time,
 };
+
+use crate::RandomIdentifierSource;
+
+/// How long the final write of a file tries a file another program holds
+/// open before the run fails with `STORAGE_IO` (ADR 0037 section 7, known
+/// limit L-237).
+pub const HELD_FILE_WAIT: Duration = Duration::from_secs(30);
+
+/// How long the final write waits between two tries of a held file.
+const HELD_FILE_RETRY: Duration = Duration::from_millis(500);
+
+/// The suffix of a snapshot's temporary file, beside the file it replaces.
+const PARTIAL_SUFFIX: &str = "vsift-partial";
 
 /// The outputs of one run, claimed in one folder.
 #[derive(Debug)]
@@ -37,15 +51,18 @@ pub struct WatchClaim {
     transcript_path: PathBuf,
     subtitles_path: PathBuf,
     folder_path: PathBuf,
-    transcript: Option<File>,
-    subtitles: Option<File>,
+    /// Whether this claim took over the outputs of an interrupted run of
+    /// the same job (ADR 0037 section 8): frames already in the folder are
+    /// then kept, and one with the same name and digest is accepted.
+    taken_over: bool,
     created_in_folder: Vec<PathBuf>,
 }
 
 impl WatchClaim {
     /// Claims the three outputs in `folder`, in the order transcript,
     /// subtitles, folder. If one is taken or refused, the ones this call
-    /// created are removed again and nothing else is touched.
+    /// created are removed again and nothing else is touched. The two files
+    /// are created empty and closed: every later write replaces them whole.
     ///
     /// # Errors
     ///
@@ -55,17 +72,12 @@ impl WatchClaim {
         let transcript_path = folder.join(names.transcript());
         let subtitles_path = folder.join(names.subtitles());
         let folder_path = folder.join(names.folder());
-        let transcript = create_new(&transcript_path, WatchOutputKind::Transcript)?;
-        let subtitles = match create_new(&subtitles_path, WatchOutputKind::Subtitles) {
-            Ok(file) => file,
-            Err(error) => {
-                drop(transcript);
-                remove_if_empty(&transcript_path);
-                return Err(error);
-            }
-        };
+        drop(create_new(&transcript_path, WatchOutputKind::Transcript)?);
+        if let Err(error) = create_new(&subtitles_path, WatchOutputKind::Subtitles) {
+            remove_if_empty(&transcript_path);
+            return Err(error);
+        }
         if let Err(error) = fs::create_dir(&folder_path) {
-            drop((transcript, subtitles));
             remove_if_empty(&transcript_path);
             remove_if_empty(&subtitles_path);
             return Err(classify(&error, WatchOutputKind::Folder));
@@ -74,8 +86,43 @@ impl WatchClaim {
             transcript_path,
             subtitles_path,
             folder_path,
-            transcript: Some(transcript),
-            subtitles: Some(subtitles),
+            taken_over: false,
+            created_in_folder: Vec::new(),
+        })
+    }
+
+    /// Takes over the outputs an interrupted run of the same job claimed,
+    /// which its job's record names: each must still be what that run
+    /// created, a regular file or a folder, never a link.
+    ///
+    /// # Errors
+    ///
+    /// [`WatchOutputError::Exists`] for an output that is no longer one.
+    pub fn take_over(claimed: &ClaimedOutputs) -> Result<Self, WatchOutputError> {
+        let is = |path: &Path, folder: bool| {
+            fs::symlink_metadata(path).is_ok_and(|metadata| {
+                !metadata.file_type().is_symlink()
+                    && if folder {
+                        metadata.is_dir()
+                    } else {
+                        metadata.is_file()
+                    }
+            })
+        };
+        for (path, folder, kind) in [
+            (&claimed.transcript, false, WatchOutputKind::Transcript),
+            (&claimed.subtitles, false, WatchOutputKind::Subtitles),
+            (&claimed.folder, true, WatchOutputKind::Folder),
+        ] {
+            if !is(path, folder) {
+                return Err(WatchOutputError::Exists(kind));
+            }
+        }
+        Ok(Self {
+            transcript_path: claimed.transcript.clone(),
+            subtitles_path: claimed.subtitles.clone(),
+            folder_path: claimed.folder.clone(),
+            taken_over: true,
             created_in_folder: Vec::new(),
         })
     }
@@ -98,36 +145,60 @@ impl WatchClaim {
         &self.folder_path
     }
 
-    /// Writes the readable transcript, once, flushes it to the disk and
-    /// returns the SHA-256 of what it wrote.
+    /// Replaces the readable transcript with `text` (see
+    /// [`replace_claimed`]); the SHA-256 of what it wrote. A file another
+    /// program holds open is tried for up to `wait`.
     ///
     /// # Errors
     ///
-    /// [`WatchOutputError::Refused`] when the write fails.
-    pub fn write_transcript(&mut self, text: &str) -> Result<String, WatchOutputError> {
-        write_once(&mut self.transcript, text, WatchOutputKind::Transcript)
+    /// [`WatchOutputError::Refused`] when the write fails, and
+    /// [`WatchOutputError::Held`] when the file stayed held for `wait`.
+    pub fn write_transcript(
+        &mut self,
+        text: &str,
+        random: &str,
+        wait: Duration,
+    ) -> Result<String, WatchOutputError> {
+        replace_claimed(
+            &self.transcript_path,
+            text.as_bytes(),
+            random,
+            wait,
+            WatchOutputKind::Transcript,
+        )
     }
 
-    /// Writes the subtitles, once, flushes them to the disk and returns the
-    /// SHA-256 of what it wrote.
+    /// Replaces the subtitles with `text`, as
+    /// [`WatchClaim::write_transcript`] does.
     ///
     /// # Errors
     ///
-    /// [`WatchOutputError::Refused`] when the write fails.
-    pub fn write_subtitles(&mut self, text: &str) -> Result<String, WatchOutputError> {
-        write_once(&mut self.subtitles, text, WatchOutputKind::Subtitles)
+    /// [`WatchOutputError::Refused`] or [`WatchOutputError::Held`].
+    pub fn write_subtitles(
+        &mut self,
+        text: &str,
+        random: &str,
+        wait: Duration,
+    ) -> Result<String, WatchOutputError> {
+        replace_claimed(
+            &self.subtitles_path,
+            text.as_bytes(),
+            random,
+            wait,
+            WatchOutputKind::Subtitles,
+        )
     }
 
     /// Removes the claimed subtitles file, still empty, for a video with no
     /// sound track (ADR 0037 section 4).
     pub fn discard_subtitles(&mut self) {
-        if self.subtitles.take().is_some() {
-            remove_if_empty(&self.subtitles_path);
-        }
+        remove_if_empty(&self.subtitles_path);
     }
 
     /// Copies a frame out of the session into the folder as `file_name`
-    /// (created exclusively) and checks the copy against `sha256`.
+    /// (created exclusively) and checks the copy against `sha256`. A claim
+    /// that took over an interrupted run accepts a frame already there with
+    /// that name and digest: `frame get` gave the same frame again.
     ///
     /// # Errors
     ///
@@ -148,38 +219,67 @@ impl WatchClaim {
         if hex_sha256(&bytes) != sha256 {
             return Err(WatchOutputError::FrameMismatch);
         }
-        let path = self.write_in_folder(file_name, &bytes)?;
-        Ok(path)
+        match self.write_in_folder(file_name, &bytes) {
+            Err(WatchOutputError::Exists(_))
+                if self.taken_over && self.holds_frame(file_name, sha256) =>
+            {
+                Ok(self.folder_path.join(file_name))
+            }
+            written => written,
+        }
     }
 
-    /// Writes the screen-change list into the folder, once, and returns its
-    /// path and the SHA-256 of what it wrote.
+    /// Whether the folder holds `file_name` as a regular file with `sha256`.
+    fn holds_frame(&self, file_name: &str, sha256: &str) -> bool {
+        let path = self.folder_path.join(file_name);
+        let regular = fs::symlink_metadata(&path)
+            .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink());
+        regular && fs::read(&path).is_ok_and(|bytes| hex_sha256(&bytes) == sha256)
+    }
+
+    /// Writes the screen-change list into the folder, replacing the one an
+    /// interrupted run of the same job wrote; its path and the SHA-256 of
+    /// what it wrote.
     ///
     /// # Errors
     ///
-    /// [`WatchOutputError::Exists`] or [`WatchOutputError::Refused`].
+    /// [`WatchOutputError::Refused`] or [`WatchOutputError::Held`].
     pub fn write_screen_changes(
         &mut self,
         text: &str,
+        random: &str,
     ) -> Result<(PathBuf, String), WatchOutputError> {
-        let path = self.write_in_folder(SCREEN_CHANGES_FILE, text.as_bytes())?;
-        Ok((path, hex_sha256(text.as_bytes())))
+        let path = self.folder_path.join(SCREEN_CHANGES_FILE);
+        let created = !self.taken_over && !self.created_in_folder.contains(&path);
+        let sha256 = replace_claimed(
+            &path,
+            text.as_bytes(),
+            random,
+            HELD_FILE_WAIT,
+            WatchOutputKind::FolderContent,
+        )?;
+        if created {
+            self.created_in_folder.push(path.clone());
+        }
+        Ok((path, sha256))
     }
 
     /// Gives the claim up after a failure: removes every file this claim
     /// created in its folder, the folder once it is empty, and the two
     /// files while they are still empty. A file that holds a write stays.
     pub fn release(mut self) {
-        drop(self.transcript.take());
-        drop(self.subtitles.take());
         for path in self.created_in_folder.drain(..) {
             // Best effort: a file that cannot be removed stays, visible to the
             // person, and never hides a failure that is being reported.
             let _ignored = fs::remove_file(path);
         }
-        let _ignored = fs::remove_dir(&self.folder_path);
-        remove_if_empty(&self.transcript_path);
-        remove_if_empty(&self.subtitles_path);
+        // What an interrupted run created stays: the job that claimed it is
+        // still unfinished, and a later rerun continues it.
+        if !self.taken_over {
+            let _ignored = fs::remove_dir(&self.folder_path);
+            remove_if_empty(&self.transcript_path);
+            remove_if_empty(&self.subtitles_path);
+        }
     }
 
     fn write_in_folder(
@@ -198,22 +298,111 @@ impl WatchClaim {
     }
 }
 
+/// Replaces the claimed file at `target` with `bytes` (ADR 0037 section 7,
+/// the planner's condition B): the bytes go to an exclusive temporary file
+/// in the same folder, `.<name>.<random>.vsift-partial`, created new (so an
+/// existing name or a link planted there fails the write rather than being
+/// written through), flushed, then moved over `target`, the claimed name and
+/// never a name read back from the folder. A reader or a crash sees the old
+/// file or the new one, whole.
+///
+/// A file another program holds open (Windows refuses the move) is tried
+/// again every half second for up to `wait`; the temporary file is removed
+/// whatever happens.
+///
+/// # Errors
+///
+/// [`WatchOutputError::Refused`] when the temporary file cannot be written or
+/// the move fails, [`WatchOutputError::Held`] when the file stayed held.
+pub fn replace_claimed(
+    target: &Path,
+    bytes: &[u8],
+    random: &str,
+    wait: Duration,
+    kind: WatchOutputKind,
+) -> Result<String, WatchOutputError> {
+    let refused = |error: io::ErrorKind| WatchOutputError::Refused(kind, error);
+    let folder = target.parent().ok_or(refused(io::ErrorKind::NotFound))?;
+    let name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or(refused(io::ErrorKind::InvalidInput))?;
+    let partial = folder.join(format!(".{name}.{random}.{PARTIAL_SUFFIX}"));
+    let mut file = create_new(&partial, kind)?;
+    let written = file
+        .write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| classify(&error, kind));
+    drop(file);
+    let moved = written.and_then(|()| move_over(&partial, target, wait, kind));
+    if moved.is_err() {
+        let _ignored = fs::remove_file(&partial);
+    }
+    moved.map(|()| hex_sha256(bytes))
+}
+
+/// Moves `partial` over `target`, trying a held target again for `wait`.
+fn move_over(
+    partial: &Path,
+    target: &Path,
+    wait: Duration,
+    kind: WatchOutputKind,
+) -> Result<(), WatchOutputError> {
+    let started = Instant::now();
+    loop {
+        match fs::rename(partial, target) {
+            Ok(()) => return Ok(()),
+            Err(error) if is_held(&error) => {
+                if started.elapsed() >= wait {
+                    return Err(WatchOutputError::Held(kind));
+                }
+                std::thread::sleep(HELD_FILE_RETRY.min(wait));
+            }
+            Err(error) => return Err(WatchOutputError::Refused(kind, error.kind())),
+        }
+    }
+}
+
+/// Whether a move failed because another program holds the target open:
+/// Windows reports a sharing violation (32) or a lock (33), or access
+/// denied for a file opened without delete sharing.
+fn is_held(error: &io::Error) -> bool {
+    cfg!(windows)
+        && (error.kind() == io::ErrorKind::PermissionDenied
+            || matches!(error.raw_os_error(), Some(32 | 33)))
+}
+
 /// The folder implementation of the [`WatchOutputs`] port: resolves the
 /// folder, claims the outputs there with a [`WatchClaim`] and renders the
-/// finished files with this module's writers.
-#[derive(Debug)]
+/// files with this module's writers.
 pub struct FolderWatchOutputs {
     vsift_roots: Vec<PathBuf>,
+    identifiers: Box<dyn IdentifierSource>,
+    held_wait: Duration,
     claim: Option<WatchClaim>,
+}
+
+impl fmt::Debug for FolderWatchOutputs {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("FolderWatchOutputs")
+            .field("vsift_roots", &self.vsift_roots)
+            .field("claim", &self.claim)
+            .finish_non_exhaustive()
+    }
 }
 
 impl FolderWatchOutputs {
     /// Outputs that refuse any folder inside `vsift_roots`, the canonical
-    /// session and managed roots, which `VSift` cleans automatically.
+    /// session and managed roots, which `VSift` cleans automatically. The
+    /// temporary files' random parts come from the operating system's
+    /// randomness, through the identifier source.
     #[must_use]
-    pub const fn new(vsift_roots: Vec<PathBuf>) -> Self {
+    pub fn new(vsift_roots: Vec<PathBuf>) -> Self {
         Self {
             vsift_roots,
+            identifiers: Box::new(RandomIdentifierSource),
+            held_wait: HELD_FILE_WAIT,
             claim: None,
         }
     }
@@ -223,6 +412,20 @@ impl FolderWatchOutputs {
             WatchOutputKind::FolderContent,
             io::ErrorKind::NotFound,
         ))
+    }
+
+    /// A fresh random part for a temporary file's name.
+    fn random(&self, kind: WatchOutputKind) -> Result<String, WatchOutputError> {
+        let operation = self
+            .identifiers
+            .operation_id()
+            .map_err(|_| WatchOutputError::Refused(kind, io::ErrorKind::Other))?;
+        Ok(operation
+            .as_str()
+            .trim_start_matches("op_")
+            .chars()
+            .take(16)
+            .collect())
     }
 }
 
@@ -244,6 +447,61 @@ impl WatchOutputs for FolderWatchOutputs {
         Ok(claimed)
     }
 
+    fn planned(
+        &mut self,
+        video: &Path,
+        output: Option<&Path>,
+        names: &WatchOutputNames,
+    ) -> Result<ClaimedOutputs, WatchOutputError> {
+        let folder = output_folder(video, output, &self.vsift_roots)?;
+        Ok(ClaimedOutputs {
+            transcript: folder.join(names.transcript()),
+            subtitles: folder.join(names.subtitles()),
+            folder: folder.join(names.folder()),
+        })
+    }
+
+    fn reclaim(&mut self, claimed: &ClaimedOutputs) -> Result<(), WatchOutputError> {
+        self.claim = Some(WatchClaim::take_over(claimed)?);
+        Ok(())
+    }
+
+    fn write_snapshot(&mut self, snapshot: &WatchSnapshot) -> Result<(), WatchOutputError> {
+        let transcript_random = self.random(WatchOutputKind::Transcript)?;
+        let subtitles_random = self.random(WatchOutputKind::Subtitles)?;
+        let claim = self.claimed()?;
+        // One try each: a file another program holds is skipped until the
+        // next snapshot (known limit L-237).
+        claim.write_transcript(
+            &render_transcript_snapshot(snapshot),
+            &transcript_random,
+            Duration::ZERO,
+        )?;
+        claim.write_subtitles(
+            &render_subrip_snapshot(snapshot),
+            &subtitles_random,
+            Duration::ZERO,
+        )?;
+        Ok(())
+    }
+
+    fn write_screen_changes(
+        &mut self,
+        provenance: &WatchProvenance,
+        summary: &ScreenChangeSummary,
+        changes: &[ScreenChangeEntry],
+    ) -> Result<WatchFile, WatchOutputError> {
+        let random = self.random(WatchOutputKind::FolderContent)?;
+        let (path, sha256) = self.claimed()?.write_screen_changes(
+            &render_screen_changes(provenance, summary, changes),
+            &random,
+        )?;
+        Ok(WatchFile {
+            path,
+            sha256: Some(sha256),
+        })
+    }
+
     fn copy_frame(
         &mut self,
         frame: &SessionFrame,
@@ -257,18 +515,25 @@ impl WatchOutputs for FolderWatchOutputs {
         &mut self,
         documents: &WatchDocuments,
     ) -> Result<FinalisedOutputs, WatchOutputError> {
+        let transcript_random = self.random(WatchOutputKind::Transcript)?;
+        let subtitles_random = self.random(WatchOutputKind::Subtitles)?;
+        let wait = self.held_wait;
         let claim = self.claimed()?;
         let revision = documents
             .transcript_revision
             .as_ref()
             .map(vsift_domain::TranscriptRevisionId::as_str);
-        let transcript_sha256 = claim.write_transcript(&render_transcript(
-            &documents.provenance,
-            revision,
-            &documents.entries,
-        ))?;
+        let transcript_sha256 = claim.write_transcript(
+            &render_transcript(&documents.provenance, revision, &documents.entries),
+            &transcript_random,
+            wait,
+        )?;
         let subtitles = if revision.is_some() {
-            let sha256 = claim.write_subtitles(&render_subrip(&documents.entries))?;
+            let sha256 = claim.write_subtitles(
+                &render_subrip(&documents.entries),
+                &subtitles_random,
+                wait,
+            )?;
             Some(WatchFile {
                 path: claim.subtitles_path().to_path_buf(),
                 sha256: Some(sha256),
@@ -277,11 +542,6 @@ impl WatchOutputs for FolderWatchOutputs {
             claim.discard_subtitles();
             None
         };
-        let (list, list_sha256) = claim.write_screen_changes(&render_screen_changes(
-            &documents.provenance,
-            &documents.summary,
-            &documents.changes,
-        ))?;
         let transcript = WatchFile {
             path: claim.transcript_path().to_path_buf(),
             sha256: Some(transcript_sha256),
@@ -291,10 +551,6 @@ impl WatchOutputs for FolderWatchOutputs {
         Ok(FinalisedOutputs {
             transcript,
             subtitles,
-            screen_changes: WatchFile {
-                path: list,
-                sha256: Some(list_sha256),
-            },
         })
     }
 
@@ -351,26 +607,36 @@ fn classify(error: &io::Error, kind: WatchOutputKind) -> WatchOutputError {
     }
 }
 
-fn write_once(
-    handle: &mut Option<File>,
-    text: &str,
-    kind: WatchOutputKind,
-) -> Result<String, WatchOutputError> {
-    let mut file = handle
-        .take()
-        .ok_or(WatchOutputError::Refused(kind, io::ErrorKind::Other))?;
-    file.write_all(text.as_bytes())
-        .and_then(|()| file.sync_all())
-        .map_err(|error| classify(&error, kind))?;
-    Ok(hex_sha256(text.as_bytes()))
-}
-
 /// Removes a file this run created, only while it is still empty, so a
 /// release can never remove text that was written.
 fn remove_if_empty(path: &Path) {
     if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() == 0) {
         let _ignored = fs::remove_file(path);
     }
+}
+
+/// The SHA-256 of a file's bytes, read in pieces: how a rerun of
+/// `vsift <video>` checks that an unfinished session holds this video.
+///
+/// # Errors
+///
+/// The read's error.
+pub fn file_sha256(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    let mut hash = Sha256::new();
+    let mut buffer = vec![0_u8; 1 << 16];
+    loop {
+        let read = file.read(&mut buffer)?;
+        let Some(piece) = buffer.get(..read).filter(|piece| !piece.is_empty()) else {
+            break;
+        };
+        hash.update(piece);
+    }
+    let mut text = String::with_capacity(64);
+    for byte in hash.finalize() {
+        let _infallible = write!(text, "{byte:02x}");
+    }
+    Ok(text)
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
@@ -390,6 +656,65 @@ pub fn render_transcript(
     revision: Option<&str>,
     entries: &[TranscriptEntry],
 ) -> String {
+    let revision_line = match revision {
+        Some(revision) => format!(
+            "Transcript       {revision}   in session {} (closed when this run finished; the ids name it, the hashes can be checked any time)",
+            provenance.session_id
+        ),
+        None => "Transcript       none: this video has no sound track".to_owned(),
+    };
+    transcript_text(provenance, &revision_line, entries)
+}
+
+/// Renders `<stem>.txt` while the job runs (ADR 0037 section 7): the
+/// in-progress line first, then the header and what has been published.
+#[must_use]
+pub fn render_transcript_snapshot(snapshot: &WatchSnapshot) -> String {
+    let so_far = match snapshot.duration {
+        Some(duration) => format!(
+            "transcribed up to {} of {}",
+            readable_time(snapshot.published_until),
+            readable_time(duration)
+        ),
+        None => "nothing transcribed yet".to_owned(),
+    };
+    let mut text = match snapshot.state {
+        SnapshotState::Running => format!(
+            "IN PROGRESS: {so_far}. VSift is still working; this file is replaced when it finishes.\n"
+        ),
+        SnapshotState::Stopped => format!(
+            "STOPPED: {so_far}, where the run was stopped. Run the same command again to continue; VSift keeps its private copy of the video for about a day unused.\n"
+        ),
+        SnapshotState::Failed => format!(
+            "STOPPED WITH AN ERROR: {so_far}. This file will not be finished; move it away and run the command again, or write elsewhere with --output <folder>.\n"
+        ),
+    };
+    let revision = snapshot.revision.as_ref().map_or(
+        "not published yet",
+        vsift_domain::TranscriptRevisionId::as_str,
+    );
+    let session_state = match snapshot.state {
+        SnapshotState::Running => "VSift is still working",
+        SnapshotState::Stopped => "kept so the run can continue",
+        SnapshotState::Failed => "closed when the run failed",
+    };
+    let revision_line = format!(
+        "Transcript       {revision}   in session {} ({session_state}; the ids name it, the hashes can be checked any time)",
+        snapshot.provenance.session_id
+    );
+    text.push_str(&transcript_text(
+        &snapshot.provenance,
+        &revision_line,
+        &snapshot.entries,
+    ));
+    text
+}
+
+fn transcript_text(
+    provenance: &WatchProvenance,
+    revision_line: &str,
+    entries: &[TranscriptEntry],
+) -> String {
     let mut text = String::new();
     let _ = writeln!(
         text,
@@ -400,16 +725,7 @@ pub fn render_transcript(
         "A machine transcription: check it against the recording before you rely on it.\n\n",
     );
     let _ = writeln!(text, "Video SHA-256    {}", provenance.video_sha256);
-    match revision {
-        Some(revision) => {
-            let _ = writeln!(
-                text,
-                "Transcript       {revision}   in session {} (closed when this run finished; the ids name it, the hashes can be checked any time)",
-                provenance.session_id
-            );
-        }
-        None => text.push_str("Transcript       none: this video has no sound track\n"),
-    }
+    let _ = writeln!(text, "{revision_line}");
     text.push('\n');
     for entry in entries {
         match entry {
@@ -435,6 +751,44 @@ pub fn render_transcript(
 /// left out, since a player would show them as speech.
 #[must_use]
 pub fn render_subrip(entries: &[TranscriptEntry]) -> String {
+    subrip_cues(entries).0
+}
+
+/// Renders `<stem>.srt` while the job runs (ADR 0037 section 7): the cues
+/// published so far, then one cue from the published time to the end of the
+/// video, so a person playing it sees where the text stops.
+#[must_use]
+pub fn render_subrip_snapshot(snapshot: &WatchSnapshot) -> String {
+    let (mut text, number) = subrip_cues(&snapshot.entries);
+    if let Some(duration) = snapshot.duration
+        && snapshot.published_until < duration
+    {
+        let _ = write!(
+            text,
+            "{}\n{} --> {}\n{}\n\n",
+            number + 1,
+            subrip_time(snapshot.published_until),
+            subrip_time(duration),
+            trailing_cue(snapshot.state)
+        );
+    }
+    text
+}
+
+/// The trailing cue of the subtitles while they are unfinished: where the
+/// text stops, and why.
+const fn trailing_cue(state: SnapshotState) -> &'static str {
+    match state {
+        SnapshotState::Running => "(VSift is still transcribing from here)",
+        SnapshotState::Stopped => "(VSift stopped here; run the same command again to continue)",
+        SnapshotState::Failed => {
+            "(VSift stopped here with an error; these subtitles will not be finished)"
+        }
+    }
+}
+
+/// The cues of the line entries, numbered from 1, and how many there are.
+fn subrip_cues(entries: &[TranscriptEntry]) -> (String, usize) {
     let mut text = String::new();
     let mut number = 0_usize;
     for entry in entries {
@@ -457,7 +811,7 @@ pub fn render_subrip(entries: &[TranscriptEntry]) -> String {
             );
         }
     }
-    text
+    (text, number)
 }
 
 /// Renders `screen-changes.txt`.

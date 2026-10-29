@@ -14,7 +14,7 @@
 //! checked and every output name is claimed before anything is copied, so a
 //! refusal before the work leaves nothing written and no session. After the
 //! claim, a failure releases it (the port removes only what it created, never
-//! a written file) and the session is closed either way.
+//! a written file) and the session is closed, except after Ctrl-C (below).
 //!
 //! **The list holds the settled screens** ([`settled_screens`]): every change
 //! found is counted, and the first frame, each screen after motion settles
@@ -25,6 +25,18 @@
 //! for, spread evenly over the changes; should the session still refuse a
 //! frame for room, the frames stop there and the run is partial, never failed
 //! (ADR 0037 section 6, known limit L-234).
+//!
+//! **Files grow while the job runs** (section 7). The engine tells the use
+//! case through [`WatchProgress`] after each chunk of speech and when the
+//! visual stream is done; the callback only records. Beside the job, on the
+//! same task, the use case writes a snapshot of what was published at most
+//! once every [`SNAPSHOT_INTERVAL_SECONDS`] (read through the [`Clock`]),
+//! and the frames and their list as soon as the visual stream is done.
+//!
+//! **Ctrl-C keeps the session** (section 8). The files keep their last
+//! snapshot and marker, and the same command continues the job: the job's
+//! own record of its claimed names ([`WatchClaimLog`]) is what finds it,
+//! never the text of a file in the person's folder.
 
 use std::{
     ffi::OsStr,
@@ -32,12 +44,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::{Clock, SessionStorageError};
 use vsift_domain::{
     CandidateReason, EvidenceId, JobId, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime,
     OutputNameError, SessionId, SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId,
     VisualIndexId, WatchOutputNames, frame_file_name, frames_that_fit, settled_screens,
     spread_evenly,
 };
+
+mod follow;
+
+use follow::{WatchSignal, join};
 
 /// Why a stated gap was not transcribed, in plain words (ADR 0037 section 4).
 const GAP_REASON: &str = "the speech tool could not transcribe this part";
@@ -125,6 +142,54 @@ pub enum FrameRefusal<E> {
     Failed(E),
 }
 
+/// How the `prepare` job stopped short of its end.
+#[derive(Debug)]
+pub enum PrepareStop<E> {
+    /// The caller cancelled the run (Ctrl-C): the job is interrupted, its
+    /// finished chunks kept, and the same command continues it.
+    Interrupted,
+    /// Any other failure, which ends the run.
+    Failed(E),
+}
+
+/// What the `prepare` job tells the use case while it runs (the planner's
+/// call 1, 2026-10-29). The engine invokes it on the job's own task, so it
+/// records and returns: it never writes, reads or waits.
+pub trait WatchProgress: Send + Sync {
+    /// A chunk of speech finished, so a part of the open revision may have
+    /// been published.
+    fn published(&self);
+
+    /// The visual stream has indexed the whole video (`StreamEnd::Indexed`):
+    /// the frames can be written while the transcription runs.
+    fn visual_indexed(&self);
+}
+
+/// What a read of the open revision found published.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PublishedPart {
+    /// The open revision.
+    pub revision: TranscriptRevisionId,
+    /// The segments the read returned, in time order, text in display form.
+    pub lines: Vec<TranscriptLine>,
+    /// How far the revision has published.
+    pub published_until: MediaTime,
+    /// The video's length.
+    pub duration: MediaTime,
+    /// The token the next read follows the revision with; `None` when the
+    /// read gave none (the next read then reads everything again).
+    pub since: Option<String>,
+}
+
+/// An interrupted run of the same video, found by its claimed names.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnfinishedWatch {
+    /// Its session, still open.
+    pub session: OpenedWatchSession,
+    /// Its unfinished `prepare` job.
+    pub job: JobId,
+}
+
 /// The existing operations `watch` composes, supplied by the engine.
 ///
 /// The engine's implementation holds the run's cancellation and progress
@@ -161,16 +226,73 @@ pub trait WatchSteps: Send + Sync {
         video: &Path,
     ) -> impl Future<Output = Result<OpenedWatchSession, Self::Error>> + Send;
 
-    /// Starts the session's `prepare` job in the watched mode and runs it in
-    /// this process to its end (ADR 0033).
+    /// Starts the session's `prepare` job in the watched mode (ADR 0033); its
+    /// id.
     ///
     /// # Errors
     ///
-    /// Every error of the job; a video with no sound track is not one.
+    /// Every error of `job start`.
+    fn start_job(&self, session: &SessionId) -> Result<JobId, Self::Error>;
+
+    /// Keeps the names this run claimed in the job's own record, in the
+    /// session, so that a rerun finds the job by them and never by reading
+    /// the person's folder (ADR 0037 section 8, the planner's call 2).
+    ///
+    /// # Errors
+    ///
+    /// Storage failures.
+    fn record_claim(
+        &self,
+        session: &SessionId,
+        job: &JobId,
+        claimed: &ClaimedOutputs,
+    ) -> Result<(), Self::Error>;
+
+    /// Runs the `prepare` job in this process to its end. `progress` is told
+    /// after each chunk of speech (a part may have been published) and when
+    /// the visual stream has indexed the whole video; it records and
+    /// returns.
+    ///
+    /// # Errors
+    ///
+    /// [`PrepareStop::Interrupted`] when the caller cancelled the run, which
+    /// leaves the job resumable, and [`PrepareStop::Failed`] for every other
+    /// error of the job; a video with no sound track is not one.
     fn prepare(
         &self,
         session: &SessionId,
-    ) -> impl Future<Output = Result<PreparedRun, Self::Error>> + Send;
+        job: &JobId,
+        progress: &dyn WatchProgress,
+    ) -> impl Future<Output = Result<PreparedRun, PrepareStop<Self::Error>>> + Send;
+
+    /// What the job's open revision has published: everything when `since`
+    /// is `None`, else only what it published after that token (a `--since`
+    /// read). `None` before the first part.
+    ///
+    /// # Errors
+    ///
+    /// Every error of the transcript read.
+    fn published(
+        &self,
+        session: &SessionId,
+        since: Option<&str>,
+    ) -> Result<Option<PublishedPart>, Self::Error>;
+
+    /// An open session of this video whose unfinished `prepare` job claimed
+    /// exactly `claimed`, found through the job's own record (ADR 0037
+    /// section 8). An expired session is not found.
+    ///
+    /// # Errors
+    ///
+    /// Storage failures and reading the video.
+    fn find_unfinished(
+        &self,
+        video: &Path,
+        claimed: &ClaimedOutputs,
+    ) -> impl Future<Output = Result<Option<UnfinishedWatch>, Self::Error>> + Send;
+
+    /// The clock the snapshots are spaced by.
+    fn clock(&self) -> &dyn Clock;
 
     /// Every segment of `revision` within `range`, in time order.
     ///
@@ -253,6 +375,9 @@ pub enum WatchOutputError {
     Refused(WatchOutputKind, io::ErrorKind),
     /// A frame copied out of the session does not have its recorded SHA-256.
     FrameMismatch,
+    /// Another program held the file open for the final write's 30 s
+    /// (known limit L-237); the last snapshot stays, with its marker.
+    Held(WatchOutputKind),
     /// `--output` names a folder whose parent does not exist, or something
     /// that is not a folder.
     FolderUnusable,
@@ -272,6 +397,12 @@ impl fmt::Display for WatchOutputError {
                 )
             }
             Self::FrameMismatch => formatter.write_str("a copied frame does not match its digest"),
+            Self::Held(kind) => {
+                write!(
+                    formatter,
+                    "the {kind:?} output is held open by another program"
+                )
+            }
             Self::FolderUnusable => formatter.write_str("the output folder cannot be used"),
             Self::InsideVsift => {
                 formatter.write_str("the output folder is inside VSift's own folders")
@@ -293,6 +424,34 @@ pub struct ClaimedOutputs {
     pub folder: PathBuf,
 }
 
+/// Port that keeps the names a `watch` run claimed in its job's own record,
+/// in the session (ADR 0037 section 8, the planner's call 2 of 2026-10-29):
+/// a small versioned record beside the job, removed with it.
+pub trait WatchClaimLog {
+    /// Records the names `job` claimed.
+    ///
+    /// # Errors
+    ///
+    /// Storage failures, and a folder or name that is not Unicode text.
+    fn record_watch_claim(
+        &self,
+        session: &SessionId,
+        job: &JobId,
+        claimed: &ClaimedOutputs,
+    ) -> Result<(), SessionStorageError>;
+
+    /// The claims recorded by the session's jobs; a record that cannot be
+    /// read is left out, so it is never misread as a claim.
+    ///
+    /// # Errors
+    ///
+    /// Storage failures of the session's jobs.
+    fn watch_claims(
+        &self,
+        session: &SessionId,
+    ) -> Result<Vec<(JobId, ClaimedOutputs)>, SessionStorageError>;
+}
+
 /// Facts every output names about the run that made it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WatchProvenance {
@@ -300,7 +459,8 @@ pub struct WatchProvenance {
     pub video_name: String,
     /// `VSift` and its version, for example `VSift 0.3.0`.
     pub made_by: String,
-    /// When the run finished, in UTC to the minute (`2026-11-20 14:05 UTC`).
+    /// When the file was written, in UTC to the minute (`2026-11-20 14:05
+    /// UTC`).
     pub made_at: String,
     /// The video's SHA-256, 64 lowercase hexadecimal digits.
     pub video_sha256: String,
@@ -391,10 +551,38 @@ pub struct WatchDocuments {
     pub transcript_revision: Option<TranscriptRevisionId>,
     /// The transcript's segments and stated gaps, in time order.
     pub entries: Vec<TranscriptEntry>,
-    /// The screen-change list's summary.
-    pub summary: ScreenChangeSummary,
-    /// The settled screens, in time order, with the frames written.
-    pub changes: Vec<ScreenChangeEntry>,
+}
+
+/// The transcript as far as it has been published, for a file that grows
+/// (ADR 0037 section 7).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WatchSnapshot {
+    /// Where the run is: what the files' markers say.
+    pub state: SnapshotState,
+    /// What every output names about the run.
+    pub provenance: WatchProvenance,
+    /// The open revision; `None` before its first part.
+    pub revision: Option<TranscriptRevisionId>,
+    /// The published segments, in time order.
+    pub entries: Vec<TranscriptEntry>,
+    /// How far the revision has published.
+    pub published_until: MediaTime,
+    /// The video's length, once a part has said it.
+    pub duration: Option<MediaTime>,
+}
+
+/// Where the run is when a snapshot is written, so that the files' markers
+/// stay true (the planner's condition of 2026-10-29).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SnapshotState {
+    /// The job runs: the files are replaced when it finishes.
+    Running,
+    /// The person stopped the run (Ctrl-C): the files say where, and that
+    /// the same command continues it while `VSift` keeps its private copy.
+    Stopped,
+    /// The run failed after the files were written: they say so, and that
+    /// they will not be finished.
+    Failed,
 }
 
 /// The finished files the port wrote.
@@ -404,8 +592,6 @@ pub struct FinalisedOutputs {
     pub transcript: WatchFile,
     /// The subtitles; `None` for a video with no sound track.
     pub subtitles: Option<WatchFile>,
-    /// The screen-change list in the folder.
-    pub screen_changes: WatchFile,
 }
 
 /// Port that writes `watch`'s outputs into a person's folder (ADR 0037
@@ -432,6 +618,54 @@ pub trait WatchOutputs: Send {
         names: &WatchOutputNames,
     ) -> Result<ClaimedOutputs, WatchOutputError>;
 
+    /// The paths [`WatchOutputs::claim`] would claim, without creating
+    /// anything: for a rerun whose names are taken.
+    ///
+    /// # Errors
+    ///
+    /// [`WatchOutputError::FolderUnusable`] or
+    /// [`WatchOutputError::InsideVsift`] for the folder.
+    fn planned(
+        &mut self,
+        video: &Path,
+        output: Option<&Path>,
+        names: &WatchOutputNames,
+    ) -> Result<ClaimedOutputs, WatchOutputError>;
+
+    /// Takes over the outputs an interrupted run of the same job claimed
+    /// (its job's record names them; never decided by reading the folder):
+    /// the two files and the folder must still be a regular file and a
+    /// folder, never a link. Frames already in the folder are kept.
+    ///
+    /// # Errors
+    ///
+    /// [`WatchOutputError::Exists`] when an output is no longer what the
+    /// run created (a link, a folder where a file was).
+    fn reclaim(&mut self, claimed: &ClaimedOutputs) -> Result<(), WatchOutputError>;
+
+    /// Writes a snapshot of the transcript and the subtitles with their
+    /// in-progress markers, each to an exclusive temporary file moved over
+    /// the claimed name only (the planner's condition B). One attempt: a
+    /// file another program holds open is skipped until the next snapshot.
+    ///
+    /// # Errors
+    ///
+    /// The write's error; the use case goes on without it.
+    fn write_snapshot(&mut self, snapshot: &WatchSnapshot) -> Result<(), WatchOutputError>;
+
+    /// Writes the screen-change list into the folder, once the frames are
+    /// written (ADR 0037 section 7).
+    ///
+    /// # Errors
+    ///
+    /// The claim's write errors.
+    fn write_screen_changes(
+        &mut self,
+        provenance: &WatchProvenance,
+        summary: &ScreenChangeSummary,
+        changes: &[ScreenChangeEntry],
+    ) -> Result<WatchFile, WatchOutputError>;
+
     /// Copies a frame out of the session into the claimed folder as
     /// `file_name`, checked against its recorded SHA-256; the copy's path.
     ///
@@ -445,13 +679,13 @@ pub trait WatchOutputs: Send {
         file_name: &str,
     ) -> Result<PathBuf, WatchOutputError>;
 
-    /// Writes the finished files: the transcript, the subtitles (or removes
-    /// their claim, still empty, for a video with no sound track) and the
-    /// screen-change list.
+    /// Writes the finished transcript and subtitles over their snapshots, or
+    /// removes the subtitles' claim, still empty, for a video with no sound
+    /// track. A file another program holds open is tried for up to 30 s.
     ///
     /// # Errors
     ///
-    /// The claim's write errors.
+    /// The claim's write errors, and [`WatchOutputError::Held`].
     fn finalise(
         &mut self,
         documents: &WatchDocuments,
@@ -542,19 +776,39 @@ pub enum WatchError<E> {
     UnusableName(OutputNameError),
     /// An output could not be claimed or written.
     Output(WatchOutputError),
+    /// The caller stopped the run (Ctrl-C). The files keep their last
+    /// snapshot and its marker, the session is kept, and the same command
+    /// continues the job (ADR 0037 section 8).
+    Stopped {
+        /// How far the transcript had been published.
+        transcribed_to: MediaTime,
+        /// The video's length, when a part had said it.
+        duration: Option<MediaTime>,
+    },
 }
+
+/// The least time between two snapshots of a file that grows, in seconds
+/// (ADR 0037 section 7).
+pub const SNAPSHOT_INTERVAL_SECONDS: u64 = 10;
 
 /// Watches one `video` (ADR 0037 section 3): writes `<stem>.txt`,
 /// `<stem>.srt` and `<stem>-vsift/` beside it or into `output`.
 ///
 /// `video` and `output` are absolute. Nothing is copied or written before
-/// every output name is claimed; after the claim, a failure releases it and
-/// the session is closed either way.
+/// every output name is claimed. When a name is taken, the run continues an
+/// interrupted run of the same video only if its job's own record claimed
+/// exactly these names in a session still open (section 8); otherwise it is
+/// refused as before. While the job runs the transcript and the subtitles
+/// grow by snapshots, and the frames are written once the visual stream is
+/// done. Stopped by the caller, the run keeps the files with their last
+/// snapshot and the session; after any other failure it releases the claim
+/// and closes the session.
 ///
 /// # Errors
 ///
-/// [`WatchError::Step`] for the operations' errors, and
-/// [`WatchError::UnusableName`] or [`WatchError::Output`] for the outputs.
+/// [`WatchError::Step`] for the operations' errors,
+/// [`WatchError::UnusableName`] or [`WatchError::Output`] for the outputs, and
+/// [`WatchError::Stopped`] when the caller stopped the run.
 pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
     steps: &S,
     outputs: &mut O,
@@ -567,15 +821,16 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
         .file_name()
         .ok_or(WatchError::UnusableName(OutputNameError::Empty))?;
     let names = WatchOutputNames::from_video_name(file_name).map_err(WatchError::UnusableName)?;
-    let claimed = outputs
-        .claim(video, output, &names)
-        .map_err(WatchError::Output)?;
-    let session = match steps.open_session(video).await {
-        Ok(session) => session,
-        Err(error) => {
-            outputs.release();
-            return Err(WatchError::Step(error));
-        }
+    let (claimed, unfinished) = claim_or_continue(steps, outputs, video, output, &names).await?;
+    let (session, job) = match unfinished {
+        Some(unfinished) => (unfinished.session, Some(unfinished.job)),
+        None => match steps.open_session(video).await {
+            Ok(session) => (session, None),
+            Err(error) => {
+                outputs.release();
+                return Err(WatchError::Step(error));
+            }
+        },
     };
     let run = WatchRun {
         steps,
@@ -583,8 +838,12 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
         file_name,
         names: &names,
         claimed,
+        taken_over: job.is_some(),
     };
-    let written = Box::pin(run.write(outputs)).await;
+    let written = Box::pin(run.write(outputs, job)).await;
+    if let Err(stopped @ WatchError::Stopped { .. }) = written {
+        return Err(stopped);
+    }
     let closed = steps.close_session(&session.session_id);
     match written {
         Ok(mut outcome) => {
@@ -598,6 +857,38 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
     }
 }
 
+/// Claims the names, or, when one is taken, takes over the outputs of an
+/// unfinished run of the same video that claimed exactly these names.
+async fn claim_or_continue<S: WatchSteps, O: WatchOutputs>(
+    steps: &S,
+    outputs: &mut O,
+    video: &Path,
+    output: Option<&Path>,
+    names: &WatchOutputNames,
+) -> Result<(ClaimedOutputs, Option<UnfinishedWatch>), WatchError<S::Error>> {
+    match outputs.claim(video, output, names) {
+        Ok(claimed) => Ok((claimed, None)),
+        Err(taken @ WatchOutputError::Exists(_)) => {
+            let planned = outputs
+                .planned(video, output, names)
+                .map_err(WatchError::Output)?;
+            // Decided by the session's record of the job, never by the text of
+            // a file in the person's folder (the planner's condition A): an
+            // expired session is gone, so its files are refused.
+            let Some(unfinished) = steps
+                .find_unfinished(video, &planned)
+                .await
+                .map_err(WatchError::Step)?
+            else {
+                return Err(WatchError::Output(taken));
+            };
+            outputs.reclaim(&planned).map_err(WatchError::Output)?;
+            Ok((planned, Some(unfinished)))
+        }
+        Err(error) => Err(WatchError::Output(error)),
+    }
+}
+
 /// One run, from the open session to the finished files.
 struct WatchRun<'a, S> {
     steps: &'a S,
@@ -605,6 +896,9 @@ struct WatchRun<'a, S> {
     file_name: &'a OsStr,
     names: &'a WatchOutputNames,
     claimed: ClaimedOutputs,
+    /// Whether the run took over the files of an interrupted run, which
+    /// already hold a snapshot.
+    taken_over: bool,
 }
 
 /// The frames a run took, and every change as the list shows it.
@@ -614,33 +908,214 @@ struct TakenFrames {
     stopped_for_room: bool,
 }
 
+/// The screen changes, their frames and the list, written once the visual
+/// stream is done.
+struct Screens {
+    index: Option<VisualIndexId>,
+    covered_to: MediaTime,
+    changes_found: usize,
+    changes_listed: usize,
+    taken: TakenFrames,
+    list: WatchFile,
+}
+
+/// What the run has followed of the open revision, for the snapshots.
+struct Following<E> {
+    revision: Option<TranscriptRevisionId>,
+    lines: Vec<TranscriptLine>,
+    since: Option<String>,
+    published_until: MediaTime,
+    duration: Option<MediaTime>,
+    last_snapshot_at: Option<u64>,
+    /// Whether this run wrote a snapshot into the files.
+    snapshot_written: bool,
+    screens: Option<Result<Screens, WatchError<E>>>,
+}
+
 impl<S: WatchSteps> WatchRun<'_, S> {
+    /// Runs the job and writes the files. A failure once the files hold a
+    /// snapshot (this run's, or the interrupted run's it took over) rewrites
+    /// them, best effort, to say the run failed and they will not be
+    /// finished: they are never removed and never left saying `VSift` is
+    /// working.
     async fn write<O: WatchOutputs>(
         self,
         outputs: &mut O,
+        unfinished_job: Option<JobId>,
+    ) -> Result<WatchOutcome, WatchError<S::Error>> {
+        let mut following = Following {
+            revision: None,
+            lines: Vec::new(),
+            since: None,
+            published_until: MediaTime::from_micros(0),
+            duration: None,
+            last_snapshot_at: None,
+            snapshot_written: false,
+            screens: None,
+        };
+        let written = self.run(outputs, unfinished_job, &mut following).await;
+        if let Err(error) = &written
+            && !matches!(error, WatchError::Stopped { .. })
+            && (following.snapshot_written || self.taken_over)
+        {
+            self.refresh(&mut following);
+            let _best_effort = self.snapshot(outputs, &mut following, SnapshotState::Failed);
+        }
+        written
+    }
+
+    async fn run<O: WatchOutputs>(
+        &self,
+        outputs: &mut O,
+        unfinished_job: Option<JobId>,
+        following: &mut Following<S::Error>,
     ) -> Result<WatchOutcome, WatchError<S::Error>> {
         let session = &self.session.session_id;
-        let prepared = self
-            .steps
-            .prepare(session)
-            .await
-            .map_err(WatchError::Step)?;
-        let entries = match &prepared.transcript {
-            Some(transcript) => self.transcript_entries(transcript)?,
-            None => Vec::new(),
+        let job = if let Some(job) = unfinished_job {
+            job
+        } else {
+            let job = self.steps.start_job(session).map_err(WatchError::Step)?;
+            self.steps
+                .record_claim(session, &job, &self.claimed)
+                .map_err(WatchError::Step)?;
+            job
         };
+        let signal = WatchSignal::default();
+        let prepare = async {
+            let prepared = self.steps.prepare(session, &job, &signal).await;
+            signal.close();
+            prepared
+        };
+        let (prepared, ()) = join(prepare, self.follow(outputs, &signal, following)).await;
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
+            Err(PrepareStop::Interrupted) => {
+                // The files keep what was published, and say where it stopped.
+                self.refresh(following);
+                let _advisory = self.snapshot(outputs, following, SnapshotState::Stopped);
+                return Err(WatchError::Stopped {
+                    transcribed_to: following.published_until,
+                    duration: following.duration,
+                });
+            }
+            Err(PrepareStop::Failed(error)) => return Err(WatchError::Step(error)),
+        };
+        let screens = match following.screens.take() {
+            Some(screens) => screens?,
+            None => self.screens(outputs).await?,
+        };
+        self.finish(outputs, prepared, screens)
+    }
+
+    /// Follows the job until it ends: a snapshot after a publication, at
+    /// most once every [`SNAPSHOT_INTERVAL_SECONDS`], and the frames once
+    /// the visual stream is done.
+    async fn follow<O: WatchOutputs>(
+        &self,
+        outputs: &mut O,
+        signal: &WatchSignal,
+        following: &mut Following<S::Error>,
+    ) {
+        while let Some(notice) = signal.next().await {
+            if notice.indexed && following.screens.is_none() {
+                following.screens = Some(self.screens(outputs).await);
+            }
+            if notice.published && self.snapshot_due(following) {
+                self.refresh(following);
+                if self
+                    .snapshot(outputs, following, SnapshotState::Running)
+                    .is_ok()
+                {
+                    following.last_snapshot_at = self.steps.clock().now_unix_seconds().ok();
+                }
+            }
+        }
+    }
+
+    fn snapshot_due(&self, following: &Following<S::Error>) -> bool {
+        let Some(last) = following.last_snapshot_at else {
+            return true;
+        };
+        self.steps
+            .clock()
+            .now_unix_seconds()
+            .is_ok_and(|now| now.saturating_sub(last) >= SNAPSHOT_INTERVAL_SECONDS)
+    }
+
+    /// Reads what the open revision published since the last read. A failed
+    /// read changes nothing: snapshots are advisory, and the next one reads
+    /// everything again.
+    fn refresh(&self, following: &mut Following<S::Error>) {
+        let read = self
+            .steps
+            .published(&self.session.session_id, following.since.as_deref());
+        match read {
+            Ok(Some(part)) => {
+                if following.since.is_none() {
+                    following.lines.clear();
+                }
+                following.lines.extend(part.lines);
+                following.revision = Some(part.revision);
+                following.since = part.since;
+                following.published_until = part.published_until;
+                following.duration = Some(part.duration);
+            }
+            Ok(None) => {}
+            Err(_) => following.since = None,
+        }
+    }
+
+    /// Writes one snapshot of what has been published; its failure is the
+    /// port's, and the use case goes on (a file held open is tried again at
+    /// the next one).
+    fn snapshot<O: WatchOutputs>(
+        &self,
+        outputs: &mut O,
+        following: &mut Following<S::Error>,
+        state: SnapshotState,
+    ) -> Result<(), WatchError<S::Error>> {
+        let provenance = self
+            .steps
+            .provenance(
+                self.file_name,
+                &self.session.source_id,
+                &self.session.session_id,
+            )
+            .map_err(WatchError::Step)?;
+        outputs
+            .write_snapshot(&WatchSnapshot {
+                state,
+                provenance,
+                revision: following.revision.clone(),
+                entries: following
+                    .lines
+                    .iter()
+                    .map(|line| TranscriptEntry::Line {
+                        start: line.start,
+                        end: line.end,
+                        text: line.text.clone(),
+                    })
+                    .collect(),
+                published_until: following.published_until,
+                duration: following.duration,
+            })
+            .map_err(WatchError::Output)?;
+        following.snapshot_written = true;
+        Ok(())
+    }
+
+    /// The screen changes, the settled screens among them, their frames and
+    /// the list, written into the folder.
+    async fn screens<O: WatchOutputs>(
+        &self,
+        outputs: &mut O,
+    ) -> Result<Screens, WatchError<S::Error>> {
+        let session = &self.session.session_id;
         let changes = self
             .steps
             .screen_changes(session)
             .await
             .map_err(WatchError::Step)?;
-        let duration = prepared
-            .transcript
-            .as_ref()
-            .map(|transcript| transcript.range.end())
-            .or_else(|| changes.as_ref().map(|changes| changes.covered_to))
-            .unwrap_or(MediaTime::from_micros(0));
-        let beyond_visual_bound = duration.as_micros() > MAX_VISUAL_INDEX_DURATION_MICROS;
         let mut found = changes
             .as_ref()
             .map(|changes| changes.changes.clone())
@@ -659,6 +1134,55 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             .steps
             .provenance(self.file_name, &self.session.source_id, session)
             .map_err(WatchError::Step)?;
+        let covered_to = changes
+            .as_ref()
+            .map_or(MediaTime::from_micros(0), |changes| changes.covered_to);
+        let summary = ScreenChangeSummary {
+            index_id: changes.as_ref().map_or_else(
+                || "none".to_owned(),
+                |changes| changes.index.as_str().to_owned(),
+            ),
+            changes_found: found.len(),
+            index_covers_to: covered_to,
+            // The index stops at its bound, so an index that reaches it
+            // covers part of a longer video.
+            beyond_index_bound: covered_to.as_micros() >= MAX_VISUAL_INDEX_DURATION_MICROS,
+            stopped_for_room: taken.stopped_for_room,
+        };
+        let list = outputs
+            .write_screen_changes(&provenance, &summary, &taken.listed)
+            .map_err(WatchError::Output)?;
+        Ok(Screens {
+            index: changes.map(|changes| changes.index),
+            covered_to,
+            changes_found: found.len(),
+            changes_listed: settled.len(),
+            taken,
+            list,
+        })
+    }
+
+    /// The finished files, once the job has sealed its revision.
+    fn finish<O: WatchOutputs>(
+        &self,
+        outputs: &mut O,
+        prepared: PreparedRun,
+        screens: Screens,
+    ) -> Result<WatchOutcome, WatchError<S::Error>> {
+        let session = &self.session.session_id;
+        let entries = match &prepared.transcript {
+            Some(transcript) => self.transcript_entries(transcript)?,
+            None => Vec::new(),
+        };
+        let duration = prepared
+            .transcript
+            .as_ref()
+            .map_or(screens.covered_to, |transcript| transcript.range.end());
+        let beyond_visual_bound = duration.as_micros() > MAX_VISUAL_INDEX_DURATION_MICROS;
+        let provenance = self
+            .steps
+            .provenance(self.file_name, &self.session.source_id, session)
+            .map_err(WatchError::Step)?;
         let transcript_revision = prepared
             .transcript
             .as_ref()
@@ -667,19 +1191,6 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             provenance,
             transcript_revision: transcript_revision.clone(),
             entries,
-            summary: ScreenChangeSummary {
-                index_id: changes.as_ref().map_or_else(
-                    || "none".to_owned(),
-                    |changes| changes.index.as_str().to_owned(),
-                ),
-                changes_found: found.len(),
-                index_covers_to: changes
-                    .as_ref()
-                    .map_or(MediaTime::from_micros(0), |changes| changes.covered_to),
-                beyond_index_bound: beyond_visual_bound,
-                stopped_for_room: taken.stopped_for_room,
-            },
-            changes: taken.listed,
         };
         let finalised = outputs.finalise(&documents).map_err(WatchError::Output)?;
         Ok(WatchOutcome {
@@ -688,7 +1199,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             session_closed: false,
             job_id: prepared.job_id,
             transcript_revision,
-            visual_index: changes.map(|changes| changes.index),
+            visual_index: screens.index,
             duration,
             not_transcribed: prepared
                 .transcript
@@ -697,16 +1208,16 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             transcript: finalised.transcript,
             subtitles: finalised.subtitles,
             folder: WatchFile {
-                path: self.claimed.folder,
+                path: self.claimed.folder.clone(),
                 sha256: None,
             },
-            screen_changes: finalised.screen_changes,
-            changes_found: found.len(),
-            changes_listed: settled.len(),
-            frames: taken.frames,
+            screen_changes: screens.list,
+            changes_found: screens.changes_found,
+            changes_listed: screens.changes_listed,
+            frames: screens.taken.frames,
             beyond_visual_bound,
             names_shortened: self.names.shortened(),
-            frames_stopped_for_room: taken.stopped_for_room,
+            frames_stopped_for_room: screens.taken.stopped_for_room,
         })
     }
 
