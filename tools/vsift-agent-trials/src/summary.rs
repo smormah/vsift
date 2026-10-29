@@ -547,35 +547,40 @@ fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
                 ),
             ));
         }
-        // C-04 (ADR 0038, section 5) is a measurement of its own: batch 1
-        // never ran it, so it is neither part of the target above nor a gate.
-        let outcome: Vec<&RunLine> = cold
-            .iter()
-            .copied()
-            .filter(|run| {
-                run.client == client
-                    && run.kind == RunKind::Counted
-                    && run.scenario == COLD_OUTCOME_SCENARIO
-            })
-            .collect();
-        if !outcome.is_empty() {
-            lines.push(gate(
-                &format!(
-                    "Cold outcome ({COLD_OUTCOME_SCENARIO}), {}",
-                    client.slug()
-                ),
-                GateStatus::NoData,
-                format!(
-                    "{} of {} useful ({}), setting {}; a measurement on its own, not a gate: no baseline ran it",
-                    outcome.iter().filter(|run| run.interpretation).count(),
-                    outcome.len(),
-                    percent(rate(&outcome, |run| run.interpretation)),
-                    settings_of(&outcome),
-                ),
-            ));
-        }
+        lines.extend(cold_outcome_line(&cold, client));
     }
     lines
+}
+
+/// C-04's line for one client (ADR 0038, section 5): a measurement of its own.
+/// Batch 1 never ran it, so it is neither part of the final round's target nor
+/// a gate; `None` when the records hold no counted run of it.
+fn cold_outcome_line(cold: &[&RunLine], client: ClientName) -> Option<GateLine> {
+    let outcome: Vec<&RunLine> = cold
+        .iter()
+        .copied()
+        .filter(|run| {
+            run.client == client
+                && run.kind == RunKind::Counted
+                && run.scenario == COLD_OUTCOME_SCENARIO
+        })
+        .collect();
+    (!outcome.is_empty()).then(|| {
+        gate(
+            &format!(
+                "Cold outcome ({COLD_OUTCOME_SCENARIO}), {}",
+                client.slug()
+            ),
+            GateStatus::NoData,
+            format!(
+                "{} of {} useful ({}), setting {}; a measurement on its own, not a gate: no baseline ran it",
+                outcome.iter().filter(|run| run.interpretation).count(),
+                outcome.len(),
+                percent(rate(&outcome, |run| run.interpretation)),
+                settings_of(&outcome),
+            ),
+        )
+    })
 }
 
 /// The cold settings a group of runs were under, for a gate's detail.
