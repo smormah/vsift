@@ -2,7 +2,8 @@
 
 - Status: **Accepted by the planner, 2026-10-28**, at `9f563bc2`, relayed by the coordinator, with
   the conditions recorded in [Outcome](#outcome-the-planners-rulings-of-2026-10-28). D1 is the
-  maintainer's and is open: the meeting-notes and workshop-spec workflows wait for it. Each slice is
+  maintainer's, **decided on 2026-10-29** (amended into sections 2, 8 and 9 below; the planner
+  reviews the amendment before the meeting-notes and workshop-spec workflows are built). Each slice is
   built in its own pull request; until each lands, what it describes is a plan, not a feature.
 - Date: 2026-10-28
 - Refines: [ADR 0022](0022-agent-skill-and-named-client-qualification.md) (the skill, its command policy
@@ -112,22 +113,83 @@ Six workflows, each a short file in the skill at `skills/vsift/workflows/<name>.
 | --- | --- | --- | --- |
 | `bug-report.md` | A recording becomes an evidence-backed bug report | `compact` | The existing procedure: search the symptom words, read windows, inspect frames and report Problem, Expected, Actual and Reproduction. |
 | `findings.md` | A narrated screencast becomes findings (bug, feature, question) | `standard` | Search cue words for each kind ("doesn't", "should", "why", "?"), then read windows and confirm on screen. Each finding is one claim with a `category`. |
-| `workshop-spec.md` | A workshop becomes a spec with quoted decisions and open questions | `standard` | Search decision and requirement cue words, quote each decision from `display_text` with its segment, and list open questions. |
+| `workshop-spec.md` | A workshop becomes a spec with quoted decisions and open questions | `read_through` | Read the whole transcript page by page (amended 2026-10-29, D1), quote each decision from `display_text` with its segment, and list open questions; frames only within `standard`'s image limits. |
 | `demo-backlog.md` | A product demo becomes a prioritised backlog | `standard` | Search problem and request cue words, confirm each item on a frame, and give each a `priority` from what was said (cited) or `inferred`. |
-| `meeting-notes.md` | A meeting becomes actions, decisions and open questions | `standard` | Search action, decision and question cue words, and name speakers by `display_label` when segments carry one. |
+| `meeting-notes.md` | A meeting becomes actions, decisions and open questions | `read_through` | Read the whole transcript page by page (amended 2026-10-29, D1), and name speakers by `display_label` when segments carry one; frames only within `standard`'s image limits. |
 | `logs-by-clock.md` | Moments in a recording are matched to system log lines through clock time | `compact` | Ingest with `--recorded-at` when the user knows the start. Turn each log time into a window, then cite the segments and frames whose own `clock_time` VSift reports. |
 
 Every workflow uses only `free` commands. Each stays inside its profile and ends with `vsift handoff
 check`, so its result is a checkable handoff. That is the difference from a summary: every item cites a
 segment, frame or crop that `handoff check --session` resolves.
 
-**Long recordings.** Most meetings, workshops and demos run longer than 5 minutes. The maintainer's
-ruling for #368 says a summary of a whole long recording does not fit the budgets. That ruling also lets
-the agent start when the user has said what to hand back if the budget runs out. A workflow is that
-statement. It finds items by cue-word search, ends `partial` and lists every stretch it did not read as a
-`transcript` gap with reason `not_inspected`. It never claims to have read the whole meeting. This keeps
-the #368 ruling unchanged (decision D1). The cue words are English, so other languages find less
-(L-238).
+**Long recordings (amended 2026-10-29, D1).** Most meetings, workshops and demos run longer than 5 minutes.
+The maintainer decided D1 on 2026-10-29, in his words: "Yes: meeting notes and workshop specs read the
+whole transcript text, up to about two hours, with images still within the budget." So:
+
+- **`meeting-notes.md` and `workshop-spec.md` read the whole transcript**, page by page in the brief view,
+  under a new profile, `read_through` (below). This supersedes the #368 ruling for these two workflows
+  only. The rest of the skill keeps it: a summary or timeline of a whole long recording still does not fit
+  `compact` or `standard`.
+- **`findings.md` and `demo-backlog.md` keep cue-word search** within `standard` (and `bug-report.md` and
+  `logs-by-clock.md` within `compact`). They end `partial` and list every stretch they did not read as a
+  `transcript` gap with reason `not_inspected`. Their cue words are English, so other languages find less
+  (L-238).
+
+**The `read_through` profile** is `standard` with more room for text and nothing more for images. The
+identifier is snake case like every other closed value of the handoff:
+
+| Limit | `standard` | `read_through` | Why |
+| --- | --- | --- | --- |
+| Page size (`--view brief` only) | 50 | 25 | Not for the agent's context: the whole read is the same text at either size. It is for the client's cut (below the table). |
+| Transcript pages | (no limit of its own) | 120 | At about 5 s a segment, two hours is about 1,440 segments, 58 pages of 25; supplied subtitles with 2.5 s cues are about 116. 120 covers both. |
+| Tool calls | 80 | 200 | At most 120 transcript reads, and the other calls stay within `standard`'s 80 (searches, `job status`, frames, the check). |
+| Images per step, in total, bytes | 4, 24, 48 MiB | 4, 24, 48 MiB | Unchanged: "images still within the budget". |
+| Refinement depth, burst frames | 4, 12 | 4, 12 | Unchanged. |
+| Wall time | 30 min | 60 min | Reading 120 pages takes longer; the host still measures and enforces it. |
+
+**Why pages of 25, when the brief view has allowed 50 since 0.2.1** (the planner's question,
+2026-10-29). The segments a two-hour read brings into the agent's context are the same at either page
+size, so 25 is not for the context. (Each page also repeats the revision block, so smaller pages cost
+somewhat more in total. After a transcription that left many stretches no segment holds, that block alone
+can be about 45,000 characters, and then no page size fits under the cut. budgets.md already says to report
+such a read as incomplete.) It is for the client. A client can cut a long tool answer without any
+error (one did at about 43,000 characters, budgets.md), and a brief page of 50 measured 35,000 to 57,000
+characters (`docs/agents/skill.md`, the 0.2.1 change). So a page of 50 is often over the cut. A cut page is
+asked again with `--limit 5` (budgets.md), which costs ten calls for that page, or it is reported as not
+read. A page of 25 is about 18,000 to 28,000 characters, under the cut in the common case. A two-hour read
+then takes up to 120 calls instead of 60. That is why the call ceiling is 200: 120 reads plus `standard`'s
+80. `standard`'s targeted reads keep 50: they read a few windows, where an occasional cut and re-ask is
+cheap. A client known not to cut may use 50 under `read_through` as an override (`budget.overrides`), which
+halves the reads. Not measured here: the 25-segment size through any client. The 43,000-character cut is
+one client's, and the page sizes are from the 0.2.1 measurements.
+
+`transcript_pages` is a new limit member, so the handoff's `budget.limits` gains it (optional, and only
+`read_through` gives it a value). `budget.profile` gains `read_through`. `handoff check` holds the given
+limits to the profile's, as it does today. Both are additive to the skill-owned handoff schema;
+`handoff_version` stays `1`.
+
+**What a read-through costs the agent.** Two hours of brief pages is roughly 0.5 to 1.4 million
+characters of tool output. That fits only a model with a long context window, so `read_through` is for
+the review tier. A compact model gets the cue-word method of the other workflows instead, and the
+workflow file says so before the first read. This is stated as L-243.
+
+**Edges.**
+
+- **Over about two hours**, or when the page ceiling runs out first: the report ends `partial`. Each
+  stretch not read is a `transcript` gap (`not_inspected`, or `budget_exhausted` with the resume card when
+  the budget ran out). Every item cites only segments from pages actually read.
+- **A transcription still running** (ADR 0033): the workflow follows the job with `job status` and reads
+  what is published with `--since`. If the job has not succeeded when the budget or the wall time runs
+  out, the report ends `partial` with the unread stretches as gaps (`transcription_pending` where VSift
+  says so) and a resume card naming the job.
+- **A cut answer** follows budgets.md: ask again with `--limit 5`; if it is still cut, that page is
+  reported as not read.
+- **"Read all" only when true.** The report says it read the whole transcript only when the last page's
+  `next_cursor` was null, no read was `partial`, and the transcription job (if any) had succeeded.
+  Otherwise it says which stretch it read, from VSift's own times.
+- **The handoff's caps stay** (50 claims, 100 citations, 50 gaps). A meeting with more items than 50 claims
+  hold ends `partial`, with a gap note giving the count left out. Items that do not fit are not listed in
+  prose either, since the prose says nothing the JSON does not.
 
 **Clock time.** No command takes a clock time yet. The agent turns a log time into source time by
 subtracting `time_anchor.recording_start`, which VSift reported. It then cites only items whose own
@@ -151,12 +213,17 @@ each file from one new line in `SKILL.md`. To stay at 300 lines, an existing sen
 reference, as earlier changes did. The plugin's slash commands point at these same files.
 
 **Tests.** The guard extends to `workflows/*.md`. Every `vsift` line parses and is `free`, and every
-inline command and flag exists. The budget a workflow names is a profile in `budgets.md`. Three example
-handoffs (bug report, findings, meeting notes) are built from fixture output and validate against the
-schema, including the new members.
+inline command and flag exists. The budget a workflow names is a profile in `budgets.md`. The guard holds
+`read_through` in `budgets.md` equal to the contract's constant (`vsift_contract::handoff::budget`), as it
+does `compact` and `standard`, and `handoff check` accepts its limits. Three example handoffs (bug report,
+findings, meeting notes) are built from fixture output and validate against the schema, including the new
+members. The meeting-notes example is a whole-transcript read: every page read, `budget.profile`
+`read_through` (amended 2026-10-29).
 
-**Cost:** about two days and one pull request (the six files, the two handoff members with their check
-rules, the guard and three examples).
+**Cost:** about two days and one pull request for the four cue-word workflows, the two handoff members
+with their check rules, the guard and two examples. The two read-through workflows, the `read_through`
+profile with its `transcript_pages` member and the meeting-notes example are about one more day, in their
+own pull request after the planner reviews this amendment (amended 2026-10-29).
 
 ### 3. The skill everywhere an agent looks (brief items 2 and 3): `vsift skill install`
 
@@ -303,20 +370,24 @@ Cut the first item first:
 6. C-04. The existing cold round still runs on the new help.
 7. The plugin entirely. `skill install --client claude-code` reaches Claude Code.
 8. `logs-by-clock.md`, if clock time slips from 0.3.0.
+9. `workshop-spec.md` (amended 2026-10-29): it shares `read_through` with `meeting-notes.md`, so cutting it
+   saves its file and example only.
 
 **Never cut:**
 
 - the skeleton (the hazard that started this);
-- the other five workflow files and the two handoff members' `category`;
+- the other workflow files, with `meeting-notes.md` and its `read_through` profile (the maintainer's D1),
+  and the two handoff members' `category`;
 - `skill install` for both folders;
 - the help pointers;
 - item 7 for whatever has merged.
 
 ### 9. Proposed register entries
 
-- **L-238:** Workflows over a long recording find items by cue-word search within the budget. An item far
-  from any cue word can be missed. The report says which stretches were not read, and the cue words are
-  English.
+- **L-238:** The cue-word workflows (findings, demo-backlog, and bug-report and logs-by-clock over a long
+  recording) find items by cue-word search within the budget. An item far from any cue word can be missed.
+  The report says which stretches were not read, and the cue words are English. Meeting notes and
+  workshop specs read the whole transcript instead (D1, amended 2026-10-29).
 - **L-239:** No command takes a clock time. The agent subtracts the recording's start to find a window.
   Log lines are not citable evidence in handoff v1, so they are quoted in prose as untrusted data.
 - **L-240:** A plugin added from `main` can carry a newer skill than the installed `vsift`. The docs say
@@ -325,12 +396,20 @@ Cut the first item first:
   2026-10-28. A client that moves its folder needs a new release, and the manual copy still works.
 - **L-242:** The workflows, the plugin and the install command are untried by agents until the 0.3.0 cut.
   The text ships, but the behaviour is unmeasured.
+- **L-243 (confirmed by the planner 2026-10-29; amended 2026-10-29):** `read_through` reads
+  at most 120 pages of 25 segments (about two hours), needs a long-context model (roughly 0.5 to 1.4
+  million characters of tool output for two hours), and a meeting with more than 50 items ends `partial`
+  because the handoff holds at most 50 claims. A longer recording or more items are stated as gaps.
 
 ## Decisions for the planner and the maintainer
 
 - **D1 (the maintainer).** Workflows over a long recording are cue-word sampled within `standard` and end
   `partial` with the unread stretches as gaps. This keeps the #368 ruling. A profile that reads a whole
-  transcript is not in 0.3.0. *Recommended:* yes.
+  transcript is not in 0.3.0. *Recommended:* yes. **Outcome (2026-10-29), in the maintainer's words: "Yes:
+  meeting notes and workshop specs read the whole transcript text, up to about two hours, with images still
+  within the budget."** The planner's reading: those two workflows read the whole transcript under a
+  text-only profile with a page ceiling and a call ceiling sized for two hours, superseding #368 for them
+  only; the other workflows keep cue-word search. Amended into sections 2, 8 and 9.
 - **D2 (the planner).** Add the optional `claims[].category` and `claims[].priority` members, rather than
   using prose only. *Recommended:* add them, because they make a workflow's output checkable JSON.
 - **D3 (the planner).** A refused install answers `INVALID_ARGUMENT` with a remediation naming
