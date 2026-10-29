@@ -648,3 +648,10 @@ campaign's `watchItem` records `changes_found` (today's rule), `changes_listed` 
 reason for each item, and checks that the frames are min(listed, 180), that no in-progress marker or temporary file is
 left, and that the session was closed. The numbers, and whether the full list was useful on footage like RM03, are
 written here when the run is in.
+
+**Delivery, amended 2026-10-29 (the planner's ruling, relayed by the coordinator).** Section 13's second pull request
+is split. The second pull request holds the use case (the implementation note above) and the settled screens (this
+amendment), with its own hosted measurement. Sections 7 to 9 (files that grow, frames during the transcription,
+Ctrl-C keeping the session and a rerun continuing it, a file held open on Windows with L-237, and the bars) come in a
+further pull request with its own hosted run. `--include on-screen-text` (section 10) stays separate and droppable at
+the cut.
