@@ -1,0 +1,79 @@
+{
+  "handoff_version": "1",
+  "status": "insufficient_evidence",
+  "question": "What service status does the presenter report in this recording?",
+  "capabilities": {
+    "image_access": "unavailable"
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "section": "actual",
+      "kind": "inferred",
+      "support": "unsupported",
+      "certainty": "low",
+      "statement": "The screen changes once, at 00:04.000, but what it shows could not be viewed, so the reported status is unknown.",
+      "citations": ["e1"]
+    },
+    {
+      "id": "c2",
+      "section": "context",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The video has an audio stream; a clip of 00:03.000 to 00:09.000 is available for a person to listen to.",
+      "citations": ["e2"]
+    }
+  ],
+  "citations": [
+    {
+      "id": "e1",
+      "type": "frame",
+      "evidence_id": "evd_0709743af0b31de3502dbb0630fad362",
+      "pixels_inspected": false
+    },
+    {
+      "id": "e2",
+      "type": "audio",
+      "evidence_id": "evd_51712e9345c7b70c4a395a7dd6ccbd7f"
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "transcript",
+      "reason": "transcript_unavailable",
+      "code": "MISSING_CAPABILITY",
+      "note": "No transcript was supplied and local speech recognition is not set up (the whisper.cpp CLI is missing)."
+    },
+    {
+      "kind": "image_access",
+      "reason": "image_access_unavailable",
+      "note": "This client could not open the check image, so no frame was viewed."
+    },
+    {
+      "kind": "audio",
+      "range": { "from_us": 3000000, "to_us": 9000000 },
+      "reason": "not_audible_to_agent",
+      "note": "The clip was extracted for a person to hear; the agent cannot listen to it."
+    }
+  ],
+  "untrusted_instructions": [],
+  "lifecycle": {
+    "action": "left_open"
+  },
+  "resume": {
+    "state": "PREPARE",
+    "session_id": "ses_338565afe20c5236577a28169e75b3f3",
+    "revision_id": null,
+    "job_id": null,
+    "operation_ids": ["op_retx338565afe20c5236577a281601"],
+    "evidence": [
+      { "kind": "visual_candidate", "id": "vcd_75290bd86dbfb7335309254d0b5f95d8", "at_us": 4000000 },
+      { "kind": "frame", "id": "evd_0709743af0b31de3502dbb0630fad362", "at_us": 4000000 },
+      { "kind": "audio", "id": "evd_51712e9345c7b70c4a395a7dd6ccbd7f", "at_us": 3000000 }
+    ],
+    "summary": "No transcript and no image access. One screen change at 00:04.000 is extracted but unviewed. Continue after the user supplies an SRT or WebVTT file, sets up whisper.cpp, or switches to an image-capable client.",
+    "remaining": { "images_total": 5, "tool_calls": 22, "wall_time_s": null },
+    "next_command": "vsift setup check --json"
+  }
+}

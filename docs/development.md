@@ -788,7 +788,9 @@ page, section 13).
 ## Governance checks, release evidence and public claims
 
 `cargo run --locked -p vsift-governance -- check` is the Governance job. Besides the delivery
-ledger, the fixture corpus, the handoff files, the workflow lint and the npm package rules, it
+ledger, the fixture corpus, the handoff files, the workflow lint, the npm package rules and the
+Claude Code plugin rule (the marketplace and plugin manifests name no person; the plugin ships no
+hooks, executables, monitors, MCP or LSP servers, npm manifest or link; ADR 0038 section 4), it
 checks the structure of the P14 release evidence ledger
 (`docs/planning/p14-evidence-ledger.json`) and the public-claims registry
 (`docs/planning/public-claims.json`) ([delivery governance](planning/delivery-governance.md)).

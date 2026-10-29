@@ -2819,3 +2819,59 @@ fn relative_links_resolve_and_no_tools_are_granted() -> Result<(), String> {
     }
     problems.into_result()
 }
+
+/// ADR 0038 section 4: the Claude Code plugin carries a real copy of the
+/// skill, not a link (Claude Code copies a plugin into its cache, and a
+/// Windows checkout without symbolic links turns a link into a text file), so
+/// this test holds every file of `plugins/vsift/skills/vsift/` to
+/// `skills/vsift/` byte for byte, with no file missing or added. A skill
+/// change updates both in the same change.
+#[test]
+fn the_plugins_skill_is_the_shipped_skill_byte_for_byte() -> Result<(), String> {
+    let shipped = skill_directory();
+    let copy = repository()
+        .join("plugins")
+        .join("vsift")
+        .join("skills")
+        .join("vsift");
+    let relative = |root: &Path| -> Result<Vec<PathBuf>, String> {
+        files_below(root)?
+            .into_iter()
+            .map(|path| {
+                path.strip_prefix(root)
+                    .map(Path::to_path_buf)
+                    .map_err(|error| format!("{}: {error}", path.display()))
+            })
+            .collect()
+    };
+    let shipped_files = relative(&shipped)?;
+    let copy_files = relative(&copy)?;
+    let mut problems = Problems::default();
+    for file in &shipped_files {
+        if !copy_files.contains(file) {
+            problems.add(format!(
+                "plugins/vsift/skills/vsift lacks {}",
+                file.display()
+            ));
+        }
+    }
+    for file in &copy_files {
+        if shipped_files.contains(file) {
+            let read = |root: &Path| {
+                fs::read(root.join(file)).map_err(|error| format!("{}: {error}", file.display()))
+            };
+            if read(&shipped)? != read(&copy)? {
+                problems.add(format!(
+                    "plugins/vsift/skills/vsift/{} differs from skills/vsift; copy the skill again",
+                    file.display()
+                ));
+            }
+        } else {
+            problems.add(format!(
+                "plugins/vsift/skills/vsift holds {}, which skills/vsift does not",
+                file.display()
+            ));
+        }
+    }
+    problems.into_result()
+}

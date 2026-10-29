@@ -1,0 +1,6 @@
+{
+  "name": "vsift",
+  "description": "Investigate a local recording with the vsift command and hand back a report whose every claim cites a transcript segment, frame or crop that vsift handoff check resolves. Needs the vsift command on your PATH.",
+  "license": "MIT OR Apache-2.0",
+  "repository": "https://github.com/smormah/vsift"
+}
