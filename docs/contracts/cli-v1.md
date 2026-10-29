@@ -3030,7 +3030,7 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
 ### 0.3.0 `handoff skeleton`
 
 `vsift handoff skeleton <session> --question <text>` prints a handoff that is valid but states
-nothing yet, written by VSift from the session's committed records ([ADR
+nothing yet, written by VSift from the session's records ([ADR
 0038](../decisions/0038-ai-integration-without-mcp.md) section 1). It exists because an agent that
 built the handoff JSON from a text template, and filled the template in with a case-insensitive
 search and replace, corrupted the JSON without any error: the replace also rewrote member names

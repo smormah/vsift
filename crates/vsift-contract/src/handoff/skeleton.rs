@@ -57,7 +57,7 @@ impl HandoffTranscriptBasis {
 }
 
 /// What `VSift` knows of one open session that a handoff may state: read by
-/// the host from the session's committed records, never from the agent.
+/// the host from the session's records, never from the agent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HandoffSkeletonFacts {
     session_id: String,
