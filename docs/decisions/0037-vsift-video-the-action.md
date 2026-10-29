@@ -686,3 +686,10 @@ amendment), with its own hosted measurement. Sections 7 to 9 (files that grow, f
 Ctrl-C keeping the session and a rerun continuing it, a file held open on Windows with L-237, and the bars) come in a
 further pull request with its own hosted run. `--include on-screen-text` (section 10) stays separate and droppable at
 the cut.
+
+**The planner's ruling on the measurement (2026-10-29), relayed by the coordinator:** keep the 5 s rule as it stands.
+"About 100" was a trigger for review, not a requirement. A spacing that grows with the video's length would thin long
+screen recordings, where quick screens matter most. The bound that counts is the frame room: a listed change without a
+frame is marked `no frame (evidence room)` on its own line (RM03's 3 of 183), and L-234 gives RM03 as its measured
+example. Recording each found change's time and reason in the campaign's report, so that a later spacing review can be
+simulated from one run, goes to the pull request for sections 7 to 9.

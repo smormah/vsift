@@ -497,7 +497,7 @@ pub fn render_screen_changes(
     if frames < changes.len() {
         let _ = writeln!(
             text,
-            "{frames} of {} frames written, spread evenly over the video; the others are listed without one.",
+            "{frames} of {} frames written, spread evenly over the listed changes; the others are listed with no frame (evidence room).",
             changes.len()
         );
     }
@@ -519,24 +519,21 @@ pub fn render_screen_changes(
     text.push('\n');
     let _ = writeln!(
         text,
-        "{:<10}  {:<20}  {:<18}  {:<36}  {:<36}  Frame SHA-256",
+        "{:<10}  {:<20}  {:<24}  {:<36}  {:<36}  Frame SHA-256",
         "Time", "Reason", "Frame", "Change", "Frame evidence"
     );
     for change in changes {
         let (file, evidence, sha256) =
-            change
-                .frame
-                .as_ref()
-                .map_or(("(not written)", "-", "-"), |frame| {
-                    (
-                        frame.file_name.as_str(),
-                        frame.evidence_id.as_str(),
-                        frame.sha256.as_str(),
-                    )
-                });
+            change.frame.as_ref().map_or((NO_FRAME, "-", "-"), |frame| {
+                (
+                    frame.file_name.as_str(),
+                    frame.evidence_id.as_str(),
+                    frame.sha256.as_str(),
+                )
+            });
         let _ = writeln!(
             text,
-            "{:<10}  {:<20}  {file:<18}  {:<36}  {evidence:<36}  {sha256}",
+            "{:<10}  {:<20}  {file:<24}  {:<36}  {evidence:<36}  {sha256}",
             readable_time(change.time),
             reason_words(change.reason),
             change.candidate_id
@@ -544,6 +541,11 @@ pub fn render_screen_changes(
     }
     text
 }
+
+/// The mark of a listed change without a frame: frames are bounded by the
+/// session's evidence room (known limit L-234), whether the bound spread them
+/// or the room stopped them.
+const NO_FRAME: &str = "no frame (evidence room)";
 
 /// A change's reason in plain words, as the list shows it.
 const fn reason_words(reason: CandidateReason) -> &'static str {

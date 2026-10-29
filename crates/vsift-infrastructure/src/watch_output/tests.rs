@@ -210,14 +210,14 @@ fn the_screen_change_list_gives_every_id_and_hash() {
         "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 settled screens of 9 changes found, 1 frames.\n\
          Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out, so a screen shown for less than 5 s after a listed one is missing unless motion settles on it.\n\
          To see every change, keep a session of the video: vsift ingest <video>, then vsift candidates <session> --from 0 --to 300000000, with the session id ingest gives.\n\
-         1 of 2 frames written, spread evenly over the video; the others are listed without one.\n\
+         1 of 2 frames written, spread evenly over the listed changes; the others are listed with no frame (evidence room).\n\
          VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n\
          Screen changes are found in the first four hours of a video only.\n"
     ));
     assert!(text.contains("Visual index     vix_02b7   in session ses_0123456789abcdef"));
-    assert!(text.contains("00:01:12    first frame           00-01-12.480.png    vcd_7f20"));
+    assert!(text.contains("00:01:12    first frame           00-01-12.480.png          vcd_7f20"));
     assert!(text.contains(&format!("evd_c19a{}  {}", " ".repeat(28), "b".repeat(64))));
-    assert!(text.contains("00:04:55    settled after motion  (not written)       vcd_a81d"));
+    assert!(text.contains("00:04:55    settled after motion  no frame (evidence room)  vcd_a81d"));
 }
 
 fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {

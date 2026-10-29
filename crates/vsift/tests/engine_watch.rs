@@ -378,7 +378,7 @@ async fn more_changes_than_the_session_has_room_for_still_finish() -> TestResult
     )?;
     assert!(list.contains("settled screens of"));
     assert_eq!(
-        list.contains("(not written)"),
+        list.contains("no frame (evidence room)"),
         outcome.changes_listed > vsift::MAX_WATCH_FRAMES
     );
     for frame in &outcome.frames {

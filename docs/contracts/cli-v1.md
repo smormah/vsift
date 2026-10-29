@@ -3308,7 +3308,7 @@ after it releases every name it claimed, never a file it did not create.
 | --- | --- |
 | `meeting.txt` | A header (the video's name, VSift's version, the UTC time to the minute, "local speech recognition", a line saying it is a machine transcription to check against the recording, the video's full SHA-256, and the transcript revision and session ids with a note that the run closed the session), then one line per segment, `[HH:MM:SS] text`. A part that was not transcribed appears in time order as `[HH:MM:SS-HH:MM:SS] (not transcribed: <reason>)`; a video with no sound track says so in place of the lines. |
 | `meeting.srt` | SubRip subtitles, one cue per segment, no header and no ids. A cue's text is one line, never holding a blank line or the `-->` arrow. Not written for a video with no sound track. |
-| `meeting-vsift/` | One PNG per written frame, named by its time (`00-01-12.480.png`), and `screen-changes.txt`: a header (the video's SHA-256, the visual index revision and session ids), then every screen change with its time, frame file (or a mark that its frame was not written), candidate id, frame evidence id and the frame's SHA-256. |
+| `meeting-vsift/` | One PNG per written frame, named by its time (`00-01-12.480.png`), and `screen-changes.txt`: a header (the video's SHA-256, the visual index revision and session ids), then every screen change with its time, frame file (or `no frame (evidence room)` when the frame bound or the session's evidence room left it without one), candidate id, frame evidence id and the frame's SHA-256. |
 
 - **Text is written in display form**, hidden and control characters made visible, as the readable
   views show it: transcript text and the video's name are untrusted.
