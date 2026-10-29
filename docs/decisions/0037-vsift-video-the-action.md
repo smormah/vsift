@@ -646,8 +646,39 @@ this pull request; no campaign threshold is loosened.
 **The measurement** (the second pull request's one hosted `P14 real media` run, RM01, RM03, RM04 and RM10): the
 campaign's `watchItem` records `changes_found` (today's rule), `changes_listed` (this one) and the listed changes by
 reason for each item, and checks that the frames are min(listed, 180), that no in-progress marker or temporary file is
-left, and that the session was closed. The numbers, and whether the full list was useful on footage like RM03, are
-written here when the run is in.
+left, and that the session was closed.
+
+**Measured, 2026-10-29: hosted run 40791259684** on `682920e5`. The pull request's later head, `adee6bc1`, differs from
+it in records only. Every `vsift <video>` step exited 0, and every `watch` check passed. RM03 failed only the advisory
+seam check, on the two rewording seams F14 left after #542.
+
+| Item | Footage | Changes found (every change) | Listed (settled screens) | Listed by reason | Frames | Wall time (RTF) |
+| --- | --- | --- | --- | --- | --- | --- |
+| RM01 | screen recording | 26 | 15 | first frame 1, visual change 14 | 15 | 46 s (0.33) |
+| RM03 | 19:16 talk, moving camera | 589 | 183 | first frame 1, visual change 128, settled after motion 54 | 180 | 479 s (0.41) |
+| RM04 | screen recording | 138 | 48 | first frame 1, visual change 14, settled after motion 33 | 48 | 90 s (0.30) |
+| RM10 | 3:21 screen recording | 108 | 31 | first frame 1, visual change 11, settled after motion 19 | 31 | 65 s (0.33) |
+
+The campaign's own `candidates` step on the same run gives every change found by reason:
+
+- RM01: 22 visual changes and no motion.
+- RM03: 466 visual changes, 55 starts of motion, 54 settled.
+- RM04: 62 visual changes, 37 starts of motion, 33 settled.
+- RM10: 65 visual changes, 21 starts of motion, 19 settled.
+
+**Reading.** The rule shortens every list by a half to three quarters.
+
+- On RM04 and RM10, most of what it leaves out is either motion's start (its settled screen is listed) or a plain
+  change within 5 s of a listed one.
+- On RM01, a screen recording without motion, it leaves out 11 plain changes within 5 s of a listed one. That is the
+  case this record names as the rule's cost: a screen that follows a listed one quickly, a dialog after a click say.
+- The run's report holds counts, not the changes' times or frames. So whether a person would have wanted any of the
+  changes left out on RM01 or RM10 is not shown by this run. It would take a look at those changes' frames.
+- RM03, the talk, still lists 183. That is above the planner's mark of about 100, and above the 180-frame bound, so 3
+  are listed without a frame. A spacing proposal goes to the planner rather than a retune here.
+- The full list was not useful on footage like RM03: 589 entries in 19 minutes, one every two seconds, mostly camera
+  movement.
+- RM03's run was also `partial`, with one range not transcribed, which the transcript states in place.
 
 **Delivery, amended 2026-10-29 (the planner's ruling, relayed by the coordinator).** Section 13's second pull request
 is split. The second pull request holds the use case (the implementation note above) and the settled screens (this
