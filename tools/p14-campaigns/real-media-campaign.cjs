@@ -186,7 +186,7 @@ function main() {
       log(`  ${item.id}: ${kept.verdict.passed ? 'pass' : `FAIL in ${kept.verdict.failed_checks.map((entry) => entry.check).join(', ')}`}`);
     } else {
       // ADR 0037: `vsift <video>` over a copy of the item, the bare form.
-      const watched = campaign.watchItem(item, file, run, { folder });
+      const watched = campaign.watchItem(item, file, run, { folder, changes: campaign.takeChanges(report) });
       report.measurements.watch = watched.measurements;
       report.checks.watch = watched.check;
       report.sha256 = item.sha256;

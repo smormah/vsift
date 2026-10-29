@@ -214,6 +214,44 @@ where
             .and_then(|()| self.standard_error.flush());
     }
 
+    /// Draws the live view of `vsift <video>` (ADR 0037 section 9) on
+    /// standard error in place of the `previous` lines drawn before: the
+    /// cursor goes back to the first of them, each line is erased and
+    /// written again, and whatever the old view had below the new one is
+    /// erased. Best effort. The text was built by the `TerminalText`
+    /// builder, so its only escape sequences are its own status colours.
+    /// Returns how many lines are on the screen now.
+    pub(crate) fn write_error_block(&mut self, text: &RenderedText, previous: usize) -> usize {
+        let mut block = String::with_capacity(text.as_str().len() + 64);
+        if previous > 0 {
+            block.push_str("\x1b[");
+            block.push_str(&previous.to_string());
+            block.push('F');
+        }
+        let mut lines = 0_usize;
+        for line in text.as_str().split_inclusive('\n') {
+            block.push_str("\x1b[2K");
+            block.push_str(line);
+            lines += 1;
+        }
+        block.push_str("\x1b[J");
+        let _ignored = self
+            .standard_error
+            .write_all(block.as_bytes())
+            .and_then(|()| self.standard_error.flush());
+        lines
+    }
+
+    /// Erases the `previous` lines of the live view on standard error
+    /// before the result or failure is written.
+    pub(crate) fn clear_error_block(&mut self, previous: usize) {
+        if previous == 0 {
+            return;
+        }
+        let _ignored = write!(self.standard_error, "\x1b[{previous}F\x1b[J")
+            .and_then(|()| self.standard_error.flush());
+    }
+
     /// Best-effort bounded diagnostic output; stderr failure never panics.
     ///
     /// Diagnostics can repeat text the user or a provider supplied (the

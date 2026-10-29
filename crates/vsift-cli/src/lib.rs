@@ -29,6 +29,7 @@ mod skill;
 #[cfg(test)]
 mod skill_contract;
 mod watch;
+mod watch_lines;
 mod worker;
 
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::Duration};
@@ -568,10 +569,19 @@ where
             .await
         }
         Command::Watch(arguments) => {
-            let result = live_line::with_live_line(&mut writer, line, |observer| {
-                Box::pin(watch::watch(&engine, &arguments, &cancellation, observer))
-            })
-            .await;
+            // ADR 0037 section 9: the bars in readable text, and only in the
+            // real process, whose standard error is the person's.
+            let display = if mode == OutputMode::Human && interruption == Interruption::Trapped {
+                watch_lines::TerminalFacts::of_process().display()
+            } else {
+                watch_lines::WatchDisplay::Hidden
+            };
+            let board = watch::progress_board(&arguments);
+            let result =
+                watch_lines::with_watch_progress(&mut writer, display, board, |observer| {
+                    Box::pin(watch::watch(&engine, &arguments, &cancellation, observer))
+                })
+                .await;
             write_session_result(&mut writer, mode, CommandName::Watch, result)
         }
         Command::Transcript(arguments) => {
@@ -944,7 +954,7 @@ impl From<EngineError> for CommandFailure {
             })
             .or_else(|| local_asr_remediation(&error))
             .or_else(|| match &error {
-                EngineError::Watch(failure) => Some(watch::remediation(*failure).to_owned()),
+                EngineError::Watch(failure) => Some(watch::remediation(*failure)),
                 _ => None,
             });
         let reason = match &error {

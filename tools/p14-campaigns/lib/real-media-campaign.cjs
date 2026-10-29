@@ -296,6 +296,8 @@ function summariseRevision(answer) {
     no_audio_chunks: asr.no_audio_chunks,
     unplaced_ranges: unplaced.length,
     unplaced_us: checks.mergeRanges(unplaced).reduce((total, range) => total + range.to_us - range.from_us, 0),
+    // Each range as VSift reports it (times only), so a later review can place every one.
+    unplaced: unplaced.map((range) => ({ from_us: range.from_us, to_us: range.to_us })),
     // The recogniser threads VSift gave whisper.cpp for this run (#486).
     threads: Number.isInteger(asr.threads) ? asr.threads : null,
     warnings: (revision.warnings || []).map((warning) => ({ code: warning.code, count: warning.count === undefined ? null : warning.count })),
@@ -379,6 +381,9 @@ function investigate(item, file, run, where) {
     }, {}),
     dropped_candidates: visual.finals.reduce((total, gap) => total + (gap.dropped_candidates || 0), 0),
   };
+  // Every change found, by time and reasons (times and reasons only): `watchItem`
+  // takes it from here (`takeChanges`), so a public item's report lists them once.
+  if (!isPrivate) report.measurements.candidates.changes = visual.items.map((candidate) => ({ time_us: candidate.representative_us, reason: (candidate.reasons || []).join(',') }));
   const visualFindings = [];
   if (visual.gaps.length > 0) visualFindings.push(`candidates left ${visual.gaps.length} range(s) not analysed or timed out after ten rounds`);
   const labels = item.labels || {};
@@ -577,6 +582,21 @@ function investigate(item, file, run, where) {
   return report;
 }
 
+/**
+ * Moves the screen changes the item's own `candidates` step read (every one,
+ * not only the listed ones) out of its report and returns them for `watchItem`,
+ * or null when that step did not run. They are kept once, under `watch`.
+ * @param {{ measurements: { candidates?: { changes?: { time_us: number, reason: string }[] } } }} report
+ * @returns {{ time_us: number, reason: string }[] | null}
+ */
+function takeChanges(report) {
+  const candidates = report.measurements && report.measurements.candidates;
+  if (!candidates || !Array.isArray(candidates.changes)) return null;
+  const { changes } = candidates;
+  delete candidates.changes;
+  return changes;
+}
+
 /** The frames `vsift <video>` writes at most (ADR 0037 section 6, L-234). */
 const WATCH_MAX_FRAMES = 180;
 /** One listed change of `screen-changes.txt` (ADR 0037): its time, then its reason in plain words. */
@@ -673,6 +693,8 @@ function watchItem(item, file, run, where) {
       listed_by_reason: listedByReason,
       frames_written: data.frames.length,
       frame_bytes: frameBytes,
+      // Every change found by the item's own candidates step (`where.changes`), by time and reason, so a review can be simulated from the report.
+      changes: Array.isArray(where.changes) ? where.changes : null,
     },
     check: { passed: findings.length === 0, findings },
   };
@@ -827,6 +849,16 @@ function markdown(run) {
       : (item.verdict.findings.length === 0 ? 'none' : item.verdict.findings.join('<br>'));
     lines.push(`| ${item.id} | ${item.verdict.passed ? 'pass' : '**fail**'} | ${t ? `${t.seconds.toFixed(0)} s (${t.real_time_factor.toFixed(2)})` : 'n/a'} | ${s ? `${fmt(s.seam_recall)} / ${fmt(s.control_recall)}` : 'n/a'} | ${m.seam_repeats ? m.seam_repeats.count : 'n/a'} | ${m.timing_differences && m.timing_differences.start.p95_us !== null ? `${(m.timing_differences.start.p95_us / 1000).toFixed(0)} ms` : 'n/a'} | ${m.candidates ? fmt(m.candidates.per_minute) : 'n/a'} | ${m.small_text && m.small_text.line_heights.lines > 0 ? `${m.small_text.line_heights.min_px} / ${m.small_text.line_heights.median_px} px (${m.small_text.line_heights.lines})` : 'n/a'} | ${findings} |`);
   }
+  // One short line per item that left speech unplaced: the ranges as clock times.
+  const clock = (us) => {
+    const tenths = Math.floor(us / (SECOND / 10));
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${pad(Math.floor(tenths / 36000))}:${pad(Math.floor(tenths / 600) % 60)}:${pad(Math.floor(tenths / 10) % 60)}.${tenths % 10}`;
+  };
+  const unplacedLines = run.items
+    .filter((item) => item.measurements && item.measurements.transcription && Array.isArray(item.measurements.transcription.unplaced) && item.measurements.transcription.unplaced.length > 0)
+    .map((item) => `- ${item.id}: speech not placed in ${item.measurements.transcription.unplaced.map((range) => `${clock(range.from_us)}-${clock(range.to_us)}`).join(', ')}`);
+  if (unplacedLines.length > 0) lines.push('', ...unplacedLines);
   const watched = run.items.filter((item) => item.measurements && item.measurements.watch);
   if (watched.length > 0) {
     lines.push('', '## `vsift <video>`', '', '| Item | Wall time (RTF) | Outcome | Screen changes found | Listed (settled screens) | Listed by reason | Frames written (bytes) |', '| --- | --- | --- | --- | --- | --- | --- |');
@@ -845,4 +877,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { WATCH_MAX_FRAMES, watchItem, KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };
+module.exports = { WATCH_MAX_FRAMES, watchItem, takeChanges, KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };

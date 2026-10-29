@@ -377,6 +377,25 @@ impl EvidenceInventory {
         if evidence < total { evidence } else { total }
     }
 
+    /// Evidence artifacts the session could take if none were stored yet:
+    /// the room `vsift <video>` fits its frames to. Its session holds only
+    /// its own frames, which `frame get` gives again without storing them
+    /// twice, so a run that continues an interrupted one spreads its frames
+    /// over the same changes (ADR 0037 section 8).
+    #[must_use]
+    pub const fn evidence_slots_if_reused(&self) -> usize {
+        let others = self
+            .status
+            .artifact_count
+            .saturating_sub(self.evidence_artifacts);
+        let total = MAX_SESSION_ARTIFACTS.saturating_sub(others);
+        if crate::MAX_EVIDENCE_ARTIFACTS < total {
+            crate::MAX_EVIDENCE_ARTIFACTS
+        } else {
+            total
+        }
+    }
+
     /// Artifact bytes the session can still take.
     #[must_use]
     pub const fn bytes_left(&self) -> u64 {

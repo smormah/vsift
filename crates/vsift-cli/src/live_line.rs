@@ -204,7 +204,7 @@ pub(crate) fn media_sentence(media: &MediaProgress, estimating: bool) -> String 
 }
 
 /// A media time as `M:SS`, or `H:MM:SS` from an hour on.
-fn clock(micros: u64) -> String {
+pub(crate) fn clock(micros: u64) -> String {
     let seconds = micros / 1_000_000;
     let (hours, minutes, seconds) = (seconds / 3_600, seconds / 60 % 60, seconds % 60);
     if hours > 0 {
@@ -216,7 +216,7 @@ fn clock(micros: u64) -> String {
 
 /// The time left in round words: under a minute, minutes, or hours and
 /// minutes.
-fn time_left(micros: u64) -> String {
+pub(crate) fn time_left(micros: u64) -> String {
     let minutes = micros.div_ceil(60_000_000);
     match minutes {
         0 | 1 if micros < 60_000_000 => "under a minute left".to_owned(),

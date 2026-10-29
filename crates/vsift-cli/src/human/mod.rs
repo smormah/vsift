@@ -46,6 +46,7 @@ mod time;
 mod transcript;
 mod view;
 mod watch;
+mod watch_progress;
 
 use serde::Deserialize;
 use vsift_contract::{CommandName, OperationResponse};
@@ -61,6 +62,10 @@ pub(crate) use setup_door::{
 use text::TerminalText;
 pub(crate) use text::{DisplayText, RenderedText, Styling, TooLarge};
 pub(crate) use view::{InstallComponent, SetupInstall, SetupPlan};
+pub(crate) use watch_progress::{
+    StreamFigures, StreamView, WatchPhase, WatchProgressView, WatchStream, watch_progress,
+    watch_stream_finished,
+};
 
 use crate::output::OutputError;
 

@@ -89,6 +89,24 @@ impl ProgressObserver {
         }
     }
 
+    /// The same observer, which also tells `callback`, after the host's own,
+    /// every observation; the other callbacks stay. `callback` must not
+    /// block.
+    #[must_use]
+    pub(crate) fn also(&self, callback: impl Fn(&JobProgress) + Send + Sync + 'static) -> Self {
+        let host = self.progress.clone();
+        Self {
+            progress: Some(Arc::new(move |progress: &JobProgress| {
+                if let Some(host) = &host {
+                    host(progress);
+                }
+                callback(progress);
+            })),
+            admission: self.admission.clone(),
+            pieces: self.pieces.clone(),
+        }
+    }
+
     /// Reports one observation to the callback, if there is one. The
     /// engine's operations call it; a host may too, for example to test the
     /// callback it installed.

@@ -211,13 +211,17 @@ impl Console for Nobody {
     }
 }
 
+/// Whether the console takes virtual terminal sequences (colour and cursor
+/// movement), switching them on for standard output and standard error;
+/// always true off Windows, where a terminal takes them.
 #[cfg(windows)]
-fn windows_console_takes_colour() -> bool {
+pub(crate) fn windows_console_takes_colour() -> bool {
     anstyle_query::windows::enable_ansi_colors().unwrap_or(false)
 }
 
+/// Off Windows a terminal takes virtual terminal sequences.
 #[cfg(not(windows))]
-const fn windows_console_takes_colour() -> bool {
+pub(crate) const fn windows_console_takes_colour() -> bool {
     true
 }
 

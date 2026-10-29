@@ -133,11 +133,17 @@ pub struct WatchData {
 }
 
 /// Remediation when the readable transcript's name is taken.
-pub const WATCH_TRANSCRIPT_EXISTS_REMEDIATION: &str = "The transcript file (.txt) VSift would write beside the video already exists, and VSift never replaces a file. Move it away, or write elsewhere with --output <folder>.";
+pub const WATCH_TRANSCRIPT_EXISTS_REMEDIATION: &str = "The transcript file (.txt) VSift would write beside the video already exists, and VSift never replaces a file. Move it away, or write elsewhere with --output <folder>. A file left by a stopped VSift run is continued by the same command only while VSift's private copy of the video is kept (a day unused); after that, move it away too.";
 /// Remediation when the subtitles' name is taken.
-pub const WATCH_SUBTITLES_EXISTS_REMEDIATION: &str = "The subtitles file (.srt) VSift would write beside the video already exists, and VSift never replaces a file. Move it away, or write elsewhere with --output <folder>.";
+pub const WATCH_SUBTITLES_EXISTS_REMEDIATION: &str = "The subtitles file (.srt) VSift would write beside the video already exists, and VSift never replaces a file. Move it away, or write elsewhere with --output <folder>. A file left by a stopped VSift run is continued by the same command only while VSift's private copy of the video is kept (a day unused); after that, move it away too.";
 /// Remediation when the screen-change folder's name is taken.
-pub const WATCH_FOLDER_EXISTS_REMEDIATION: &str = "The screen-change folder (-vsift) VSift would write beside the video already exists, and VSift never replaces it. Move it away, or write elsewhere with --output <folder>.";
+pub const WATCH_FOLDER_EXISTS_REMEDIATION: &str = "The screen-change folder (-vsift) VSift would write beside the video already exists, and VSift never replaces it. Move it away, or write elsewhere with --output <folder>. A file left by a stopped VSift run is continued by the same command only while VSift's private copy of the video is kept (a day unused); after that, move it away too.";
+/// Remediation when another program held a file open for the final write's
+/// 30 s (known limit L-237).
+pub const WATCH_OUTPUT_HELD_REMEDIATION: &str = "Another program kept a file VSift was writing open, so VSift could not finish it; the file keeps its last update, marked IN PROGRESS. Close the file in the other program, then write the files again elsewhere with --output <folder>.";
+/// Remediation when the person stopped the run (Ctrl-C): the files keep
+/// their last update and the same command continues (ADR 0037 section 8).
+pub const WATCH_STOPPED_REMEDIATION: &str = "VSift stopped. The files keep what was transcribed so far, marked IN PROGRESS, and VSift kept its private copy of the video: run the same command again to continue.";
 /// Remediation when the folder refuses a write.
 pub const WATCH_OUTPUT_REFUSED_REMEDIATION: &str = "VSift could not write its files into the folder (it may be read-only, full, or a synced folder that refuses new files). Choose a folder you can write to with --output <folder>.";
 /// Remediation when `--output` is inside `VSift`'s own folders.

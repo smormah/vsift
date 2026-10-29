@@ -107,14 +107,29 @@ pub(crate) struct DisplayText(String);
 impl DisplayText {
     /// Renders raw untrusted text with `display_text`'s rule, after bounding
     /// it (at most 4 KiB of it is read) and replacing its control
-    /// characters, line breaks included. Only the tests use it now: the
-    /// readable `setup check` shows no provider text.
-    #[cfg(test)]
+    /// characters, line breaks included. The live view of `vsift <video>`
+    /// shows the video's name with it (ADR 0037 section 9).
     pub(crate) fn render(raw: &str) -> Self {
         Self(render_hidden_characters(&sanitize_untrusted_text(
             raw,
             MAX_RENDERED_SOURCE_BYTES,
         )))
+    }
+
+    /// [`DisplayText::render`] of at most the first `characters` characters
+    /// of `raw`, followed by `...` when more were left out.
+    ///
+    /// A view redrawn in place counts its lines to move back over them, so a
+    /// line the terminal wraps would leave a copy behind at every redraw; a
+    /// long name is shortened there. The text it stands for is written whole
+    /// elsewhere (the finish screen, `--json`).
+    pub(crate) fn render_shortened(raw: &str, characters: usize) -> Self {
+        let mut kept: String = raw.chars().take(characters).collect();
+        let shortened = kept.len() < raw.len();
+        if shortened {
+            kept.push_str("...");
+        }
+        Self::render(&kept)
     }
 
     /// Renders raw untrusted text that has its own lines, such as the

@@ -205,6 +205,64 @@ test('a window over its candidate budget is measured, not retried and not a find
   assert.equal(report.measurements.candidates.dropped_candidates, 7);
 });
 
+test('the local speech measurement lists each unplaced range\'s start and end, beside the unchanged count and total', (t) => {
+  const { run } = standIn();
+  const unplaced = [{ from_us: 10 * SECOND, to_us: 14 * SECOND }, { from_us: 12 * SECOND, to_us: 16 * SECOND }, { from_us: 90 * SECOND, to_us: 95.5 * SECOND, reason: 'ignored' }];
+  const withGaps = (step, args, extra) => {
+    const answer = run(step, args, extra);
+    if (args[0] === 'transcript' && args[1] === 'retranscribe') answer.json.data.revision.local_asr.unplaced_ranges = unplaced;
+    return answer;
+  };
+  const publicItem = { ...PRIVATE_ITEM, id: 'RM01', private: undefined, title: 'T', attribution: 'A', tests: ['#363'] };
+  const report = campaign.investigate(publicItem, FILE, withGaps, { folder: scratch(t), copyFile: () => {}, exists: () => true });
+  const measured = report.measurements.transcription;
+  assert.equal(measured.unplaced_ranges, 3, 'the count, as before');
+  assert.equal(measured.unplaced_us, 11.5 * SECOND, 'the merged total, as before');
+  assert.deepEqual(measured.unplaced, [{ from_us: 10 * SECOND, to_us: 14 * SECOND }, { from_us: 12 * SECOND, to_us: 16 * SECOND }, { from_us: 90 * SECOND, to_us: 95.5 * SECOND }], 'times only, as reported');
+  const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
+    setup: { passed: true, findings: [] }, items: [{ id: 'RM01', measurements: { transcription: measured }, verdict: { passed: true, findings: [] } }] });
+  assert.match(summary, /^- RM01: speech not placed in 00:00:10\.0-00:00:14\.0, 00:00:12\.0-00:00:16\.0, 00:01:30\.0-00:01:35\.5$/m);
+  const none = campaign.investigate(publicItem, FILE, run, { folder: scratch(t), copyFile: () => {}, exists: () => true });
+  assert.deepEqual(none.measurements.transcription.unplaced, []);
+  assert.doesNotMatch(campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
+    setup: { passed: true, findings: [] }, items: [{ id: 'RM01', measurements: { transcription: none.measurements.transcription }, verdict: { passed: true, findings: [] } }] }), /speech not placed/);
+});
+
+test('the watch report carries every screen change the candidates step read, by time and reasons, once (not only the listed ones)', (t) => {
+  const { run } = standIn();
+  const many = (step, args, extra) => {
+    // The stand-in's frame step knows only its own two candidates: any other asks for the first.
+    const known = args[0] === 'frame' && !/^vcd_[12]$/.test(args[args.indexOf('--candidate') + 1]);
+    const answer = run(step, known ? args.map((arg, index) => (args[index - 1] === '--candidate' ? 'vcd_1' : arg)) : args, extra);
+    if (args[0] === 'candidates') {
+      // The stand-in's two candidates (which its frame step knows) and the rest of 589.
+      const rest = Array.from({ length: 587 }, (_, index) => ({ candidate_id: `vcd_x${index}`, representative_us: (index + 2) * SECOND, reasons: index === 5 ? ['visual_change', 'motion_start'] : ['visual_change'] }));
+      answer.json.data.items = [...answer.json.data.items, ...rest];
+    }
+    return answer;
+  };
+  const publicItem = { ...WATCHED_ITEM, tests: ['#363'] };
+  const { file, item } = watchedSource(t);
+  const report = campaign.investigate(publicItem, FILE, many, { folder: item, copyFile: () => {}, exists: () => true });
+  assert.equal(report.measurements.candidates.count, 589);
+  const changes = campaign.takeChanges(report);
+  assert.equal(changes.length, 589, 'every change found, not the listed 200');
+  assert.deepEqual(changes[0], { time_us: 0, reason: 'first_frame' });
+  assert.deepEqual(changes[1], { time_us: 50 * SECOND, reason: 'motion_start' });
+  assert.deepEqual(changes[7], { time_us: 7 * SECOND, reason: 'visual_change,motion_start' });
+  assert.deepEqual(Object.keys(changes[1]).sort(), ['reason', 'time_us'], 'times and reasons only');
+  assert.equal(report.measurements.candidates.changes, undefined, 'kept once, under watch');
+  assert.equal(campaign.takeChanges(report), null, 'taken already');
+  const { run: watchRun } = watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 589, listed: 200 });
+  const watched = campaign.watchItem(WATCHED_ITEM, file, watchRun, { folder: item, changes });
+  assert.deepEqual(watched.measurements.changes, changes);
+  const bare = watchedSource(t);
+  assert.equal(campaign.watchItem(WATCHED_ITEM, bare.file, watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 3 }).run, { folder: bare.item }).measurements.changes, null, 'no candidates step, no list');
+  const priv = campaign.investigate(PRIVATE_ITEM, FILE, many, { folder: scratch(t), copyFile: () => {}, exists: () => true, writeFile: () => {} });
+  assert.equal(campaign.takeChanges(priv), null, 'a private item is not watched and lists no changes');
+  assert.equal(JSON.stringify(campaign.privateReport(priv)).includes('time_us\":7'), false);
+});
+
 test('the shifted run starts at a segment boundary well inside a chunk step, or not at all', () => {
   const at = (...seconds) => seconds.map((s) => ({ start_us: s * SECOND }));
   assert.equal(campaign.shiftPoint(at(0, 6, 11.9, 17.92, 30), 200 * SECOND), 11.9 * SECOND);

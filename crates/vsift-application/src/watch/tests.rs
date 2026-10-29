@@ -1,12 +1,15 @@
 //! The `watch` use case over fakes of its two ports (ADR 0037 section 14):
-//! the order of the steps, refusals before any work, stated gaps, and the
-//! frame bound with its even spread and its backstop.
+//! the order of the steps, refusals before any work, stated gaps, the frame
+//! bound with its even spread and its backstop, the snapshots of the files
+//! that grow, Ctrl-C keeping the session, and a rerun continuing the job.
 
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
     sync::Mutex,
 };
+
+use crate::{Clock, ClockError};
 
 use vsift_domain::{
     CandidateReason, EvidenceId, IdentifierError, JobId, MAX_WATCH_FRAMES, MediaTime, SessionId,
@@ -15,10 +18,11 @@ use vsift_domain::{
 };
 
 use super::{
-    ClaimedOutputs, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PreparedRun,
-    PreparedTranscript, ScreenChange, ScreenChanges, SessionFrame, TranscriptEntry, TranscriptLine,
-    WatchDocuments, WatchError, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs,
-    WatchProvenance, WatchSteps, run_watch,
+    ClaimedOutputs, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop, PreparedRun,
+    PreparedTranscript, PublishedPart, ScreenChange, ScreenChangeEntry, ScreenChangeSummary,
+    ScreenChanges, SessionFrame, TranscriptEntry, TranscriptLine, UnfinishedWatch, WatchDocuments,
+    WatchError, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs, WatchProgress,
+    WatchProvenance, WatchSnapshot, WatchSteps, run_watch,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -51,8 +55,36 @@ fn change(position: usize) -> Result<ScreenChange, IdentifierError> {
 
 /// The engine's operations, scripted: what each answers, and every call in
 /// order.
+/// What the fake job tells the use case while it runs, in order.
+#[derive(Clone, Copy, Debug)]
+enum FakeNotice {
+    Published,
+    Indexed,
+}
+
+/// A clock that moves on by `step` seconds each time it is read.
+struct SteppingClock {
+    now: Mutex<u64>,
+    step: u64,
+}
+
+impl Clock for SteppingClock {
+    fn now_unix_seconds(&self) -> Result<u64, ClockError> {
+        let mut now = self.now.lock().map_err(|_| ClockError::BeforeUnixEpoch)?;
+        let read = *now;
+        *now += self.step;
+        Ok(read)
+    }
+}
+
 struct FakeSteps {
     fail: Option<StepFailure>,
+    /// The caller stops the job (Ctrl-C) after its notices.
+    stopped: bool,
+    notices: Vec<FakeNotice>,
+    published: Option<PublishedPart>,
+    unfinished: Option<UnfinishedWatch>,
+    clock: SteppingClock,
     transcript: Option<PreparedTranscript>,
     lines: Vec<TranscriptLine>,
     changes: Vec<ScreenChange>,
@@ -66,6 +98,24 @@ impl FakeSteps {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             fail: None,
+            stopped: false,
+            notices: vec![FakeNotice::Indexed, FakeNotice::Published],
+            published: Some(PublishedPart {
+                revision: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
+                lines: vec![TranscriptLine {
+                    start: seconds(1),
+                    end: seconds(4),
+                    text: "Good morning.".to_owned(),
+                }],
+                published_until: seconds(30),
+                duration: seconds(60),
+                since: Some("since-1".to_owned()),
+            }),
+            unfinished: None,
+            clock: SteppingClock {
+                now: Mutex::new(1_000),
+                step: 0,
+            },
             transcript: Some(PreparedTranscript {
                 revision: TranscriptRevisionId::parse("trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978")?,
                 range: range(0, 60)?,
@@ -143,18 +193,67 @@ impl WatchSteps for FakeSteps {
         std::future::ready(answer)
     }
 
+    fn start_job(&self, _session: &SessionId) -> Result<JobId, StepFailure> {
+        self.record("start_job");
+        JobId::parse("job_0123456789abcdef").map_err(|_| StepFailure::Prepare)
+    }
+
+    fn record_claim(
+        &self,
+        _session: &SessionId,
+        job: &JobId,
+        _claimed: &ClaimedOutputs,
+    ) -> Result<(), StepFailure> {
+        self.record(format!("record_claim {}", job.as_str()));
+        Ok(())
+    }
+
     fn prepare(
         &self,
         _session: &SessionId,
-    ) -> impl Future<Output = Result<PreparedRun, StepFailure>> + Send {
+        job: &JobId,
+        progress: &dyn WatchProgress,
+    ) -> impl Future<Output = Result<PreparedRun, PrepareStop<StepFailure>>> + Send {
         let answer = (|| {
-            self.step("prepare", StepFailure::Prepare)?;
+            self.step(&format!("prepare {}", job.as_str()), StepFailure::Prepare)
+                .map_err(PrepareStop::Failed)?;
+            for notice in &self.notices {
+                match notice {
+                    FakeNotice::Published => progress.published(),
+                    FakeNotice::Indexed => progress.visual_indexed(),
+                }
+            }
+            if self.stopped {
+                return Err(PrepareStop::Interrupted);
+            }
             Ok(PreparedRun {
-                job_id: JobId::parse("job_0123456789abcdef").map_err(|_| StepFailure::Prepare)?,
+                job_id: job.clone(),
                 transcript: self.transcript.clone(),
             })
         })();
         std::future::ready(answer)
+    }
+
+    fn published(
+        &self,
+        _session: &SessionId,
+        since: Option<&str>,
+    ) -> Result<Option<PublishedPart>, StepFailure> {
+        self.record(format!("published {}", since.unwrap_or("-")));
+        Ok(self.published.clone())
+    }
+
+    fn find_unfinished(
+        &self,
+        _video: &Path,
+        _claimed: &ClaimedOutputs,
+    ) -> impl Future<Output = Result<Option<UnfinishedWatch>, StepFailure>> + Send {
+        self.record("find_unfinished");
+        std::future::ready(Ok(self.unfinished.clone()))
+    }
+
+    fn clock(&self) -> &dyn Clock {
+        &self.clock
     }
 
     fn transcript_lines(
@@ -241,6 +340,8 @@ struct FakeOutputs {
     taken: bool,
     calls: Vec<String>,
     documents: Option<WatchDocuments>,
+    listed: Option<(ScreenChangeSummary, Vec<ScreenChangeEntry>)>,
+    snapshots: Vec<WatchSnapshot>,
 }
 
 fn file(name: &str) -> WatchFile {
@@ -268,6 +369,42 @@ impl WatchOutputs for FakeOutputs {
         })
     }
 
+    fn planned(
+        &mut self,
+        _video: &Path,
+        _output: Option<&Path>,
+        names: &WatchOutputNames,
+    ) -> Result<ClaimedOutputs, WatchOutputError> {
+        self.calls.push("planned".to_owned());
+        Ok(ClaimedOutputs {
+            transcript: PathBuf::from(names.transcript()),
+            subtitles: PathBuf::from(names.subtitles()),
+            folder: PathBuf::from(names.folder()),
+        })
+    }
+
+    fn reclaim(&mut self, _claimed: &ClaimedOutputs) -> Result<(), WatchOutputError> {
+        self.calls.push("reclaim".to_owned());
+        Ok(())
+    }
+
+    fn write_snapshot(&mut self, snapshot: &WatchSnapshot) -> Result<(), WatchOutputError> {
+        self.calls.push("write_snapshot".to_owned());
+        self.snapshots.push(snapshot.clone());
+        Ok(())
+    }
+
+    fn write_screen_changes(
+        &mut self,
+        _provenance: &WatchProvenance,
+        summary: &ScreenChangeSummary,
+        changes: &[ScreenChangeEntry],
+    ) -> Result<WatchFile, WatchOutputError> {
+        self.calls.push("write_screen_changes".to_owned());
+        self.listed = Some((summary.clone(), changes.to_vec()));
+        Ok(file("screen-changes.txt"))
+    }
+
     fn copy_frame(
         &mut self,
         _frame: &SessionFrame,
@@ -289,7 +426,6 @@ impl WatchOutputs for FakeOutputs {
                 .transcript_revision
                 .as_ref()
                 .map(|_| file("meeting.srt")),
-            screen_changes: file("screen-changes.txt"),
         })
     }
 
@@ -313,12 +449,17 @@ async fn the_steps_run_in_their_order_and_the_session_is_closed() -> TestResult 
             "check_source",
             "check_capabilities",
             "open_session",
-            "prepare",
-            "transcript_lines",
+            "start_job",
+            "record_claim job_0123456789abcdef",
+            "prepare job_0123456789abcdef",
             "screen_changes",
             "evidence_slots_left",
             "take_frame vcd_00000000000000000000000000000000",
             "take_frame vcd_00000000000000000000000000000001",
+            "provenance",
+            "published -",
+            "provenance",
+            "transcript_lines",
             "provenance",
             "close_session",
         ]
@@ -329,6 +470,8 @@ async fn the_steps_run_in_their_order_and_the_session_is_closed() -> TestResult 
             "claim",
             "copy_frame 00-00-00.000.png",
             "copy_frame 00-00-01.000.png",
+            "write_screen_changes",
+            "write_snapshot",
             "finalise",
         ],
         "the names are claimed before the session opens, and nothing is released"
@@ -376,12 +519,12 @@ async fn a_name_that_is_taken_refuses_before_any_session() -> TestResult {
     ));
     assert_eq!(
         outputs.calls,
-        vec!["claim"],
+        vec!["claim", "planned"],
         "nothing is written or released"
     );
     assert_eq!(
         steps.calls(),
-        vec!["check_source", "check_capabilities"],
+        vec!["check_source", "check_capabilities", "find_unfinished"],
         "no session is opened"
     );
     Ok(())
@@ -511,8 +654,8 @@ async fn more_changes_than_the_bound_get_frames_spread_evenly_and_all_are_listed
     assert_eq!(outcome.frames.len(), MAX_WATCH_FRAMES);
     assert_eq!(outcome.changes_found, count);
     let listed = outputs
-        .documents
-        .map(|documents| documents.changes)
+        .listed
+        .map(|(_, changes)| changes)
         .unwrap_or_default();
     assert_eq!(listed.len(), count, "every change is listed");
     assert_eq!(
@@ -560,9 +703,9 @@ async fn a_session_out_of_room_ends_the_frames_not_the_run() -> TestResult {
         4,
         "no frame is asked for after the refusal"
     );
-    let documents = outputs.documents.ok_or("the files were finished")?;
-    assert!(documents.summary.stopped_for_room);
-    assert_eq!(documents.changes.len(), 10, "every change is still listed");
+    let (summary, changes) = outputs.listed.ok_or("the list was written")?;
+    assert!(summary.stopped_for_room);
+    assert_eq!(changes.len(), 10, "every change is still listed");
     Ok(())
 }
 
@@ -573,7 +716,7 @@ async fn any_other_frame_failure_ends_the_run_and_releases_the_claim() -> TestRe
     let mut outputs = FakeOutputs::default();
     let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
     assert!(matches!(result, Err(WatchError::Step(StepFailure::Frame))));
-    assert_eq!(outputs.calls, vec!["claim", "release"]);
+    assert_eq!(outputs.calls, vec!["claim", "write_snapshot", "release"]);
     assert_eq!(
         steps.calls().last().map(String::as_str),
         Some("close_session")
@@ -622,19 +765,213 @@ async fn the_list_holds_the_settled_screens_and_only_they_get_frames() -> TestRe
             "vcd_00000000000000000000000000000005",
         ]
     );
-    let documents = outputs.documents.ok_or("the files were finished")?;
-    assert_eq!(documents.summary.changes_found, 6);
+    let (summary, changes) = outputs.listed.ok_or("the list was written")?;
+    assert_eq!(summary.changes_found, 6);
     assert_eq!(
-        documents
-            .changes
-            .iter()
-            .map(|entry| entry.reason)
-            .collect::<Vec<_>>(),
+        changes.iter().map(|entry| entry.reason).collect::<Vec<_>>(),
         vec![
             CandidateReason::FirstFrame,
             CandidateReason::SettledAfterMotion,
             CandidateReason::VisualChange,
         ]
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_publication_writes_a_snapshot_of_what_was_published() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs::default();
+    run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    let snapshot = outputs.snapshots.first().ok_or("a snapshot was written")?;
+    assert_eq!(snapshot.published_until, seconds(30));
+    assert_eq!(snapshot.duration, Some(seconds(60)));
+    assert_eq!(snapshot.entries.len(), 1);
+    assert!(
+        steps.calls().contains(&"published -".to_owned()),
+        "the first read reads everything"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn snapshots_are_at_least_ten_seconds_apart() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.notices = vec![FakeNotice::Published; 5];
+    let mut outputs = FakeOutputs::default();
+    run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        outputs.snapshots.len(),
+        1,
+        "the notices came within ten seconds"
+    );
+
+    let mut steps = FakeSteps::new()?;
+    steps.notices = vec![FakeNotice::Published];
+    steps.clock.step = 10;
+    let mut outputs = FakeOutputs::default();
+    let signal = super::WatchSignal::default();
+    let run = super::WatchRun {
+        steps: &steps,
+        session: &FakeSteps::session()?,
+        file_name: OsStr::new("meeting.mp4"),
+        names: &WatchOutputNames::from_video_name(OsStr::new("meeting.mp4"))?,
+        claimed: ClaimedOutputs {
+            transcript: PathBuf::from("meeting.txt"),
+            subtitles: PathBuf::from("meeting.srt"),
+            folder: PathBuf::from("meeting-vsift"),
+        },
+    };
+    let mut following = super::Following {
+        revision: None,
+        lines: Vec::new(),
+        since: None,
+        published_until: seconds(0),
+        duration: None,
+        last_snapshot_at: None,
+        screens: None,
+    };
+    for _ in 0..3 {
+        signal.published();
+    }
+    signal.close();
+    run.follow(&mut outputs, &signal, &mut following).await;
+    assert_eq!(outputs.snapshots.len(), 1, "one notice, one snapshot");
+    signal_twice_ten_seconds_apart(&run, &mut outputs, &mut following).await;
+    assert_eq!(outputs.snapshots.len(), 2);
+    assert!(
+        steps.calls().contains(&"published since-1".to_owned()),
+        "a later read follows the revision with its token"
+    );
+    Ok(())
+}
+
+async fn signal_twice_ten_seconds_apart(
+    run: &super::WatchRun<'_, FakeSteps>,
+    outputs: &mut FakeOutputs,
+    following: &mut super::Following<StepFailure>,
+) {
+    let signal = super::WatchSignal::default();
+    signal.published();
+    signal.close();
+    run.follow(outputs, &signal, following).await;
+}
+
+#[tokio::test]
+async fn the_frames_are_written_when_the_visual_stream_is_done() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs::default();
+    run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    let calls = steps.calls();
+    let frames = calls
+        .iter()
+        .position(|call| call.starts_with("take_frame"))
+        .ok_or("frames were taken")?;
+    let sealed = calls
+        .iter()
+        .position(|call| call == "transcript_lines")
+        .ok_or("the sealed transcript was read")?;
+    assert!(frames < sealed, "the frames come before the sealed read");
+    let list = outputs
+        .calls
+        .iter()
+        .position(|call| call == "write_screen_changes")
+        .ok_or("the list was written")?;
+    let finished = outputs
+        .calls
+        .iter()
+        .position(|call| call == "finalise")
+        .ok_or("the files were finished")?;
+    assert!(list < finished, "the list is written once the frames are");
+    Ok(())
+}
+
+#[tokio::test]
+async fn ctrl_c_keeps_the_files_and_the_session() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.stopped = true;
+    let mut outputs = FakeOutputs::default();
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Stopped {
+            transcribed_to,
+            duration: Some(duration),
+        }) if transcribed_to == seconds(30) && duration == seconds(60)
+    ));
+    assert!(!outputs.calls.contains(&"release".to_owned()));
+    assert!(!outputs.calls.contains(&"finalise".to_owned()));
+    assert_eq!(
+        outputs.calls.last().map(String::as_str),
+        Some("write_snapshot"),
+        "the files keep the last snapshot, with its marker"
+    );
+    assert!(!steps.calls().contains(&"close_session".to_owned()));
+    assert!(
+        steps
+            .calls()
+            .contains(&"record_claim job_0123456789abcdef".to_owned()),
+        "the job's record keeps the claimed names"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rerun_continues_the_unfinished_job_of_the_same_names() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.unfinished = Some(UnfinishedWatch {
+        session: FakeSteps::session()?,
+        job: JobId::parse("job_fedcba9876543210")?,
+    });
+    let mut outputs = FakeOutputs {
+        taken: true,
+        ..FakeOutputs::default()
+    };
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        outputs.calls.get(..3),
+        Some(
+            ["claim", "planned", "reclaim"]
+                .map(str::to_owned)
+                .as_slice()
+        )
+    );
+    let calls = steps.calls();
+    assert!(calls.contains(&"prepare job_fedcba9876543210".to_owned()));
+    assert!(
+        !calls.contains(&"open_session".to_owned()),
+        "no new session"
+    );
+    assert!(!calls.contains(&"start_job".to_owned()), "no new job");
+    assert!(outcome.session_closed);
+    Ok(())
+}
+
+#[tokio::test]
+async fn taken_names_without_an_unfinished_job_are_refused() -> TestResult {
+    // An expired session is gone, so no unfinished job is found and the
+    // files are refused, whatever their text says (the planner's condition A).
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs {
+        taken: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Output(WatchOutputError::Exists(
+            WatchOutputKind::Transcript
+        )))
+    ));
+    assert_eq!(outputs.calls, vec!["claim", "planned"]);
+    assert!(!steps.calls().contains(&"open_session".to_owned()));
     Ok(())
 }
