@@ -1,0 +1,101 @@
+{
+  "handoff_version": "1",
+  "status": "complete",
+  "question": "What goes wrong with order 1017 in the scrolling table?",
+  "capabilities": {
+    "image_access": "verified",
+    "image_check_code": "XXXXX 0000",
+    "transcript_basis": "supplied_transcript"
+  },
+  "session": {
+    "session_id": "ses_029c3fb5d81a720137fa6b2debb47acd",
+    "revision_id": "trv_6aec97cb64f8f9cbb3b00c54e246cc42"
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "section": "problem",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The speaker says the status changes from queued to failed while the header remains fixed.",
+      "citations": ["e2"]
+    },
+    {
+      "id": "c2",
+      "section": "reproduction",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "The first step the speaker gives, from 00:00.775, is to scroll to order 1017.",
+      "citations": ["e1"]
+    },
+    {
+      "id": "c3",
+      "section": "actual",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "At 00:10.000 the table row reads 1017 FAILED, in red, below the header ORDER STATUS.",
+      "citations": ["e4"]
+    },
+    {
+      "id": "c4",
+      "section": "context",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "At 00:00.000 the table row reads 1001 QUEUED below the same header ORDER STATUS.",
+      "citations": ["e3"]
+    }
+  ],
+  "citations": [
+    {
+      "id": "e1",
+      "type": "transcript_segment",
+      "segment_id": "tsg_ce47de64029f1ad14b67315bc3e559c3",
+      "start_us": 775000,
+      "end_us": 2850000
+    },
+    {
+      "id": "e2",
+      "type": "transcript_segment",
+      "segment_id": "tsg_93e248d78ed5194b1181dc82280c740b",
+      "start_us": 2975000,
+      "end_us": 6950000
+    },
+    {
+      "id": "e3",
+      "type": "frame",
+      "evidence_id": "evd_c4f6a4eb20af6d7e70fb36a8271f9cd7",
+      "candidate_id": "vcd_a9c9abc2ee6c802e204205916e5c01ca",
+      "requested_us": 0,
+      "actual_us": 0,
+      "delta_us": 0,
+      "pixels_inspected": true
+    },
+    {
+      "id": "e4",
+      "type": "frame",
+      "evidence_id": "evd_70a5b89e5e731e37629a7707b5197444",
+      "candidate_id": "vcd_5c06dbe1675ee6d1379edc337918ee7f",
+      "requested_us": 10000000,
+      "actual_us": 10000000,
+      "delta_us": 0,
+      "pixels_inspected": true
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "visual",
+      "reason": "not_inspected",
+      "range": { "from_us": 7000000, "to_us": 10000000 },
+      "note": "The candidate at 00:07.000 was not opened, so the moment the row changes is not shown."
+    }
+  ],
+  "untrusted_instructions": [],
+  "lifecycle": {
+    "action": "left_open",
+    "expires_at": "2026-10-30T20:06:34Z"
+  }
+}

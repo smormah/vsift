@@ -168,6 +168,14 @@
           "maxItems": 10,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/citation_ref" }
+        },
+        "category": {
+          "description": "Optional (0.3.0): what kind of item a workflow's claim is. A bug report uses none.",
+          "enum": ["bug", "feature_request", "question", "decision", "action_item", "open_question", "requirement", "backlog_item"]
+        },
+        "priority": {
+          "description": "Optional (0.3.0), only on a claim whose category is backlog_item. A priority the recording does not state is the agent's own: the statement then says so, for example priority inferred: high.",
+          "enum": ["high", "medium", "low"]
         }
       },
       "allOf": [
@@ -178,6 +186,10 @@
         {
           "if": { "properties": { "kind": { "const": "observed" } } },
           "then": { "properties": { "support": { "not": { "const": "unsupported" } } } }
+        },
+        {
+          "if": { "required": ["priority"] },
+          "then": { "required": ["category"], "properties": { "category": { "const": "backlog_item" } } }
         }
       ]
     },

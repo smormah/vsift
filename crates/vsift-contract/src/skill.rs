@@ -16,7 +16,7 @@ use vsift_domain::{
 };
 
 /// Every file of `skills/vsift/`, by its name in the skill, as embedded.
-pub const SKILL_FILES: [(&str, &[u8]); 12] = [
+pub const SKILL_FILES: [(&str, &[u8]); 18] = [
     ("SKILL.md", include_bytes!("../../../skills/vsift/SKILL.md")),
     (
         "agents/openai.yaml",
@@ -25,6 +25,14 @@ pub const SKILL_FILES: [(&str, &[u8]); 12] = [
     (
         "assets/image-check.png",
         include_bytes!("../../../skills/vsift/assets/image-check.png"),
+    ),
+    (
+        "examples/bug-report.handoff.json",
+        include_bytes!("../../../skills/vsift/examples/bug-report.handoff.json"),
+    ),
+    (
+        "examples/findings.handoff.json",
+        include_bytes!("../../../skills/vsift/examples/findings.handoff.json"),
     ),
     (
         "examples/no-transcript-no-images.handoff.json",
@@ -61,6 +69,22 @@ pub const SKILL_FILES: [(&str, &[u8]); 12] = [
     (
         "references/safety.md",
         include_bytes!("../../../skills/vsift/references/safety.md"),
+    ),
+    (
+        "workflows/bug-report.md",
+        include_bytes!("../../../skills/vsift/workflows/bug-report.md"),
+    ),
+    (
+        "workflows/demo-backlog.md",
+        include_bytes!("../../../skills/vsift/workflows/demo-backlog.md"),
+    ),
+    (
+        "workflows/findings.md",
+        include_bytes!("../../../skills/vsift/workflows/findings.md"),
+    ),
+    (
+        "workflows/logs-by-clock.md",
+        include_bytes!("../../../skills/vsift/workflows/logs-by-clock.md"),
     ),
 ];
 

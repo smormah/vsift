@@ -50,7 +50,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift setup repair` | free | Read-only diagnosis; it changes nothing. Its findings name `setup rollback` and `setup remove` commands: relay them to the user, never run them. |
 | `vsift setup remove` | never | Removes managed tools the user installed; the user's decision alone. |
 | `vsift setup rollback` | never | Changes which managed tool version every command uses; the user's decision alone. |
-| `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named. Opening the same video again is `explicit`: after its session expired (resume.md), or to add a transcript the user supplies. |
+| `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named; `--recorded-at` only with the start time the user gave. Opening the same video again is `explicit`: after its session expired (resume.md), or to add a transcript or start time the user supplies. |
 | `vsift session list` | free | Read-only; one page per call: pass `next_cursor` back as `--cursor` until it is null. |
 | `vsift session status` | free | Read-only; the first command after a context reset. |
 | `vsift session close` | free | Only your own session, and only as the user's lifecycle policy says. |
@@ -115,6 +115,8 @@ vsift setup repair --json
 vsift ingest <video> --json
 vsift ingest <video> --transcript <transcript> --json
 vsift ingest <video> --transcript <transcript> --transcript-offset <offset-us> --json
+vsift ingest <video> --recorded-at <recorded-at> --json
+vsift ingest <video> --transcript <transcript> --recorded-at <recorded-at> --json
 vsift session status <session> --json
 vsift session list --json
 vsift session list --cursor <n> --json
