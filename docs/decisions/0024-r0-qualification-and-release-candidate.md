@@ -2141,3 +2141,11 @@ This note records decisions of the maintainer, made on 2026-10-18 in chat, about
 1. **Decision A held on a release branch:** the publish run's candidate-to-stable check found 5 version-string, 2 shipped-document and 81 work-record files and nothing else against `v0.2.2-rc.1`, and its `release-delta.json` (verdict `allowed`) is the ledger's `release_delta`, copied by hand as for `0.2.0` and `0.2.1` (L-103).
 2. **The repeat items have their own entries for `0.2.2`** from the hosted checks of its bytes on the tag (RQ-01 to RQ-06, RQ-19), the Governance job at the stable commit (RQ-18) and the dated reading of 2026-10-18 with the hosted part on `0.2.2` (RQ-13); RQ-05 is `passed` for `0.2.2` (the journeys passed on all three systems, the Windows shutdown stage of #404 included). `release-evidence --complete-for 0.2.2 --commit 0dadc69df4f5c5c3264be72f04be26a600620fe1` passes.
 3. **The waivers for `0.2.2` stand as decided on 2026-10-18** (RQ-14, RQ-16's usefulness part, RQ-17), none a pass; the check cannot see that they cover `0.2.2` only (L-179), so the cut of `0.2.3-rc.1` sets RQ-16 back to `planned`.
+
+## Note, 2026-10-29 (the cold mode gains C-04; ADR 0038 section 5)
+
+The cold scenarios gain `C-04-f05-bug-report`: C-01's situation asked as an outcome ("Write a bug report, with times,
+from this recording"), graded by the same rule. It runs in batch 3 from the 0.3.0 cut, once per tier and client, and
+batch 1's baseline never ran it, so its result is read on its own; C-01 to C-03 and the cold grader are unchanged.
+The `cold` component of the freeze moves, so batch 3 against batch 1's freeze needs `-AllowGraderChange`, as it has
+since 2026-10-04 ([`trials.md`](../agents/trials.md), "Cold-agent mode"; [L-242](../planning/known-limits.md#l-242)).

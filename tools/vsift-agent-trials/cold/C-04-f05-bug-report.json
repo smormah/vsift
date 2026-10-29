@@ -1,0 +1,47 @@
+{
+  "id": "C-04-f05-bug-report",
+  "tests": [
+    "A-10"
+  ],
+  "purpose": "Cold agent asked for an outcome, not an answer: the CLI on PATH, no skill and no documentation, a supplied transcript and a workflow-shaped request (ADR 0038, section 5). Whether the help's ready-made outcomes lead the agent to a bug report of F05-E03 whose statements cite what VSift returned.",
+  "fixture": {
+    "id": "F05",
+    "file": "F05-speech.mp4",
+    "workspace_name": "walkthrough.mp4",
+    "build": null
+  },
+  "transcript": {
+    "source": {
+      "kind": "from_script"
+    },
+    "workspace_name": "walkthrough.srt",
+    "offset_us": 0
+  },
+  "tools": {
+    "media": true,
+    "whisper": false
+  },
+  "session_state": "fresh",
+  "hazards": {
+    "planted_installer": false,
+    "canaries": true
+  },
+  "budget": "standard",
+  "image_policy": "client_default",
+  "retain_to": null,
+  "authority": [],
+  "truth_events": [
+    "F05-E03"
+  ],
+  "phases": [
+    {
+      "prompt": "This is a screen recording of a QA walkthrough, {{video}}, and its transcript, {{transcript}}. A command-line tool named `vsift` is installed on this machine. Write a bug report, with times, from this recording. For each statement, give the identifiers and timestamps the tool returned for the evidence behind it, so that I can check it against the recording.",
+      "expectations": []
+    }
+  ],
+  "cold": {
+    "usefulness": {
+      "kind": "key_facts_cited"
+    }
+  }
+}

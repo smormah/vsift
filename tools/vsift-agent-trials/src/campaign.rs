@@ -7,10 +7,10 @@
 //! | --- | --- | --- |
 //! | 1 | against the published 0.1.0 | 8 pilots (a dry run per client and mode, two scenarios each, compact tier) and the 12-run cold baseline (compact tier, 3 cold scenarios x 2 runs x 2 models) |
 //! | 2 | on the candidate | the 34-run counted set with the skill (review tier 2 x 12, compact tier 2 x 5) |
-//! | 3 | on the candidate | the cold final round: compact 12 and review 6 (18 runs) |
+//! | 3 | on the candidate | the cold final round: compact 12 and review 6 (18 runs), and since 0.3.0 C-04 once per tier (4 runs; ADR 0038 section 5) |
 //!
-//! That is 20 + 34 + 18 = 72 planned runs and a reserve of 12 more, the
-//! plan's 84. A **plan** is a pure list ([`plan`]); a **state file** holds it
+//! That is 20 + 34 + 22 = 76 planned runs and a reserve of 12 more: the
+//! plan's 84, and the 4 runs of C-04. A **plan** is a pure list ([`plan`]); a **state file** holds it
 //! with every attempt, one file per client so that the Windows Claude Code
 //! loop and the Codex container loop never write the same file. The campaign
 //! scripts only ask `campaign next`, run what it says and report `campaign
@@ -209,6 +209,13 @@ const COLD_REVIEW_ROUND: Table = &[
     ("C-02-f05-local-asr", 1),
     ("C-03-f03-missing-tools", 1),
 ];
+/// The outcome-shaped cold scenario (ADR 0038, section 5): a request for a bug
+/// report rather than a question. It runs in batch 3 only, once per tier,
+/// because batch 1's baseline never ran it, and the summary reports it on its
+/// own, outside the final round's usefulness target, which stays C-01 to C-03
+/// so that it still compares with the baseline.
+pub const COLD_OUTCOME_SCENARIO: &str = "C-04-f05-bug-report";
+const COLD_OUTCOME: Table = &[(COLD_OUTCOME_SCENARIO, 1)];
 const SKILL_REVIEW: Table = &[
     ("A-08-f05-local-asr", 3),
     ("A-09-f05-supplied", 3),
@@ -337,6 +344,9 @@ pub fn plan(batch: u8, client: ClientName) -> Result<Vec<PlannedRun>, TrialError
                 RunKind::Counted,
                 COLD_REVIEW_ROUND,
             );
+            for tier in [Tier::Compact, Tier::Review] {
+                push_table(&mut runs, 3, client, tier, RunKind::Counted, COLD_OUTCOME);
+            }
         }
         other => {
             return Err(TrialError::Refused(format!(
