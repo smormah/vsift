@@ -89,6 +89,11 @@ These files are the machine-readable public v1 boundary:
 - `handoff-skeleton-data.schema.json` — the `data` of a complete `handoff.skeleton`
   result (0.3.0, ADR 0038): a valid handoff that states nothing yet, with one open
   session's ids filled in, and `fill`, the members only the agent can supply;
+- `skill-install-data.schema.json`, `skill-status-data.schema.json` and
+  `skill-show-data.schema.json` — the `data` of `skill.install` (what copying the embedded
+  skill did at each client skill folder; kept as the failure's data when a folder was left
+  as it was), `skill.status` (what is at each folder, read without following a link) and
+  `skill.show` (one text file of the skill, by its manifest name) (0.3.0, ADR 0038);
 - `config.schema.json` â strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was

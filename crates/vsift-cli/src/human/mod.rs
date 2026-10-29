@@ -40,6 +40,7 @@ mod session;
 mod setup;
 mod setup_check;
 mod setup_door;
+mod skill;
 mod text;
 mod time;
 mod transcript;
@@ -164,6 +165,9 @@ fn render_value(
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),
         CommandName::HandoffSkeleton => handoff::skeleton(&envelope(value)?),
+        CommandName::SkillInstall => skill::install(&envelope(value)?),
+        CommandName::SkillStatus => skill::status(&envelope(value)?),
+        CommandName::SkillShow => skill::show(&envelope(value)?),
         CommandName::Watch => watch::finished(&envelope(value)?),
         // `setup check` renders from its typed report (`setup_check`), the
         // setup door writes its own conversation (`setup_door`), and a

@@ -41,13 +41,44 @@ of the `vsift-cli` npm package, byte for byte (`npm root --global` names the fol
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
 the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.2 is published, as
 `npm install --global vsift-cli` (no tag) and as archives on GitHub Releases; building from
-source also works). Then copy (or link) the whole `skills/vsift`
-directory, keeping its name, into the client's skill folder:
+source also works).
+
+**Since `0.3.0`, one command installs it** (ADR 0038 section 3), from the bytes the binary was
+built with, so the skill always matches the CLI that runs it: for example
+`vsift skill install --client claude-code --client codex`, with `--project` and a folder to
+install for one project, and `--replace` to replace a different `vsift` skill. It writes the folder each client's own documentation gives (checked 2026-10-28,
+[L-241](../planning/known-limits.md#l-241)); clients that share a folder have it written once:
+
+| `--client` | Folder (for you, below your home folder; or below `--project`) | The client's documentation |
+| --- | --- | --- |
+| `claude-code` | `.claude/skills/vsift/` | <https://code.claude.com/docs/en/skills> |
+| `codex` | `.agents/skills/vsift/` | <https://learn.chatgpt.com/docs/build-skills> |
+| `copilot` (VS Code and the Copilot CLI) | `.agents/skills/vsift/` | <https://code.visualstudio.com/docs/copilot/customization/agent-skills>, <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills> |
+| `cursor` | `.agents/skills/vsift/` | <https://cursor.com/docs/context/skills> |
+| `gemini-cli` | `.agents/skills/vsift/` | <https://geminicli.com/docs/cli/skills/> |
+| `opencode` | `.agents/skills/vsift/` | <https://opencode.ai/docs/skills/> |
+| `goose` | `.agents/skills/vsift/` | <https://goose-docs.ai/docs/guides/context-engineering/using-skills> |
+| `amp` | `.agents/skills/vsift/` | <https://ampcode.com/docs/customize/skills> |
+
+Windsurf (now Devin Desktop) also documents `.agents/skills/`, so `--client codex` serves it.
+The install stages the skill beside its folder, reads every file back and compares it, then
+renames it into place. A folder that already holds this release's skill is `unchanged`. A
+different `vsift` skill, or a link, is left as it is (`INVALID_ARGUMENT`, every folder's outcome in
+`data`) unless `--replace` is given; then it is swapped (the old one moved aside, the new one moved
+in, the old one removed last, and put back on any failure), and a link is removed only as a link.
+Anything that is not a `vsift` skill is never replaced, and no step follows a link or junction.
+`vsift skill status` shows what is at each folder, and `vsift skill show <skill-file>` prints one of the
+skill's files by its name. The skill classes `skill install` as `never`: it changes another
+client's configuration, which is the person's to change.
+
+**By hand**, as before: copy (or link) the whole `skills/vsift` directory, keeping its name, from
+the repository, a release archive or the npm package (`npm root --global` names the folder that
+holds `vsift-cli/skills/vsift/`), into the client's skill folder:
 
 | Client | For one user | For one project |
 | --- | --- | --- |
 | Claude Code | `~/.claude/skills/vsift/` | `<project>/.claude/skills/vsift/` |
-| OpenAI Codex | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
+| Every other client above | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
 
 Restart the client (or start a new session) so that it discovers the skill. Both
 clients read the `name` and `description` front matter and load the rest on demand.
@@ -385,6 +416,18 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The guard** gains the placeholder `<question>`. `vsift --help` names the command in step 6.
 - **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten again at the merge
   rebase (`v030` rules). **Untried:** no trial scenario runs the skeleton.
+
+## The change for 0.3.0: `vsift skill install`, `status` and `show` (ADR 0038 slice 3; draft, 2026-10-29)
+
+- **`references/commands.md`** classes `vsift skill install` `never` (it changes another client's configuration; the
+  planner's D4) and `vsift skill status` and `vsift skill show` `free`, with the forms `vsift skill status --json` and
+  `vsift skill show <skill-file> --json`. `skill show` says to read the skill's files with the file-reading tool when
+  there is one. `SKILL.md` and the fuzz seed copy are unchanged.
+- **The guard** gains `skill.install` in its reviewed `never` set and the placeholder `<skill-file>`.
+- **The embedded skill** (the list in the contract crate) is held equal to this folder, file list and bytes, by a test:
+  a file added to the skill must be added there.
+- **The freeze:** the `skill` component moves again; the draft rewrites it, and it is rewritten at the merge rebase.
+  **Untried:** no trial runs the installer; trials prepare their workspaces as before.
 
 ## Keeping it in step with the CLI
 

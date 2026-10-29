@@ -48,9 +48,13 @@
 - [vsift job resume](#vsift-job-resume): Continue one interrupted job from its checkpoints
 - [vsift job cancel](#vsift-job-cancel): Cancel one job, or ask the process running it to stop
 - [vsift job start](#vsift-job-start): Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
-- [vsift handoff](#vsift-handoff): Check an agent's draft handoff report before it is sent
+- [vsift handoff](#vsift-handoff): Start an agent's handoff report from a valid skeleton, or check a draft before it is sent
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
 - [vsift handoff skeleton](#vsift-handoff-skeleton): Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
+- [vsift skill](#vsift-skill): Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files
+- [vsift skill install](#vsift-skill-install): Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
+- [vsift skill status](#vsift-skill-status): Show what is at each skill folder, read only, and the skill's files
+- [vsift skill show](#vsift-skill-show): Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md)
 - [vsift watch](#vsift-watch): Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
 
 ## vsift
@@ -75,7 +79,8 @@ Commands:
   crop        Crop an orientation-correct evidence image
   bundle      Validate portable evidence bundles
   job         Execute or inspect recoverable worker jobs
-  handoff     Check an agent's draft handoff report before it is sent
+  handoff     Start an agent's handoff report from a valid skeleton, or check a draft before it is sent
+  skill       Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files
   watch       Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
 
 Options:
@@ -2120,10 +2125,10 @@ Options:
 
 ## vsift handoff
 
-Check an agent's draft handoff report before it is sent.
+Start an agent's handoff report from a valid skeleton, or check a draft before it is sent.
 
 ```text
-Check an agent's draft handoff report before it is sent
+Start an agent's handoff report from a valid skeleton, or check a draft before it is sent
 
 Usage: vsift handoff [OPTIONS] <COMMAND>
 
@@ -2217,6 +2222,177 @@ Options:
 
       --question <QUESTION>
           The user's question in your own words (1 to 500 characters, one line), written into the handoff's question member
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift skill
+
+Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files.
+
+```text
+Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files
+
+Usage: vsift skill [OPTIONS] <COMMAND>
+
+Commands:
+  install  Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
+  status   Show what is at each skill folder, read only, and the skill's files
+  show     Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift skill install
+
+Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given.
+
+```text
+Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
+
+Usage: vsift skill install [OPTIONS] --client <CLIENT>
+
+Options:
+      --client <CLIENT>
+          A client to install the skill for; repeat it for several. Clients that read the same folder have it written once
+
+          Possible values:
+          - claude-code: Claude Code (.claude/skills/)
+          - codex:       `OpenAI` Codex (.agents/skills/)
+          - copilot:     GitHub Copilot in VS Code and the Copilot CLI (.agents/skills/)
+          - cursor:      Cursor (.agents/skills/)
+          - gemini-cli:  Gemini CLI (.agents/skills/)
+          - opencode:    `OpenCode` (.agents/skills/)
+          - goose:       Goose (.agents/skills/)
+          - amp:         Amp (.agents/skills/)
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --project <FOLDER>
+          Install for one project, below this existing folder, instead of for you (below your home folder)
+
+      --replace
+          Put this release's skill in place of a different vsift skill or a link at a folder; anything that is not a vsift skill is never replaced
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift skill status
+
+Show what is at each skill folder, read only, and the skill's files.
+
+```text
+Show what is at each skill folder, read only, and the skill's files
+
+Usage: vsift skill status [OPTIONS]
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --project <FOLDER>
+          Show one project's skill folders, below this existing folder, instead of yours
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift skill show
+
+Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md).
+
+```text
+Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md)
+
+Usage: vsift skill show [OPTIONS] <ENTRY>
+
+Arguments:
+  <ENTRY>
+          The file's name in the skill, as skill status lists it; never a path
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    ClockReading, CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection,
+    AgentClient, ClockReading, CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection,
     IsolationProfile, JobId, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
     OperationId, OptionalComponent, OptionalComponentSet, RuntimeDependency, SessionId,
     SetupProfile, TimeAnchorError, TranscriptRevisionId, VisualCandidateId,
@@ -166,8 +166,12 @@ pub(crate) enum Command {
     Bundle(BundleArguments),
     /// Execute or inspect recoverable worker jobs.
     Job(JobArguments),
-    /// Check an agent's draft handoff report before it is sent.
+    /// Start an agent's handoff report from a valid skeleton, or check a
+    /// draft before it is sent.
     Handoff(HandoffArguments),
+    /// Install the agent skill into the folders AI coding clients read, see
+    /// what is there, or print one of its files.
+    Skill(SkillArguments),
     /// Make a transcript, subtitles and the screen changes of a video, beside
     /// it (the same as  vsift <video>).
     ///
@@ -1204,6 +1208,115 @@ pub(crate) struct HandoffSkeletonArguments {
     /// written into the handoff's question member.
     #[arg(long)]
     pub question: String,
+}
+
+/// Skill namespace arguments (ADR 0038).
+#[derive(Args, Debug)]
+pub(crate) struct SkillArguments {
+    #[command(subcommand)]
+    pub command: SkillCommand,
+}
+
+/// Skill operations.
+#[derive(Debug, Subcommand)]
+pub(crate) enum SkillCommand {
+    /// Copy this release's skill into the folder each named client reads
+    /// (once per folder); a folder that holds something else is left as it is
+    /// unless --replace is given.
+    Install(SkillInstallArguments),
+    /// Show what is at each skill folder, read only, and the skill's files.
+    Status(SkillStatusArguments),
+    /// Print one text file of this release's skill, by its name in the skill
+    /// (for example SKILL.md or references/commands.md).
+    Show(SkillShowArguments),
+}
+
+impl SkillCommand {
+    /// Returns the public operation identifier.
+    pub(crate) const fn operation_name(&self) -> CommandName {
+        match self {
+            Self::Install(_) => CommandName::SkillInstall,
+            Self::Status(_) => CommandName::SkillStatus,
+            Self::Show(_) => CommandName::SkillShow,
+        }
+    }
+}
+
+/// An AI coding client whose skill folder `VSift` knows.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum ClientArgument {
+    /// Claude Code (.claude/skills/).
+    #[value(name = "claude-code")]
+    ClaudeCode,
+    /// `OpenAI` Codex (.agents/skills/).
+    #[value(name = "codex")]
+    Codex,
+    /// GitHub Copilot in VS Code and the Copilot CLI (.agents/skills/).
+    #[value(name = "copilot")]
+    Copilot,
+    /// Cursor (.agents/skills/).
+    #[value(name = "cursor")]
+    Cursor,
+    /// Gemini CLI (.agents/skills/).
+    #[value(name = "gemini-cli")]
+    GeminiCli,
+    /// `OpenCode` (.agents/skills/).
+    #[value(name = "opencode")]
+    OpenCode,
+    /// Goose (.agents/skills/).
+    #[value(name = "goose")]
+    Goose,
+    /// Amp (.agents/skills/).
+    #[value(name = "amp")]
+    Amp,
+}
+
+impl From<ClientArgument> for AgentClient {
+    fn from(value: ClientArgument) -> Self {
+        match value {
+            ClientArgument::ClaudeCode => Self::ClaudeCode,
+            ClientArgument::Codex => Self::Codex,
+            ClientArgument::Copilot => Self::Copilot,
+            ClientArgument::Cursor => Self::Cursor,
+            ClientArgument::GeminiCli => Self::GeminiCli,
+            ClientArgument::OpenCode => Self::OpenCode,
+            ClientArgument::Goose => Self::Goose,
+            ClientArgument::Amp => Self::Amp,
+        }
+    }
+}
+
+/// Which clients, and whose folders.
+#[derive(Args, Debug)]
+pub(crate) struct SkillInstallArguments {
+    /// A client to install the skill for; repeat it for several. Clients that
+    /// read the same folder have it written once.
+    #[arg(long = "client", required = true, value_enum, value_name = "CLIENT")]
+    pub clients: Vec<ClientArgument>,
+    /// Install for one project, below this existing folder, instead of for
+    /// you (below your home folder).
+    #[arg(long, value_name = "FOLDER")]
+    pub project: Option<PathBuf>,
+    /// Put this release's skill in place of a different vsift skill or a
+    /// link at a folder; anything that is not a vsift skill is never replaced.
+    #[arg(long)]
+    pub replace: bool,
+}
+
+/// Whose folders.
+#[derive(Args, Debug)]
+pub(crate) struct SkillStatusArguments {
+    /// Show one project's skill folders, below this existing folder, instead
+    /// of yours.
+    #[arg(long, value_name = "FOLDER")]
+    pub project: Option<PathBuf>,
+}
+
+/// Which file.
+#[derive(Args, Debug)]
+pub(crate) struct SkillShowArguments {
+    /// The file's name in the skill, as skill status lists it; never a path.
+    pub entry: String,
 }
 
 /// Local bundle path.

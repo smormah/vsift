@@ -69,6 +69,9 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [setup-repair.schema.json](#setup-repairschemajson): VSift setup repair data v1
 - [setup-rollback.schema.json](#setup-rollbackschemajson): VSift setup rollback data v1
 - [setup.schema.json](#setupschemajson): VSift setup data v1
+- [skill-install-data.schema.json](#skill-install-dataschemajson): VSift skill.install data v1
+- [skill-show-data.schema.json](#skill-show-dataschemajson): VSift skill.show data v1
+- [skill-status-data.schema.json](#skill-status-dataschemajson): VSift skill.status data v1
 - [terminal-event.schema.json](#terminal-eventschemajson): VSift JSONL terminal event v1
 - [time-anchor.schema.json](#time-anchorschemajson): VSift time anchor v1
 - [transcript-get-brief-data.schema.json](#transcript-get-brief-dataschemajson): VSift transcript.get data, brief view v1
@@ -1980,6 +1983,54 @@ The data of a setup result: one unattended run of the setup door, vsift setup --
 | `parts[].status` | "ready" \| "not_set_up" \| "added" \| "not_added" \| "not_available_here" | yes |  |
 | `parts[].next_step` | string or null | yes | 1 to 512 characters |
 | `install` | object, see [setup-install.schema.json](#setup-installschemajson) or null | yes |  |
+
+### skill-install-data.schema.json
+
+**VSift skill.install data v1** ([the schema](../../../schemas/v1/skill-install-data.schema.json))
+
+The data of a skill.install result (0.3.0, ADR 0038 section 3): what copying this release's embedded skill did at each skill folder the named clients read, one entry per folder (clients that share a folder have it written once). installed: written where nothing was, staged beside the folder, every file read back and compared, then renamed into place; unchanged: the same bytes were already there; replaced (only with --replace): swapped in for a different vsift skill or a link, named in replaced; refused: left as it was, the reason in refusal. A refused folder makes the result failed with INVALID_ARGUMENT, and this data is kept as the failure's data. No step follows a symbolic link or junction.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `scope` | "user" \| "project" | yes | user: below the person's home folder; project: below the folder --project named. No result names an absolute path. |
+| `skill_digest` | string | yes | SHA-256 over this release's skill: each file in name order as its name, a NUL, its length in decimal, a NUL and its bytes.; pattern `^[0-9a-f]{64}$` |
+| `folders` | array of object | yes | 1 to 2 items |
+| `folders[].layout` | "claude" \| "agents" | yes |  |
+| `folders[].path` | ".claude/skills/vsift" \| ".agents/skills/vsift" | yes |  |
+| `folders[].clients` | array of "claude-code" \| "codex" \| "copilot" \| "cursor" \| "gemini-cli" \| "opencode" \| "goose" \| "amp" | yes | at least 1 items; items are unique |
+| `folders[].outcome` | "installed" \| "unchanged" \| "replaced" \| "refused" | yes |  |
+| `folders[].replaced` | null \| "different" \| "link" | yes |  |
+| `folders[].refusal` | null \| "different_without_replace" \| "link_without_replace" \| "not_vsift" \| "parent_not_folder" | yes |  |
+
+This schema also holds 2 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/skill-install-data.schema.json) for them.
+
+### skill-show-data.schema.json
+
+**VSift skill.show data v1** ([the schema](../../../schemas/v1/skill-show-data.schema.json))
+
+The data of a skill.show result (0.3.0, ADR 0038 section 3): one text file of this release's embedded skill, named as the skill's manifest names it (skill status lists the names). Anything else, a path, a folder or the image, is INVALID_ARGUMENT; nothing on the disk is read.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `entry` | string | yes | pattern `^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*){0,2}$` |
+| `text` | string | yes | at most 262144 characters |
+
+### skill-status-data.schema.json
+
+**VSift skill.status data v1** ([the schema](../../../schemas/v1/skill-status-data.schema.json))
+
+The data of a skill.status result (0.3.0, ADR 0038 section 3), read only: what is at each of the two skill folders of the scope, read without following a link, beside this release's skill. absent: nothing; current: this release's skill byte for byte; different: a folder whose SKILL.md names the skill vsift, with other bytes (another version, or edited); link: a symbolic link or junction, never followed; not_vsift: a file, or a folder that is not a vsift skill; parent_not_folder: .claude, .agents or their skills folder is a link or not a folder. files lists the skill's files by the names skill show takes.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `scope` | "user" \| "project" | yes | user: below the person's home folder; project: below the folder --project named. No result names an absolute path. |
+| `skill_digest` | string | yes | SHA-256 over this release's skill: each file in name order as its name, a NUL, its length in decimal, a NUL and its bytes.; pattern `^[0-9a-f]{64}$` |
+| `files` | array of string | yes | at least 1 items; items are unique; each: pattern `^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*){0,2}$` |
+| `folders` | array of object | yes | exactly 2 items |
+| `folders[].layout` | "claude" \| "agents" | yes |  |
+| `folders[].path` | ".claude/skills/vsift" \| ".agents/skills/vsift" | yes |  |
+| `folders[].clients` | array of "claude-code" \| "codex" \| "copilot" \| "cursor" \| "gemini-cli" \| "opencode" \| "goose" \| "amp" | yes | at least 1 items; items are unique |
+| `folders[].state` | "absent" \| "current" \| "different" \| "link" \| "not_vsift" \| "parent_not_folder" | yes |  |
 
 ### terminal-event.schema.json
 

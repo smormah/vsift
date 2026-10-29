@@ -25,6 +25,7 @@ mod search;
 mod session;
 mod setup;
 mod signal;
+mod skill;
 #[cfg(test)]
 mod skill_contract;
 mod watch;
@@ -35,7 +36,7 @@ use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::
 use clap::{CommandFactory, Parser, error::ErrorKind};
 use command::{
     BundleCommand, Cli, Command, EventFormat, ExecutionProfile, HandoffCommand, JobArguments,
-    JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand,
+    JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand, SkillCommand,
     TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
@@ -131,9 +132,11 @@ const fn is_long_running(command: &Command) -> bool {
         // `setup install` downloads, verifies and smokes for minutes; an
         // interruption cancels it and discards the stage in progress.
         Command::Setup(arguments) => matches!(arguments.command, Some(SetupCommand::Install(_))),
-        Command::Session(_) | Command::Search(_) | Command::Bundle(_) | Command::Handoff(_) => {
-            false
-        }
+        Command::Session(_)
+        | Command::Search(_)
+        | Command::Bundle(_)
+        | Command::Handoff(_)
+        | Command::Skill(_) => false,
     }
 }
 
@@ -187,6 +190,7 @@ const fn operation_name(command: &Command) -> CommandName {
         Command::Bundle(arguments) => arguments.command.operation_name(),
         Command::Job(arguments) => arguments.command.operation_name(),
         Command::Handoff(arguments) => arguments.command.operation_name(),
+        Command::Skill(arguments) => arguments.command.operation_name(),
     }
 }
 
@@ -685,6 +689,24 @@ where
                 HandoffCommand::Skeleton(arguments) => handoff::skeleton(&engine, &arguments),
             };
             write_session_result(&mut writer, mode, operation, result)
+        }
+        Command::Skill(arguments) => {
+            let operation = arguments.command.operation_name();
+            match arguments.command {
+                SkillCommand::Install(arguments) => {
+                    let result = skill::install(&engine, &arguments);
+                    write_result_with_failure_data(&mut writer, mode, operation, result)
+                }
+                SkillCommand::Status(arguments) => write_session_result(
+                    &mut writer,
+                    mode,
+                    operation,
+                    skill::status(&engine, &arguments),
+                ),
+                SkillCommand::Show(arguments) => {
+                    write_session_result(&mut writer, mode, operation, skill::show(&arguments))
+                }
+            }
         }
         Command::Job(arguments) => {
             let operation = arguments.command.operation_name();

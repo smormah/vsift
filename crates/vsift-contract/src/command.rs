@@ -95,6 +95,13 @@ pub enum CommandName {
     /// `handoff skeleton` (ADR 0038): a valid handoff that states nothing
     /// yet, with the session's identities filled in.
     HandoffSkeleton,
+    /// `skill install` (ADR 0038): copy the shipped skill into the folders
+    /// AI coding clients read.
+    SkillInstall,
+    /// `skill status` (ADR 0038): what is at each skill folder.
+    SkillStatus,
+    /// `skill show` (ADR 0038): print one text file of the shipped skill.
+    SkillShow,
 }
 
 impl CommandName {
@@ -103,7 +110,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 40] = [
+    pub const ALL: [Self; 43] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -144,6 +151,9 @@ impl CommandName {
         Self::Setup,
         Self::Watch,
         Self::HandoffSkeleton,
+        Self::SkillInstall,
+        Self::SkillStatus,
+        Self::SkillShow,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -185,6 +195,9 @@ impl CommandName {
             Self::SessionInitWorkspace => "session.init-workspace",
             Self::HandoffCheck => "handoff.check",
             Self::HandoffSkeleton => "handoff.skeleton",
+            Self::SkillInstall => "skill.install",
+            Self::SkillStatus => "skill.status",
+            Self::SkillShow => "skill.show",
             Self::Ocr => "ocr",
             Self::OcrSearch => "ocr.search",
             Self::JobStart => "job.start",
@@ -243,6 +256,9 @@ impl CommandName {
             Self::Setup => 37,
             Self::Watch => 38,
             Self::HandoffSkeleton => 39,
+            Self::SkillInstall => 40,
+            Self::SkillStatus => 41,
+            Self::SkillShow => 42,
         }
     }
 }

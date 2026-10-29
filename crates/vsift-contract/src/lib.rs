@@ -135,6 +135,7 @@ mod search;
 mod session;
 mod setup;
 mod setup_door;
+mod skill;
 mod storage;
 mod stream;
 mod text;
@@ -278,6 +279,12 @@ pub use setup_door::{
     SETUP_NEXT_AFTER_VIDEO, SETUP_NEXT_AGAIN, SETUP_NEXT_CANCELLED, SETUP_NEXT_CONNECTION,
     SETUP_NEXT_SPACE, SetupOutcome, SetupPartName, SetupPartResult, SetupPartStatus, SetupResponse,
     setup_next_install,
+};
+pub use skill::{
+    SKILL_FILES, SKILL_HOME_UNKNOWN_REMEDIATION, SKILL_INSTALL_REFUSED_REMEDIATION,
+    SKILL_PROJECT_REMEDIATION, SKILL_SHOW_ENTRY_REMEDIATION, SkillFolderData, SkillInstallData,
+    SkillInstallFolderData, SkillInstallFolderOutcome, SkillShowData, SkillStatusData,
+    SkillStatusFolderData, shipped_skill, skill_digest,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,

@@ -6,6 +6,7 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod agent_skill;
 mod asr;
 mod clock;
 mod evidence;
@@ -26,6 +27,10 @@ mod verification;
 mod visual;
 mod watch;
 
+pub use agent_skill::{
+    SkillFolderError, SkillFolderOutcome, SkillFolders, SkillInstallOutcome, install_skill,
+    skill_folder_states,
+};
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
     AsrTranscription, CheckpointScope, CheckpointUse, ChunkGate, ChunkSeed, NoObserver, NoProgress,

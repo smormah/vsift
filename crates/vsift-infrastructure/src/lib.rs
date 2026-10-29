@@ -63,6 +63,7 @@ mod request_timing;
 mod retry_timer;
 mod screen_text_index_record;
 mod session_root;
+mod skill_folders;
 mod source_binding;
 mod source_duration_probe;
 mod source_snapshot;
@@ -223,6 +224,7 @@ pub use session_root::{
     PROVISIONING_WAIT, SessionRootError, SessionRootProvisioning, open_session_root,
     open_session_root_within, platform_session_root,
 };
+pub use skill_folders::{FilesystemSkillFolders, SkillBaseError};
 pub use source_binding::{BoundSource, EvidenceSourceCheck, SourceBinding, VerifiedSourceIdentity};
 pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{

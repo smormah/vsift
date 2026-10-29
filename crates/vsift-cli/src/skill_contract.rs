@@ -62,7 +62,7 @@ const MAX_RESUME_BYTES: usize = 2 * 1024;
 /// Placeholders the skill's command lines use, with a value the parser
 /// accepts. An unknown placeholder fails the guard, so a new one is added here
 /// deliberately.
-const PLACEHOLDERS: [(&str, &str); 25] = [
+const PLACEHOLDERS: [(&str, &str); 26] = [
     ("namespace", "session"),
     ("operation", "retain"),
     ("video", "recording.mp4"),
@@ -88,6 +88,7 @@ const PLACEHOLDERS: [(&str, &str); 25] = [
     ("model-file", "ggml-base.bin"),
     ("dependency", "ffmpeg"),
     ("question", "What does the dialog show?"),
+    ("skill-file", "references/commands.md"),
 ];
 
 /// Commands the skill must never run. Changing this set is a reviewed safety
@@ -99,7 +100,9 @@ const PLACEHOLDERS: [(&str, &str); 25] = [
 /// person (ADR 0036), asks a question and installs on the answer, so it is
 /// never an assistant's to run. ADR 0037 adds `watch` (`vsift <video>`),
 /// which writes files into the person's own folder (the planner, 2026-10-27).
-const NEVER: [&str; 8] = [
+/// ADR 0038 adds `skill install`, which changes another client's
+/// configuration, the person's alone (the planner's D4, 2026-10-28).
+const NEVER: [&str; 9] = [
     "setup",
     "setup.install",
     "setup.remove",
@@ -108,6 +111,7 @@ const NEVER: [&str; 8] = [
     "job.run",
     "job.batch",
     "watch",
+    "skill.install",
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.
