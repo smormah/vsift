@@ -367,7 +367,7 @@ merge rebase.
 
 Cut the first item first:
 
-1. The plugin's subagent.
+1. The plugin's subagent. **Cut from 0.3.0** (the planner, 2026-10-29; slice 4's implementation note).
 2. `vsift skill show`, with help naming the skill's files instead.
 3. `claims[].priority`. The backlog's order then lives in prose, with `category` `backlog_item`.
 4. The three example handoffs beyond the first (keep bug report).
@@ -537,3 +537,46 @@ Built as section 3 and conditions 1 and 2 say, with these narrowings and additio
   `SkillError`, so `EngineError` is unchanged; the CLI composes. No new failure code.
 - **Register:** L-241 (the eight clients as their documentation gave them on 2026-10-28).
 
+## Implementation note, 2026-10-29 (slice 4: the Claude Code plugin)
+
+Built as section 4 says, with three differences, each for a reason found while building. **The planner
+accepted all three on 2026-10-29**; each ruling is stated with its difference.
+
+- **`plugin.json` states no `version`.** Claude Code keeps a person on a plugin's stated version until it
+  changes, so a stated version would have to move with every release, and the release tools let a stable
+  release differ from its candidate only in the version-string files they list
+  (`tools/vsift-release/src/candidate.rs`, `tools/release_window.py`). Without it the plugin follows its
+  marketplace source, which the docs pin to the release tag. The plugin rule refuses a `version`.
+  *The planner's ruling (2026-10-29): accepted.* The tag pins the version; L-240 already says a plugin added
+  from `main` can be ahead of the installed release, and the install text says to add it at the release tag.
+- **The tag syntax is confirmed** from Claude Code's own install documentation (read 2026-10-29 with no
+  identifying detail sent): a GitHub marketplace source takes `#ref` to pin a branch or tag, so
+  `/plugin marketplace add smormah/vsift#v<version>`, and `claude plugin marketplace add` takes the same
+  sources. The marketplace exists from the 0.3.0 tag on.
+- **No slash commands yet.** The commands point at workflow files, which slice 2 builds, so each workflow's
+  pull request adds its `commands/<workflow>.md`. *The planner's ruling (2026-10-29): accepted.* Each
+  workflow's slash command comes with that workflow in slice 2, and if the commands name skill files, the
+  skill guard's byte-for-byte test covers `plugins/vsift/commands/` too.
+- **No subagent.** A plugin subagent preloads skills by name, and the documentation does not settle how a
+  plugin's own skill is named there; a wrong name is skipped without an error. *The planner's ruling
+  (2026-10-29): the subagent is cut from 0.3.0*, the first item of section 8's cut list. It is recorded as
+  cut, not deferred to a date.
+- **`claude plugin validate` was not run** (nothing is installed on the development machine for this pull
+  request). *The planner's ruling (2026-10-29): acceptable;* the governance rule and its manifest tests
+  stand in for it, and the 0.3.0 try-out adds the plugin from the release tag and records whether it loads.
+
+- **Layers:** no Rust crate changes. The governance check gains the plugin rule
+  (`tools/vsift-governance/src/claude_plugin.rs`): the marketplace has exactly the reviewed members, the owner
+  `{"name": "VSift project"}` and one entry, `vsift` at `./plugins/vsift`; `plugin.json` holds only `name`,
+  `description`, `license` and `repository`; nothing under `plugins/` is named `hooks`, `bin`, `monitors`,
+  `.mcp.json`, `.lsp.json` or `package.json`, or is a link.
+- **The copy:** `plugins/vsift/skills/vsift/` is a real copy of `skills/vsift/`. The skill guard's
+  `the_plugins_skill_is_the_shipped_skill_byte_for_byte` fails on any file missing, added or different, so a
+  skill change copies the folder again in the same change. The rebase onto #543 showed it working: the two
+  skill files #543 changed had to be copied again.
+- **The skill:** unchanged, so no new trial freeze.
+- **Tests:** the plugin rule's unit tests (the reviewed manifests pass; a person, a component, a `version`,
+  another source and every refused entry or link fail) and the byte-for-byte guard, which failed on a planted
+  one-byte difference before it was removed.
+- **Register:** [L-240](../planning/known-limits.md#l-240), a marketplace added without a tag can carry a
+  newer skill than the installed `vsift`.

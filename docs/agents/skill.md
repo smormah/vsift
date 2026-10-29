@@ -80,6 +80,20 @@ holds `vsift-cli/skills/vsift/`), into the client's skill folder:
 | Claude Code | `~/.claude/skills/vsift/` | `<project>/.claude/skills/vsift/` |
 | Every other client above | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
 
+**Claude Code also takes it as a plugin** (0.3.0, ADR 0038 section 4). From the 0.3.0
+tag on, the repository is a plugin marketplace: `.claude-plugin/marketplace.json` lists one plugin, `plugins/vsift/`,
+whose `skills/vsift/` is this folder byte for byte. Add the marketplace at the release tag
+of the installed `vsift` and install the plugin: `/plugin marketplace add
+smormah/vsift#v<version>`, then `/plugin install vsift@vsift`, or the same with `claude
+plugin` from a shell. The `#v<version>` pins the tag, which Claude Code's own
+documentation gives as the way to pin a branch or tag; without it the marketplace follows
+`main`, whose skill can be ahead of the installed binary
+([L-240](../planning/known-limits.md#l-240)). The skill is then `/vsift:vsift`. The plugin
+ships no hooks, executables, monitors, MCP or LSP servers and no npm manifest, so
+installing it runs nothing, and its manifests name the project, never a person; the
+governance check refuses anything else. Nothing loads it into a contributor's own agent:
+Claude Code reads a marketplace only once someone adds it.
+
 Restart the client (or start a new session) so that it discovers the skill. Both
 clients read the `name` and `description` front matter and load the rest on demand.
 The Codex metadata sets implicit invocation on, so a request about a local video can
@@ -433,6 +447,10 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo
 test --workspace`) fails when the skill drifts from the CLI:
+
+- the Claude Code plugin's copy, `plugins/vsift/skills/vsift/`, equals `skills/vsift/`
+  byte for byte, with no file missing or added; a skill change copies the folder again
+  in the same change;
 
 - every `vsift` line in a `console` block of the skill (and of this page) parses with
   the real parser, uses `--json` or `--events jsonl` and no operator-only option, and

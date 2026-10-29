@@ -31,6 +31,15 @@ release archive and in the repository (`skills/vsift`). Copy the whole folder, k
 | Claude Code | `~/.claude/skills/vsift/` | `<project>/.claude/skills/vsift/` |
 | Codex | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
 
+**Claude Code can also take the skill as a plugin** from this repository, which is a plugin marketplace from
+release 0.3.0 on.
+In a Claude Code session, add the marketplace at the tag of the `vsift` you installed, then install the
+plugin, for example `/plugin marketplace add smormah/vsift#v0.3.0` and then `/plugin install vsift@vsift`.
+From your shell the same is `claude plugin marketplace add smormah/vsift#v0.3.0` and then `claude plugin
+install vsift@vsift`. Name the tag: without it the marketplace follows the repository's newest work, whose
+skill can be ahead of your `vsift`. The plugin holds the same skill folder and nothing else that runs: no
+hooks, servers or programs.
+
 Start a new session of the assistant so it finds the skill. The [skill guide](../agents/skill.md) has the
 details, including what the skill asks of the assistant (it must be able to open an image file, for one).
 
