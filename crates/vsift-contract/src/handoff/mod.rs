@@ -21,6 +21,10 @@
 //! [`HandoffCheck::resolve_in_session`] then optionally resolves the cited
 //! identities against one session's records, which a host reads.
 //!
+//! `handoff skeleton` (ADR 0038) uses the same checker the other way round:
+//! [`HandoffChecker::skeleton`] writes a valid handoff that states nothing
+//! yet, so an agent never builds the JSON from a text template.
+//!
 //! **Nothing of the draft is repeated** in a finding (SEC-16): the draft can
 //! carry hostile evidence text. A finding is a JSON pointer made of the
 //! schema's own member names and array indices, a line number, a closed
@@ -34,6 +38,7 @@ mod rule;
 mod rules;
 mod schema;
 mod session;
+mod skeleton;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -45,6 +50,10 @@ pub use rules::{MAX_RESUME_CARD_BYTES, handoff_is_cut_short};
 pub use schema::HandoffSchemaError;
 pub use session::{
     HandoffEvidenceKind, HandoffSessionCheck, HandoffSessionGap, HandoffSessionRecords,
+};
+pub use skeleton::{
+    HANDOFF_SKELETON_FILL, HANDOFF_SKELETON_QUESTION_REMEDIATION, HandoffSkeletonData,
+    HandoffSkeletonError, HandoffSkeletonFacts, HandoffTranscriptBasis,
 };
 
 use schema::CompiledSchema;

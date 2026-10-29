@@ -72,6 +72,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift audio` | free | For a human listener; you cannot hear it and its file tells you nothing: read speech with `transcript get`. |
 | `vsift bundle validate` | free | Read-only, on a bundle the user named or one you retained for them. |
 | `vsift handoff check` | free | Read-only; checks your draft report once before you send it, in one of the two forms under "Checking the draft". |
+| `vsift handoff skeleton` | free | Read-only; prints a valid handoff that states nothing yet, with your session's ids filled in, to start the JSON from (handoff.md). |
 | `vsift job status` | free | Read-only. |
 | `vsift job resume` | free | Only a job of your own session. |
 | `vsift job cancel` | explicit | Cancelling removes the job's saved progress; to stop for a budget, leave the job interrupted instead. |
@@ -143,6 +144,7 @@ vsift session close <session> --json
 vsift session clean --expired --dry-run --json
 vsift session clean --expired --dry-run --cursor <n> --json
 vsift bundle validate <bundle-directory> --json
+vsift handoff skeleton <session> --question "<question>" --json
 vsift --help
 vsift <namespace> <operation> --help
 ```

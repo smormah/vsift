@@ -404,3 +404,165 @@ fn json_of(output: &Output) -> Built<Value> {
     );
     Ok(serde_json::from_slice(&output.stdout)?)
 }
+
+/// A `handoff skeleton --json` result, validated; its data and the handoff
+/// in it are validated when it succeeded (ADR 0038).
+fn skeleton_json(output: &Output) -> Built<Value> {
+    assert!(output.stderr.is_empty(), "a JSON command wrote to stderr");
+    let value: Value = serde_json::from_slice(&output.stdout)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value["command"], "handoff.skeleton");
+    if value["error"].is_null() {
+        validate("handoff-skeleton-data.schema.json", &value["data"])?;
+        let schema: Value = serde_json::from_str(&fs::read_to_string(repository(
+            "skills/vsift/handoff.schema.json",
+        ))?)?;
+        jsonschema::validator_for(&schema)?
+            .validate(&value["data"]["handoff"])
+            .map_err(|error| io::Error::other(format!("handoff.schema.json: {error}")))?;
+    }
+    Ok(value)
+}
+
+const QUESTION: &str = "What does the speaker name?";
+
+#[tokio::test]
+async fn a_skeleton_names_the_session_and_passes_the_check_unfilled() -> TestResult {
+    let root = OwnedRoot::new()?;
+    seed_session(&root).await?;
+    let before = json_of(&vsift(
+        &root,
+        &["session", "status", SESSION, "--json"],
+        b"",
+    )?)?;
+
+    let output = vsift(
+        &root,
+        &[
+            "handoff",
+            "skeleton",
+            SESSION,
+            "--question",
+            QUESTION,
+            "--json",
+        ],
+        b"",
+    )?;
+    assert_eq!(exit(&output), Some(0));
+    let value = skeleton_json(&output)?;
+    assert_eq!(value["status"], "complete");
+    let skeleton = &value["data"]["handoff"];
+    assert_eq!(skeleton["question"], QUESTION);
+    assert_eq!(skeleton["status"], "insufficient_evidence");
+    assert_eq!(skeleton["session"]["session_id"], SESSION);
+    assert_eq!(
+        skeleton["session"]["source_id"],
+        before["data"]["source_id"]
+    );
+    assert!(skeleton["session"]["revision_id"].is_string(), "{skeleton}");
+    assert_eq!(
+        skeleton["capabilities"]["transcript_basis"],
+        "supplied_transcript"
+    );
+    assert_eq!(skeleton["capabilities"]["image_access"], "unavailable");
+    assert_eq!(skeleton["claims"], json!([]));
+
+    // Unfilled, it already passes the check a draft gets, its session
+    // identities resolved in the session it names.
+    let checked = json(&vsift(
+        &root,
+        &["handoff", "check", "--session", SESSION, "--json"],
+        report(skeleton).as_bytes(),
+    )?)?;
+    assert_eq!(checked["data"]["valid"], true, "{checked}");
+    assert_eq!(checked["data"]["session"]["resolved"], true);
+
+    let after = json_of(&vsift(
+        &root,
+        &["session", "status", SESSION, "--json"],
+        b"",
+    )?)?;
+    assert_eq!(
+        before["data"], after["data"],
+        "the skeleton changed the session"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_question_the_handoff_refuses_is_an_invalid_argument() -> TestResult {
+    let root = OwnedRoot::new()?;
+    seed_session(&root).await?;
+    for question in ["", "two\nlines"] {
+        let output = vsift(
+            &root,
+            &[
+                "handoff",
+                "skeleton",
+                SESSION,
+                "--question",
+                question,
+                "--json",
+            ],
+            b"",
+        )?;
+        assert_eq!(exit(&output), Some(2), "{question:?}");
+        let value = skeleton_json(&output)?;
+        assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_closed_or_unknown_session_has_no_skeleton() -> TestResult {
+    let root = OwnedRoot::new()?;
+    seed_session(&root).await?;
+    json_of(&vsift(
+        &root,
+        &["session", "close", SESSION, "--json"],
+        b"",
+    )?)?;
+    for session in [SESSION, "ses_ffffffffffffffffffffffffffffffff"] {
+        let output = vsift(
+            &root,
+            &[
+                "handoff",
+                "skeleton",
+                session,
+                "--question",
+                QUESTION,
+                "--json",
+            ],
+            b"",
+        )?;
+        assert_ne!(exit(&output), Some(0), "{session}");
+        let value = skeleton_json(&output)?;
+        assert_eq!(value["status"], "failed", "{value}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn human_output_is_the_block_to_copy() -> TestResult {
+    let root = OwnedRoot::new()?;
+    seed_session(&root).await?;
+    let output = vsift(
+        &root,
+        &["handoff", "skeleton", SESSION, "--question", QUESTION],
+        b"",
+    )?;
+    assert_eq!(exit(&output), Some(0));
+    let text = String::from_utf8(output.stdout)?;
+    assert!(text.starts_with("```vsift-handoff\n"), "{text}");
+    let block = extract_block(&text).ok_or("no fenced block")?;
+    let handoff: Value = serde_json::from_str(block)?;
+    assert_eq!(handoff["session"]["session_id"], SESSION);
+    assert!(text.contains("Fill in: /capabilities, /claims"), "{text}");
+    Ok(())
+}
+
+fn extract_block(text: &str) -> Option<&str> {
+    let start = text.find("```vsift-handoff\n")? + "```vsift-handoff\n".len();
+    let end = start + text[start..].find("\n```")?;
+    Some(&text[start..end])
+}

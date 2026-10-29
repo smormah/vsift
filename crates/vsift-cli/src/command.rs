@@ -47,10 +47,13 @@ A typical investigation (every command takes --json):
   5. vsift frame get <session> --at <us> --json
      vsift frame burst <session> --from <us> --to <us> --max-frames 4 --json
        Look at specific moments; each frame is an image file to open.
-  6. vsift handoff check --json
-       Only when you were asked for a vsift-handoff report: reads the draft from standard
-       input and lists what to fix before you send it. A plain-text report needs no check
-       (a draft without a vsift-handoff block is reported as missing one).
+  6. vsift handoff skeleton <session> --question <words> --json
+     vsift handoff check --json
+       Only when you were asked for a vsift-handoff report. skeleton prints a valid one
+       with the session's ids filled in (data.handoff), to add your findings to; never
+       build the JSON by search and replace. check reads the draft from standard input and
+       lists what to fix before you send it. A plain-text report needs no check (a draft
+       without a vsift-handoff block is reported as missing one).
   7. vsift session close <session> --json
        When you are done.
 
@@ -1164,6 +1167,9 @@ pub(crate) enum HandoffCommand {
     /// handoff schema and rules; reads the draft from standard input unless
     /// --file names it.
     Check(HandoffCheckArguments),
+    /// Print a valid handoff that states nothing yet, with the session's
+    /// ids filled in, to fill in instead of building the JSON from a template.
+    Skeleton(HandoffSkeletonArguments),
 }
 
 impl HandoffCommand {
@@ -1171,6 +1177,7 @@ impl HandoffCommand {
     pub(crate) const fn operation_name(&self) -> CommandName {
         match self {
             Self::Check(_) => CommandName::HandoffCheck,
+            Self::Skeleton(_) => CommandName::HandoffSkeleton,
         }
     }
 }
@@ -1186,6 +1193,17 @@ pub(crate) struct HandoffCheckArguments {
     /// resolve in; read only, never renewed.
     #[arg(long)]
     pub session: Option<SessionId>,
+}
+
+/// The session and question a handoff skeleton is written for (ADR 0038).
+#[derive(Args, Debug)]
+pub(crate) struct HandoffSkeletonArguments {
+    /// Open session the handoff reports on; read only, never renewed.
+    pub session: SessionId,
+    /// The user's question in your own words (1 to 500 characters, one line),
+    /// written into the handoff's question member.
+    #[arg(long)]
+    pub question: String,
 }
 
 /// Local bundle path.
@@ -1518,6 +1536,8 @@ mod tests {
             "--transcript-offset <microseconds>",
             "vsift job start <session> --json",
             "vsift job status <job> --json",
+            "never
+       build the JSON by search and replace",
             "--session-root and --host-isolation are for operators",
         ] {
             assert!(TYPICAL_INVESTIGATION_HELP.contains(needle), "{needle}");

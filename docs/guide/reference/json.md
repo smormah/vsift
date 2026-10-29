@@ -43,6 +43,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [frame-evidence.schema.json](#frame-evidenceschemajson): VSift frame evidence record v1
 - [frame-stream-data.schema.json](#frame-stream-dataschemajson): VSift frame and crop JSON Lines terminal data v1
 - [handoff-check-data.schema.json](#handoff-check-dataschemajson): VSift handoff.check data v1
+- [handoff-skeleton-data.schema.json](#handoff-skeleton-dataschemajson): VSift handoff.skeleton data v1
 - [ingest-data.schema.json](#ingest-dataschemajson): VSift ingest data v1
 - [job-batch-data.schema.json](#job-batch-dataschemajson): VSift job.batch data v1
 - [job-data.schema.json](#job-dataschemajson): VSift job data v1
@@ -850,6 +851,24 @@ The data member of a complete handoff.check result (P13 PR 5, issue #213, ADR 00
 | `session.identities_checked` | integer | yes | at least 0 |
 
 This schema also holds 4 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/handoff-check-data.schema.json) for them.
+
+### handoff-skeleton-data.schema.json
+
+**VSift handoff.skeleton data v1** ([the schema](../../../schemas/v1/handoff-skeleton-data.schema.json))
+
+The data member of a complete handoff.skeleton result (0.3.0, ADR 0038 section 1): a handoff that is valid but states nothing yet, written by VSift from one open session's committed records so that an agent never builds the handoff JSON from a text template. handoff is a complete handoff v1 that validates against the skill-owned skills/vsift/handoff.schema.json and passes handoff check, also with --session naming the same session: status insufficient_evidence, the question as given, capabilities.image_access unavailable and transcript_basis from the session's newest transcript revision, the one a plain transcript get reads (the open revision while a background transcription runs; none without one), session with session_id, source_id and, when the session has a transcript, revision_id, empty claims, citations, gaps and untrusted_instructions, and lifecycle.action left_open. fill lists, as RFC 6901 pointers into handoff, the members only the agent can supply, in the order it fills them. The command reads the session read-only and never renews it.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `handoff_version` | constant "1" | yes |  |
+| `handoff` | object | yes | A complete handoff v1 (skills/vsift/handoff.schema.json) that states nothing yet. |
+| `handoff.handoff_version` | constant "1" | yes |  |
+| `handoff.status` | constant "insufficient_evidence" | yes |  |
+| `handoff.claims` | array of any | yes | at most 0 items |
+| `handoff.citations` | array of any | yes | at most 0 items |
+| `handoff.gaps` | array of any | yes | at most 0 items |
+| `handoff.untrusted_instructions` | array of any | yes | at most 0 items |
+| `fill` | array of "/capabilities" \| "/claims" \| "/citations" \| "/gaps" \| "/untrusted_instructions" \| "/status" \| "/lifecycle" | yes | at least 1 items; items are unique |
 
 ### ingest-data.schema.json
 

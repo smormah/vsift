@@ -87,6 +87,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
 | `handoff check` | Check an agent's draft report against the skill's handoff schema and rules, answering `data.valid` with typed findings that never repeat the draft | Implemented in P13 PR 5 |
+| `handoff skeleton` | Print a valid handoff that states nothing yet, with one open session's ids filled in, for an agent to fill in instead of building the JSON from a template | Implemented in 0.3.0 (ADR 0038) |
 | `watch` (also `vsift <video>`) | A person's action: a readable transcript, subtitles and the screen changes with their frames, written beside the video or into `--output`, never replacing a file; every output names the video's SHA-256, and the frame list every frame's | 0.3.0 (ADR 0037); first pull request: files written once at the end, ADR 0033's live line as progress |
 
 ### P05 disposable sessions and bundles
@@ -3022,6 +3023,48 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   so the command and the grader cannot disagree. Its schema validator implements
   exactly the JSON Schema features the handoff schema uses and refuses any other at
   compile time; a differential test holds it to a general validator.
+
+### 0.3.0 `handoff skeleton`
+
+`vsift handoff skeleton <session> --question <text>` prints a handoff that is valid but states
+nothing yet, written by VSift from the session's committed records ([ADR
+0038](../decisions/0038-ai-integration-without-mcp.md) section 1). It exists because an agent that
+built the handoff JSON from a text template, and filled the template in with a case-insensitive
+search and replace, corrupted the JSON without any error: the replace also rewrote member names
+that spelled the placeholder. The skeleton removes the template. Additive: a new command identifier,
+`handoff.skeleton`, that the schemas' pattern already admits.
+
+- **Input.** An open session and the user's question in the agent's own words. The question must
+  pass the handoff schema's rule for `question` (1 to 500 characters of plain text on one line, no
+  link, local path or hidden character); otherwise the result is `INVALID_ARGUMENT` (exit 2) with
+  fixed-prose remediation. A session that is closed, expired or unknown fails as a transcript read
+  of it does; nothing is written.
+- **Result.** `complete`, with `data` per `schemas/v1/handoff-skeleton-data.schema.json`:
+  `handoff_version` (`"1"`), `handoff` and `fill`. `handoff` is a complete handoff v1 that validates
+  against `skills/vsift/handoff.schema.json` and passes `handoff check`, also with `--session`
+  naming the same session: `status` `insufficient_evidence`, the `question` as given,
+  `capabilities.image_access` `unavailable` (the agent changes it only after its own image check)
+  and `capabilities.transcript_basis` from the session's newest transcript revision
+  (`supplied_transcript`, `local_asr`, `mixed`, or `none` without one), `session` with `session_id`,
+  `source_id` and, when there is a transcript, `revision_id`, empty `claims`, `citations`, `gaps`
+  and `untrusted_instructions`, and `lifecycle.action` `left_open`. The revision is the one a plain
+  `transcript get` reads: while a background transcription runs, its open revision (ADR 0033), so
+  the skeleton names the revision the agent's reads cite. `fill` lists, as RFC 6901
+  pointers into `handoff`, the members only the agent can supply. The frozen example is
+  `schemas/v1/examples/handoff-skeleton.json`.
+- **Read only.** The session is not renewed and nothing is written. Without `--json` the command
+  prints the ready fenced `vsift-handoff` block and the members left to fill in.
+- **The skill** classes it `free` (`skills/vsift/references/commands.md`) and its handoff page says
+  to write the JSON whole or start from the skeleton, never by search-and-replace on a template.
+  `vsift --help` names it in the typical investigation's step 6, for an agent with no skill.
+- **Tests.** `handoff_contract` (the frozen example; the skeleton validates against the skill's
+  handoff schema and passes the check), the `skeleton` unit tests of `vsift-contract` (every
+  transcript basis; a refused question is the caller's error) and `handoff_cli_contract` through the
+  binary (a seeded session's skeleton passes `handoff check --session` unfilled and leaves the
+  session's status unchanged; a refused question; a closed or unknown session; the human block) and
+  `growing_read_cli_contract` (while a job publishes an open revision, the skeleton names the revision
+  `transcript get` cites, and a handoff citing that read passes `handoff check --session`, also after
+  the next part).
 
 ### P13 `setup install`
 

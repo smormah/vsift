@@ -50,6 +50,7 @@
 - [vsift job start](#vsift-job-start): Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
 - [vsift handoff](#vsift-handoff): Check an agent's draft handoff report before it is sent
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
+- [vsift handoff skeleton](#vsift-handoff-skeleton): Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
 - [vsift watch](#vsift-watch): Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
 
 ## vsift
@@ -132,10 +133,13 @@ A typical investigation (every command takes --json):
   5. vsift frame get <session> --at <us> --json
      vsift frame burst <session> --from <us> --to <us> --max-frames 4 --json
        Look at specific moments; each frame is an image file to open.
-  6. vsift handoff check --json
-       Only when you were asked for a vsift-handoff report: reads the draft from standard
-       input and lists what to fix before you send it. A plain-text report needs no check
-       (a draft without a vsift-handoff block is reported as missing one).
+  6. vsift handoff skeleton <session> --question <words> --json
+     vsift handoff check --json
+       Only when you were asked for a vsift-handoff report. skeleton prints a valid one
+       with the session's ids filled in (data.handoff), to add your findings to; never
+       build the JSON by search and replace. check reads the draft from standard input and
+       lists what to fix before you send it. A plain-text report needs no check (a draft
+       without a vsift-handoff block is reported as missing one).
   7. vsift session close <session> --json
        When you are done.
 
@@ -2124,7 +2128,8 @@ Check an agent's draft handoff report before it is sent
 Usage: vsift handoff [OPTIONS] <COMMAND>
 
 Commands:
-  check  Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
+  check     Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
+  skeleton  Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
 
 Options:
       --json
@@ -2176,6 +2181,48 @@ Options:
 
       --session <SESSION>
           Open session whose records every cited segment and evidence id must resolve in; read only, never renewed
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift handoff skeleton
+
+Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template.
+
+```text
+Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
+
+Usage: vsift handoff skeleton [OPTIONS] --question <QUESTION> <SESSION>
+
+Arguments:
+  <SESSION>
+          Open session the handoff reports on; read only, never renewed
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --question <QUESTION>
+          The user's question in your own words (1 to 500 characters, one line), written into the handoff's question member
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache

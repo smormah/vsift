@@ -5,6 +5,11 @@ this order and ends with one fenced `vsift-handoff` block holding the JSON that
 follows [../handoff.schema.json](../handoff.schema.json). Write the JSON first in your
 head: the prose must say nothing the JSON does not.
 
+Write the JSON whole, or start from `vsift handoff skeleton <session> --question "<question>"
+--json`: its `data.handoff` is a valid handoff with your session's ids filled in, and
+`data.fill` lists what only you can add. Never build the JSON by search-and-replace on a
+template: a replace can also rewrite the member names and break it without an error.
+
 ## Template
 
 ````markdown

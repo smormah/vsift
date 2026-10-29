@@ -62,7 +62,7 @@ const MAX_RESUME_BYTES: usize = 2 * 1024;
 /// Placeholders the skill's command lines use, with a value the parser
 /// accepts. An unknown placeholder fails the guard, so a new one is added here
 /// deliberately.
-const PLACEHOLDERS: [(&str, &str); 24] = [
+const PLACEHOLDERS: [(&str, &str); 25] = [
     ("namespace", "session"),
     ("operation", "retain"),
     ("video", "recording.mp4"),
@@ -87,6 +87,7 @@ const PLACEHOLDERS: [(&str, &str); 24] = [
     ("executable", "ffmpeg-bin"),
     ("model-file", "ggml-base.bin"),
     ("dependency", "ffmpeg"),
+    ("question", "What does the dialog show?"),
 ];
 
 /// Commands the skill must never run. Changing this set is a reviewed safety

@@ -91,6 +91,8 @@
 //!   and the report-text rules; [`HandoffCheckData`] is the `handoff.check`
 //!   data, whose findings never repeat the draft. The trial grader uses the
 //!   same checker, so the command and the grader cannot disagree.
+//!   [`HandoffSkeletonData`] is the `handoff.skeleton` data (ADR 0038): a
+//!   valid handoff that states nothing yet, written by `VSift`.
 //! - **Worker requests (P11):** the strict bounded document decoder
 //!   [`decode_strict_json`]; the versioned [`WorkRequest`] decoded by
 //!   [`decode_work_request`] (and [`decode_batch_line`] for a `job batch`
@@ -197,10 +199,12 @@ pub use envelope::{
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
 pub use handoff::{
     COMPACT_BUDGET, HANDOFF_DRAFT_NOT_UTF8_REMEDIATION, HANDOFF_DRAFT_TOO_LARGE_REMEDIATION,
-    HANDOFF_FILE_REMEDIATION, HANDOFF_SCHEMA_JSON, HANDOFF_VERSION, HandoffBudgetLimits,
-    HandoffCheck, HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding,
-    HandoffRule, HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck, HandoffSessionGap,
-    HandoffSessionRecords, HandoffVocabulary, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES,
+    HANDOFF_FILE_REMEDIATION, HANDOFF_SCHEMA_JSON, HANDOFF_SKELETON_FILL,
+    HANDOFF_SKELETON_QUESTION_REMEDIATION, HANDOFF_VERSION, HandoffBudgetLimits, HandoffCheck,
+    HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding, HandoffRule,
+    HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck, HandoffSessionGap,
+    HandoffSessionRecords, HandoffSkeletonData, HandoffSkeletonError, HandoffSkeletonFacts,
+    HandoffTranscriptBasis, HandoffVocabulary, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES,
     MAX_RESUME_CARD_BYTES, STANDARD_BUDGET, budget_profile, extract_handoff_block,
     handoff_is_cut_short, handoff_pattern_has_message, handoff_report_text_findings,
     handoff_vocabulary,

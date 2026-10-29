@@ -682,6 +682,7 @@ where
                 HandoffCommand::Check(arguments) => {
                     handoff::check(&engine, &arguments, io::stdin().lock())
                 }
+                HandoffCommand::Skeleton(arguments) => handoff::skeleton(&engine, &arguments),
             };
             write_session_result(&mut writer, mode, operation, result)
         }

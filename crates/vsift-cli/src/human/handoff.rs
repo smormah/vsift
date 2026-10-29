@@ -1,4 +1,4 @@
-//! Human text of `handoff check` (P13 PR 5).
+//! Human text of `handoff check` (P13 PR 5) and `handoff skeleton` (ADR 0038).
 //!
 //! A finding holds no draft text (SEC-16): its pointer is built from the
 //! schema's member names and indices, its allowed values are the schema's
@@ -90,6 +90,38 @@ pub(super) fn check(envelope: &Envelope<HandoffCheck>) -> Result<RenderedText, T
         )
         .end_line();
     }
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// The `data` of a `handoff.skeleton` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct HandoffSkeleton {
+    handoff: serde_json::Value,
+    fill: Vec<String>,
+}
+
+/// The skeleton as the fenced block a report ends with, ready to copy, and
+/// the members left to fill in. Each line of the JSON is written through
+/// [`TerminalText::push_value`]: the question is the caller's text.
+pub(super) fn skeleton(envelope: &Envelope<HandoffSkeleton>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    let json = serde_json::to_string_pretty(&data.handoff).map_err(|_| TooLarge)?;
+    text.push_fixed("```vsift-handoff").end_line();
+    for line in json.lines() {
+        text.push_value(line).end_line();
+    }
+    text.push_fixed("```").end_line();
+    text.blank_line();
+    text.push_fixed("Fill in: ");
+    for (index, member) in data.fill.iter().enumerate() {
+        if index > 0 {
+            text.push_fixed(", ");
+        }
+        text.push_value(member);
+    }
+    text.end_line();
     push_outcome(&mut text, envelope);
     text.finish()
 }
