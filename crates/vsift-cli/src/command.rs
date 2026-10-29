@@ -57,6 +57,18 @@ A typical investigation (every command takes --json):
   7. vsift session close <session> --json
        When you are done.
 
+Ready-made outcomes. When the user asks for one of these, follow its method: each is a
+short procedure with the commands above that ends in a vsift-handoff report the check
+accepts.
+  bug-report      a recording to an evidence-backed bug report, with times
+  findings        a narrated screencast to findings: bugs, requests and questions
+  demo-backlog    a product demo to a prioritised backlog
+  meeting-notes   a meeting to its actions, decisions and open questions
+  workshop-spec   a workshop to a spec with quoted decisions and open questions
+  logs-by-clock   moments of the recording matched to log lines by clock time
+Each one's method (Markdown) is printed by:
+  vsift skill show workflows/<name>.md
+
 Ask for small pages. --limit takes 1 to 100 (default 20) and --max-frames 1 to 100
 (default 12), more than an investigation needs: reading 20 results at a time and looking
 at a handful of frames keeps it cheap and inside any budget. Ask for more only when the
@@ -1561,13 +1573,14 @@ mod tests {
     /// The command lines of [`TYPICAL_INVESTIGATION_HELP`], with each
     /// placeholder replaced by a value of the right kind.
     fn help_command_lines() -> Vec<Vec<String>> {
-        const SUBSTITUTIONS: [(&str, &str); 6] = [
+        const SUBSTITUTIONS: [(&str, &str); 7] = [
             ("<video>", "video.mp4"),
             ("<session>", "ses_0123456789abcdef"),
             ("<us>", "1000"),
             ("<words>", "error"),
             ("<file>", "walkthrough.srt"),
             ("<microseconds>", "500000"),
+            ("<name>", "bug-report"),
         ];
         TYPICAL_INVESTIGATION_HELP
             .lines()
@@ -1611,6 +1624,32 @@ mod tests {
             let parsed = Cli::try_parse_from(&line);
             assert!(parsed.is_ok(), "{line:?}: {:?}", parsed.err());
         }
+    }
+
+    /// The "ready-made outcomes" paragraph lists exactly the workflows this
+    /// release's skill ships, each by its file name without `.md`, so a
+    /// workflow added, renamed or removed fails here until the help says so
+    /// (ADR 0038, section 5). The `skill show` line itself is parsed by
+    /// [`every_command_the_typical_investigation_names_parses`].
+    #[test]
+    fn the_ready_made_outcomes_are_the_shipped_workflows() {
+        let shipped: BTreeSet<&str> = vsift_contract::SKILL_FILES
+            .iter()
+            .filter_map(|(name, _)| name.strip_prefix("workflows/")?.strip_suffix(".md"))
+            .collect();
+        let listed: BTreeSet<&str> = TYPICAL_INVESTIGATION_HELP
+            .lines()
+            .skip_while(|line| !line.starts_with("Ready-made outcomes."))
+            .take_while(|line| !line.starts_with("Each one's method"))
+            .filter_map(|line| {
+                let line = line.strip_prefix("  ")?;
+                let (name, description) = line.split_once("  ")?;
+                (!description.trim().is_empty()).then_some(name)
+            })
+            .collect();
+        assert_eq!(listed, shipped);
+        assert!(shipped.len() >= 6, "the skill lost workflows: {shipped:?}");
+        assert!(TYPICAL_INVESTIGATION_HELP.contains("vsift skill show workflows/<name>.md"));
     }
 
     /// The example also names the optional transcript options, the job

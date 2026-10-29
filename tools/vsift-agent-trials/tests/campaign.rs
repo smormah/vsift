@@ -21,7 +21,7 @@ fn count(runs: &[vsift_agent_trials::campaign::PlannedRun], kind: RunKind) -> us
 }
 
 #[test]
-fn the_batches_add_up_to_the_plans_72_runs_and_a_reserve_of_12() -> TestResult {
+fn the_batches_add_up_to_the_plans_76_runs_and_a_reserve_of_12() -> TestResult {
     let mut total = 0;
     let mut pilots = 0;
     let mut counted_with_skill = 0;
@@ -43,9 +43,16 @@ fn the_batches_add_up_to_the_plans_72_runs_and_a_reserve_of_12() -> TestResult {
     }
     assert_eq!(pilots, 8, "pilots");
     assert_eq!(counted_with_skill, 34, "the counted set with the skill");
-    assert_eq!(cold, 30, "the cold runs: 12 baseline and 18 final");
-    assert_eq!(total, 72);
-    assert_eq!(total + 12, 84, "with the reserve, the plan's 84 runs");
+    assert_eq!(
+        cold, 34,
+        "the cold runs: 12 baseline, 18 final and 4 of C-04 (ADR 0038)"
+    );
+    assert_eq!(total, 76);
+    assert_eq!(
+        total + 12,
+        84 + 4,
+        "with the reserve, the plan's 84 runs and C-04's 4"
+    );
     Ok(())
 }
 
@@ -116,18 +123,32 @@ fn each_batch_has_the_shape_the_plan_describes() -> TestResult {
         );
     }
 
-    // Batch 3: compact 6 and review 3 cold runs per client.
+    // Batch 3: compact 7 and review 4 cold runs per client, C-04 once in
+    // each tier (ADR 0038, section 5); batch 1 never runs C-04.
     for client in [ClientName::Claude, ClientName::Codex] {
         let runs = plan(3, client)?;
         assert_eq!(
             runs.iter().filter(|run| run.tier == Tier::Compact).count(),
-            6
+            7
         );
         assert_eq!(
             runs.iter().filter(|run| run.tier == Tier::Review).count(),
-            3
+            4
         );
         assert!(runs.iter().all(|run| run.mode == TrialMode::Cold));
+        for tier in [Tier::Compact, Tier::Review] {
+            let outcome = runs
+                .iter()
+                .filter(|run| run.tier == tier && run.scenario == "C-04-f05-bug-report")
+                .count();
+            assert_eq!(outcome, 1, "{tier:?}");
+        }
+        assert!(
+            plan(1, client)?
+                .iter()
+                .all(|run| run.scenario != "C-04-f05-bug-report"),
+            "the baseline is not rewritten"
+        );
     }
     assert!(plan(0, ClientName::Claude).is_err() && plan(4, ClientName::Codex).is_err());
     Ok(())

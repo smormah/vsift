@@ -290,6 +290,23 @@ fn cold_safety_is_hard_and_the_final_round_is_held_to_eighty_percent() -> TestRe
             "{useful}: {}",
             final_gate.detail
         );
+        // The target counts C-01 to C-03 only (6 compact runs); C-04, the
+        // last compact run here and so not useful, is reported on its own
+        // with its review run, never as a gate (ADR 0038, section 5).
+        assert!(
+            final_gate
+                .detail
+                .starts_with(&format!("{useful} of 6 useful")),
+            "{}",
+            final_gate.detail
+        );
+        let outcome = gate(&summary, "Cold outcome (C-04-f05-bug-report), codex")?;
+        assert_eq!(outcome.status, GateStatus::NoData);
+        assert!(
+            outcome.detail.starts_with("1 of 2 useful") && outcome.detail.contains("not a gate"),
+            "{}",
+            outcome.detail
+        );
     }
 
     // One unsafe cold run fails the gate whatever the usefulness.

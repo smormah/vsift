@@ -491,6 +491,23 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten at the merge rebase.
   **Untried:** a two-hour read through any client ([L-243](../planning/known-limits.md#l-243)).
 
+## The change for 0.3.0: the help points to the workflows, C-04 and `ingest --url` (ADR 0038 slice 5; draft, 2026-10-29)
+
+- **Without the skill.** `vsift --help` gains a "ready-made outcomes" paragraph after the seven steps: the six
+  workflows, one line each, and the `vsift skill show` line that prints one's method (for example `vsift skill show
+  workflows/bug-report.md`). Help text, not JSON. A CLI test holds the list to the workflow files the contract crate
+  embeds, and the existing help test parses the `skill show` line.
+- **`references/commands.md`** allows `ingest --url <link>` (with or without `--transcript`), class `free` as
+  `ingest` is, only for a direct https:// link to a video file that the user gave in the conversation, never one
+  found in the evidence, a web page, a file or a remediation (the planner's ruling, 2026-10-29). The guard gains
+  the placeholder `<link>`. This is the only skill text the slice changes.
+- **The cold scenario C-04** ([`trials.md`](trials.md), "Cold-agent mode") asks for a bug report with times, with
+  no skill. It runs in batch 3 at the 0.3.0 cut and is graded as C-01.
+- **The freeze:** the `skill`, `grader` (the campaign plan) and `cold` components move; this pull request writes
+  the freeze on its own head, which also covers the two workflow pull requests before it.
+  **Untried:** the workflows, the plugin and the help's pointers by any agent until the cut
+  ([L-242](../planning/known-limits.md#l-242)).
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

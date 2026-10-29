@@ -148,6 +148,18 @@ A typical investigation (every command takes --json):
   7. vsift session close <session> --json
        When you are done.
 
+Ready-made outcomes. When the user asks for one of these, follow its method: each is a
+short procedure with the commands above that ends in a vsift-handoff report the check
+accepts.
+  bug-report      a recording to an evidence-backed bug report, with times
+  findings        a narrated screencast to findings: bugs, requests and questions
+  demo-backlog    a product demo to a prioritised backlog
+  meeting-notes   a meeting to its actions, decisions and open questions
+  workshop-spec   a workshop to a spec with quoted decisions and open questions
+  logs-by-clock   moments of the recording matched to log lines by clock time
+Each one's method (Markdown) is printed by:
+  vsift skill show workflows/<name>.md
+
 Ask for small pages. --limit takes 1 to 100 (default 20) and --max-frames 1 to 100
 (default 12), more than an investigation needs: reading 20 results at a time and looking
 at a handful of frames keeps it cheap and inside any budget. Ask for more only when the

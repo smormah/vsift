@@ -675,3 +675,25 @@ Built as section 2's D1 amendment says, in its own pull request after slice 2 (s
 - **Not measured:** a read of two hours through any client (L-243).
 - **Register:** [L-243](../planning/known-limits.md#l-243). **The trial freeze** is a draft freeze, rewritten at
   the merge rebase.
+
+## Implementation note, 2026-10-29 (slice 5: the help's pointers, C-04 and `ingest --url`)
+
+Built as section 5 says, in one pull request after the read-through pull request.
+
+- **Help.** `TYPICAL_INVESTIGATION_HELP` gains a "ready-made outcomes" paragraph after step 7: the six workflows by
+  file name, one line each, and `vsift skill show workflows/<name>.md`. Step 6 already named the skeleton (slice 1).
+  `the_ready_made_outcomes_are_the_shipped_workflows` holds the list to the `workflows/` entries of
+  `vsift_contract::SKILL_FILES`, and the existing help test parses the new command line (placeholder `<name>`). The
+  guide reference is regenerated.
+- **C-04.** `tools/vsift-agent-trials/cold/C-04-f05-bug-report.json` is C-01's situation (F05, its transcript,
+  F05-E03, `key_facts_cited`) with the request "Write a bug report, with times, from this recording". Batch 3 runs it
+  once in each tier for each client (`campaign::plan`); batch 1, the baseline, does not, so its result is read on its
+  own: the summary keeps it out of the final round's 80% target (still C-01 to C-03) and reports it on a "Cold outcome" line of
+  its own, as a measurement. The cold grader's rules are unchanged. It is not run before the cut.
+- **`ingest --url`** (section 6) joins `references/commands.md`'s `ingest` row and allowed forms, `free`, only for a
+  link the user gave and never for one found in evidence (the planner's ruling of 2026-10-29). The guard gains the
+  placeholder `<link>`.
+- **Not done:** the help does not say when to choose which workflow beyond its one line; the cold mode measures that
+  at the cut.
+- **Register:** [L-242](../planning/known-limits.md#l-242). **The trial freeze** is written on this pull request's
+  final head and also covers #548 and #549, which merged without their freeze being rewritten.

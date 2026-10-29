@@ -46,9 +46,9 @@ fn the_cold_and_hold_out_sets_validate_and_are_named_for_what_they_are() -> Test
 }
 
 #[test]
-fn the_three_cold_scenarios_are_the_plans() -> TestResult {
+fn the_four_cold_scenarios_are_the_plans() -> TestResult {
     let scenarios = load("cold")?;
-    assert_eq!(scenarios.len(), 3);
+    assert_eq!(scenarios.len(), 4);
     for (_, scenario) in &scenarios {
         assert_eq!(scenario.tests, vec!["A-10".to_owned()], "{}", scenario.id);
         assert!(scenario.authority.is_empty() && scenario.retain_to.is_none());
@@ -75,6 +75,24 @@ fn the_three_cold_scenarios_are_the_plans() -> TestResult {
         supplied.cold.as_ref().map(|cold| &cold.usefulness),
         Some(ColdUsefulness::KeyFactsCited)
     ));
+    // C-04 asks C-01's situation for an outcome (ADR 0038, section 5): the
+    // same fixture, transcript, tools and truth, graded by the same rule, and
+    // a prompt that asks for a bug report with times.
+    let outcome = by_id("C-04-f05-bug-report").ok_or("no outcome-shaped scenario")?;
+    assert_eq!(outcome.fixture.id, supplied.fixture.id);
+    assert_eq!(outcome.truth_events, supplied.truth_events);
+    assert!(outcome.transcript.is_some() && outcome.tools.media && !outcome.tools.whisper);
+    assert!(matches!(
+        outcome.cold.as_ref().map(|cold| &cold.usefulness),
+        Some(ColdUsefulness::KeyFactsCited)
+    ));
+    assert!(
+        outcome.phases[0]
+            .prompt
+            .contains("Write a bug report, with times, from this recording."),
+        "{}",
+        outcome.phases[0].prompt
+    );
     let asr = by_id("C-02-f05-local-asr").ok_or("no local ASR scenario")?;
     assert!(asr.transcript.is_none() && asr.tools.media && asr.tools.whisper);
     let missing = by_id("C-03-f03-missing-tools").ok_or("no missing-tools scenario")?;
