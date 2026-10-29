@@ -750,3 +750,23 @@ What the pull request for sections 7 to 9 built, under the planner's two rulings
 - **The campaign's watch report** records each found change's time and reason (from the item's own `candidates`
   step), and the speech measurement each unplaced range's start and end.
 - **Register:** L-237 added.
+
+**Measured, 2026-10-29: hosted run 40858083797** on `02f43a95` (RM01, RM03, RM04, RM10, `campaign`). Every
+`vsift <video>` step and every `watch` check passed; RM03 failed only the two advisory rewording seams F14 left
+(761–766 s and 825–830 s), as on the earlier runs. The counts are unchanged from #544's run:
+
+| Item | Changes found | Listed | Frames | Wall time (RTF) | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| RM01 | 26 | 15 | 15 | 45.3 s (0.33) | complete |
+| RM03 | 589 | 183 | 180 | 426.3 s (0.37) | partial: one range not transcribed |
+| RM04 | 138 | 48 | 48 | 83.8 s (0.28) | complete |
+| RM10 | 108 | 31 | 31 | 62.4 s (0.31) | complete |
+
+- **The report's new fields are present.** `measurements.watch.changes` lists 23, 576, 133 and 106 changes with their
+  times and reasons. That is fewer than `changes_found`, because the campaign's `candidates` step leaves out
+  `periodic_coverage`, which the settled-screen rule never lists, so a spacing review can still be simulated from it.
+  `measurements.transcription.unplaced` holds each range's start and end.
+- **RM03's one unplaced range** is 123.8 to 125.0 s (1.2 s), at the seam between chunks 4 and 5 (125 s). It is stated
+  as not transcribed in the transcript and in `watch-data`. It is neither of the two seams the planner named: it is
+  longer than L-156's 0.5 s tolerance and it is stated, while L-156's stretches are silent; and L-188's RM03 case is
+  chunk 3 (75 to 100 s). It went to the planner through the coordinator.
