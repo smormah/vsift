@@ -829,10 +829,10 @@ function markdown(run) {
   }
   const watched = run.items.filter((item) => item.measurements && item.measurements.watch);
   if (watched.length > 0) {
-    lines.push('', '## `vsift <video>`', '', '| Item | Wall time (RTF) | Outcome | Screen changes found | Listed (settled screens) | Frames written (bytes) |', '| --- | --- | --- | --- | --- | --- |');
+    lines.push('', '## `vsift <video>`', '', '| Item | Wall time (RTF) | Outcome | Screen changes found | Listed (settled screens) | Listed by reason | Frames written (bytes) |', '| --- | --- | --- | --- | --- | --- | --- |');
     for (const item of watched) {
       const w = item.measurements.watch;
-      lines.push(`| ${item.id} | ${w.seconds.toFixed(0)} s${typeof w.real_time_factor === 'number' ? ` (${w.real_time_factor.toFixed(2)})` : ''} | ${w.outcome || 'failed'} | ${w.changes_found ?? 'n/a'} | ${w.changes_listed ?? 'n/a'} | ${w.frames_written ?? 'n/a'}${typeof w.frame_bytes === 'number' ? ` (${w.frame_bytes})` : ''} |`);
+      lines.push(`| ${item.id} | ${w.seconds.toFixed(0)} s${typeof w.real_time_factor === 'number' ? ` (${w.real_time_factor.toFixed(2)})` : ''} | ${w.outcome || 'failed'} | ${w.changes_found ?? 'n/a'} | ${w.changes_listed ?? 'n/a'} | ${w.listed_by_reason ? Object.entries(w.listed_by_reason).map(([reason, count]) => `${reason} ${count}`).join(', ') || 'none' : 'n/a'} | ${w.frames_written ?? 'n/a'}${typeof w.frame_bytes === 'number' ? ` (${w.frame_bytes})` : ''} |`);
     }
   }
   const attributed = run.items.filter((item) => !item.private && !item.not_yet_mirrored);

@@ -521,7 +521,7 @@ test('vsift <video> runs the bare form on a copy, and its outputs, header, frame
   assert.ok(watched.measurements.frame_bytes > 0);
   const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
     setup: { passed: true, findings: [] }, items: [{ id: 'RM10', measurements: { watch: watched.measurements }, verdict: { passed: true, findings: [] } }] });
-  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 200 \| 180 \(\d+\) \|/);
+  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 200 \| first frame 1, settled after motion 1, visual change 198 \| 180 \(\d+\) \|/);
 });
 
 test('vsift <video> findings: a wrong header hash, a missing frame, changed frame bytes, a temporary file left, an open session, a failure', (t) => {

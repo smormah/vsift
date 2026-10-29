@@ -201,13 +201,15 @@ fn the_screen_change_list_gives_every_id_and_hash() {
     let summary = ScreenChangeSummary {
         index_id: "vix_02b7".to_owned(),
         changes_found: 9,
+        index_covers_to: MediaTime::from_micros(300_000_000),
         beyond_index_bound: true,
         stopped_for_room: true,
     };
     let text = render_screen_changes(&provenance(), &summary, &changes);
     assert!(text.starts_with(
         "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 settled screens of 9 changes found, 1 frames.\n\
-         Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out.\n\
+         Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out, so a screen shown for less than 5 s after a listed one is missing unless motion settles on it.\n\
+         To see every change, keep a session of the video: vsift ingest <video>, then vsift candidates <session> --from 0 --to 300000000, with the session id ingest gives.\n\
          1 of 2 frames written, spread evenly over the video; the others are listed without one.\n\
          VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n\
          Screen changes are found in the first four hours of a video only.\n"
@@ -232,6 +234,7 @@ fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {
         summary: ScreenChangeSummary {
             index_id: "none".to_owned(),
             changes_found: 0,
+            index_covers_to: MediaTime::from_micros(0),
             beyond_index_bound: false,
             stopped_for_room: false,
         },

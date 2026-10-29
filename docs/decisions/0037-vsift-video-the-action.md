@@ -629,9 +629,22 @@ budget's ceiling: a list that long hides the screens a person would look at. Fro
 - **Frames** are taken for listed changes only: still at most 180, spread evenly over the listed ones and fitted to the
   measured evidence room (section 6 and its correction). **The 180 bound stays until the measurement is in.**
 - No failure code changes; `changes_found` keeps its meaning.
+- **The cost, stated (the planner's condition, 2026-10-28).** A screen shown for less than 5 s after a listed one is
+  not listed unless motion settles on it: a dialog that flashes up 3 s after a click, for example. The header says so
+  whenever the rule left changes out, and so does the guide's limits page (L-234, amended).
+- **What was left out stays reachable (the planner's condition).** The run closes its session, so the changes it left
+  out are kept nowhere. Whenever the rule left changes out, the header gives the commands that show every one:
+  `vsift ingest <video>`, then `vsift candidates <session> --from 0 --to <the end the index covers, in microseconds>`
+  (the number is written in), with the session id `ingest` gives. The guide's limits page says the same.
+
+**Confirmed by the planner, 2026-10-28,** relayed by the coordinator: the five choices as written, with the two
+conditions above and a third on the measurement: the run reports `changes_found`, `changes_listed` and the listed count
+by reason for each item. If a talk like RM03 still lists more than about 100, or a screen recording like RM10 or RM01
+drops a change a person would want, the numbers and a spacing proposal go back to the planner rather than a retune in
+this pull request; no campaign threshold is loosened.
 
 **The measurement** (the second pull request's one hosted `P14 real media` run, RM01, RM03, RM04 and RM10): the
 campaign's `watchItem` records `changes_found` (today's rule), `changes_listed` (this one) and the listed changes by
 reason for each item, and checks that the frames are min(listed, 180), that no in-progress marker or temporary file is
 left, and that the session was closed. The numbers, and whether the full list was useful on footage like RM03, are
-written here when the run is in. The five choices above were sent to the planner on 2026-10-28 for confirmation.
+written here when the run is in.

@@ -141,8 +141,12 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   `<name>-vsift/screen-changes.txt` lists the settled screens: the first frame, each screen once motion settles, and a
   change at least 5 s after the one listed before it, each with its reason; its header says how many changes were
   found in all. With more than 180 listed, the frames are spread evenly over them and the others are listed without
-  one. The changes counted are the ones `candidates` would give you, so a change its per-window limit leaves out is
-  not counted either.
+  one. The cost: a screen shown for less than 5 s after a listed one, a dialog that flashes up 3 s after a click say, is
+  not listed unless motion settles on it, and the run closes its session, so the changes it left out are kept
+  nowhere. To see every change, keep a session of the video: `vsift ingest <video>`, then
+  `vsift candidates <session> --from 0 --to <microseconds>`, with the session id `ingest` gives; the list's header
+  writes the exact `--to` in. The changes counted are the ones `candidates` would give you, so a change its
+  per-window limit leaves out is not counted either.
 - **Screen changes in the first four hours only** ([L-235](../planning/known-limits.md#l-235)). The transcript covers
   the whole video; the list and the finish screen say where the screen changes stop.
 - **The ids in the files name a closed session** ([L-236](../planning/known-limits.md#l-236)). They say which run made

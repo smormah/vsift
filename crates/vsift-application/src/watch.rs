@@ -371,6 +371,9 @@ pub struct ScreenChangeSummary {
     /// How many screen changes the visual stream found; the list holds the
     /// settled screens among them.
     pub changes_found: usize,
+    /// The end of the range the visual index covers: the `--to` a person
+    /// gives `candidates` to see every change.
+    pub index_covers_to: MediaTime,
     /// Whether the video runs past the part the visual index covers.
     pub beyond_index_bound: bool,
     /// Whether the session ran out of evidence room before every selected
@@ -670,6 +673,9 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                     |changes| changes.index.as_str().to_owned(),
                 ),
                 changes_found: found.len(),
+                index_covers_to: changes
+                    .as_ref()
+                    .map_or(MediaTime::from_micros(0), |changes| changes.covered_to),
                 beyond_index_bound: beyond_visual_bound,
                 stopped_for_room: taken.stopped_for_room,
             },

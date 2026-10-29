@@ -483,8 +483,15 @@ pub fn render_screen_changes(
     );
     if changes.len() < summary.changes_found {
         text.push_str(
-            "Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out.
-",
+            "Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out, so a screen shown for less than 5 s after a listed one is missing unless motion settles on it.\n",
+        );
+        // The run closes its session, so the changes it left out are kept
+        // nowhere: the list says how to find every one (the planner's
+        // condition, 2026-10-28).
+        let _ = writeln!(
+            text,
+            "To see every change, keep a session of the video: vsift ingest <video>, then vsift candidates <session> --from 0 --to {}, with the session id ingest gives.",
+            summary.index_covers_to.as_micros()
         );
     }
     if frames < changes.len() {
