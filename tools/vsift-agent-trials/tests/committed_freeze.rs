@@ -60,7 +60,15 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **Draft freeze, rewritten at the merge rebase** (W9, ADR 0038 section 2, the read-through workflows, 2026-10-29,
+/// **0.3.0 development freeze, written on the head of W9's last pull request** (ADR 0038 slice 5, 2026-10-29): the
+/// skill allows `ingest --url` in `references/commands.md`, the cold scenarios gain `C-04-f05-bug-report`, and the
+/// campaign plan runs it in batch 3 with the summary reporting it apart from the 80% target, so three components moved:
+/// `skill` `2807b370...` to `6a3104bd...`, `cold` `b288c18b...` to `853d8da3...` and `grader` `9ecd1121...` to
+/// `da1b01be...`, and this digest `fa13eeba...` to the value below; the other four components are unchanged. The two
+/// draft freezes below merged with #548 and #549 without being rewritten at a merge rebase; this freeze, written on
+/// `main` after both, covers them.
+///
+/// The draft freeze before it (W9, ADR 0038 section 2, the read-through workflows, 2026-10-29,
 /// stacked on slice 2's draft): the skill gains `workflows/meeting-notes.md`, `workflows/workshop-spec.md`, the
 /// `read_through` profile in `references/budgets.md`, `read_through` and `transcript_pages` in the handoff schema and a
 /// meeting-notes example, so the `skill` component moved `924d6ebe...` to `2807b370...` and this digest `5d0b187a...`
@@ -151,7 +159,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "fa13eeba14ca88c59ed9b1828e0fa3d00f224a3a2124a984f559d868f9d38a59";
+const CUT_FREEZE_SHA256: &str = "78a332a27e36e0dd3e5bbe1106b9bd625d776c36dc3a270784368742873af748";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
