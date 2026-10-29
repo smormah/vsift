@@ -60,7 +60,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **Draft freeze, rewritten at the merge rebase** (W9, ADR 0038 slice 1, 2026-10-28): `references/commands.md`
+/// **0.3.0 development freeze, written at the merge rebase** (W9, ADR 0038 slice 1, 2026-10-29): `references/commands.md`
 /// classes `vsift handoff skeleton` as free and `references/handoff.md` says to start the JSON from it, so the `skill`
 /// component moved `0c25b263...` to `5739c914...` and this digest `f6835cb5...` to the value below; the other six
 /// components are unchanged.
