@@ -138,9 +138,9 @@ pub const WATCH_TRANSCRIPT_EXISTS_REMEDIATION: &str = "The transcript file (.txt
 pub const WATCH_SUBTITLES_EXISTS_REMEDIATION: &str = "The subtitles file (.srt) VSift would write beside the video already exists, and VSift never replaces a file. Move it away, or write elsewhere with --output <folder>. A file left by a stopped VSift run is continued by the same command only while VSift's private copy of the video is kept (a day unused); after that, move it away too.";
 /// Remediation when the screen-change folder's name is taken.
 pub const WATCH_FOLDER_EXISTS_REMEDIATION: &str = "The screen-change folder (-vsift) VSift would write beside the video already exists, and VSift never replaces it. Move it away, or write elsewhere with --output <folder>. A file left by a stopped VSift run is continued by the same command only while VSift's private copy of the video is kept (a day unused); after that, move it away too.";
-/// Remediation when another program held a file open for the final write's
-/// 30 s (known limit L-237).
-pub const WATCH_OUTPUT_HELD_REMEDIATION: &str = "Another program kept a file VSift was writing open, so VSift could not finish it; the file keeps its last update, marked IN PROGRESS. Close the file in the other program, then write the files again elsewhere with --output <folder>.";
+/// Remediation when a file was held open by another program, or was not
+/// writable, for the final write's 30 s (known limit L-237).
+pub const WATCH_OUTPUT_HELD_REMEDIATION: &str = "A file VSift was writing was held open by another program, or not writable, so VSift could not finish it; the file keeps its last update. Close the file in the other program (or make it writable), then write the files again elsewhere with --output <folder>.";
 /// Remediation when the person stopped the run (Ctrl-C): the files keep
 /// their last update and the same command continues (ADR 0037 section 8).
 pub const WATCH_STOPPED_REMEDIATION: &str = "VSift stopped. The files keep what was transcribed so far, marked IN PROGRESS, and VSift kept its private copy of the video: run the same command again to continue.";

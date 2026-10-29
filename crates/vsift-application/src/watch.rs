@@ -557,6 +557,8 @@ pub struct WatchDocuments {
 /// (ADR 0037 section 7).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WatchSnapshot {
+    /// Where the run is: what the files' markers say.
+    pub state: SnapshotState,
     /// What every output names about the run.
     pub provenance: WatchProvenance,
     /// The open revision; `None` before its first part.
@@ -567,6 +569,20 @@ pub struct WatchSnapshot {
     pub published_until: MediaTime,
     /// The video's length, once a part has said it.
     pub duration: Option<MediaTime>,
+}
+
+/// Where the run is when a snapshot is written, so that the files' markers
+/// stay true (the planner's condition of 2026-10-29).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SnapshotState {
+    /// The job runs: the files are replaced when it finishes.
+    Running,
+    /// The person stopped the run (Ctrl-C): the files say where, and that
+    /// the same command continues it while `VSift` keeps its private copy.
+    Stopped,
+    /// The run failed after the files were written: they say so, and that
+    /// they will not be finished.
+    Failed,
 }
 
 /// The finished files the port wrote.
@@ -822,6 +838,7 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
         file_name,
         names: &names,
         claimed,
+        taken_over: job.is_some(),
     };
     let written = Box::pin(run.write(outputs, job)).await;
     if let Err(stopped @ WatchError::Stopped { .. }) = written {
@@ -879,6 +896,9 @@ struct WatchRun<'a, S> {
     file_name: &'a OsStr,
     names: &'a WatchOutputNames,
     claimed: ClaimedOutputs,
+    /// Whether the run took over the files of an interrupted run, which
+    /// already hold a snapshot.
+    taken_over: bool,
 }
 
 /// The frames a run took, and every change as the list shows it.
@@ -907,14 +927,48 @@ struct Following<E> {
     published_until: MediaTime,
     duration: Option<MediaTime>,
     last_snapshot_at: Option<u64>,
+    /// Whether this run wrote a snapshot into the files.
+    snapshot_written: bool,
     screens: Option<Result<Screens, WatchError<E>>>,
 }
 
 impl<S: WatchSteps> WatchRun<'_, S> {
+    /// Runs the job and writes the files. A failure once the files hold a
+    /// snapshot (this run's, or the interrupted run's it took over) rewrites
+    /// them, best effort, to say the run failed and they will not be
+    /// finished: they are never removed and never left saying `VSift` is
+    /// working.
     async fn write<O: WatchOutputs>(
         self,
         outputs: &mut O,
         unfinished_job: Option<JobId>,
+    ) -> Result<WatchOutcome, WatchError<S::Error>> {
+        let mut following = Following {
+            revision: None,
+            lines: Vec::new(),
+            since: None,
+            published_until: MediaTime::from_micros(0),
+            duration: None,
+            last_snapshot_at: None,
+            snapshot_written: false,
+            screens: None,
+        };
+        let written = self.run(outputs, unfinished_job, &mut following).await;
+        if let Err(error) = &written
+            && !matches!(error, WatchError::Stopped { .. })
+            && (following.snapshot_written || self.taken_over)
+        {
+            self.refresh(&mut following);
+            let _best_effort = self.snapshot(outputs, &mut following, SnapshotState::Failed);
+        }
+        written
+    }
+
+    async fn run<O: WatchOutputs>(
+        &self,
+        outputs: &mut O,
+        unfinished_job: Option<JobId>,
+        following: &mut Following<S::Error>,
     ) -> Result<WatchOutcome, WatchError<S::Error>> {
         let session = &self.session.session_id;
         let job = if let Some(job) = unfinished_job {
@@ -927,27 +981,18 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             job
         };
         let signal = WatchSignal::default();
-        let mut following = Following {
-            revision: None,
-            lines: Vec::new(),
-            since: None,
-            published_until: MediaTime::from_micros(0),
-            duration: None,
-            last_snapshot_at: None,
-            screens: None,
-        };
         let prepare = async {
             let prepared = self.steps.prepare(session, &job, &signal).await;
             signal.close();
             prepared
         };
-        let (prepared, ()) = join(prepare, self.follow(outputs, &signal, &mut following)).await;
+        let (prepared, ()) = join(prepare, self.follow(outputs, &signal, following)).await;
         let prepared = match prepared {
             Ok(prepared) => prepared,
             Err(PrepareStop::Interrupted) => {
-                // The files keep what was published, with their marker.
-                self.refresh(&mut following);
-                let _advisory = self.snapshot(outputs, &following);
+                // The files keep what was published, and say where it stopped.
+                self.refresh(following);
+                let _advisory = self.snapshot(outputs, following, SnapshotState::Stopped);
                 return Err(WatchError::Stopped {
                     transcribed_to: following.published_until,
                     duration: following.duration,
@@ -977,7 +1022,10 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             }
             if notice.published && self.snapshot_due(following) {
                 self.refresh(following);
-                if self.snapshot(outputs, following).is_ok() {
+                if self
+                    .snapshot(outputs, following, SnapshotState::Running)
+                    .is_ok()
+                {
                     following.last_snapshot_at = self.steps.clock().now_unix_seconds().ok();
                 }
             }
@@ -1023,7 +1071,8 @@ impl<S: WatchSteps> WatchRun<'_, S> {
     fn snapshot<O: WatchOutputs>(
         &self,
         outputs: &mut O,
-        following: &Following<S::Error>,
+        following: &mut Following<S::Error>,
+        state: SnapshotState,
     ) -> Result<(), WatchError<S::Error>> {
         let provenance = self
             .steps
@@ -1035,6 +1084,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             .map_err(WatchError::Step)?;
         outputs
             .write_snapshot(&WatchSnapshot {
+                state,
                 provenance,
                 revision: following.revision.clone(),
                 entries: following
@@ -1049,7 +1099,9 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                 published_until: following.published_until,
                 duration: following.duration,
             })
-            .map_err(WatchError::Output)
+            .map_err(WatchError::Output)?;
+        following.snapshot_written = true;
+        Ok(())
     }
 
     /// The screen changes, the settled screens among them, their frames and

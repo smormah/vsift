@@ -313,7 +313,7 @@ async fn a_stopped_run_keeps_its_session_and_the_same_request_continues_it() -> 
     );
     let folder = video.parent().ok_or("no folder")?;
     let text = fs::read_to_string(folder.join("team meeting.txt"))?;
-    assert!(text.starts_with("IN PROGRESS: "), "{text}");
+    assert!(text.starts_with("STOPPED: "), "{text}");
 
     let outcome = engine.watch(request(&video, None)).await?;
     let text = fs::read_to_string(folder.join("team meeting.txt"))?;

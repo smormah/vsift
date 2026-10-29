@@ -2,8 +2,8 @@ use std::{error::Error, ffi::OsStr, fs, path::Path, time::Duration};
 
 use vsift_application::{
     ClaimedOutputs, IdentifierGenerationError, IdentifierSource, ScreenChangeEntry,
-    ScreenChangeSummary, TranscriptEntry, WatchDocuments, WatchOutputError, WatchOutputKind,
-    WatchOutputs as _, WatchProvenance, WatchSnapshot, WrittenFrame,
+    ScreenChangeSummary, SnapshotState, TranscriptEntry, WatchDocuments, WatchOutputError,
+    WatchOutputKind, WatchOutputs as _, WatchProvenance, WatchSnapshot, WrittenFrame,
 };
 use vsift_domain::{
     CandidateReason, MediaTime, OperationId, SessionId, TranscriptRevisionId, WatchOutputNames,
@@ -67,6 +67,7 @@ fn fixed_outputs() -> FolderWatchOutputs {
 
 fn snapshot(published_s: u64) -> WatchSnapshot {
     WatchSnapshot {
+        state: SnapshotState::Running,
         provenance: provenance(),
         revision: None,
         entries: vec![line(1, 4, "Good morning.")],
@@ -132,6 +133,49 @@ fn a_snapshot_says_it_is_unfinished_and_the_final_write_does_not() -> TestResult
     let subtitles = fs::read_to_string(folder.join("meeting.srt"))?;
     assert!(!subtitles.contains("still transcribing"), "{subtitles}");
     Ok(())
+}
+
+/// The markers stay true (the planner's condition of 2026-10-29): a
+/// stopped run's files say where it stopped and that the same command
+/// continues it, a failed run's that they will not be finished; neither
+/// says `VSift` is still working.
+#[test]
+fn each_state_says_what_became_of_the_run() {
+    let render = |state| {
+        let snapshot = WatchSnapshot {
+            state,
+            ..snapshot(750)
+        };
+        (
+            super::render_transcript_snapshot(&snapshot),
+            super::render_subrip_snapshot(&snapshot),
+        )
+    };
+    let (text, subtitles) = render(SnapshotState::Stopped);
+    assert!(
+        text.starts_with("STOPPED: transcribed up to 00:12:30 of 00:48:00, where the run was stopped. Run the same command again to continue;"),
+        "{text}"
+    );
+    assert!(
+        subtitles.ends_with("(VSift stopped here; run the same command again to continue)\n\n"),
+        "{subtitles}"
+    );
+    let (failed, failed_subtitles) = render(SnapshotState::Failed);
+    assert!(
+        failed.starts_with("STOPPED WITH AN ERROR: transcribed up to 00:12:30 of 00:48:00. This file will not be finished;"),
+        "{failed}"
+    );
+    assert!(
+        failed_subtitles.ends_with(
+            "(VSift stopped here with an error; these subtitles will not be finished)\n\n"
+        ),
+        "{failed_subtitles}"
+    );
+    for written in [&text, &subtitles, &failed, &failed_subtitles] {
+        assert!(!written.contains("still"), "{written}");
+    }
+    let (running, _) = render(SnapshotState::Running);
+    assert!(running.contains("VSift is still working"), "{running}");
 }
 
 /// The planner's condition B: a temporary name taken in advance fails the

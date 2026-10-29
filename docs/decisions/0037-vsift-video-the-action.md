@@ -743,6 +743,20 @@ What the pull request for sections 7 to 9 built, under the planner's two rulings
   line says `done` without `14 found`, because the visual stream's progress counts windows, not changes; the copy line
   has no byte figures, because `ingest` reports no progress during the copy; and on Windows with standard output
   redirected, the console cannot take escape sequences, so the plain lines are shown.
+- **Truthful markers (the planner's condition at review, 2026-10-29).** A snapshot carries a state
+  (`SnapshotState`): `Running` writes section 7's markers; `Stopped`, written at Ctrl-C, starts `STOPPED: transcribed
+  up to 00:12:30 of 00:48:00, where the run was stopped.` and says the same command continues while the private copy
+  is kept, about a day unused; `Failed`, written best effort through `replace_claimed` when a run fails after this run
+  wrote a snapshot or after it took over an interrupted run's files, starts `STOPPED WITH AN ERROR:` and says the file
+  will not be finished. The subtitles' trailing cue says the same. The files are never removed and never left saying
+  `VSift` is working; a held file stays as it is (L-237). Tests: the use case over fakes (Ctrl-C writes `Stopped`; a
+  failure after a snapshot writes `Failed` for a fresh claim and for a taken-over one; none before any snapshot) and
+  the render of each state.
+- **Held or not writable; a leftover temporary file (the planner's two points).** Windows reports a target that is not
+  writable as it reports a held one, so it too waits 30 s and fails `Held`; the remediation and L-237 name both. A hard
+  stop between the temporary file and the move leaves a hidden `.<name>.<random>.vsift-partial`; the guide's limits
+  page and L-237 say it is VSift's and safe to delete, and nothing cleans the person's folder automatically.
+- **RM03's unplaced range** (123.8–125.0 s) went to intake with the seam work (#539, #474), not to the register.
 - **The stopped line.** The failure's remediation starts `Stopped at 12:30 of 48:00. Run the same command again to
   continue.`, from the published time and the video's length (left out when no part had been published).
 - **No new failure code and no JSON change.** The three "already exists" remediations now say how a leftover of an

@@ -20,9 +20,9 @@ use vsift_domain::{
 use super::{
     ClaimedOutputs, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop, PreparedRun,
     PreparedTranscript, PublishedPart, ScreenChange, ScreenChangeEntry, ScreenChangeSummary,
-    ScreenChanges, SessionFrame, TranscriptEntry, TranscriptLine, UnfinishedWatch, WatchDocuments,
-    WatchError, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs, WatchProgress,
-    WatchProvenance, WatchSnapshot, WatchSteps, run_watch,
+    ScreenChanges, SessionFrame, SnapshotState, TranscriptEntry, TranscriptLine, UnfinishedWatch,
+    WatchDocuments, WatchError, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs,
+    WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps, run_watch,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -716,7 +716,19 @@ async fn any_other_frame_failure_ends_the_run_and_releases_the_claim() -> TestRe
     let mut outputs = FakeOutputs::default();
     let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
     assert!(matches!(result, Err(WatchError::Step(StepFailure::Frame))));
-    assert_eq!(outputs.calls, vec!["claim", "write_snapshot", "release"]);
+    assert_eq!(
+        outputs.calls,
+        vec!["claim", "write_snapshot", "write_snapshot", "release"]
+    );
+    assert_eq!(
+        outputs
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.state)
+            .collect::<Vec<_>>(),
+        vec![SnapshotState::Running, SnapshotState::Failed],
+        "a failure after a snapshot leaves the files saying so"
+    );
     assert_eq!(
         steps.calls().last().map(String::as_str),
         Some("close_session")
@@ -786,6 +798,7 @@ async fn a_publication_writes_a_snapshot_of_what_was_published() -> TestResult {
         .await
         .map_err(|error| format!("{error:?}"))?;
     let snapshot = outputs.snapshots.first().ok_or("a snapshot was written")?;
+    assert_eq!(snapshot.state, SnapshotState::Running);
     assert_eq!(snapshot.published_until, seconds(30));
     assert_eq!(snapshot.duration, Some(seconds(60)));
     assert_eq!(snapshot.entries.len(), 1);
@@ -825,6 +838,7 @@ async fn snapshots_are_at_least_ten_seconds_apart() -> TestResult {
             subtitles: PathBuf::from("meeting.srt"),
             folder: PathBuf::from("meeting-vsift"),
         },
+        taken_over: false,
     };
     let mut following = super::Following {
         revision: None,
@@ -833,6 +847,7 @@ async fn snapshots_are_at_least_ten_seconds_apart() -> TestResult {
         published_until: seconds(0),
         duration: None,
         last_snapshot_at: None,
+        snapshot_written: false,
         screens: None,
     };
     for _ in 0..3 {
@@ -910,7 +925,12 @@ async fn ctrl_c_keeps_the_files_and_the_session() -> TestResult {
     assert_eq!(
         outputs.calls.last().map(String::as_str),
         Some("write_snapshot"),
-        "the files keep the last snapshot, with its marker"
+        "the files keep the last snapshot"
+    );
+    assert_eq!(
+        outputs.snapshots.last().map(|snapshot| snapshot.state),
+        Some(SnapshotState::Stopped),
+        "and say where the run stopped"
     );
     assert!(!steps.calls().contains(&"close_session".to_owned()));
     assert!(
@@ -973,5 +993,50 @@ async fn taken_names_without_an_unfinished_job_are_refused() -> TestResult {
     ));
     assert_eq!(outputs.calls, vec!["claim", "planned"]);
     assert!(!steps.calls().contains(&"open_session".to_owned()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_failed_rerun_leaves_the_taken_over_files_saying_so() -> TestResult {
+    // The files of the interrupted run say it can be continued; once this
+    // run fails, its session is closed and that is no longer true.
+    let mut steps = FakeSteps::new()?;
+    steps.fail = Some(StepFailure::Prepare);
+    steps.unfinished = Some(UnfinishedWatch {
+        session: FakeSteps::session()?,
+        job: JobId::parse("job_fedcba9876543210")?,
+    });
+    let mut outputs = FakeOutputs {
+        taken: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Step(StepFailure::Prepare))
+    ));
+    assert_eq!(
+        outputs
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.state)
+            .collect::<Vec<_>>(),
+        vec![SnapshotState::Failed]
+    );
+    assert_eq!(outputs.calls.last().map(String::as_str), Some("release"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_failure_before_any_snapshot_writes_none() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.fail = Some(StepFailure::Prepare);
+    let mut outputs = FakeOutputs::default();
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Step(StepFailure::Prepare))
+    ));
+    assert_eq!(outputs.snapshots, Vec::new(), "the empty claim is released");
     Ok(())
 }

@@ -25,8 +25,8 @@ use std::{
 use sha2::{Digest as _, Sha256};
 use vsift_application::{
     ClaimedOutputs, FinalisedOutputs, IdentifierSource, ScreenChangeEntry, ScreenChangeSummary,
-    SessionFrame, TranscriptEntry, WatchDocuments, WatchFile, WatchOutputError, WatchOutputKind,
-    WatchOutputs, WatchProvenance, WatchSnapshot,
+    SessionFrame, SnapshotState, TranscriptEntry, WatchDocuments, WatchFile, WatchOutputError,
+    WatchOutputKind, WatchOutputs, WatchProvenance, WatchSnapshot,
 };
 use vsift_domain::{
     CandidateReason, WatchOutputNames, readable_time, subrip_cue_text, subrip_time,
@@ -670,20 +670,36 @@ pub fn render_transcript(
 /// in-progress line first, then the header and what has been published.
 #[must_use]
 pub fn render_transcript_snapshot(snapshot: &WatchSnapshot) -> String {
-    let mut text = match snapshot.duration {
+    let so_far = match snapshot.duration {
         Some(duration) => format!(
-            "IN PROGRESS: transcribed up to {} of {}. VSift is still working; this file is replaced when it finishes.\n",
+            "transcribed up to {} of {}",
             readable_time(snapshot.published_until),
             readable_time(duration)
         ),
-        None => "IN PROGRESS: nothing transcribed yet. VSift is still working; this file is replaced when it finishes.\n".to_owned(),
+        None => "nothing transcribed yet".to_owned(),
+    };
+    let mut text = match snapshot.state {
+        SnapshotState::Running => format!(
+            "IN PROGRESS: {so_far}. VSift is still working; this file is replaced when it finishes.\n"
+        ),
+        SnapshotState::Stopped => format!(
+            "STOPPED: {so_far}, where the run was stopped. Run the same command again to continue; VSift keeps its private copy of the video for about a day unused.\n"
+        ),
+        SnapshotState::Failed => format!(
+            "STOPPED WITH AN ERROR: {so_far}. This file will not be finished; move it away and run the command again, or write elsewhere with --output <folder>.\n"
+        ),
     };
     let revision = snapshot.revision.as_ref().map_or(
         "not published yet",
         vsift_domain::TranscriptRevisionId::as_str,
     );
+    let session_state = match snapshot.state {
+        SnapshotState::Running => "VSift is still working",
+        SnapshotState::Stopped => "kept so the run can continue",
+        SnapshotState::Failed => "closed when the run failed",
+    };
     let revision_line = format!(
-        "Transcript       {revision}   in session {} (VSift is still working; the ids name it, the hashes can be checked any time)",
+        "Transcript       {revision}   in session {} ({session_state}; the ids name it, the hashes can be checked any time)",
         snapshot.provenance.session_id
     );
     text.push_str(&transcript_text(
@@ -749,17 +765,27 @@ pub fn render_subrip_snapshot(snapshot: &WatchSnapshot) -> String {
     {
         let _ = write!(
             text,
-            "{}\n{} --> {}\n{STILL_TRANSCRIBING}\n\n",
+            "{}\n{} --> {}\n{}\n\n",
             number + 1,
             subrip_time(snapshot.published_until),
-            subrip_time(duration)
+            subrip_time(duration),
+            trailing_cue(snapshot.state)
         );
     }
     text
 }
 
-/// The trailing cue of the subtitles while the job runs.
-const STILL_TRANSCRIBING: &str = "(VSift is still transcribing from here)";
+/// The trailing cue of the subtitles while they are unfinished: where the
+/// text stops, and why.
+const fn trailing_cue(state: SnapshotState) -> &'static str {
+    match state {
+        SnapshotState::Running => "(VSift is still transcribing from here)",
+        SnapshotState::Stopped => "(VSift stopped here; run the same command again to continue)",
+        SnapshotState::Failed => {
+            "(VSift stopped here with an error; these subtitles will not be finished)"
+        }
+    }
+}
 
 /// The cues of the line entries, numbered from 1, and how many there are.
 fn subrip_cues(entries: &[TranscriptEntry]) -> (String, usize) {

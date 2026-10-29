@@ -155,10 +155,13 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **A file held open by another program on Windows is not updated** ([L-237](../planning/known-limits.md#l-237)).
   While the run works, `<name>.txt` and `<name>.srt` are replaced by a fresh snapshot at most every 10 s; an editor
   that locks the file keeps that from happening until it lets go. At the end VSift tries for 30 s, then stops with
-  `STORAGE_IO`, and the file keeps its last snapshot with its `IN PROGRESS` line.
-- **Stopping and starting again.** Ctrl-C keeps the files, each saying where it stopped, and keeps VSift's private
+  `STORAGE_IO`, and the file keeps its last snapshot. A file that is not writable is reported the same way.
+- **A hidden `.<name>.<random>.vsift-partial` file** can be left beside the outputs if the computer or the process
+  stops hard in the middle of an update. It is VSift's and safe to delete.
+- **Stopping and starting again.** Ctrl-C keeps the files, each saying where it stopped (`STOPPED: ...`), and keeps VSift's private
   copy of the video; the same command continues where the run stopped. A private copy expires after a day unused:
-  after that the same command refuses the files, as for any file in the way, and you move them away first.
+  after that the same command refuses the files, as for any file in the way, and you move them away first. A run
+  that fails after writing the files leaves them saying so (`STOPPED WITH AN ERROR: ...`); they will not be finished.
 - **The files take the folder's ordinary permissions**, because you write them to share. Beside the video they are as
   exposed as the video itself; `--output <folder>` writes them elsewhere.
 
