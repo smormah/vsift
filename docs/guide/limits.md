@@ -137,10 +137,16 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 
 ## The files `vsift <video>` writes (new in 0.3.0)
 
-- **Frames for at most 180 screen changes** ([L-234](../planning/known-limits.md#l-234)). Every change is listed in
-  `<name>-vsift/screen-changes.txt`; with more than 180, the frames are spread evenly over the video and the others
-  are listed without one. A 19-minute talk already has more: about one frame every 6 seconds. The list holds the
-  changes `candidates` would give you, so a change its per-window limit leaves out is not listed either.
+- **Settled screens, and frames for at most 180 of them** ([L-234](../planning/known-limits.md#l-234)).
+  `<name>-vsift/screen-changes.txt` lists the settled screens: the first frame, each screen once motion settles, and a
+  change at least 5 s after the one listed before it, each with its reason; its header says how many changes were
+  found in all. With more than 180 listed, the frames are spread evenly over them and the others are listed with
+  `no frame (evidence room)`: a 19-minute talk lists 183 settled screens of 589 changes, so 3 have no frame. The cost: a screen shown for less than 5 s after a listed one, a dialog that flashes up 3 s after a click say, is
+  not listed unless motion settles on it, and the run closes its session, so the changes it left out are kept
+  nowhere. To see every change, keep a session of the video: `vsift ingest <video>`, then
+  `vsift candidates <session> --from 0 --to <microseconds>`, with the session id `ingest` gives; the list's header
+  writes the exact `--to` in. The changes counted are the ones `candidates` would give you, so a change its
+  per-window limit leaves out is not counted either.
 - **Screen changes in the first four hours only** ([L-235](../planning/known-limits.md#l-235)). The transcript covers
   the whole video; the list and the finish screen say where the screen changes stop.
 - **The ids in the files name a closed session** ([L-236](../planning/known-limits.md#l-236)). They say which run made

@@ -1,11 +1,14 @@
 use std::{error::Error, ffi::OsStr, fs};
 
-use vsift_domain::{MediaTime, WatchOutputNames};
+use vsift_application::{
+    ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchDocuments, WatchOutputError,
+    WatchOutputKind, WatchOutputs as _, WatchProvenance, WrittenFrame,
+};
+use vsift_domain::{CandidateReason, MediaTime, TranscriptRevisionId, WatchOutputNames};
 
 use super::{
-    ScreenChangeEntry, ScreenChangeSummary, TranscriptEntry, WatchClaim, WatchOutputError,
-    WatchOutputKind, WatchProvenance, WrittenFrame, hex_sha256, render_screen_changes,
-    render_subrip, render_transcript,
+    FolderWatchOutputs, WatchClaim, hex_sha256, render_screen_changes, render_subrip,
+    render_transcript,
 };
 use crate::test_folder::TestFolder;
 
@@ -181,6 +184,7 @@ fn the_screen_change_list_gives_every_id_and_hash() {
         ScreenChangeEntry {
             time: MediaTime::from_micros(72_480_000),
             candidate_id: "vcd_7f20".to_owned(),
+            reason: CandidateReason::FirstFrame,
             frame: Some(WrittenFrame {
                 file_name: "00-01-12.480.png".to_owned(),
                 evidence_id: "evd_c19a".to_owned(),
@@ -190,23 +194,136 @@ fn the_screen_change_list_gives_every_id_and_hash() {
         ScreenChangeEntry {
             time: MediaTime::from_micros(295_040_000),
             candidate_id: "vcd_a81d".to_owned(),
+            reason: CandidateReason::SettledAfterMotion,
             frame: None,
         },
     ];
     let summary = ScreenChangeSummary {
         index_id: "vix_02b7".to_owned(),
+        changes_found: 9,
+        index_covers_to: MediaTime::from_micros(300_000_000),
         beyond_index_bound: true,
         stopped_for_room: true,
     };
     let text = render_screen_changes(&provenance(), &summary, &changes);
     assert!(text.starts_with(
-        "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 changes, 1 frames.\n\
-         1 of 2 frames written, spread evenly over the video; the others are listed without one.\n\
-         VSift's private copy of the video ran out of room for frames, so the frames stop early; every change is still listed.\n\
+        "Screen changes in meeting.mp4, found by VSift 0.3.0, 2026-11-20 14:05 UTC: 2 settled screens of 9 changes found, 1 frames.\n\
+         Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out, so a screen shown for less than 5 s after a listed one is missing unless motion settles on it.\n\
+         To see every change, keep a session of the video: vsift ingest <video>, then vsift candidates <session> --from 0 --to 300000000, with the session id ingest gives.\n\
+         1 of 2 frames written, spread evenly over the listed changes; the others are listed with no frame (evidence room).\n\
+         VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n\
          Screen changes are found in the first four hours of a video only.\n"
     ));
     assert!(text.contains("Visual index     vix_02b7   in session ses_0123456789abcdef"));
-    assert!(text.contains("00:01:12    00-01-12.480.png    vcd_7f20"));
+    assert!(text.contains("00:01:12    first frame           00-01-12.480.png          vcd_7f20"));
     assert!(text.contains(&format!("evd_c19a{}  {}", " ".repeat(28), "b".repeat(64))));
-    assert!(text.contains("00:04:55    (not written)       vcd_a81d"));
+    assert!(text.contains("00:04:55    settled after motion  no frame (evidence room)  vcd_a81d"));
+}
+
+fn documents(revision: bool) -> Result<WatchDocuments, Box<dyn Error>> {
+    Ok(WatchDocuments {
+        provenance: provenance(),
+        transcript_revision: if revision {
+            Some(TranscriptRevisionId::parse(
+                "trv_1f2e3d4c5b6a79880f1e2d3c4b5a6978",
+            )?)
+        } else {
+            None
+        },
+        entries: vec![line(1, 4, "Good morning.")],
+        summary: ScreenChangeSummary {
+            index_id: "none".to_owned(),
+            changes_found: 0,
+            index_covers_to: MediaTime::from_micros(0),
+            beyond_index_bound: false,
+            stopped_for_room: false,
+        },
+        changes: Vec::new(),
+    })
+}
+
+#[test]
+fn the_folder_port_writes_beside_the_video_and_finishes_every_file() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port")?;
+    let video = folder.join("meeting.mp4");
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    let claimed = outputs.claim(&video, None, &names()?)?;
+    assert_eq!(
+        claimed.transcript.file_name(),
+        Some(OsStr::new("meeting.txt"))
+    );
+    let finished = outputs.finalise(&documents(true)?)?;
+    let text = fs::read_to_string(&finished.transcript.path)?;
+    assert!(text.contains("[00:00:01] Good morning."), "{text}");
+    assert_eq!(
+        finished.transcript.sha256.as_deref(),
+        Some(hex_sha256(text.as_bytes()).as_str())
+    );
+    assert!(finished.subtitles.is_some());
+    assert!(finished.screen_changes.path.is_file());
+    outputs.release();
+    assert!(
+        finished.screen_changes.path.is_file(),
+        "a release after the files are finished removes nothing"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_video_with_no_sound_track_leaves_no_subtitles_file() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-silent")?;
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    let finished = outputs.finalise(&documents(false)?)?;
+    assert!(finished.subtitles.is_none());
+    assert!(!folder.join("meeting.srt").exists());
+    Ok(())
+}
+
+#[test]
+fn an_output_folder_is_created_once_and_never_inside_vsifts_roots() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-output")?;
+    let root = fs::canonicalize(&*folder)?.join("sessions");
+    fs::create_dir(&root)?;
+    let video = folder.join("meeting.mp4");
+    let mut outputs = FolderWatchOutputs::new(vec![root.clone()]);
+    assert!(matches!(
+        outputs.claim(&video, Some(&root.join("inside")), &names()?),
+        Err(WatchOutputError::InsideVsift)
+    ));
+    assert!(matches!(
+        outputs.claim(
+            &video,
+            Some(&folder.join("no-parent").join("out")),
+            &names()?
+        ),
+        Err(WatchOutputError::FolderUnusable)
+    ));
+    fs::write(folder.join("a-file"), "")?;
+    assert!(matches!(
+        outputs.claim(&video, Some(&folder.join("a-file")), &names()?),
+        Err(WatchOutputError::FolderUnusable)
+    ));
+    let claimed = outputs.claim(&video, Some(&folder.join("out")), &names()?)?;
+    assert!(
+        claimed
+            .transcript
+            .starts_with(fs::canonicalize(folder.join("out"))?)
+    );
+    Ok(())
+}
+
+#[test]
+fn a_release_after_a_failure_leaves_only_what_was_there() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-release")?;
+    let mut outputs = FolderWatchOutputs::new(Vec::new());
+    outputs.claim(&folder.join("meeting.mp4"), None, &names()?)?;
+    outputs.release();
+    let left: Vec<_> = fs::read_dir(&*folder)?.collect::<Result<_, _>>()?;
+    assert!(left.is_empty(), "{left:?}");
+    assert!(matches!(
+        outputs.finalise(&documents(true)?),
+        Err(WatchOutputError::Refused(WatchOutputKind::FolderContent, _))
+    ));
+    Ok(())
 }

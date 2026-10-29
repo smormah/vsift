@@ -578,3 +578,118 @@ complete in code; the "after" real-media run is its qualification evidence.
   without real media (a generated video with a new picture every two seconds) and passes with the fix; the test
   `the_frame_cap_fits_a_fresh_sessions_evidence_room` pins the relation.
 - **Register:** L-234, L-235 and L-236 added by this pull request; L-237 comes with the second.
+
+## Implementation note, 2026-10-28 (the second pull request: the use case)
+
+The first pull request's departure "there is no application use case and no `WatchOutputs` port" is
+**closed** (the planner's ruling of 2026-10-28: required for 0.3.0, and the first commit of the second
+pull request). Section 3's layering now holds as written:
+
+- **application** (`crates/vsift-application/src/watch.rs`): `run_watch`, the use case. It checks the source
+  and the capabilities, derives the names, claims them, opens the session, runs the `prepare` job, states the
+  untranscribed ranges as gaps in time order, measures the evidence room before the first frame and takes at
+  most `frames_that_fit` frames spread evenly (a refusal for room ends the frames, not the run), finalises the
+  files and closes the session; after the claim, a failure releases it. It reaches the existing operations
+  through a second port, `WatchSteps`, which the engine supplies, as `PrepareStreams` supplies the `prepare`
+  job's streams: one method per existing operation (the source's `ingest` refusal, the configuration check,
+  `ingest`, the watched `prepare` job in this process, the transcript and candidate reads, the evidence room,
+  `frame get`, the provenance, closing the session), none with a rule of its own. The port data and the
+  outcome (`WatchOutcome`, `WatchFile`, `WatchFrame`, `WatchOutputKind`) moved here from the engine and the
+  infrastructure; the engine re-exports them under the same names, so no host changes.
+- **`WatchOutputs`** covers claim (which also resolves the folder: the video's own, or `--output`, created
+  without its parents, canonicalised and never inside VSift's roots), copying a frame checked against its
+  SHA-256, finalise and release. Writing a snapshot of a file that grows joins it with section 7.
+- **infrastructure**: `FolderWatchOutputs`, the port's folder implementation over `WatchClaim` and the three
+  renderers (`crates/vsift-infrastructure/src/watch_output.rs`).
+- **engine**: `Engine::watch` is the facade: it makes the paths absolute, builds the two ports and maps the
+  use case's error back to `EngineError`. The first pull request's `FrameTaker` seam is gone; the backstop is
+  the use case's, tested over the fake steps.
+- **Tests:** the use case over fakes of both ports (the order of the steps; a missing capability, a source
+  that is not a file, an unusable name and a taken name each refused with nothing claimed or no session
+  opened; a failure after the claim released and the session closed; a stated gap in time order; no subtitles
+  without a sound track; 576 changes with 180 frames spread evenly and every change listed; the frames fitted
+  to a small room; the backstop), the folder port on real temporary folders, and the engine's opt-in runs
+  through `Engine::watch` unchanged.
+
+## Amendment, 2026-10-28: the list holds settled screens (the second pull request, ruling 3)
+
+**What changes.** Section 6 said every screen change the visual stream finds is listed. The first pull request's "before"
+run (40595722898) found about 30 changes a minute on both RM03 (a 19-minute talk, mostly camera movement: 576 changes,
+466 of them `visual_change` and 55 `motion_start`) and RM10 (a screen recording: 106), which is the per-window candidate
+budget's ceiling: a list that long hides the screens a person would look at. From the second pull request:
+
+- **Every change found is counted** (`changes_found`, as before), and **the list shows the settled screens** among them
+  (`changes_listed`, additive to `watch-data`): a `first_frame` and each `settled_after_motion` always; a `visual_change`
+  only when it comes at least 5 s after the last listed entry, whatever that entry's reason; a `motion_start` and
+  `periodic_coverage` never, because a person reads the screen once it holds still. The rule is a pure domain function
+  (`settled_screens`, `SETTLED_SCREEN_SPACING_MICROS`), applied by the use case before the frames.
+- **Each line names its reason** in plain words (`first frame`, `settled after motion`, `visual change`), and the header
+  says `N settled screens of M changes found` and states the rule when it left changes out. The finish screen says
+  `N settled screens of M changes` in that case.
+- **Frames** are taken for listed changes only: still at most 180, spread evenly over the listed ones and fitted to the
+  measured evidence room (section 6 and its correction). **The 180 bound stays until the measurement is in.**
+- No failure code changes; `changes_found` keeps its meaning.
+- **The cost, stated (the planner's condition, 2026-10-28).** A screen shown for less than 5 s after a listed one is
+  not listed unless motion settles on it: a dialog that flashes up 3 s after a click, for example. The header says so
+  whenever the rule left changes out, and so does the guide's limits page (L-234, amended).
+- **What was left out stays reachable (the planner's condition).** The run closes its session, so the changes it left
+  out are kept nowhere. Whenever the rule left changes out, the header gives the commands that show every one:
+  `vsift ingest <video>`, then `vsift candidates <session> --from 0 --to <the end the index covers, in microseconds>`
+  (the number is written in), with the session id `ingest` gives. The guide's limits page says the same.
+
+**Confirmed by the planner, 2026-10-28,** relayed by the coordinator: the five choices as written, with the two
+conditions above and a third on the measurement: the run reports `changes_found`, `changes_listed` and the listed count
+by reason for each item. If a talk like RM03 still lists more than about 100, or a screen recording like RM10 or RM01
+drops a change a person would want, the numbers and a spacing proposal go back to the planner rather than a retune in
+this pull request; no campaign threshold is loosened.
+
+**The measurement** (the second pull request's one hosted `P14 real media` run, RM01, RM03, RM04 and RM10): the
+campaign's `watchItem` records `changes_found` (today's rule), `changes_listed` (this one) and the listed changes by
+reason for each item, and checks that the frames are min(listed, 180), that no in-progress marker or temporary file is
+left, and that the session was closed.
+
+**Measured, 2026-10-29: hosted run 40791259684** on `682920e5`. The pull request's later head, `adee6bc1`, differs from
+it in records only. Every `vsift <video>` step exited 0, and every `watch` check passed. RM03 failed only the advisory
+seam check, on the two rewording seams F14 left after #542.
+
+| Item | Footage | Changes found (every change) | Listed (settled screens) | Listed by reason | Frames | Wall time (RTF) |
+| --- | --- | --- | --- | --- | --- | --- |
+| RM01 | screen recording | 26 | 15 | first frame 1, visual change 14 | 15 | 46 s (0.33) |
+| RM03 | 19:16 talk, moving camera | 589 | 183 | first frame 1, visual change 128, settled after motion 54 | 180 | 479 s (0.41) |
+| RM04 | screen recording | 138 | 48 | first frame 1, visual change 14, settled after motion 33 | 48 | 90 s (0.30) |
+| RM10 | 3:21 screen recording | 108 | 31 | first frame 1, visual change 11, settled after motion 19 | 31 | 65 s (0.33) |
+
+The campaign's own `candidates` step on the same run gives every change found by reason:
+
+- RM01: 22 visual changes and no motion.
+- RM03: 466 visual changes, 55 starts of motion, 54 settled.
+- RM04: 62 visual changes, 37 starts of motion, 33 settled.
+- RM10: 65 visual changes, 21 starts of motion, 19 settled.
+
+**Reading.** The rule shortens every list by a half to three quarters.
+
+- On RM04 and RM10, most of what it leaves out is either motion's start (its settled screen is listed) or a plain
+  change within 5 s of a listed one.
+- On RM01, a screen recording without motion, it leaves out 11 plain changes within 5 s of a listed one. That is the
+  case this record names as the rule's cost: a screen that follows a listed one quickly, a dialog after a click say.
+- The run's report holds counts, not the changes' times or frames. So whether a person would have wanted any of the
+  changes left out on RM01 or RM10 is not shown by this run. It would take a look at those changes' frames.
+- RM03, the talk, still lists 183. That is above the planner's mark of about 100, and above the 180-frame bound, so 3
+  are listed without a frame. A spacing proposal goes to the planner rather than a retune here.
+- The full list was not useful on footage like RM03: 589 entries in 19 minutes, one every two seconds, mostly camera
+  movement.
+- RM03's run was also `partial`, with one range not transcribed, which the transcript states in place.
+
+**Delivery, amended 2026-10-29 (the planner's ruling, relayed by the coordinator).** Section 13's second pull request
+is split. The second pull request holds the use case (the implementation note above) and the settled screens (this
+amendment), with its own hosted measurement. Sections 7 to 9 (files that grow, frames during the transcription,
+Ctrl-C keeping the session and a rerun continuing it, a file held open on Windows with L-237, and the bars) come in a
+further pull request with its own hosted run. `--include on-screen-text` (section 10) stays separate and droppable at
+the cut.
+
+**The planner's ruling on the measurement (2026-10-29), relayed by the coordinator:** keep the 5 s rule as it stands.
+"About 100" was a trigger for review, not a requirement. A spacing that grows with the video's length would thin long
+screen recordings, where quick screens matter most. The bound that counts is the frame room: a listed change without a
+frame is marked `no frame (evidence room)` on its own line (RM03's 3 of 183), and L-234 gives RM03 as its measured
+example. Recording each found change's time and reason in the campaign's report, so that a later spacing review can be
+simulated from one run, goes to the pull request for sections 7 to 9.

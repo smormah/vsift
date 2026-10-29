@@ -3308,7 +3308,7 @@ after it releases every name it claimed, never a file it did not create.
 | --- | --- |
 | `meeting.txt` | A header (the video's name, VSift's version, the UTC time to the minute, "local speech recognition", a line saying it is a machine transcription to check against the recording, the video's full SHA-256, and the transcript revision and session ids with a note that the run closed the session), then one line per segment, `[HH:MM:SS] text`. A part that was not transcribed appears in time order as `[HH:MM:SS-HH:MM:SS] (not transcribed: <reason>)`; a video with no sound track says so in place of the lines. |
 | `meeting.srt` | SubRip subtitles, one cue per segment, no header and no ids. A cue's text is one line, never holding a blank line or the `-->` arrow. Not written for a video with no sound track. |
-| `meeting-vsift/` | One PNG per written frame, named by its time (`00-01-12.480.png`), and `screen-changes.txt`: a header (the video's SHA-256, the visual index revision and session ids), then every screen change with its time, frame file (or a mark that its frame was not written), candidate id, frame evidence id and the frame's SHA-256. |
+| `meeting-vsift/` | One PNG per written frame, named by its time (`00-01-12.480.png`), and `screen-changes.txt`: a header (the video's SHA-256, the visual index revision and session ids), then every screen change with its time, frame file (or `no frame (evidence room)` when the frame bound or the session's evidence room left it without one), candidate id, frame evidence id and the frame's SHA-256. |
 
 - **Text is written in display form**, hidden and control characters made visible, as the readable
   views show it: transcript text and the video's name are untrusted.
@@ -3362,8 +3362,10 @@ status `complete`, and `data` with `source_id`, `session_id`, `session_closed`, 
 `screen_changes_beyond_bound` or `frames_stopped_for_room` is true), `not_transcribed` (half-open
 ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
 `screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
-only for the folder), `changes_found`, and `frames` (each with `time_us`, `candidate_id`,
-`evidence_id`, `path` and `sha256`, at most 180). With `--events jsonl` the stream carries the
+only for the folder), `changes_found` (every screen change the visual stream found), `changes_listed`
+(the settled screens `screen-changes.txt` lists, each with its reason: the first frame, each screen once
+motion settles, and a change at least 5 s after the one listed before it), and `frames` (each with
+`time_us`, `candidate_id`, `evidence_id`, `path` and `sha256`, at most 180, for listed changes only). With `--events jsonl` the stream carries the
 `prepare` job's progress events, then the terminal event with the same data.
 
 **The readable view** writes ADR 0033's live line on standard error while it works (terminal only),

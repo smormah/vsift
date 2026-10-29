@@ -579,6 +579,8 @@ function investigate(item, file, run, where) {
 
 /** The frames `vsift <video>` writes at most (ADR 0037 section 6, L-234). */
 const WATCH_MAX_FRAMES = 180;
+/** One listed change of `screen-changes.txt` (ADR 0037): its time, then its reason in plain words. */
+const LISTED_CHANGE_LINE = /^\d{2}:\d{2}:\d{2}\s{2,}(first frame|settled after motion|visual change|motion starts|periodic coverage)\s{2,}/gm;
 const VIDEO_SHA256_LINE = /^Video SHA-256 +([0-9a-f]{64})$/m;
 
 /**
@@ -586,9 +588,11 @@ const VIDEO_SHA256_LINE = /^Video SHA-256 +([0-9a-f]{64})$/m;
  * own: the bare form, run by the binary's absolute path with a session root of
  * its own. It checks that the three outputs are beside the copy and are the
  * bytes the answer hashed, that the transcript's header names the item's pinned
- * SHA-256, that the frames are min(changes, 180) and each is the bytes its
- * SHA-256 says (and is listed), and that the session was closed; it records the
- * wall time, the screen changes and the frames written. A private item is not
+ * SHA-256, that the frames are min(listed changes, 180) and each is the bytes
+ * its SHA-256 says (and is listed), that no in-progress marker or temporary
+ * file is left, and that the session was closed; it records the wall time, the
+ * screen changes found and listed (the settled screens, by reason: the
+ * measurement of ADR 0037's settled-screens amendment) and the frames written. A private item is not
  * watched: its files would hold the recording's words in the work folder.
  * Findings are fixed phrases with numbers only.
  */
@@ -630,9 +634,18 @@ function watchItem(item, file, run, where) {
     if (!header) findings.push("the transcript's header names no video SHA-256");
     else if (pinned && header[1] !== pinned) findings.push("the transcript's header does not name the item's pinned SHA-256");
   }
-  const expectedFrames = Math.min(data.changes_found, WATCH_MAX_FRAMES);
-  if (data.frames.length !== expectedFrames) findings.push(`${data.frames.length} frames were written for ${data.changes_found} changes, not ${expectedFrames}`);
+  const listedCount = typeof data.changes_listed === 'number' ? data.changes_listed : data.changes_found;
+  if (listedCount > data.changes_found) findings.push(`${listedCount} changes were listed of ${data.changes_found} found`);
+  const expectedFrames = Math.min(listedCount, WATCH_MAX_FRAMES);
+  if (data.frames.length !== expectedFrames) findings.push(`${data.frames.length} frames were written for ${listedCount} listed changes, not ${expectedFrames}`);
   const list = exists(data.outputs.screen_changes.path) ? readFile(data.outputs.screen_changes.path, 'utf8') : '';
+  const listedByReason = {};
+  for (const [, reason] of list.matchAll(LISTED_CHANGE_LINE)) listedByReason[reason] = (listedByReason[reason] || 0) + 1;
+  const linesListed = Object.values(listedByReason).reduce((sum, count) => sum + count, 0);
+  if (list && linesListed !== listedCount) findings.push(`the screen-change list has ${linesListed} lines for ${listedCount} listed changes`);
+  if (exists(data.outputs.transcript.path) && readFile(data.outputs.transcript.path, 'utf8').startsWith('IN PROGRESS')) findings.push('the transcript still carries its in-progress marker');
+  const leftovers = (where.readdir || fs.readdirSync)(folder).filter((name) => name.endsWith('.vsift-partial'));
+  if (leftovers.length > 0) findings.push(`${leftovers.length} temporary file(s) left beside the video`);
   let mismatched = 0;
   let unlisted = 0;
   let frameBytes = 0;
@@ -656,6 +669,8 @@ function watchItem(item, file, run, where) {
       outcome: data.outcome,
       not_transcribed_ranges: data.not_transcribed.length,
       changes_found: data.changes_found,
+      changes_listed: listedCount,
+      listed_by_reason: listedByReason,
       frames_written: data.frames.length,
       frame_bytes: frameBytes,
     },
@@ -814,10 +829,10 @@ function markdown(run) {
   }
   const watched = run.items.filter((item) => item.measurements && item.measurements.watch);
   if (watched.length > 0) {
-    lines.push('', '## `vsift <video>`', '', '| Item | Wall time (RTF) | Outcome | Screen changes | Frames written (bytes) |', '| --- | --- | --- | --- | --- |');
+    lines.push('', '## `vsift <video>`', '', '| Item | Wall time (RTF) | Outcome | Screen changes found | Listed (settled screens) | Listed by reason | Frames written (bytes) |', '| --- | --- | --- | --- | --- | --- | --- |');
     for (const item of watched) {
       const w = item.measurements.watch;
-      lines.push(`| ${item.id} | ${w.seconds.toFixed(0)} s${typeof w.real_time_factor === 'number' ? ` (${w.real_time_factor.toFixed(2)})` : ''} | ${w.outcome || 'failed'} | ${w.changes_found ?? 'n/a'} | ${w.frames_written ?? 'n/a'}${typeof w.frame_bytes === 'number' ? ` (${w.frame_bytes})` : ''} |`);
+      lines.push(`| ${item.id} | ${w.seconds.toFixed(0)} s${typeof w.real_time_factor === 'number' ? ` (${w.real_time_factor.toFixed(2)})` : ''} | ${w.outcome || 'failed'} | ${w.changes_found ?? 'n/a'} | ${w.changes_listed ?? 'n/a'} | ${w.listed_by_reason ? Object.entries(w.listed_by_reason).map(([reason, count]) => `${reason} ${count}`).join(', ') || 'none' : 'n/a'} | ${w.frames_written ?? 'n/a'}${typeof w.frame_bytes === 'number' ? ` (${w.frame_bytes})` : ''} |`);
     }
   }
   const attributed = run.items.filter((item) => !item.private && !item.not_yet_mirrored);

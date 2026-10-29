@@ -22,49 +22,14 @@ use std::{
 };
 
 use sha2::{Digest as _, Sha256};
-use vsift_domain::{MediaTime, WatchOutputNames, readable_time, subrip_cue_text, subrip_time};
-
-/// Which output an error is about.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WatchOutputKind {
-    /// The readable transcript, `<stem>.txt`.
-    Transcript,
-    /// The subtitles, `<stem>.srt`.
-    Subtitles,
-    /// The screen-change folder, `<stem>-vsift`.
-    Folder,
-    /// A frame or the screen-change list inside the folder.
-    FolderContent,
-}
-
-/// Why an output could not be claimed or written.
-#[derive(Debug)]
-pub enum WatchOutputError {
-    /// Something already exists at the output's name; nothing was replaced.
-    Exists(WatchOutputKind),
-    /// The folder refused the write (read-only, no room, a synced folder
-    /// that rejects new files).
-    Refused(WatchOutputKind, io::ErrorKind),
-    /// A frame copied out of the session does not have its recorded SHA-256.
-    FrameMismatch,
-}
-
-impl std::fmt::Display for WatchOutputError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Exists(kind) => write!(formatter, "the {kind:?} output already exists"),
-            Self::Refused(kind, error) => {
-                write!(
-                    formatter,
-                    "the {kind:?} output could not be written: {error}"
-                )
-            }
-            Self::FrameMismatch => formatter.write_str("a copied frame does not match its digest"),
-        }
-    }
-}
-
-impl std::error::Error for WatchOutputError {}
+use vsift_application::{
+    ClaimedOutputs, FinalisedOutputs, ScreenChangeEntry, ScreenChangeSummary, SessionFrame,
+    TranscriptEntry, WatchDocuments, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs,
+    WatchProvenance,
+};
+use vsift_domain::{
+    CandidateReason, WatchOutputNames, readable_time, subrip_cue_text, subrip_time,
+};
 
 /// The outputs of one run, claimed in one folder.
 #[derive(Debug)]
@@ -233,6 +198,140 @@ impl WatchClaim {
     }
 }
 
+/// The folder implementation of the [`WatchOutputs`] port: resolves the
+/// folder, claims the outputs there with a [`WatchClaim`] and renders the
+/// finished files with this module's writers.
+#[derive(Debug)]
+pub struct FolderWatchOutputs {
+    vsift_roots: Vec<PathBuf>,
+    claim: Option<WatchClaim>,
+}
+
+impl FolderWatchOutputs {
+    /// Outputs that refuse any folder inside `vsift_roots`, the canonical
+    /// session and managed roots, which `VSift` cleans automatically.
+    #[must_use]
+    pub const fn new(vsift_roots: Vec<PathBuf>) -> Self {
+        Self {
+            vsift_roots,
+            claim: None,
+        }
+    }
+
+    fn claimed(&mut self) -> Result<&mut WatchClaim, WatchOutputError> {
+        self.claim.as_mut().ok_or(WatchOutputError::Refused(
+            WatchOutputKind::FolderContent,
+            io::ErrorKind::NotFound,
+        ))
+    }
+}
+
+impl WatchOutputs for FolderWatchOutputs {
+    fn claim(
+        &mut self,
+        video: &Path,
+        output: Option<&Path>,
+        names: &WatchOutputNames,
+    ) -> Result<ClaimedOutputs, WatchOutputError> {
+        let folder = output_folder(video, output, &self.vsift_roots)?;
+        let claim = WatchClaim::claim(&folder, names)?;
+        let claimed = ClaimedOutputs {
+            transcript: claim.transcript_path().to_path_buf(),
+            subtitles: claim.subtitles_path().to_path_buf(),
+            folder: claim.folder_path().to_path_buf(),
+        };
+        self.claim = Some(claim);
+        Ok(claimed)
+    }
+
+    fn copy_frame(
+        &mut self,
+        frame: &SessionFrame,
+        file_name: &str,
+    ) -> Result<PathBuf, WatchOutputError> {
+        self.claimed()?
+            .copy_frame(&frame.path, file_name, &frame.sha256)
+    }
+
+    fn finalise(
+        &mut self,
+        documents: &WatchDocuments,
+    ) -> Result<FinalisedOutputs, WatchOutputError> {
+        let claim = self.claimed()?;
+        let revision = documents
+            .transcript_revision
+            .as_ref()
+            .map(vsift_domain::TranscriptRevisionId::as_str);
+        let transcript_sha256 = claim.write_transcript(&render_transcript(
+            &documents.provenance,
+            revision,
+            &documents.entries,
+        ))?;
+        let subtitles = if revision.is_some() {
+            let sha256 = claim.write_subtitles(&render_subrip(&documents.entries))?;
+            Some(WatchFile {
+                path: claim.subtitles_path().to_path_buf(),
+                sha256: Some(sha256),
+            })
+        } else {
+            claim.discard_subtitles();
+            None
+        };
+        let (list, list_sha256) = claim.write_screen_changes(&render_screen_changes(
+            &documents.provenance,
+            &documents.summary,
+            &documents.changes,
+        ))?;
+        let transcript = WatchFile {
+            path: claim.transcript_path().to_path_buf(),
+            sha256: Some(transcript_sha256),
+        };
+        // Finished: nothing this run wrote may be released any more.
+        self.claim = None;
+        Ok(FinalisedOutputs {
+            transcript,
+            subtitles,
+            screen_changes: WatchFile {
+                path: list,
+                sha256: Some(list_sha256),
+            },
+        })
+    }
+
+    fn release(&mut self) {
+        if let Some(claim) = self.claim.take() {
+            claim.release();
+        }
+    }
+}
+
+/// The folder to write into: the video's own, or `output` (an existing
+/// folder, or a new one whose parent exists, created without its parents),
+/// canonicalised and never inside one of `vsift_roots` (ADR 0037 section 5).
+fn output_folder(
+    video: &Path,
+    output: Option<&Path>,
+    vsift_roots: &[PathBuf],
+) -> Result<PathBuf, WatchOutputError> {
+    let unusable = WatchOutputError::FolderUnusable;
+    let folder = match output {
+        None => video.parent().map(Path::to_path_buf).ok_or(unusable)?,
+        Some(output) => match fs::symlink_metadata(output) {
+            Ok(metadata) if metadata.is_dir() => output.to_path_buf(),
+            Ok(_) => return Err(WatchOutputError::FolderUnusable),
+            Err(_) => {
+                fs::create_dir(output).map_err(|_| WatchOutputError::FolderUnusable)?;
+                output.to_path_buf()
+            }
+        },
+    };
+    let folder = fs::canonicalize(&folder).map_err(|_| WatchOutputError::FolderUnusable)?;
+    if vsift_roots.iter().any(|root| folder.starts_with(root)) {
+        return Err(WatchOutputError::InsideVsift);
+    }
+    Ok(folder)
+}
+
 /// The screen-change list's name inside the folder.
 pub const SCREEN_CHANGES_FILE: &str = "screen-changes.txt";
 
@@ -281,44 +380,6 @@ fn hex_sha256(bytes: &[u8]) -> String {
         let _infallible = write!(text, "{byte:02x}");
     }
     text
-}
-
-/// Facts every output names about the run that made it.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WatchProvenance {
-    /// The video's file name, in display form.
-    pub video_name: String,
-    /// `VSift` and its version, for example `VSift 0.3.0`.
-    pub made_by: String,
-    /// When the run finished, in UTC to the minute (`2026-11-20 14:05 UTC`).
-    pub made_at: String,
-    /// The video's SHA-256, 64 lowercase hexadecimal digits.
-    pub video_sha256: String,
-    /// The session the run used.
-    pub session_id: String,
-}
-
-/// One entry of the transcript, in time order.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum TranscriptEntry {
-    /// A segment: its range and its text in display form.
-    Line {
-        /// Start of the segment.
-        start: MediaTime,
-        /// End of the segment.
-        end: MediaTime,
-        /// The segment's text, hidden characters made visible.
-        text: String,
-    },
-    /// A range that was not transcribed, and why, in plain words.
-    Gap {
-        /// Start of the range.
-        start: MediaTime,
-        /// End of the range.
-        end: MediaTime,
-        /// Why it was not transcribed.
-        reason: String,
-    },
 }
 
 /// Renders `<stem>.txt`: the header, then one line per entry. `revision` is
@@ -399,40 +460,6 @@ pub fn render_subrip(entries: &[TranscriptEntry]) -> String {
     text
 }
 
-/// One screen change in the list.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScreenChangeEntry {
-    /// The change's representative time.
-    pub time: MediaTime,
-    /// The visual candidate's id.
-    pub candidate_id: String,
-    /// The frame written for it, when one was.
-    pub frame: Option<WrittenFrame>,
-}
-
-/// A frame written into the folder.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WrittenFrame {
-    /// Its file name in the folder.
-    pub file_name: String,
-    /// The frame's evidence id.
-    pub evidence_id: String,
-    /// The PNG's SHA-256.
-    pub sha256: String,
-}
-
-/// What the screen-change list says about the run as a whole.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScreenChangeSummary {
-    /// The visual index revision's id.
-    pub index_id: String,
-    /// Whether the video runs past the part the visual index covers.
-    pub beyond_index_bound: bool,
-    /// Whether the session ran out of evidence room before every selected
-    /// change had its frame (known limit L-234).
-    pub stopped_for_room: bool,
-}
-
 /// Renders `screen-changes.txt`.
 #[must_use]
 pub fn render_screen_changes(
@@ -447,22 +474,36 @@ pub fn render_screen_changes(
     let mut text = String::new();
     let _ = writeln!(
         text,
-        "Screen changes in {}, found by {}, {}: {} changes, {frames} frames.",
+        "Screen changes in {}, found by {}, {}: {} settled screens of {} changes found, {frames} frames.",
         provenance.video_name,
         provenance.made_by,
         provenance.made_at,
-        changes.len()
+        changes.len(),
+        summary.changes_found
     );
+    if changes.len() < summary.changes_found {
+        text.push_str(
+            "Listed: the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; the others are left out, so a screen shown for less than 5 s after a listed one is missing unless motion settles on it.\n",
+        );
+        // The run closes its session, so the changes it left out are kept
+        // nowhere: the list says how to find every one (the planner's
+        // condition, 2026-10-28).
+        let _ = writeln!(
+            text,
+            "To see every change, keep a session of the video: vsift ingest <video>, then vsift candidates <session> --from 0 --to {}, with the session id ingest gives.",
+            summary.index_covers_to.as_micros()
+        );
+    }
     if frames < changes.len() {
         let _ = writeln!(
             text,
-            "{frames} of {} frames written, spread evenly over the video; the others are listed without one.",
+            "{frames} of {} frames written, spread evenly over the listed changes; the others are listed with no frame (evidence room).",
             changes.len()
         );
     }
     if summary.stopped_for_room {
         text.push_str(
-            "VSift's private copy of the video ran out of room for frames, so the frames stop early; every change is still listed.\n",
+            "VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n",
         );
     }
     if summary.beyond_index_bound {
@@ -478,29 +519,43 @@ pub fn render_screen_changes(
     text.push('\n');
     let _ = writeln!(
         text,
-        "{:<10}  {:<18}  {:<36}  {:<36}  Frame SHA-256",
-        "Time", "Frame", "Change", "Frame evidence"
+        "{:<10}  {:<20}  {:<24}  {:<36}  {:<36}  Frame SHA-256",
+        "Time", "Reason", "Frame", "Change", "Frame evidence"
     );
     for change in changes {
         let (file, evidence, sha256) =
-            change
-                .frame
-                .as_ref()
-                .map_or(("(not written)", "-", "-"), |frame| {
-                    (
-                        frame.file_name.as_str(),
-                        frame.evidence_id.as_str(),
-                        frame.sha256.as_str(),
-                    )
-                });
+            change.frame.as_ref().map_or((NO_FRAME, "-", "-"), |frame| {
+                (
+                    frame.file_name.as_str(),
+                    frame.evidence_id.as_str(),
+                    frame.sha256.as_str(),
+                )
+            });
         let _ = writeln!(
             text,
-            "{:<10}  {file:<18}  {:<36}  {evidence:<36}  {sha256}",
+            "{:<10}  {:<20}  {file:<24}  {:<36}  {evidence:<36}  {sha256}",
             readable_time(change.time),
+            reason_words(change.reason),
             change.candidate_id
         );
     }
     text
+}
+
+/// The mark of a listed change without a frame: frames are bounded by the
+/// session's evidence room (known limit L-234), whether the bound spread them
+/// or the room stopped them.
+const NO_FRAME: &str = "no frame (evidence room)";
+
+/// A change's reason in plain words, as the list shows it.
+const fn reason_words(reason: CandidateReason) -> &'static str {
+    match reason {
+        CandidateReason::FirstFrame => "first frame",
+        CandidateReason::VisualChange => "visual change",
+        CandidateReason::MotionStart => "motion starts",
+        CandidateReason::SettledAfterMotion => "settled after motion",
+        CandidateReason::PeriodicCoverage => "periodic coverage",
+    }
 }
 
 #[cfg(test)]

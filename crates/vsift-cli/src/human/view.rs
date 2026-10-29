@@ -1333,5 +1333,6 @@ pub(crate) struct Watched {
     pub(crate) names_shortened: bool,
     pub(crate) outputs: WatchOutputs,
     pub(crate) changes_found: u64,
+    pub(crate) changes_listed: u64,
     pub(crate) frames: Vec<serde_json::Value>,
 }

@@ -156,7 +156,7 @@ These files are the machine-readable public v1 boundary:
   `visual_index_revision_id`), `outcome` (`complete` or `partial`, with `not_transcribed`,
   `screen_changes_beyond_bound` and `frames_stopped_for_room`), `names_shortened`, `outputs` (each file's absolute
   `path`, display `name` and `sha256`; the folder's `sha256` is `null`), `changes_found`
-  and at most 180 `frames` (`time_us`, `candidate_id`, `evidence_id`, `path`, `sha256`);
+  (every screen change found), `changes_listed` (the settled screens the list shows) and at most 180 `frames` (`time_us`, `candidate_id`, `evidence_id`, `path`, `sha256`);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count`, the continuation cursor (P07) and, since 0.2.1, the

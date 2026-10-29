@@ -133,6 +133,7 @@ fn meeting() -> WatchData {
             ),
         },
         changes_found: 2,
+        changes_listed: 2,
         frames: vec![
             frame(
                 72,
