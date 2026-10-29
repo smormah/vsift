@@ -60,7 +60,13 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 development freeze, written at the merge rebase** (W9, ADR 0038 slice 3, 2026-10-29): `references/commands.md`
+/// **Draft freeze, rewritten at the merge rebase** (W9, ADR 0038 slice 2, 2026-10-29): the skill gains the four
+/// cue-word workflows (`workflows/`), two example handoffs, the optional `claims[].category` and `claims[].priority`,
+/// `ingest --recorded-at` in `references/commands.md` and the log-file rule of `references/safety.md`, so the `skill`
+/// component moved `60c086a7...` to `924d6ebe...` and this digest `12a93ac3...` to the value below; the other six
+/// components are unchanged.
+///
+/// The freeze before it, a **0.3.0 development freeze, written at the merge rebase** (W9, ADR 0038 slice 3, 2026-10-29): `references/commands.md`
 /// classes `vsift skill install` as never and `vsift skill status` and `vsift skill show` as free, so the `skill`
 /// component moved `5739c914...` to `60c086a7...` and this digest `928f9d7b...` to the value below; the other six
 /// components are unchanged.
@@ -139,7 +145,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "12a93ac31a5dcc5e7daacc7b1745a1b53328ed7252d13fe09444a0ba01729e23";
+const CUT_FREEZE_SHA256: &str = "5d0b187ac70c70f187fa94a903a06b0d6249923f84818466fe2f98eb510b3544";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

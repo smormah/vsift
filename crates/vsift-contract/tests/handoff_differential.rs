@@ -87,6 +87,8 @@ fn bases() -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     for name in [
         "examples/supplied-transcript.handoff.json",
         "examples/no-transcript-no-images.handoff.json",
+        "examples/bug-report.handoff.json",
+        "examples/findings.handoff.json",
     ] {
         bases.push(serde_json::from_str(&fs::read_to_string(skill_file(
             name,
@@ -113,7 +115,8 @@ fn rich() -> Value {
         "session": {"session_id": "ses_0123456789abcdef", "revision_id": "trv_0123456789abcdef",
             "source_id": format!("src_sha256_{}", "a".repeat(64)), "duration_us": 60_000_000},
         "claims": [{"id": "c1", "section": "actual", "kind": "observed", "support": "supported",
-            "certainty": "high", "statement": "The dialog shows 7.", "citations": ["e1", "e2", "e3", "e4"]}],
+            "certainty": "high", "statement": "The dialog shows 7.", "citations": ["e1", "e2", "e3", "e4"],
+            "category": "backlog_item", "priority": "high"}],
         "citations": [
             {"id": "e1", "type": "transcript_segment", "segment_id": "tsg_0123456789abcdef",
                 "revision_id": "trv_0123456789abcdef", "start_us": 1, "end_us": 2},
@@ -399,7 +402,7 @@ proptest! {
 
     /// A generated value placed at a generated location of a base draft.
     #[test]
-    fn generated_drafts_agree(base in 0_usize..4, location in any::<prop::sample::Index>(), value in arbitrary_value()) {
+    fn generated_drafts_agree(base in 0_usize..6, location in any::<prop::sample::Index>(), value in arbitrary_value()) {
         let oracle = Oracle::new().map_err(|error| TestCaseError::fail(error.to_string()))?;
         let bases = bases().map_err(|error| TestCaseError::fail(error.to_string()))?;
         let mut draft = bases[base % bases.len()].clone();

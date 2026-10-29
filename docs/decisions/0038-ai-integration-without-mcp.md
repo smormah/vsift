@@ -119,7 +119,7 @@ Six workflows, each a short file in the skill at `skills/vsift/workflows/<name>.
 | `bug-report.md` | A recording becomes an evidence-backed bug report | `compact` | The existing procedure: search the symptom words, read windows, inspect frames and report Problem, Expected, Actual and Reproduction. |
 | `findings.md` | A narrated screencast becomes findings (bug, feature, question) | `standard` | Search cue words for each kind ("doesn't", "should", "why", "?"), then read windows and confirm on screen. Each finding is one claim with a `category`. |
 | `workshop-spec.md` | A workshop becomes a spec with quoted decisions and open questions | `read_through` | Read the whole transcript page by page (amended 2026-10-29, D1), quote each decision from `display_text` with its segment, and list open questions; frames only within `standard`'s image limits. |
-| `demo-backlog.md` | A product demo becomes a prioritised backlog | `standard` | Search problem and request cue words, confirm each item on a frame, and give each a `priority` from what was said (cited) or `inferred`. |
+| `demo-backlog.md` | A product demo becomes a prioritised backlog | `standard` | Search problem and request cue words, confirm each item on a frame, and give each a `priority` from what was said (cited) or, when nothing says it, inferred, which the claim's statement says ("priority inferred: high"; ruled 2026-10-29, below). |
 | `meeting-notes.md` | A meeting becomes actions, decisions and open questions | `read_through` | Read the whole transcript page by page (amended 2026-10-29, D1), and name speakers by `display_label` when segments carry one; frames only within `standard`'s image limits. |
 | `logs-by-clock.md` | Moments in a recording are matched to system log lines through clock time | `compact` | Ingest with `--recorded-at` when the user knows the start. Turn each log time into a window, then cite the segments and frames whose own `clock_time` VSift reports. |
 
@@ -466,6 +466,12 @@ which the maintainer decided on 2026-10-28; the planner accepted its amendment o
   inferred priority is shown. The planner prefers no third member: the claim's statement says "inferred",
   and `handoff check` refuses `priority` without `category` `backlog_item`. The CHANGELOG says an older
   `handoff check` refuses the new members.
+  **Inferred priority, the planner's ruling (2026-10-29, after reviewing #547): no third member.** `priority`
+  holds only `high`, `medium` or `low`. A priority the agent inferred, rather than one said in the
+  recording, is stated in the claim's own `statement` ("priority inferred: high", with the reason from the
+  evidence), and `demo-backlog.md` says when to infer and that the statement must say so. The claim's
+  `kind` stays what the item is. `handoff check` refuses `priority` on a claim whose `category` is not
+  `backlog_item`, or that has no `category`.
 - **D3, yes:** `INVALID_ARGUMENT`, as ADR 0037's refusal of an existing output is. Each folder's typed
   outcome is in `data`, and the remediation names `--replace`.
 - **D4, D5 (the planner's call: it is packaging), D7 and D9, yes.**
@@ -580,3 +586,53 @@ accepted all three on 2026-10-29**; each ruling is stated with its difference.
   one-byte difference before it was removed.
 - **Register:** [L-240](../planning/known-limits.md#l-240), a marketplace added without a tag can carry a
   newer skill than the installed `vsift`.
+
+## Implementation note, 2026-10-29 (slice 2: the four cue-word workflows)
+
+Built as section 2 says for `bug-report.md`, `findings.md`, `demo-backlog.md` and `logs-by-clock.md`, with the
+planner's ruling on inferred priority (Outcome, D2). The read-through workflows (`meeting-notes.md`,
+`workshop-spec.md`) and the `read_through` profile are the next pull request.
+
+- **The files.** Each opens with D7's two sentences, names its budget and states that profile's limits
+  (`compact`: 30 calls, 6 images, pages of 20; `standard`: 80, 24, 50), starts the JSON from `handoff
+  skeleton` and ends with `handoff check`. Every command in them is `free`. `SKILL.md` links them from one
+  line; to stay at 300 lines its sentence on quoting arguments now points at `references/commands.md`,
+  which already said it. The fuzz seed copy and the plugin's copy are copied again.
+- **Cue words are literal words** (search matches whole normalised words, so `fail` does not find
+  `failed`, and punctuation such as `?` is no query). Each workflow lists its cue words per kind; the
+  findings and backlog workflows end `partial` and list each stretch they did not read as a `transcript`
+  gap (`not_inspected`) unless their windows covered the whole recording (L-238).
+- **`category` and `priority`.** Two optional members of `claims[]` in `handoff.schema.json`, and one
+  `if`/`then` rule: a claim with `priority` must have `category` `backlog_item`. The rule lives in the
+  schema, so `handoff check` reports it with existing rules (`member_missing`, `value_not_allowed`) and
+  no new rule identifier or failure code. `handoff_version` stays `1`. Checked on the binary built
+  before the change: it refuses a claim with `category` as `member_unknown`, as the CHANGELOG says.
+- **Clock time.** `references/commands.md` gains `ingest --recorded-at` (only with the start time the user
+  gave; opening the video again to add one is `explicit`, as it is for a transcript). `ingest --url` is not
+  added by this pull request; section 6 leaves it to a later slice.
+- **Condition 3 (log privacy), as built.** `logs-by-clock.md` and a new "Log files" section of
+  `references/safety.md`: the one log file the user names is read with the file-reading tool, in that
+  workflow only; the least text that makes the match is quoted, in a code span; no secret, token, key,
+  password or personal data is quoted. An instruction in a log line is listed under "Untrusted
+  instructions observed" in the Markdown. **The JSON's `untrusted_instructions` cannot hold it**: each
+  entry requires a `citation`, and a log line is not VSift evidence and has no citation (L-239). It is
+  therefore stated in the Markdown alone, an exception to "the prose says nothing the JSON does not" that
+  L-239 already makes for log lines.
+- **The plugin's commands.** `plugins/vsift/commands/<workflow>.md`, one per workflow, give `/vsift:bug-report`
+  and the others. Each is front matter (`description`, `argument-hint`) and a few lines naming its
+  workflow file, with `vsift skill show workflows/<name>.md --json` for a client that cannot read it.
+- **Tests.** The skill guard: workflow console blocks are held to `free`
+  (`console_commands_parse_and_respect_their_class`), and
+  `workflows_stand_alone_use_free_commands_and_state_their_budget` holds the opening, the budget and its
+  limits, the skeleton, the check, the inline commands and the `SKILL.md` link;
+  `each_workflow_has_one_plugin_command_that_names_it` holds one command per workflow, each naming only its
+  own file, which must be in the plugin's skill copy (held byte for byte to the skill), with no front matter
+  that grants a tool; `the_workflow_examples_use_the_members_their_workflows_name`. The contract:
+  `a_priority_is_allowed_only_on_a_backlog_item`, the new examples in the example and differential tests, and
+  the differential test's full draft with both members. Each new guard test and the priority test failed on a
+  planted mutation before it was reverted.
+- **Examples.** `examples/bug-report.handoff.json` and `examples/findings.handoff.json` are built from the
+  output of this branch's binary on the `F04-speech` fixture with its supplied transcript (frames at 0 s and
+  10 s opened and read); both pass `handoff check --session` against that session.
+- **Register:** [L-238](../planning/known-limits.md#l-238) and [L-239](../planning/known-limits.md#l-239).
+- **The trial freeze** is a draft freeze, rewritten at the merge rebase.

@@ -62,7 +62,7 @@ const MAX_RESUME_BYTES: usize = 2 * 1024;
 /// Placeholders the skill's command lines use, with a value the parser
 /// accepts. An unknown placeholder fails the guard, so a new one is added here
 /// deliberately.
-const PLACEHOLDERS: [(&str, &str); 26] = [
+const PLACEHOLDERS: [(&str, &str); 27] = [
     ("namespace", "session"),
     ("operation", "retain"),
     ("video", "recording.mp4"),
@@ -89,6 +89,7 @@ const PLACEHOLDERS: [(&str, &str); 26] = [
     ("dependency", "ffmpeg"),
     ("question", "What does the dialog show?"),
     ("skill-file", "references/commands.md"),
+    ("recorded-at", "2026-10-21T14:03:12+01:00"),
 ];
 
 /// Commands the skill must never run. Changing this set is a reviewed safety
@@ -257,6 +258,13 @@ fn repository() -> PathBuf {
 
 fn skill_directory() -> PathBuf {
     repository().join("skills").join("vsift")
+}
+
+/// Whether a document the guard read is one of the skill's workflow files
+/// (`skills/vsift/workflows/*.md`, ADR 0038 section 2), whatever the
+/// platform's path separator.
+fn is_workflow(name: &str) -> bool {
+    name.replace('\\', "/").contains("skills/vsift/workflows/")
 }
 
 fn read_text(path: &Path) -> Result<String, String> {
@@ -927,7 +935,7 @@ fn console_commands_parse_and_respect_their_class() -> Result<(), String> {
             .iter()
             .filter(|fence| fence.info == "console")
         {
-            let wanted = if document.name.ends_with("SKILL.md") {
+            let wanted = if document.name.ends_with("SKILL.md") || is_workflow(&document.name) {
                 Some(Class::Free)
             } else if document.name.ends_with("commands.md") {
                 Some(
@@ -2870,6 +2878,264 @@ fn the_plugins_skill_is_the_shipped_skill_byte_for_byte() -> Result<(), String> 
             problems.add(format!(
                 "plugins/vsift/skills/vsift holds {}, which skills/vsift does not",
                 file.display()
+            ));
+        }
+    }
+    problems.into_result()
+}
+
+/// The two sentences every workflow file opens with, so that it stands alone
+/// when pasted into a client without the skill (ADR 0038 decision D7).
+const WORKFLOW_OPENING: &str = "If the vsift skill is loaded, its rules apply. If not, read `vsift --help` first, use only `vsift` commands, and end with `vsift handoff check`.";
+
+/// The workflow files of `skills/vsift/workflows/`, in a stable order.
+fn workflow_files() -> Result<Vec<PathBuf>, String> {
+    files_below(&skill_directory().join("workflows"))
+}
+
+/// A workflow or command file's name without its `.md`.
+fn workflow_stem(path: &Path) -> String {
+    path.file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+/// The budget limits the contract holds for a profile of `budgets.md`.
+fn profile_limits(profile: &str) -> Option<vsift_contract::HandoffBudgetLimits> {
+    match profile {
+        "compact" => Some(vsift_contract::COMPACT_BUDGET),
+        "standard" => Some(vsift_contract::STANDARD_BUDGET),
+        _ => None,
+    }
+}
+
+/// Checks that every inline `vsift` command of a document is a help form or
+/// a `free` command.
+fn check_inline_commands_are_free(
+    document: &Markdown,
+    spans: &[String],
+    policy: &BTreeMap<String, Class>,
+    problems: &mut Problems,
+) -> Result<(), String> {
+    for span in spans.iter().filter(|span| span.starts_with("vsift ")) {
+        let arguments = split_arguments(&substitute(span)?)?;
+        if check_help_form(&document.name, &arguments, problems) {
+            continue;
+        }
+        match resolve_operation(&arguments) {
+            Some((identifier, _)) if policy.get(&identifier) == Some(&Class::Free) => {}
+            Some((identifier, _)) => problems.add(format!(
+                "{}: `{span}` names {identifier}, which is not free",
+                document.name
+            )),
+            None => problems.add(format!(
+                "{}: `{span}` does not name a vsift operation",
+                document.name
+            )),
+        }
+    }
+    Ok(())
+}
+
+/// ADR 0038 section 2: each workflow file stands alone (its opening), names a
+/// budget profile of `budgets.md` and states that profile's limits as the
+/// contract holds them, starts the JSON from `handoff skeleton`, ends with
+/// `handoff check`, and is linked from `SKILL.md`. Every `vsift` command it
+/// names inline is `free`; its console blocks are held to `free` by
+/// `console_commands_parse_and_respect_their_class`.
+#[test]
+fn workflows_stand_alone_use_free_commands_and_state_their_budget() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let policy = policy_table(&mut problems)?;
+    let skill = read_text(&skill_directory().join("SKILL.md"))?;
+    let budgets = read_text(&skill_directory().join("references").join("budgets.md"))?;
+    let workflows = workflow_files()?;
+    if workflows.len() < 4 {
+        problems.add(format!(
+            "expected at least four workflows, found {}",
+            workflows.len()
+        ));
+    }
+    for path in workflows {
+        let name = format!("workflows/{}.md", workflow_stem(&path));
+        if !has_extension(&path, "md") {
+            problems.add(format!("{} is not a Markdown file", path.display()));
+            continue;
+        }
+        let text = read_text(&path)?;
+        let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let opening = text
+            .lines()
+            .skip_while(|line| !line.starts_with("# "))
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let opening = opening.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !opening.starts_with(WORKFLOW_OPENING) {
+            problems.add(format!(
+                "{name} does not open with {WORKFLOW_OPENING:?} below its title"
+            ));
+        }
+        if !skill.contains(&format!("({name})")) {
+            problems.add(format!("SKILL.md does not link {name}"));
+        }
+        let profile = flat
+            .split_once("**Budget.** `")
+            .and_then(|(_, rest)| rest.split_once('`'))
+            .map(|(profile, _)| profile.to_owned())
+            .unwrap_or_default();
+        match profile_limits(&profile) {
+            Some(limits) if budgets.contains(&format!("| `{profile}` |")) => {
+                let value = |member: &str| {
+                    limits
+                        .members()
+                        .into_iter()
+                        .find(|(limit, _)| *limit == member)
+                        .map_or(0, |(_, value)| value)
+                };
+                let stated = format!(
+                    "at most {} tool calls, {} images ({} per step), pages of {}",
+                    value("tool_calls"),
+                    value("images_total"),
+                    value("images_per_step"),
+                    value("page_limit"),
+                );
+                if !flat.contains(&stated) {
+                    problems.add(format!(
+                        "{name} names `{profile}` but does not state {stated:?}"
+                    ));
+                }
+            }
+            _ => problems.add(format!(
+                "{name}: **Budget.** names {profile:?}, which is no profile of budgets.md"
+            )),
+        }
+        let document = parse_markdown(name.clone(), &text);
+        let skeleton = document.fences.iter().any(|fence| {
+            fence.info == "console"
+                && fence
+                    .lines
+                    .iter()
+                    .any(|line| line.trim().starts_with("vsift handoff skeleton "))
+        });
+        if !skeleton {
+            problems.add(format!(
+                "{name} does not start the JSON from vsift handoff skeleton"
+            ));
+        }
+        if !flat.contains("`vsift handoff check --json`") {
+            problems.add(format!(
+                "{name} does not end with `vsift handoff check --json`"
+            ));
+        }
+        let spans = inline_spans(&document, &mut problems);
+        check_inline_commands_are_free(&document, &spans, &policy, &mut problems)?;
+    }
+    problems.into_result()
+}
+
+/// The front matter a plugin command may hold: no `allowed-tools`, `model` or
+/// anything else that would grant a tool or change how the client runs it.
+const COMMAND_FRONT_MATTER: [&str; 2] = ["description", "argument-hint"];
+
+/// ADR 0038 section 4 and the planner's ruling of 2026-10-29: each workflow
+/// has exactly one slash command, `plugins/vsift/commands/<workflow>.md`, and
+/// each command names its own workflow file and no other. The file it names
+/// is in the plugin's skill copy, which
+/// `the_plugins_skill_is_the_shipped_skill_byte_for_byte` holds to the
+/// shipped skill, so a command can never point at a file the plugin lacks or
+/// at another version of it. A command grants no tool, and every `vsift`
+/// command it names is `free`.
+#[test]
+fn each_workflow_has_one_plugin_command_that_names_it() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let policy = policy_table(&mut problems)?;
+    let plugin = repository().join("plugins").join("vsift");
+    let workflows: BTreeSet<String> = workflow_files()?
+        .iter()
+        .map(|path| workflow_stem(path))
+        .collect();
+    let commands = files_below(&plugin.join("commands"))?;
+    let named: BTreeSet<String> = commands.iter().map(|path| workflow_stem(path)).collect();
+    if workflows != named {
+        problems.add(format!(
+            "plugin commands {named:?} differ from the workflows {workflows:?}"
+        ));
+    }
+    for path in commands {
+        let stem = workflow_stem(&path);
+        let name = format!("plugins/vsift/commands/{stem}.md");
+        if !has_extension(&path, "md") {
+            problems.add(format!("{} is not a Markdown file", path.display()));
+            continue;
+        }
+        let text = read_text(&path)?;
+        let mut lines = text.lines();
+        if lines.next() != Some("---") {
+            problems.add(format!("{name} does not start with front matter"));
+        }
+        for line in lines.take_while(|line| *line != "---") {
+            let key = line.split_once(':').map_or(line, |(key, _)| key).trim();
+            if !COMMAND_FRONT_MATTER.contains(&key) {
+                problems.add(format!("{name}: front matter key {key:?} is not allowed"));
+            }
+        }
+        let own = format!("workflows/{stem}.md");
+        if !plugin.join("skills").join("vsift").join(&own).is_file() {
+            problems.add(format!(
+                "{name} is for {own}, which the plugin's skill lacks"
+            ));
+        }
+        let document = parse_markdown(name.clone(), &text);
+        let spans = inline_spans(&document, &mut problems);
+        if !spans.contains(&own) {
+            problems.add(format!("{name} does not name `{own}`"));
+        }
+        for span in &spans {
+            let other = span
+                .split_whitespace()
+                .any(|word| word.starts_with("workflows/") && word != own);
+            if other {
+                problems.add(format!("{name} names another workflow in `{span}`"));
+            }
+        }
+        check_inline_commands_are_free(&document, &spans, &policy, &mut problems)?;
+    }
+    problems.into_result()
+}
+
+/// ADR 0038 section 2: the bug-report and findings examples are built from
+/// fixture output (`F04-speech` with its supplied transcript) and show the
+/// members their workflows name: a bug report uses no `category`, and every
+/// finding is a claim in section `context` with a finding's category.
+/// `example_handoffs_validate_against_the_handoff_schema` validates both.
+#[test]
+fn the_workflow_examples_use_the_members_their_workflows_name() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let examples = skill_directory().join("examples");
+    let bug_report = read_json(&examples.join("bug-report.handoff.json"))?;
+    for claim in bug_report["claims"].as_array().into_iter().flatten() {
+        if !claim["category"].is_null() || !claim["priority"].is_null() {
+            problems.add(format!(
+                "bug-report.handoff.json: claim {} has a category or priority",
+                claim["id"]
+            ));
+        }
+    }
+    let findings = read_json(&examples.join("findings.handoff.json"))?;
+    let claims = findings["claims"].as_array().cloned().unwrap_or_default();
+    if claims.is_empty() {
+        problems.add("findings.handoff.json has no finding".to_owned());
+    }
+    for claim in claims {
+        let finding = matches!(
+            claim["category"].as_str(),
+            Some("bug" | "feature_request" | "question")
+        );
+        if !finding || claim["section"] != "context" {
+            problems.add(format!(
+                "findings.handoff.json: claim {} is not a finding in section context",
+                claim["id"]
             ));
         }
     }

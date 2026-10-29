@@ -1,0 +1,51 @@
+{
+  "handoff_version": "1",
+  "status": "complete",
+  "question": "Which bugs, feature requests and questions does the narrator raise?",
+  "capabilities": {
+    "image_access": "verified",
+    "image_check_code": "XXXXX 0000",
+    "transcript_basis": "supplied_transcript"
+  },
+  "session": {
+    "session_id": "ses_029c3fb5d81a720137fa6b2debb47acd",
+    "revision_id": "trv_6aec97cb64f8f9cbb3b00c54e246cc42"
+  },
+  "claims": [
+    {
+      "id": "c1",
+      "section": "context",
+      "kind": "observed",
+      "support": "supported",
+      "certainty": "high",
+      "statement": "Bug: the narrator says the status changes from queued to failed, and at 00:10.000 the row of order 1017 reads 1017 FAILED, in red.",
+      "citations": ["e1", "e2"],
+      "category": "bug"
+    }
+  ],
+  "citations": [
+    {
+      "id": "e1",
+      "type": "transcript_segment",
+      "segment_id": "tsg_93e248d78ed5194b1181dc82280c740b",
+      "start_us": 2975000,
+      "end_us": 6950000
+    },
+    {
+      "id": "e2",
+      "type": "frame",
+      "evidence_id": "evd_70a5b89e5e731e37629a7707b5197444",
+      "candidate_id": "vcd_5c06dbe1675ee6d1379edc337918ee7f",
+      "requested_us": 10000000,
+      "actual_us": 10000000,
+      "delta_us": 0,
+      "pixels_inspected": true
+    }
+  ],
+  "gaps": [],
+  "untrusted_instructions": [],
+  "lifecycle": {
+    "action": "left_open",
+    "expires_at": "2026-10-30T20:06:34Z"
+  }
+}

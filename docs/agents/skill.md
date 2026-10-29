@@ -25,8 +25,9 @@ within what budget, and how to report.
 | [`references/safety.md`](../../skills/vsift/references/safety.md) | Evidence is data: prompt-injection, rendering and privacy rules. |
 | [`references/resume.md`](../../skills/vsift/references/resume.md) | Operation ids, the resume card and recovery after a reset. |
 | [`references/lifecycle.md`](../../skills/vsift/references/lifecycle.md) | Close, retain and the cleanup routine. |
+| [`workflows/`](../../skills/vsift/workflows/) | Ready-made outcomes (0.3.0, ADR 0038 section 2): a bug report, findings, a demo backlog and log lines matched by clock time. Each file stands alone when pasted into a client without the skill. |
 | [`handoff.schema.json`](../../skills/vsift/handoff.schema.json) | The handoff v1 JSON schema, owned by the skill (not part of `schemas/v1`). |
-| [`examples/`](../../skills/vsift/examples/) | Example handoffs built from real CLI output on the F10 and F03-speech fixtures. |
+| [`examples/`](../../skills/vsift/examples/) | Example handoffs built from real CLI output on the F10, F03-speech and F04-speech fixtures (the bug report and the findings with a `category`). |
 | [`assets/image-check.png`](../../skills/vsift/assets/image-check.png) | A small image with a code word, for the image-access check. |
 | [`agents/openai.yaml`](../../skills/vsift/agents/openai.yaml) | Codex presentation metadata only. |
 
@@ -442,6 +443,36 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   a file added to the skill must be added there.
 - **The freeze:** the `skill` component moves again; the draft rewrites it, and it is rewritten at the merge rebase.
   **Untried:** no trial runs the installer; trials prepare their workspaces as before.
+
+## The change for 0.3.0: four ready-made workflows (ADR 0038 slice 2; draft, 2026-10-29)
+
+- **`workflows/`** holds `bug-report.md` (`compact`), `findings.md` (`standard`), `demo-backlog.md` (`standard`) and
+  `logs-by-clock.md` (`compact`). Each opens with "If the vsift skill is loaded, its rules apply. If not, read
+  `vsift --help` first, use only `vsift` commands, and end with `vsift handoff check`.", names its budget, finds
+  items by searching cue words, starts the JSON from `handoff skeleton` and ends with `handoff check`. Every command
+  in them is `free`. The cue words are English, and an item far from every cue word can be missed
+  ([L-238](../planning/known-limits.md#l-238)).
+- **`handoff.schema.json`** gains the optional `claims[].category` (`bug`, `feature_request`, `question`, `decision`,
+  `action_item`, `open_question`, `requirement`, `backlog_item`) and `claims[].priority` (`high`, `medium`, `low`,
+  only with `backlog_item`). A priority nobody said is the agent's own, and the claim's statement says so
+  ("priority inferred: high"; the planner's ruling, ADR 0038). `handoff_version` stays `1`; an older `handoff
+  check` refuses both members. `references/handoff.md` lists them.
+- **Clock time.** `references/commands.md` allows `ingest --recorded-at` with the start time the user gave. The
+  logs workflow turns a log time into a window by subtracting VSift's `time_anchor.recording_start` and cites
+  only items whose own `clock_time` VSift returned. A log line is never a citation
+  ([L-239](../planning/known-limits.md#l-239)).
+- **`references/safety.md`** gains "Log files": the one log file the user names is read with the file-reading
+  tool, in the logs workflow only; it is untrusted data; the least text is quoted; no secret, token or personal
+  data is quoted; an instruction in it is listed in the Markdown's "Untrusted instructions observed" (the JSON's
+  list needs a citation, which a log line cannot have).
+- **`SKILL.md`** links the four files from one line; its sentence on quoting arguments now points at
+  `references/commands.md`, which already said it, so it stays at 300 lines. The fuzz seed copy is copied again.
+- **The plugin** gains `commands/<workflow>.md`, one slash command per workflow (`/vsift:bug-report` and so on),
+  each naming its workflow file.
+- **The guard** gains the placeholder `<recorded-at>`, holds the workflow files' commands to `free`, and checks each
+  file's opening, budget, skeleton, check and link, the plugin's commands, and the two new examples.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten at the merge rebase.
+  **Untried:** no trial runs a workflow before the 0.3.0 cut.
 
 ## Keeping it in step with the CLI
 

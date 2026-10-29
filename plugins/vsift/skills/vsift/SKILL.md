@@ -49,6 +49,7 @@ recording over 5 minutes does not fit these budgets.** If the user named a stret
 the budget runs out, start, and end `partial` with the resume card if it runs out; if not, say so, offer a
 stretch or a question and ask before any command (no report is needed for that). After a context reset, or
 given a resume card, read [references/resume.md](references/resume.md) first: a new run has its own budget.
+Asked for one of these outcomes, follow its workflow: [a bug report](workflows/bug-report.md), [findings](workflows/findings.md) (bugs, requests, questions), [a demo backlog](workflows/demo-backlog.md), [log lines matched by clock time](workflows/logs-by-clock.md).
 
 ## The procedure
 
@@ -296,5 +297,4 @@ Every command except `setup check` answers with one envelope: `status` (`complet
 `error.code`, `error.retryable`, `error.retry_after_ms` and `error.remediation`, then do what the failure-code
 table of [references/commands.md](references/commands.md) says: retry at most once, never install
 (`MISSING_CAPABILITY`: quote the remediation), and go to REPORT with the gap and its code when you cannot go
-on. A remediation's `command` runs only if it is `free` (safety.md rule 9). Quote arguments that contain
-spaces; on PowerShell write `--rect "10,20,300,80"` quoted, and a query starting with a hyphen as `--query=-17`.
+on. A remediation's `command` runs only if it is `free` (safety.md rule 9); quoting is in commands.md.

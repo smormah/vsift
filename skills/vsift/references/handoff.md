@@ -79,6 +79,12 @@ Each claim has an `id` (`c1`, `c2`, ...), the `section` it belongs to, and:
   value at that time; a value shown at another time ("changed from 5") is a claim of
   its own, with its own evidence.
 
+A workflow's claim may add two members (its workflow file says which): `category`,
+what kind of item it is (`bug`, `feature_request`, `question`, `backlog_item` and so on), and,
+only with `backlog_item`, `priority` (`high`, `medium` or `low`). A priority the recording does
+not state is your own: say so in the statement ("priority inferred: high"). A bug report uses
+neither. A VSift before 0.3.0 refuses both members.
+
 **A claim states only what its own citations show or say.** Every name, number,
 identifier or quoted word in a statement is shown or said by evidence that same claim
 cites; evidence another claim cites does not count. When a claim joins facts from two
@@ -133,6 +139,8 @@ other word is accepted, even one that means the same (`image` is not a gap kind:
 | `claims[].kind` | `observed`, `inferred`, `reported` |
 | `claims[].support` | `supported`, `partially_supported`, `unsupported`, `contradicted` |
 | `claims[].certainty` | `high`, `medium`, `low` |
+| `claims[].category` | `bug`, `feature_request`, `question`, `decision`, `action_item`, `open_question`, `requirement`, `backlog_item` |
+| `claims[].priority` | `high`, `medium`, `low` |
 | `citations[].type` | `transcript_segment`, `frame`, `crop`, `audio` |
 | `gaps[].kind` | `transcript`, `visual`, `audio`, `image_access`, `dependency`, `budget`, `lifecycle` |
 | `gaps[].reason` | `untranscribed_range`, `not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`, `candidate_budget_exhausted`, `frame_budget`, `pixel_budget`, `byte_budget`, `session_evidence_budget`, `cancelled`, `transcript_unavailable`, `image_access_unavailable`, `image_unreadable`, `not_inspected`, `budget_exhausted`, `needs_user_authority`, `session_expired`, `not_audible_to_agent` |

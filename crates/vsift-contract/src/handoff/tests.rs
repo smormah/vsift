@@ -94,6 +94,8 @@ fn the_skills_examples_and_report_skeleton_pass() -> TestResult {
     for name in [
         "examples/supplied-transcript.handoff.json",
         "examples/no-transcript-no-images.handoff.json",
+        "examples/bug-report.handoff.json",
+        "examples/findings.handoff.json",
     ] {
         let value: Value = serde_json::from_str(&fs::read_to_string(skill_file(name))?)?;
         let check = checker.check_value(value);
@@ -102,6 +104,53 @@ fn the_skills_examples_and_report_skeleton_pass() -> TestResult {
     let skill = fs::read_to_string(skill_file("SKILL.md"))?;
     let check = checker.check_report(&skill[skill.find("### 7. REPORT").ok_or("REPORT")?..]);
     assert!(check.is_valid(), "{:?}", check.errors());
+    Ok(())
+}
+
+/// ADR 0038 decision D2: a workflow's claim may name its `category`, and a
+/// `backlog_item` its `priority`; a priority on any other claim, or on a claim
+/// without a category, is refused (the planner's ruling of 2026-10-28). An
+/// inferred priority has no member of its own: the statement says so.
+#[test]
+fn a_priority_is_allowed_only_on_a_backlog_item() -> TestResult {
+    let checker = HandoffChecker::new()?;
+    let with = |members: Value| -> Result<Vec<HandoffRule>, Box<dyn std::error::Error>> {
+        let mut draft = handoff();
+        let claim = draft
+            .pointer_mut("/claims/0")
+            .and_then(Value::as_object_mut)
+            .ok_or("claim")?;
+        for (name, value) in members.as_object().ok_or("members")? {
+            claim.insert(name.clone(), value.clone());
+        }
+        Ok(rules_of(checker.check_value(draft).errors()))
+    };
+    for accepted in [
+        json!({"category": "bug"}),
+        json!({"category": "feature_request"}),
+        json!({"category": "backlog_item"}),
+        json!({"category": "backlog_item", "priority": "high"}),
+        json!({"category": "backlog_item", "priority": "low",
+            "statement": "Export fails with error E-409; priority inferred: low."}),
+    ] {
+        assert_eq!(with(accepted.clone())?, Vec::new(), "{accepted}");
+    }
+    assert_eq!(
+        with(json!({"priority": "high"}))?,
+        [HandoffRule::MemberMissing]
+    );
+    assert_eq!(
+        with(json!({"category": "bug", "priority": "high"}))?,
+        [HandoffRule::ValueNotAllowed]
+    );
+    assert_eq!(
+        with(json!({"category": "backlog_item", "priority": "inferred"}))?,
+        [HandoffRule::ValueNotAllowed]
+    );
+    assert_eq!(
+        with(json!({"category": "feature"}))?,
+        [HandoffRule::ValueNotAllowed]
+    );
     Ok(())
 }
 
