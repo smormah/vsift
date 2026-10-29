@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod admission;
+mod agent_skill;
 mod asr;
 mod checkpoint;
 mod evidence;
@@ -34,6 +35,11 @@ pub use admission::{
     MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, QUEUED_ADMISSION_POLL, QUEUED_YIELD_POLL,
     QUEUED_YIELD_WAIT, RecognitionShare, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
     leaving_one_free, recognizer_threads,
+};
+pub use agent_skill::{
+    AgentClient, ReplacePolicy, SKILL_FOLDER_NAME, SKILL_MAIN_FILE, SkillBundle, SkillBundleError,
+    SkillEntryName, SkillEntryNameError, SkillFile, SkillFolderState, SkillInstallRefusal,
+    SkillInstallStep, SkillLayout, SkillScope, install_step, names_the_vsift_skill,
 };
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,

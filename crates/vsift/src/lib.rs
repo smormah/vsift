@@ -116,6 +116,7 @@ mod screen_text;
 mod search;
 mod sessions;
 mod setup;
+mod skill;
 mod transcripts;
 mod verification;
 mod watch;
@@ -173,12 +174,14 @@ pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
     SetupCheckRequest, SetupPlanRequest,
 };
+pub use skill::{SkillError, SkillTarget};
 pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
     Cancellation, MediaToolSelection, MediaToolVerificationRequest, ModelSelection,
 };
 /// Where a stream of a `prepare` job is (`job status`, ADR 0033).
 pub use vsift_application::StreamPhase;
+pub use vsift_domain::{AgentClient, ReplacePolicy};
 pub use vsift_domain::{
     EVIDENCE_ARTIFACTS_PER_FRAME, MAX_WATCH_FRAMES, frames_that_fit, readable_time,
 };

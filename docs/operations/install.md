@@ -175,9 +175,14 @@ wrote that way.
 - **AI agents on Windows** should run `vsift` from PowerShell, Git Bash or the native
   `vsift.exe`, not through `cmd.exe`.
 
-**Where the skill is.** Under the global package folder: `npm root --global` (or `pnpm
-root --global`) names the folder that holds `vsift-cli/skills/vsift/`. Copy it as
-[`../agents/skill.md`](../agents/skill.md) describes.
+**Where the skill is.** Since `0.3.0`, `vsift skill install --client <name>` copies the skill
+this release was built with into the folder that client reads (`claude-code` for
+`.claude/skills/`; `codex`, `copilot`, `cursor`, `gemini-cli`, `opencode`, `goose` or `amp` for
+`.agents/skills/`), for you or, with `--project <folder>`, for one project; `vsift skill status`
+shows what is there. It never replaces anything without `--replace`, and never anything that is
+not a vsift skill ([`../agents/skill.md`](../agents/skill.md)). The package itself runs no install
+script. The folder is also under the global package folder: `npm root --global` (or `pnpm root
+--global`) names the folder that holds `vsift-cli/skills/vsift/`, to copy by hand.
 
 **Registries and lockfiles.** A registry mirror must serve both `vsift-cli` and the
 `@vsift` scope. If an install from a lockfile made on another kind of machine leaves this

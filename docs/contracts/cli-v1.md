@@ -88,6 +88,9 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
 | `handoff check` | Check an agent's draft report against the skill's handoff schema and rules, answering `data.valid` with typed findings that never repeat the draft | Implemented in P13 PR 5 |
 | `handoff skeleton` | Print a valid handoff that states nothing yet, with one open session's ids filled in, for an agent to fill in instead of building the JSON from a template | Implemented in 0.3.0 (ADR 0038) |
+| `skill install` | Copy the skill this binary was built with into the folders the named AI coding clients read, never replacing anything without `--replace` | Implemented in 0.3.0 (ADR 0038) |
+| `skill status` | Report what is at each skill folder, read without following a link, and the skill's files | Implemented in 0.3.0 (ADR 0038) |
+| `skill show` | Print one text file of the embedded skill, by its manifest name | Implemented in 0.3.0 (ADR 0038) |
 | `watch` (also `vsift <video>`) | A person's action: a readable transcript, subtitles and the screen changes with their frames, written beside the video or into `--output`, never replacing a file; every output names the video's SHA-256, and the frame list every frame's | 0.3.0 (ADR 0037); first pull request: files written once at the end, ADR 0033's live line as progress |
 
 ### P05 disposable sessions and bundles
@@ -3027,7 +3030,7 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
 ### 0.3.0 `handoff skeleton`
 
 `vsift handoff skeleton <session> --question <text>` prints a handoff that is valid but states
-nothing yet, written by VSift from the session's committed records ([ADR
+nothing yet, written by VSift from the session's records ([ADR
 0038](../decisions/0038-ai-integration-without-mcp.md) section 1). It exists because an agent that
 built the handoff JSON from a text template, and filled the template in with a case-insensitive
 search and replace, corrupted the JSON without any error: the replace also rewrote member names
@@ -3065,6 +3068,51 @@ that spelled the placeholder. The skeleton removes the template. Additive: a new
   `growing_read_cli_contract` (while a job publishes an open revision, the skeleton names the revision
   `transcript get` cites, and a handoff citing that read passes `handoff check --session`, also after
   the next part).
+
+### 0.3.0 `skill install`, `skill status` and `skill show`
+
+The `skill` namespace ([ADR 0038](../decisions/0038-ai-integration-without-mcp.md) section 3) puts the
+agent skill where AI coding clients look for it, in one command. Additive: three command identifiers
+(`skill.install`, `skill.status`, `skill.show`) the schemas' pattern already admits; no new failure code.
+The skill is embedded in the binary at build time (`vsift_contract::SKILL_FILES`, held equal to
+`skills/vsift/` by a test), so what is installed is what this release was built and tested with.
+
+- **`vsift skill install --client <client> [--client ...] [--project <folder>] [--replace]`.** `<client>`
+  is `claude-code` (`.claude/skills/vsift/`) or `codex`, `copilot`, `cursor`, `gemini-cli`, `opencode`,
+  `goose` or `amp` (`.agents/skills/vsift/`), below the home folder (`USERPROFILE` on Windows, `HOME`
+  elsewhere) or below `--project`, which is canonicalised and must already be a folder (otherwise
+  `INVALID_ARGUMENT`). Each folder is written once, in the order `.claude`, `.agents`. Per folder:
+  nothing there is `installed` (staged in a fresh `.vsift-skill-stage-*` folder beside it, every file
+  read back and compared, then renamed into place); this release's skill byte for byte is `unchanged`;
+  a different `vsift` skill (its `SKILL.md` front matter names `vsift`) or a link is `refused` without
+  `--replace` and `replaced` with it, as a swap: the old folder or link is renamed aside under a
+  `.vsift-skill-old-*` name, the staged folder renamed into place, and only then the old one removed (a
+  link only as a link); if the second rename fails the old one is renamed back. A file or a folder that is
+  not a `vsift` skill is always `refused` (`not_vsift`), as is a place whose `.claude`, `.agents` or
+  `skills` folder is a link or not a folder (`parent_not_folder`). No step follows a symbolic link or a
+  junction. `data` per `schemas/v1/skill-install-data.schema.json`: `scope` (`user` or `project`),
+  `skill_digest` (SHA-256 over the skill's files) and one entry per folder with its `layout`, its `path`
+  relative to the base, the `clients` that read it, `outcome`, `replaced` and `refusal`. **Any refusal
+  makes the result `failed` with `INVALID_ARGUMENT`** (exit 2; the planner's D3, as ADR 0037 refuses an
+  existing output), the data kept as the failure's data and a remediation naming `--replace`; other
+  folders of the same call keep their outcome. A disk failure is `STORAGE_IO`, a written file that does
+  not read back `INTEGRITY_FAILURE`; the failed folder holds what it held. No result names an absolute
+  path. The frozen example is `schemas/v1/examples/skill-install.json`.
+- **`vsift skill status [--project <folder>]`**, read only: per folder its `state` (`absent`, `current`,
+  `different`, `link`, `not_vsift`, `parent_not_folder`), and `files`, the skill's file names. Schema
+  `skill-status-data.schema.json`, example `skill-status.json`.
+- **`vsift skill show <entry>`** prints one text file of the embedded skill (`entry` and `text`; schema
+  `skill-show-data.schema.json`, example `skill-show.json`). `<entry>` is a manifest name as `skill status`
+  lists it; a path, a folder, a name with `..` or the PNG is `INVALID_ARGUMENT`, and nothing on the disk is
+  read. Without `--json` it prints the text.
+- **The skill** classes `skill install` `never` and `skill status` and `skill show` `free`.
+- **Tests.** The domain catalogue and install decision (`agent_skill` tests), the use case over a fake
+  (`vsift-application`), the filesystem folders (`skill_folders` tests: create, different, foreign,
+  swap, a folder that appeared, a link and a linked parent on Unix, a parent that is a file, the project
+  folder), the embedded skill equal to the folder and `show` refusing paths (`vsift-contract` unit
+  tests), the frozen examples (`skill_contract`), and through the binary with a temporary home
+  (`skill_cli_contract`: two clients sharing a folder, unchanged, refused and replaced, a foreign folder,
+  `--project`, `show` refusing `../`, an absolute path and the image, the human text).
 
 ### P13 `setup install`
 

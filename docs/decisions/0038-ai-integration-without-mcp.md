@@ -514,3 +514,26 @@ closed, expired or unknown session fails as a transcript read of it does.
   `a_skeleton_names_the_session_and_passes_the_check_unfilled` (through the binary) and
   `a_skeleton_matches_its_frozen_example_and_the_handoff_schema`.
 - **No register entry:** none of L-238 to L-242 limits this slice.
+
+## Implementation note, 2026-10-29 (slice 3: `skill install`, `status`, `show`)
+
+Built as section 3 and conditions 1 and 2 say, with these narrowings and additions:
+
+- **`replaced` names what was there** (`different` or `link`), not its digest; `skill_digest` names this
+  release's skill.
+- **A new state, `parent_not_folder`:** when `.claude`, `.agents` or their `skills` folder is a link, a
+  junction or a file, nothing below it is read and the folder is always refused, also with `--replace`
+  (condition 1: never follow a link at any step).
+- **`status` reports both folders of one scope** (yours, or `--project`'s), not both scopes at once.
+- **`show` is pure:** it reads only the embedded manifest (condition 2), refusing `../`, absolute paths,
+  folders and the PNG; nothing on the disk is read.
+- **What a failure leaves.** A failed stage or create removes only its `.vsift-skill-stage-*` folder. If the
+  second rename of a swap fails, the old folder is renamed back; should that rename fail too, it keeps its
+  `.vsift-skill-old-*` name and is never removed. After a successful swap, the old folder is removed
+  best-effort; a leftover keeps that name.
+- **Layers:** the catalogue, the states and the install decision are domain values (`agent_skill`); the use
+  case and the `SkillFolders` port are the application's; `FilesystemSkillFolders` does the disk work; the
+  engine's facade (`Engine::install_skill`, `Engine::skill_status`) returns contract data with its own
+  `SkillError`, so `EngineError` is unchanged; the CLI composes. No new failure code.
+- **Register:** L-241 (the eight clients as their documentation gave them on 2026-10-28).
+

@@ -1,0 +1,42 @@
+{
+  "command": "skill.install",
+  "coverage": null,
+  "data": {
+    "folders": [
+      {
+        "clients": [
+          "claude-code"
+        ],
+        "layout": "claude",
+        "outcome": "installed",
+        "path": ".claude/skills/vsift",
+        "refusal": null,
+        "replaced": null
+      },
+      {
+        "clients": [
+          "codex",
+          "copilot",
+          "cursor",
+          "gemini-cli",
+          "opencode",
+          "goose",
+          "amp"
+        ],
+        "layout": "agents",
+        "outcome": "replaced",
+        "path": ".agents/skills/vsift",
+        "refusal": null,
+        "replaced": "different"
+      }
+    ],
+    "scope": "user",
+    "skill_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

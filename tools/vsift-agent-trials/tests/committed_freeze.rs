@@ -60,7 +60,12 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 development freeze, written at the merge rebase** (W9, ADR 0038 slice 1, 2026-10-29): `references/commands.md`
+/// **0.3.0 development freeze, written at the merge rebase** (W9, ADR 0038 slice 3, 2026-10-29): `references/commands.md`
+/// classes `vsift skill install` as never and `vsift skill status` and `vsift skill show` as free, so the `skill`
+/// component moved `5739c914...` to `60c086a7...` and this digest `928f9d7b...` to the value below; the other six
+/// components are unchanged.
+///
+/// The freeze before it, also written at the merge rebase (W9, ADR 0038 slice 1, 2026-10-29): `references/commands.md`
 /// classes `vsift handoff skeleton` as free and `references/handoff.md` says to start the JSON from it, so the `skill`
 /// component moved `0c25b263...` to `5739c914...` and this digest `f6835cb5...` to the value below; the other six
 /// components are unchanged.
@@ -134,7 +139,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "928f9d7bd2486e79f4cba237d87e5505736eb90dfceb16f230f4e8c17fda5c7e";
+const CUT_FREEZE_SHA256: &str = "12a93ac31a5dcc5e7daacc7b1745a1b53328ed7252d13fe09444a0ba01729e23";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

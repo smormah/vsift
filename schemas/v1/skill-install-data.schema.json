@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/skill-install-data.schema.json",
+  "title": "VSift skill.install data v1",
+  "description": "The data of a skill.install result (0.3.0, ADR 0038 section 3): what copying this release's embedded skill did at each skill folder the named clients read, one entry per folder (clients that share a folder have it written once). installed: written where nothing was, staged beside the folder, every file read back and compared, then renamed into place; unchanged: the same bytes were already there; replaced (only with --replace): swapped in for a different vsift skill or a link, named in replaced; refused: left as it was, the reason in refusal. A refused folder makes the result failed with INVALID_ARGUMENT, and this data is kept as the failure's data. No step follows a symbolic link or junction.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scope",
+    "skill_digest",
+    "folders"
+  ],
+  "properties": {
+    "scope": {
+      "enum": [
+        "user",
+        "project"
+      ],
+      "description": "user: below the person's home folder; project: below the folder --project named. No result names an absolute path."
+    },
+    "skill_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 over this release's skill: each file in name order as its name, a NUL, its length in decimal, a NUL and its bytes."
+    },
+    "folders": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layout",
+          "path",
+          "clients",
+          "outcome",
+          "replaced",
+          "refusal"
+        ],
+        "properties": {
+          "layout": {
+            "enum": [
+              "claude",
+              "agents"
+            ]
+          },
+          "path": {
+            "enum": [
+              ".claude/skills/vsift",
+              ".agents/skills/vsift"
+            ]
+          },
+          "clients": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "claude-code",
+                "codex",
+                "copilot",
+                "cursor",
+                "gemini-cli",
+                "opencode",
+                "goose",
+                "amp"
+              ]
+            }
+          },
+          "outcome": {
+            "enum": [
+              "installed",
+              "unchanged",
+              "replaced",
+              "refused"
+            ]
+          },
+          "replaced": {
+            "enum": [
+              null,
+              "different",
+              "link"
+            ]
+          },
+          "refusal": {
+            "enum": [
+              null,
+              "different_without_replace",
+              "link_without_replace",
+              "not_vsift",
+              "parent_not_folder"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "replaced"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "replaced": {
+                  "enum": [
+                    "different",
+                    "link"
+                  ]
+                },
+                "refusal": {
+                  "const": null
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "replaced": {
+                  "const": null
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "outcome": {
+                  "const": "refused"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "refusal": {
+                  "enum": [
+                    "different_without_replace",
+                    "link_without_replace",
+                    "not_vsift",
+                    "parent_not_folder"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "refusal": {
+                  "const": null
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
