@@ -22,6 +22,9 @@ keeps `vsift ingest`. The two switch independently.
 **At the switch, also:** record the demo and the walk-through again from the published release, with its version
 in the label (`docs/assets/readme/README.md` says how), and redraw `roadmap.svg`.
 
+**When the last section is pasted,** delete this page, or move it to `docs/history/` if something still points
+at it. A section that did not ship goes with it: this page must not outlive its purpose.
+
 ## The three commands
 
 ````markdown

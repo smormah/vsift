@@ -53,7 +53,7 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <rect x="900" y="412" width="270" height="74" rx="12" fill="#13233a" stroke="#2dd4bf" stroke-opacity="0.8" stroke-width="1.5"/>
 <circle cx="920" cy="436" r="4.5" fill="#2dd4bf"/>
 <text x="932" y="441" font-size="15" class="s t b" text-anchor="start" >Cited handoff</text>
-<text x="916" y="463" font-size="12.5" class="s mu" text-anchor="start" >every statement points at an id,</text>
+<text x="916" y="463" font-size="12.5" class="s mu" text-anchor="start" >each claim in its block cites an id,</text>
 <text x="916" y="481" font-size="12.5" class="s mu" text-anchor="start" >a time and the original frame</text>
 <path d="M224 155 C243 155 243 186 260 186" fill="none" stroke="#9fb2c8" stroke-width="1.6" marker-end="url(#ah)"/>
 <path d="M224 253 C243 253 243 206 260 206" fill="none" stroke="#9fb2c8" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#ah)"/>

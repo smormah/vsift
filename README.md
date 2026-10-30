@@ -232,7 +232,7 @@ Each frame records the time you asked for and the time you got, and carries a ha
 | ✂️ **Brief answers for assistants** | `--view brief` on `transcript get`, `search` and `candidates` keeps each item to what is new in it, so an assistant reads more of a recording in less of its context. |
 | ✅ **Checked handoffs** | `vsift handoff check` validates an assistant's report before it is sent: closed vocabulary, citations that exist in the session, links and paths handled safely. |
 | 🧰 **Built for people and programs** | Readable text for people, versioned JSON for programs and assistants, typed errors that say how to fix the call, and an agent skill for Claude Code and Codex. |
-| 🔒 **Local and disposable** | Nothing is uploaded. Investigation sessions expire unless you retain them; cleanup is explicit and contained. |
+| 🔒 **Local and disposable** | VSift itself uploads nothing. Investigation sessions expire unless you retain them; cleanup is explicit and contained. |
 | ♻️ **Recoverable long jobs** | Long transcriptions survive interruptions; durable sessions survive an OS crash on Ubuntu 24.04 with local ext4. |
 
 ## Just want a transcript?
@@ -254,7 +254,7 @@ Local transcription needs whisper.cpp and a model; `vsift setup check` says whet
   <img src="docs/assets/readme/pipeline.svg" alt="Inside a dashed boundary labelled on your machine, VSift uploads nothing: a local video and an optional transcript go into vsift ingest, which opens a disposable session. The session yields speech (transcript and search) and screen changes (visual candidates), which lead to frames, crops and audio with hashes. Outside the boundary, you or your AI assistant read that cited evidence; what an assistant does next is up to it. A draft report goes back through vsift handoff check, which refuses a claim with no evidence behind it, and comes out as a cited handoff." width="100%">
 </p>
 
-VSift doesn't reinvent video decoding or speech recognition. It uses FFmpeg and whisper.cpp for that, as separate processes. What VSift adds is the evidence layer: disposable sessions, evidence ids and hashes, transcript search, screen-change detection, frames and crops on demand, and a check that every claim in a report points at evidence that exists.
+VSift doesn't reinvent video decoding or speech recognition. It uses FFmpeg and whisper.cpp for that, as separate processes. What VSift adds is the evidence layer: disposable sessions, evidence ids and hashes, transcript search, screen-change detection, frames and crops on demand, and a check that every claim in a report's handoff block cites evidence that exists in the session.
 
 VSift itself uploads nothing. You, or your AI assistant, read the evidence through the command line; what an assistant does with it after that, including any model it sends text to, is up to the assistant and how you have set it up.
 
