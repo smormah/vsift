@@ -1,0 +1,10 @@
+Clocks on the screen of session ses_0123456789abcdef0123456789abcdef
+State: complete
+Read by this call: 12 frames, 0 reads still to make
+Clock c1 (clock, 24_hour): 58 reads, 00:00:00.000000 to 00:10:00.000000, known to 00:00:00.500000, zone unknown
+  gap g1 between 00:05:00.000000 and 00:05:10.000000, about 00:07:17.000000: changes no clock time until a person accepts it
+  Left and returned, 00:03:00.000000 to 00:03:50.000000, 6 reads: a misread or another clock's turn, not known which
+Observed, not applied: c1 against operator fits +01:00 (only the user confirms a zone)
+Set aside: 31 times that never moved, 0 that moved unlike a clock
+
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z

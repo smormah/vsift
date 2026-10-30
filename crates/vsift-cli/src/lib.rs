@@ -6,6 +6,7 @@ mod batch;
 #[cfg(test)]
 mod build_identity;
 mod candidates;
+mod clocks;
 mod command;
 mod config;
 mod door;
@@ -53,7 +54,7 @@ use vsift::{
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
-    CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
+    CANDIDATE_CURSOR_REMEDIATION, CLOCK_RULES_REMEDIATION, CommandName, ConfiguredModelResponse,
     ConfiguredSelectionResponse, DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream,
     IDEMPOTENCY_CONFLICT_REMEDIATION, ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION,
     JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
@@ -115,6 +116,7 @@ const fn is_long_running(command: &Command) -> bool {
         | Command::Watch(_)
         | Command::Candidates(_)
         | Command::Ocr(_)
+        | Command::Clocks(_)
         | Command::Frame(_)
         | Command::Crop(_)
         | Command::Audio(_) => true,
@@ -179,6 +181,7 @@ const fn operation_name(command: &Command) -> CommandName {
         Command::Transcript(arguments) => arguments.command.operation_name(),
         Command::Search(_) => CommandName::Search,
         Command::Candidates(_) => CommandName::Candidates,
+        Command::Clocks(_) => CommandName::Clocks,
         Command::Ocr(arguments) => match arguments.command {
             Some(OcrCommand::Search(_)) => CommandName::OcrSearch,
             None => CommandName::Ocr,
@@ -663,6 +666,10 @@ where
             let result = ocr::search(&engine, arguments);
             write_session_result(&mut writer, mode, CommandName::OcrSearch, result)
         }
+        Command::Clocks(arguments) => {
+            let result = clocks::clocks(&engine, arguments, &cancellation).await;
+            write_session_result(&mut writer, mode, CommandName::Clocks, result)
+        }
         Command::Ocr(arguments) => {
             let result = ocr::ocr(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Ocr, result)
@@ -1059,6 +1066,7 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
+        EngineError::Clocks(_) => Some(CLOCK_RULES_REMEDIATION.to_owned()),
         EngineError::Ocr(OcrError::RunnerUnavailable) => Some(OCR_RUNNER_REMEDIATION.to_owned()),
         EngineError::Ocr(OcrError::Cursor(_)) => Some(OCR_SEARCH_CURSOR_REMEDIATION.to_owned()),
         EngineError::Ocr(OcrError::Failed(_) | OcrError::Stopped(ScreenTextStop::Engine(_))) => {

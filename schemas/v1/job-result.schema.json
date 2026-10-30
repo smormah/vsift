@@ -162,7 +162,8 @@
         "no_work",
         "path_outside_input_root",
         "duplicate_operation_id",
-        "workspace_not_durable"
+        "workspace_not_durable",
+        "invalid_recorded_at"
       ]
     },
     "retry_after_ms": {

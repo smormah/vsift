@@ -58,9 +58,9 @@ use vsift_application::{
 };
 use vsift_contract::{
     BundleSourceInclusion, FreeSpaceReserve, LifecycleResponse, MAX_REQUEST_DEADLINE_MS, Readiness,
-    RequestDurability, RequestFailure, RequestRejection, ResourceLimits, ResultOrigin, StepOutputs,
-    StepResult, StepTiming, WorkControls, WorkFailure, WorkRequest, WorkResult, WorkResultParts,
-    WorkStep, WorkStepKind, WorkTarget, WorkerIsolation,
+    RecordedAtInput, RequestDurability, RequestFailure, RequestRejection, ResourceLimits,
+    ResultOrigin, StepOutputs, StepResult, StepTiming, WorkControls, WorkFailure, WorkRequest,
+    WorkResult, WorkResultParts, WorkStep, WorkStepKind, WorkTarget, WorkerIsolation,
 };
 use vsift_domain::{
     ADMISSION_RETRY_AFTER, AdmissionWait, CoverageGapReason, DurabilityRequirement, FailureCode,
@@ -381,7 +381,9 @@ impl Engine {
             .as_ref()
             .is_some_and(|record| !record.steps.is_empty());
         match request.target() {
-            WorkTarget::Ingest { source, transcript } if !ingest_recorded => {
+            WorkTarget::Ingest {
+                source, transcript, ..
+            } if !ingest_recorded => {
                 let root = open_input_root(&run.input_root)?;
                 root.open_file(source.as_str()).map_err(Refusal::from)?;
                 if let Some(transcript) = transcript {
@@ -807,7 +809,12 @@ impl Engine {
         session: &SessionId,
     ) -> Result<StepDone, StepError> {
         let run = context.run;
-        let WorkTarget::Ingest { source, transcript } = run.request.target() else {
+        let WorkTarget::Ingest {
+            source,
+            transcript,
+            recorded_at,
+        } = run.request.target()
+        else {
             return Err(EngineError::JobInvariant.into());
         };
         // The copy's admission first: a busy root is then retried before
@@ -839,7 +846,7 @@ impl Engine {
                     RequestDurability::Ephemeral => DurabilityRequirement::Ephemeral,
                 },
                 session_id: Some(session.clone()),
-                recorded_at: None,
+                recorded_at: recorded_at.as_ref().map(RecordedAtInput::reading),
             })
             .await?;
         Ok(StepDone {

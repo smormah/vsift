@@ -264,6 +264,46 @@ impl FilesystemSessionStore {
         )
     }
 
+    /// Records what `clocks` found (ADR 0029 decision 18): the session's anchors
+    /// with those from the screen replaced, and its register of clocks. It waits
+    /// for no reader: a reader sees the generation before or the one after.
+    ///
+    /// # Errors
+    ///
+    /// Stale, closed or expired sessions conflict, contention is busy, and
+    /// anchors that change what the session opened with are refused.
+    pub fn publish_clocks(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        anchors: &TimeAnchors,
+        clocks: &[vsift_domain::RegisteredClock],
+        now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.revalidate_root()?;
+        let request = PublishSessionGenerationRequest::new(
+            session_id.clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_with_update(
+            &self.root,
+            self.admission_capacity,
+            &request,
+            LifecycleUpdate::SetClocks {
+                time_anchors: super::time_anchors::encode_time_anchors(anchors),
+                screen_clocks: super::time_anchors::encode_screen_clocks(clocks),
+                clock_segments: super::time_anchors::encode_clock_gaps(anchors.gaps()),
+                now: now_unix_seconds,
+            },
+            LifetimeHold::Shared,
+            &CommitHooks::new(),
+            Some(&self.verified_heads),
+        )
+    }
+
     /// Closes a session after claiming its exclusive lifetime lock.
     ///
     /// # Errors

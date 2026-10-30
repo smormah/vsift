@@ -104,6 +104,14 @@ bench = false
 required-features = ["libfuzzer"]
 
 [[bin]]
+name = "clock_face"
+path = "fuzz_targets/clock_face.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
 name = "ffprobe_metadata"
 path = "fuzz_targets/ffprobe_metadata.rs"
 test = false

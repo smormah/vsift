@@ -184,6 +184,9 @@ pub enum EngineError {
     Ocr(crate::screen_text::OcrError),
     /// A search over retained bundles was refused or cancelled (ADR 0035).
     BundleSearch(vsift_application::BundleSearchError),
+    /// A `clocks` statement named a clock or gap the session does not have, or
+    /// a zone that cannot apply (ADR 0029 decisions 13 and 16).
+    Clocks(vsift_domain::ClockStatementError),
     /// Building the visual index failed; nothing was committed.
     VisualIndexBuild(VisualIndexBuildError),
     /// No displayed frame satisfies the requested time, policy and tolerance
@@ -476,6 +479,7 @@ impl EngineError {
             )
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
+            | Self::Clocks(_)
             | Self::ArtifactDirectoryNotAbsolute
             | Self::JobNotResumable { .. }
             | Self::JobSessionNotOpen { .. }
@@ -897,6 +901,7 @@ impl fmt::Display for EngineError {
             Self::VisualIndexBuild(error) => error.fmt(formatter),
             Self::Ocr(error) => error.fmt(formatter),
             Self::BundleSearch(error) => error.fmt(formatter),
+            Self::Clocks(error) => error.fmt(formatter),
             Self::FrameNotSelected(error) => error.fmt(formatter),
             Self::EvidenceNotFound => {
                 formatter.write_str("the session has no evidence item with that identity")
@@ -998,6 +1003,7 @@ impl Error for EngineError {
             Self::VisualIndexBuild(error) => Some(error),
             Self::Ocr(error) => Some(error),
             Self::BundleSearch(error) => Some(error),
+            Self::Clocks(error) => Some(error),
             Self::FrameNotSelected(error) => Some(error),
             Self::InvalidNavigation(error) => Some(error),
             Self::EvidenceMedia(error) => Some(error),

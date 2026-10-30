@@ -60,7 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 development freeze, rewritten at W2's merge rebase** (ADR 0035, 2026-10-30): `references/commands.md`
+/// **0.3.0 draft freeze, rewritten for W3's draft; written again at its merge rebase** (ADR 0029, stage 2,
+/// 2026-10-30): `references/commands.md` classes `clocks` `explicit`, so the `skill` component moved `7bbc0f98...`
+/// to `80c3933f...` and this digest `cdfb205e...` to the value below; the other six components are unchanged.
+///
+/// The freeze before it: **0.3.0 development freeze, rewritten at W2's merge rebase** (ADR 0035, 2026-10-30): `references/commands.md`
 /// classes `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and this digest
 /// `78a332a2...` to the value below; the other six components are unchanged.
 ///
@@ -163,7 +167,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "cdfb205e0dcb96a2201e8e7c30947eb9385e1d24f4ef2a138c7f9cc713927d68";
+const CUT_FREEZE_SHA256: &str = "ba60a2fbe5682e99b47072d88b1dac6310a8b76e76cd0d920b96beb9e999a479";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

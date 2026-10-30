@@ -414,6 +414,118 @@ pub(crate) struct ScreenTextCoverage {
     pub(crate) candidates_complete: bool,
 }
 
+/// `clocks` data (`clocks-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClocksResult {
+    pub(crate) session_id: String,
+    pub(crate) state: String,
+    pub(crate) read_now: u64,
+    pub(crate) stopped: Option<String>,
+    pub(crate) reads_pending: u64,
+    pub(crate) clocks: Vec<ScreenClockView>,
+    pub(crate) observations: Vec<ClockObservation>,
+    pub(crate) conflicts: Vec<ClockConflictView>,
+    pub(crate) refused: ClockRefusedView,
+}
+
+/// One clock of a `clocks` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenClockView {
+    pub(crate) clock_id: Option<String>,
+    pub(crate) kind: String,
+    pub(crate) format: String,
+    pub(crate) reads: u64,
+    pub(crate) first_us: Option<u64>,
+    pub(crate) last_us: Option<u64>,
+    pub(crate) offset: Option<ClockOffsetView>,
+    pub(crate) confirmed_utc_offset: Option<String>,
+    pub(crate) rate: Option<ClockRateView>,
+    pub(crate) excursions: Vec<ClockExcursionView>,
+    pub(crate) excursions_total: u64,
+    pub(crate) stopped_brackets: Vec<ClockBracketView>,
+    pub(crate) freezes: Vec<ClockFreezeView>,
+    pub(crate) jumps: Vec<ClockJumpView>,
+}
+
+/// A clock's offset interval.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockOffsetView {
+    pub(crate) precision_us: u64,
+}
+
+/// A clock's rate over its longest stretch.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockRateView {
+    pub(crate) drift_us: i64,
+    pub(crate) differs: bool,
+}
+
+/// Reads that left a clock and returned.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockExcursionView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) reads: u64,
+}
+
+/// A rollover whose search an excursion or a freeze ended.
+#[derive(Debug, Deserialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The names are the published JSON"
+)]
+pub(crate) struct ClockBracketView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) width_us: u64,
+}
+
+/// A stretch a clock stood still.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockFreezeView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+}
+
+/// A jump in a clock's offset.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockJumpView {
+    pub(crate) kind: String,
+    pub(crate) gap_id: Option<String>,
+    pub(crate) before: ClockProofView,
+    pub(crate) after: ClockProofView,
+    pub(crate) jump_us: i64,
+}
+
+/// A frame that proves a claim.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockProofView {
+    pub(crate) time_us: u64,
+}
+
+/// An offset observation: an inference.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockObservation {
+    pub(crate) clock_id: String,
+    pub(crate) anchor: String,
+    pub(crate) fits: Vec<String>,
+}
+
+/// Something the clocks disagree about.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockConflictView {
+    pub(crate) kind: String,
+    pub(crate) clock_id: Option<String>,
+    pub(crate) other_clock_id: Option<String>,
+}
+
+/// Lines set aside.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockRefusedView {
+    pub(crate) stood_still: u64,
+    pub(crate) irregular: u64,
+}
+
 /// `ocr` data (`screen-text-data.schema.json`).
 #[derive(Debug, Deserialize)]
 pub(crate) struct ScreenTextResult {

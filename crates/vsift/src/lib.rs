@@ -100,6 +100,7 @@ mod asr;
 mod batch;
 mod bundle_search;
 mod candidates;
+mod clocks;
 mod engine;
 mod error;
 mod evidence;
@@ -131,6 +132,7 @@ pub use asr::{
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
 pub use bundle_search::{BundleSearchRequest, BundleSearchResults};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
+pub use clocks::{ClocksRequest, ClocksResults, ClocksState, DEFAULT_CLOCK_FRAMES};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, ManagedRootLocation,
     SessionRootLocation, UserConfigurationLocation,
@@ -296,6 +298,7 @@ pub use vsift_domain::{
     VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexId,
     VisualIndexProfile, VisualIndexWindow, VisualWindow, VisualWindowOutcome,
 };
+pub use vsift_domain::{ClockId, ClockStatementError, GapId};
 /// Search values that appear in this API.
 pub use vsift_domain::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchMatch,

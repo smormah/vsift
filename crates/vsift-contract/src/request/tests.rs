@@ -30,7 +30,10 @@ fn a_complete_request_decodes_to_typed_values() -> TestResult {
         request.deadline().map(RequestDeadline::as_millis),
         Some(600_000)
     );
-    let WorkTarget::Ingest { source, transcript } = request.target() else {
+    let WorkTarget::Ingest {
+        source, transcript, ..
+    } = request.target()
+    else {
         return Err("not an ingest target".into());
     };
     assert_eq!(source.as_str(), "clips/F01.mp4");

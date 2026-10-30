@@ -63,9 +63,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
-    DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
-    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, SourceOrigin,
-    StorageGeneration, TimeAnchors, WorkspacePolicy, WorkspaceRetention,
+    DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, RegisteredClock,
+    SessionArtifactKind, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
+    SourceOrigin, StorageGeneration, TimeAnchors, WorkspacePolicy, WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -417,6 +417,7 @@ pub struct SessionStatus {
     artifact_count: usize,
     artifact_bytes: u64,
     time_anchors: TimeAnchors,
+    screen_clocks: Vec<RegisteredClock>,
     origin: Option<SourceOrigin>,
 }
 
@@ -557,6 +558,17 @@ struct BundleManifest {
     source_included: bool,
     publication: String,
     artifacts: Vec<StoredArtifact>,
+    /// The session's anchors, written only when it has some, so a bundle
+    /// without them is written as before (ADR 0029 decision 20). A release
+    /// before 0.3.0 refuses a bundle that carries them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+    /// The clocks the session named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    screen_clocks: Vec<time_anchors::StoredScreenClock>,
+    /// The gaps those clocks showed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    clock_segments: Vec<time_anchors::StoredClockGap>,
 }
 
 impl MetadataVersion for BundleManifest {
@@ -621,6 +633,12 @@ impl SessionStatus {
         &self.time_anchors
     }
 
+    /// The clocks on the screen the session has named (ADR 0029 decision 18).
+    #[must_use]
+    pub fn screen_clocks(&self) -> &[RegisteredClock] {
+        &self.screen_clocks
+    }
+
     /// Where the source was fetched from (ADR 0028); `None` for a local
     /// file's copy.
     #[must_use]
@@ -648,6 +666,14 @@ enum LifecycleUpdate {
         now: u64,
     },
     Close,
+    /// What `clocks` found: the anchors with the screen's replaced, and the
+    /// session's register of clocks (ADR 0029 decision 18).
+    SetClocks {
+        time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+        screen_clocks: Vec<time_anchors::StoredScreenClock>,
+        clock_segments: Vec<time_anchors::StoredClockGap>,
+        now: u64,
+    },
     AddArtifact {
         artifact: StoredArtifact,
         now: u64,
@@ -1260,10 +1286,19 @@ struct StoredLifecycle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     workspace_retention_seconds: Option<u64>,
     /// The source's clock-time anchors (time anchoring, ADR 0029), written at
-    /// activation and carried unchanged; absent when there are none, so a
-    /// session without them is recorded exactly as before.
+    /// activation and carried; `clocks` replaces those from the screen. Absent
+    /// when there are none, so a session without them is recorded exactly as
+    /// before.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+    /// The clocks on the screen the session has named (ADR 0029 decision 18);
+    /// absent until `clocks` finds one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    screen_clocks: Vec<time_anchors::StoredScreenClock>,
+    /// The gaps those clocks showed, which divide the timeline into segments
+    /// (ADR 0029 decision 13); absent until one is found.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    clock_segments: Vec<time_anchors::StoredClockGap>,
     /// Where a fetched source came from (ADR 0028), written at activation
     /// and carried unchanged; absent for a local file's copy, so such a
     /// session is recorded exactly as before.

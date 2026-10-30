@@ -214,7 +214,9 @@ is release evidence by itself.
 diagnostics of one visual window through `parse_visual_samples` and the window
 analysis; the input is a frame count, a pixel seed and the diagnostics, and the target
 writes the frames itself), `visual_index_record`, `search_query` (query normalisation
-and matching over a query, a line feed and segment text), `frame_showinfo` (the
+and matching over a query, a line feed and segment text), `clock_face` (lines of
+on-screen text through the clock grammar, then the clock model and its rollover
+search), `frame_showinfo` (the
 single-frame and first-audio-sample diagnostics readers), `frame_listing` (a frame
 listing's diagnostics against a fixed 60 s window), `png_sequence` (the PNG sequence
 walker; the input is an image count, a width and height, then the output),

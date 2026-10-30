@@ -1,0 +1,190 @@
+{
+  "command": "clocks",
+  "coverage": {
+    "gaps": [],
+    "reasons": [],
+    "truncated": false
+  },
+  "data": {
+    "clocks": [
+      {
+        "clock_id": "c1",
+        "kind": "clock",
+        "format": "24_hour",
+        "unit": "minute",
+        "reads": 58,
+        "first_us": 0,
+        "last_us": 600000000,
+        "offset": {
+          "high_us": 50580750000,
+          "low_us": 50580250000,
+          "precision_us": 500000
+        },
+        "confirmed_utc_offset": null,
+        "rate": null,
+        "first": {
+          "pts": 0,
+          "region": {
+            "height": 14,
+            "width": 60,
+            "x": 1800,
+            "y": 1040
+          },
+          "time_us": 0
+        },
+        "excursions": [
+          {
+            "explanations": [
+              "misread",
+              "another_clock"
+            ],
+            "first": {
+              "pts": 4500,
+              "region": {
+                "height": 14,
+                "width": 60,
+                "x": 1800,
+                "y": 1040
+              },
+              "time_us": 180000000
+            },
+            "from_us": 180000000,
+            "last": {
+              "pts": 5750,
+              "region": {
+                "height": 14,
+                "width": 60,
+                "x": 1800,
+                "y": 1040
+              },
+              "time_us": 230000000
+            },
+            "reads": 6,
+            "to_us": 230000000
+          }
+        ],
+        "excursions_total": 1,
+        "stopped_brackets": [],
+        "freezes": [],
+        "jumps": [
+          {
+            "after": {
+              "pts": 7750,
+              "region": {
+                "height": 14,
+                "width": 60,
+                "x": 1800,
+                "y": 1040
+              },
+              "time_us": 310000000
+            },
+            "before": {
+              "pts": 7500,
+              "region": {
+                "height": 14,
+                "width": 60,
+                "x": 1800,
+                "y": 1040
+              },
+              "time_us": 300000000
+            },
+            "gap_id": "g1",
+            "jump_us": 437000000,
+            "kind": "gap",
+            "uncertainty_us": 750000
+          }
+        ]
+      }
+    ],
+    "conflicts": [],
+    "index": {
+      "engine": {
+        "detector_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "profile": "ppocrv5-latin-v1",
+        "recognizer_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "runner_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "runner_version": "0.1.0",
+        "runtime_version": "1.31.0"
+      },
+      "frames": 4,
+      "index_id": "sti_6acf6ced07743f5711fb499cdd6d43b7",
+      "lines": 4,
+      "revision": 1
+    },
+    "observations": [
+      {
+        "anchor": "operator",
+        "clock_id": "c1",
+        "fits": [
+          "+01:00"
+        ],
+        "inference": true,
+        "measured_us": 3600500000,
+        "uncertainty_us": 250000
+      }
+    ],
+    "read_now": 12,
+    "reads_pending": 0,
+    "refused": {
+      "irregular": 0,
+      "low_score": 0,
+      "places_past_bound": 0,
+      "several_times": 0,
+      "stood_still": 31,
+      "too_long": 0
+    },
+    "rules_version": 1,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "state": "complete",
+    "stopped": null,
+    "time_anchor": {
+      "anchors": [
+        {
+          "confidence": "exact",
+          "media_time_us": 0,
+          "source": "operator",
+          "time": {
+            "local": null,
+            "utc": "2026-10-21T13:03:00.000000Z",
+            "utc_offset": null
+          }
+        }
+      ],
+      "confidence": "exact",
+      "consistency": "single",
+      "recording_start": {
+        "local": null,
+        "utc": "2026-10-21T13:03:00.000000Z",
+        "utc_offset": null
+      },
+      "segments": [
+        {
+          "from_us": 0,
+          "segment": 0,
+          "to_us": 310000000
+        },
+        {
+          "adjusted_by_us": 0,
+          "clock_id": "c1",
+          "from_us": 310000000,
+          "gap_id": "g1",
+          "jump_us": 437000000,
+          "segment": 1,
+          "state": "detected",
+          "to_us": null,
+          "uncertainty_us": 750000
+        }
+      ],
+      "source": "operator"
+    }
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

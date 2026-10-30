@@ -35,9 +35,10 @@ use std::{
 
 use vsift_application::{
     DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineReading, EvidenceControl, EvidenceMediaError,
-    EvidenceStop, MAX_SCREEN_TEXT_FRAMES_PER_CALL, ReadScreenTextRequest, ScreenTextBuildError,
-    ScreenTextImage, ScreenTextReadError, ScreenTextReader, ScreenTextStop, SessionStorageError,
-    merge_screen_text, read_screen_text_within,
+    EvidenceStop, FrameExtractor, MAX_SCREEN_TEXT_FRAMES_PER_CALL, ReadScreenTextRequest,
+    ScreenTextBuildError, ScreenTextExtension, ScreenTextImage, ScreenTextReadError,
+    ScreenTextReader, ScreenTextStop, SessionStorageError, merge_screen_text,
+    read_screen_text_within,
 };
 use vsift_domain::{
     CandidateOmission, CursorError, DEFAULT_READ_PERIOD_MICROS, FailureCode,
@@ -74,6 +75,9 @@ pub const DEFAULT_OCR_THREADS: u16 = 2;
 pub const OCR_RUNNER_NAME: &str = "vsift-ocr-runner";
 /// The longest range one call plans: four hours, the longest source.
 const MAX_PLANNED_MICROS: u64 = 4 * 60 * 60 * 1_000_000;
+/// Most rounds one call reads in: a search of a 10 s bracket takes five, and
+/// `ocr` plans once.
+const MAX_READ_ROUNDS: usize = 8;
 
 /// A half-open source range to read, in microseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -338,6 +342,119 @@ impl std::error::Error for OcrError {
     }
 }
 
+/// What one reading call needs, whichever plan it follows.
+pub(crate) struct ReadCall<'a> {
+    pub(crate) store: &'a FilesystemSessionStore,
+    pub(crate) session: &'a SessionId,
+    /// The session's newest index.
+    pub(crate) previous: Option<ScreenTextIndex>,
+    pub(crate) status: vsift_infrastructure::SessionStatus,
+    /// The runner; `None` when the host supplies its own reader.
+    pub(crate) runner: Option<OcrRunner>,
+    pub(crate) max_frames: u16,
+    pub(crate) period: u64,
+    pub(crate) cancellation: ProcessCancellation,
+    pub(crate) now: u64,
+}
+
+/// What a reading call read and committed.
+pub(crate) struct ReadDone {
+    pub(crate) index: Option<ScreenTextIndex>,
+    pub(crate) extension: ScreenTextExtension,
+    pub(crate) read_now: usize,
+}
+
+/// What the rounds of one call start from.
+struct RoundsStart<'a> {
+    session_id: &'a SessionId,
+    source_id: &'a vsift_domain::SourceId,
+    previous: Option<&'a ScreenTextIndex>,
+    max_frames: u16,
+    revisions_left: usize,
+    period: u64,
+}
+
+/// Reads what `next` plans until it plans nothing, the budget is spent or a
+/// round stops early. Each round sees what the ones before it read, in memory:
+/// only the caller commits.
+async fn read_rounds<X, R, C, N>(
+    start: RoundsStart<'_>,
+    extractor: &X,
+    reader: &R,
+    control: &C,
+    next: &mut N,
+) -> Result<ScreenTextExtension, ScreenTextBuildError>
+where
+    X: FrameExtractor,
+    R: ScreenTextReader,
+    C: EvidenceControl,
+    N: FnMut(Option<&ScreenTextIndex>) -> Vec<ReadTarget>,
+{
+    let mut held = start.previous.cloned();
+    let mut total: Option<ScreenTextExtension> = None;
+    let mut left = start.max_frames;
+    for _ in 0..MAX_READ_ROUNDS {
+        let plan = next(held.as_ref());
+        if plan.is_empty() && total.is_some() {
+            break;
+        }
+        let extension = read_screen_text_within(
+            ReadScreenTextRequest {
+                session_id: start.session_id,
+                source_id: start.source_id,
+                profile: ScreenTextProfile::PpOcrV5LatinV1,
+                previous: held.as_ref(),
+                plan: &plan,
+                max_frames: left,
+                revisions_left: start.revisions_left,
+            },
+            extractor,
+            reader,
+            control,
+        )
+        .await?;
+        let read = u16::try_from(extension.frames.len()).unwrap_or(u16::MAX);
+        let stopped = extension.stop.is_some();
+        if let Some(merged) = merge_screen_text(held.as_ref(), &extension, start.period)? {
+            held = Some(merged);
+        }
+        total = Some(match total {
+            Some(earlier) => absorbed(earlier, extension),
+            None => extension,
+        });
+        left = left.saturating_sub(read);
+        if stopped || read == 0 || left == 0 {
+            break;
+        }
+    }
+    total.ok_or(ScreenTextBuildError::Index(ScreenTextError::InvalidFrames))
+}
+
+#[cfg(test)]
+#[path = "screen_text/rounds_tests.rs"]
+mod rounds_tests;
+
+/// One round's extension added to the rounds before it. A target of a later
+/// round may join a frame an earlier one read, which the index does not hold yet.
+fn absorbed(mut earlier: ScreenTextExtension, later: ScreenTextExtension) -> ScreenTextExtension {
+    for (pts, targets) in later.joined {
+        if let Some(frame) = earlier
+            .frames
+            .iter_mut()
+            .find(|frame| frame.frame.pts == pts)
+        {
+            frame.targets.extend(targets);
+        } else {
+            earlier.joined.push((pts, targets));
+        }
+    }
+    earlier.frames.extend(later.frames);
+    earlier.frames.sort_by_key(|frame| frame.frame.pts);
+    earlier.unresolved.extend(later.unresolved);
+    earlier.stop = later.stop;
+    earlier
+}
+
 struct CallControl {
     deadline: Instant,
     cancellation: ProcessCancellation,
@@ -434,21 +551,85 @@ impl Engine {
                 analysed_plan(&store, &request.session, requested, period, now)?
             }
         };
-        let call_deadline = Instant::now() + CALL_DEADLINE;
         let (previous, status) =
             store.read_screen_text_index(&request.session, self.now_unix_seconds()?)?;
-        let revisions_left =
-            store.screen_text_revisions_left(&request.session, self.now_unix_seconds()?)?;
-        let cancellation = request.cancellation.0.clone();
+        let mut once = Some(plan.clone());
+        let done = self
+            .read_in_rounds(
+                ReadCall {
+                    store: &store,
+                    session: &request.session,
+                    previous,
+                    status,
+                    runner,
+                    max_frames,
+                    period,
+                    cancellation: request.cancellation.0.clone(),
+                    now,
+                },
+                |_| once.take().unwrap_or_default(),
+            )
+            .await?;
+        let (index, extension, read_now) = (done.index, done.extension, done.read_now);
+        let now = self.now_unix_seconds()?;
+        let status = crate::sessions::published_status(&store, &request.session)?;
+        let coverage = ScreenTextCoverage {
+            awaiting_analysis,
+            ..ScreenTextCoverage::of(
+                &plan,
+                index
+                    .as_ref()
+                    .filter(|index| index.scope().provider == extension.scope.provider),
+            )
+        };
+        Ok(ScreenTextResults {
+            session: SessionSnapshot::observe(&status, now),
+            index,
+            range: searched,
+            plan,
+            coverage,
+            read_now,
+            stop: extension.stop,
+            visual_gaps,
+            period_micros: period,
+        })
+    }
+
+    /// Reads what `next` plans, round by round, and commits it all as one index
+    /// revision (see the module documentation): `ocr` plans once, and `clocks`
+    /// plans again from what each round read, because its search narrows as it
+    /// goes. One revision a call keeps a search from spending the session's 64.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "The stage order is the contract; keep it visible in one place"
+    )]
+    pub(crate) async fn read_in_rounds(
+        &self,
+        call: ReadCall<'_>,
+        mut next: impl FnMut(Option<&ScreenTextIndex>) -> Vec<ReadTarget>,
+    ) -> Result<ReadDone, EngineError> {
+        let ReadCall {
+            store,
+            session,
+            previous,
+            status,
+            runner,
+            max_frames,
+            period,
+            cancellation,
+            now,
+        } = call;
+        let call_deadline = Instant::now() + CALL_DEADLINE;
+        let revisions_left = store.screen_text_revisions_left(session, self.now_unix_seconds()?)?;
         let tools = self.media_tools()?;
         self.ensure_media_tools_verified_with(&tools, &cancellation)
             .await?;
-        let bound = BoundSource::open_committed(&store, &request.session, now)
+        let bound = BoundSource::open_committed(store, session, now)
             .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
         let media = FfmpegMedia::new(
             tools,
             self.config().host_isolation.into_infrastructure(),
-            &store,
+            store,
         )
         .with_call_deadline(call_deadline);
         let description = media
@@ -476,32 +657,28 @@ impl Engine {
             cancellation: cancellation.clone(),
         };
         let source_id = status.source_id().clone();
-        let read_request = ReadScreenTextRequest {
-            session_id: &request.session,
+        let start = RoundsStart {
+            session_id: session,
             source_id: &source_id,
-            profile: ScreenTextProfile::PpOcrV5LatinV1,
             previous: previous.as_ref(),
-            plan: &plan,
             max_frames,
             revisions_left,
+            period,
         };
         let extension = match (&runner, self.host_screen_text_reader()) {
-            (_, Some(host)) => {
-                read_screen_text_within(read_request, &extractor, &host, &control).await
-            }
+            (_, Some(host)) => read_rounds(start, &extractor, &host, &control, &mut next).await,
             (Some(runner), None) => {
-                let work = store.session_work_directory(&request.session, now)?;
+                let work = store.session_work_directory(session, now)?;
                 let workspace = ProcessWorkingDirectory::new(work.path()).map_err(|_| {
                     EngineError::Ocr(OcrError::Failed(ScreenTextReadError::Workspace))
                 })?;
                 let reader = OcrScreenTextReader::new(
                     runner.clone().with_call_deadline(call_deadline),
                     workspace,
-                    &store,
+                    store,
                     cancellation.clone(),
                 );
-                let read =
-                    read_screen_text_within(read_request, &extractor, &reader, &control).await;
+                let read = read_rounds(start, &extractor, &reader, &control, &mut next).await;
                 drop(reader);
                 drop(work);
                 read
@@ -530,36 +707,13 @@ impl Engine {
         let snapshot = bound
             .release_identity_checked()
             .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
-        let index = self.commit_screen_text(
-            &store,
-            &request.session,
-            previous,
-            status,
-            &extension,
-            period,
-        )?;
+        let index =
+            self.commit_screen_text(store, session, previous, status, &extension, period)?;
         drop(snapshot);
-        let now = self.now_unix_seconds()?;
-        let status = crate::sessions::published_status(&store, &request.session)?;
-        let coverage = ScreenTextCoverage {
-            awaiting_analysis,
-            ..ScreenTextCoverage::of(
-                &plan,
-                index
-                    .as_ref()
-                    .filter(|index| index.scope().provider == extension.scope.provider),
-            )
-        };
-        Ok(ScreenTextResults {
-            session: SessionSnapshot::observe(&status, now),
+        Ok(ReadDone {
             index,
-            range: searched,
-            plan,
-            coverage,
+            extension,
             read_now,
-            stop: extension.stop,
-            visual_gaps,
-            period_micros: period,
         })
     }
 
@@ -655,7 +809,7 @@ impl Engine {
     }
 
     /// The runner executable: `selected`, else the configured one, else `PATH`.
-    fn resolve_ocr_runner(
+    pub(crate) fn resolve_ocr_runner(
         &self,
         selected: Option<PathBuf>,
     ) -> Result<TrustedExecutable, EngineError> {
@@ -764,7 +918,7 @@ impl ScreenTextReader for HostScreenTextRef<'_> {
 /// holds ([`ScreenTextWindows::AnalysedOnly`]): the range clipped to the video,
 /// the visual gaps, and the periodic reads left out until their windows are
 /// analysed. Reads the index; analyses nothing.
-fn analysed_plan(
+pub(crate) fn analysed_plan(
     store: &FilesystemSessionStore,
     session: &SessionId,
     requested: TimeRange,

@@ -79,6 +79,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
+| `clocks` | Opt-in, bounded, resumable: finds the clocks in what `ocr` read and how each moves against the video; only `--screen-zone` and `--accept-gap`, on the user's word, change a clock time | 0.3.0 (ADR 0029, stage 2) |
 | `ocr`, `ocr search` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `ocr search` pages it with frame, time and region, with or without a transcript, and `search`'s first page shows it beside the transcript | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
@@ -154,9 +155,12 @@ planned range and `at` its first decoded sample (example
 [`transcript-get.clock-time.json`](../../schemas/v1/examples/transcript-get.clock-time.json)).
 A reading is always `utc`, `local` and `utc_offset`, each a string or `null`: an instant
 with its local time and offset, an instant whose local zone is unknown, or a local time
-whose zone is unknown. A session without an anchor answers exactly as before. A later
-release adds sources (clocks visible on screen, at other positions of the timeline) to the
-same list.
+whose zone is unknown. A session without an anchor answers exactly as before. Clocks on the
+screen add sources to the same list (see "0.3.0 clocks on the screen"). A session's anchors
+are kept in a retained bundle's `bundle.json` when it has some, which `bundle validate` checks
+and a release before `0.3.0` refuses; a bundle of a session without them is written as before.
+A worker `ingest` target takes an optional `recorded_at`, read as `--recorded-at` is
+(`invalid_recorded_at` when it cannot be read); a request without it keeps its digest.
 
 **`ingest --url <link>` (`0.3.0`, [ADR 0028](../decisions/0028-online-sources.md), #407)** fetches one video
 from a direct `https://` link to a video file into a new session, in place of the path (exactly one of the two;
@@ -1680,9 +1684,9 @@ rejection and fixed remediation, never an echo of the input: `request_too_large`
 `request_too_deep`, `malformed_request`, `unsupported_schema_version`,
 `invalid_operation_id`, `invalid_session_id`, `invalid_path`,
 `invalid_transcript_offset`, `invalid_deadline`, `invalid_range`, `invalid_bundle_name`,
-`too_many_steps`, `step_order`, `no_work`, and, decided by the host,
-`path_outside_input_root`, `duplicate_operation_id` (another line of the same batch)
-and `workspace_not_durable`.
+`too_many_steps`, `step_order`, `no_work`, `invalid_recorded_at` (0.3.0), and, decided by
+the host, `path_outside_input_root`, `duplicate_operation_id` (another line of the same
+batch) and `workspace_not_durable`.
 
 **Job result** ([`job-result.schema.json`](../../schemas/v1/job-result.schema.json);
 examples [`job-run.json`](../../schemas/v1/examples/job-run.json),
@@ -2310,6 +2314,90 @@ record over 48 MiB, an index over its bounds (4,096 frames, 256 lines a frame, 2
 runner that answered beyond its bounds or ended abnormally; `INTEGRITY_FAILURE` or
 `UNSUPPORTED_SCHEMA` for a stored record that fails verification or a source copy that changed
 during the call.
+
+### 0.3.0 clocks on the screen (`clocks`)
+
+```console
+vsift ocr ses_0123456789abcdef --json
+vsift clocks ses_0123456789abcdef --json
+vsift clocks ses_0123456789abcdef --max-frames 0 --screen-zone c1=-05:00 --json
+vsift clocks ses_0123456789abcdef --max-frames 0 --accept-gap g1 --json
+```
+
+`clocks <session> [--max-frames 0..200] [--runner <path>] [--threads 1..8]
+[--screen-zone <clock>=<±HH:MM>]... [--accept-gap <gap>]...` finds the clocks in the text `ocr` read
+([ADR 0029](../decisions/0029-time-anchoring.md), stage 2) and says how each moves against the
+video. It is opt-in and never runs `ocr`'s plan: before `ocr` has read the session it answers
+`partial`, state `not_run`. **Absence is never a claim:** no clock listed speaks only for the frames
+read.
+
+**What counts as a clock.** A time on a screen is usually not the present, so text alone never makes
+a clock. A line of at most 64 bytes is read by a closed grammar, with nothing repaired, and with a
+score of at least 0.80, which only trims junk: the score is uncalibrated, and wrong readings have
+scored as high as right ones. Accepted are `14:03`, `14:03:12`, `2:03 PM`, `2:03:12 pm`, an ISO date
+and time, and a date with a month name; a dated face may state its zone with `Z`, `UTC`, `GMT` or an
+offset. Refused are a line with two times, a time touching other text (`16:9`), a one-digit hour
+without AM or PM, a numeric date with slashes, which is two different days, and a zone abbreviation,
+which counts as no zone. Faces of one class in one place become a clock only with at least three
+reads and one advance, at the video's rate. A time that never moves, a countdown and a scrolling log
+are not clocks, and `refused` counts them. A seconds face with no date and no AM or PM that shows hour
+`00`, or read zero during the recording, is a `counter`: it gives no anchor, no observation and no gap.
+
+**The model.** A clock's `offset` is its reading minus the video's own time, an interval, because a
+minute face holds for 60 s. Its width is `precision_us`. A call reads the frames around a clock's first
+and last rollover, at most `--max-frames` (default 40) within 300 s, and commits them as one revision
+of the screen-text index, so it is bounded and resumable as `ocr` is: run it again to continue.
+`--max-frames 0` reads nothing and needs no runner. With reads to make and no runner the call fails
+with `MISSING_CAPABILITY`, as `ocr` does.
+
+**What it reports.** `data` ([`clocks-data.schema.json`](../../schemas/v1/clocks-data.schema.json),
+examples [`clocks.json`](../../schemas/v1/examples/clocks.json) and
+[`clocks.not-run.json`](../../schemas/v1/examples/clocks.not-run.json)) holds `state` (`not_run`,
+`partial`, `complete`), `rules_version`, the screen-text `index`, `read_now`, `stopped`,
+`reads_pending`, and:
+
+- `clocks`: each with `clock_id` (`c1` to `c8`, stable across calls; null past eight), `kind`, `format`,
+  `unit`, `reads`, `offset`, `confirmed_utc_offset`, `rate`, and the exact frames that prove each claim;
+- `excursions`: reads whose offset left a clock and returned to the same interval. The cause is not
+  known, so both `explanations` are offered, `misread` and `another_clock`. The reads leave the track,
+  and nothing about them is a gap;
+- `stopped_brackets`: rollovers whose search an excursion or a freeze ended, with `width_us`. The search
+  moves to the next rollover, so one misread costs one bracket;
+- `freezes`: a value held past its unit, so the screen stopped while the video ran. The video's time is
+  still right;
+- `jumps`: `gap` (the offset rose: time may be missing from the video, or the machine changed) and
+  `backward`. A jump within its width of a whole number of quarter hours, of at least 30 minutes, is
+  **another clock**, never a cut, because two presenters' taskbars differ so;
+- `observations`: how a clock of unknown zone compares with an anchor that names an instant, and the UTC
+  offsets it `fits`. Always `inference: true`, and **never applied**;
+- `conflicts`: `instants_disagree`, `rates_differ`, `jump_not_shared` and `backward`, reported and never
+  resolved. A difference in two clocks' offsets is not a conflict: clocks in different zones are simply
+  two clocks;
+- `time_anchor`: the session's anchors after the call.
+
+**Only a person changes a clock time.** A detected gap changes no value, because VSift cannot tell a
+cut from a change of machine: each item after it carries `clock_time.segment`, and
+`time_anchor.segments` names the jump, its uncertainty and the clock that showed it.
+`--accept-gap <gap>` applies it. `--screen-zone <clock>=<±HH:MM>` confirms a zone, as an offset and not
+an IANA name, and the clock becomes a `screen_clock_confirmed` anchor; one of no date takes the date on
+which its reading lies nearest the session's absolute anchor, so with none it is refused. Both options
+take only what the user stated, never an observation or a detected gap. A statement that cannot apply
+is `INVALID_ARGUMENT`, and nothing changes.
+
+**Anchors.** A dated clock that states its zone gives `screen_timestamp` and a dated clock with no zone
+`screen_clock`, whose clock times are local with `utc` null. Both, like `screen_clock_confirmed`, are
+`medium`, and their `media_time_us` is where the clock was best read, with `clock_id` and `precision_us`.
+The order is `operator`, `quicktime_creationdate`, `screen_clock_confirmed`, `container_creation_time`,
+`screen_timestamp`, `screen_clock`, so running `clocks` changes which anchor a session's clock times
+come from only when it had none. **A clock with no date gives no anchor** until it is confirmed: a
+time of day cannot be written as a date and time, and a date is never borrowed silently. `consistency`
+compares anchors at their own positions, through accepted gaps only, with each anchor's precision
+added to the two seconds. A local time is still never compared.
+
+**Storage.** The clocks are derived again each call from the newest index. The lifecycle record keeps
+the screen's anchors, the register of clocks (`screen_clocks`, at most 8) and the gaps
+(`clock_segments`, at most 32), each written only when present, so a session that never runs `clocks`
+is recorded as before. A release before `0.3.0` reads a session that has them as damaged (L-044).
 
 ### Views of a read (`--view`, 0.2.1)
 

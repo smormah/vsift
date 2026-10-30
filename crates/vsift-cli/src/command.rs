@@ -4,10 +4,11 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use vsift::{
-    AgentClient, ClockReading, CropRectangle, DurabilityRequirement, EvidenceId, FrameSelection,
-    IsolationProfile, JobId, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
-    OperationId, OptionalComponent, OptionalComponentSet, RuntimeDependency, SessionId,
-    SetupProfile, TimeAnchorError, TranscriptRevisionId, VisualCandidateId,
+    AgentClient, ClockId, ClockReading, CropRectangle, DurabilityRequirement, EvidenceId,
+    FrameSelection, GapId, IsolationProfile, JobId, ManagedComponent, ManagedVersionKey,
+    ManagedVersionKeyError, OperationId, OptionalComponent, OptionalComponentSet,
+    RuntimeDependency, SessionId, SetupProfile, TimeAnchorError, TranscriptRevisionId, UtcOffset,
+    VisualCandidateId,
 };
 use vsift_contract::{CommandName, ResultView};
 
@@ -161,6 +162,16 @@ pub(crate) enum Command {
     /// and region, with or without a transcript (search's first page shows it
     /// beside the transcript).
     Ocr(OcrArguments),
+    /// Find the clocks on a session's screen, in what ocr read.
+    ///
+    /// A time on a screen counts as a clock only if it moves with the video.
+    /// Each clock is its own source and is never converted between zones. The
+    /// answer says how each moves against the video: precision to the second,
+    /// gaps, freezes and what disagrees, with the frames that prove it.
+    /// Bounded and resumable like ocr: run ocr first, then this, then again to
+    /// continue. A gap and an observed offset change no clock time: only
+    /// --accept-gap and --screen-zone do, and only with what the user stated.
+    Clocks(ClocksArguments),
     /// Extract or navigate source-grounded frames.
     Frame(FrameArguments),
     /// Extract a bounded audio clip for a person or a speech tool to play; a
@@ -916,6 +927,32 @@ pub(crate) struct OcrArguments {
     /// Inference threads, 1 through 8; defaults to 2.
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=8))]
     pub threads: Option<u16>,
+}
+
+/// A bounded request to find a session's clocks (ADR 0029, stage 2).
+#[derive(Args, Debug)]
+pub(crate) struct ClocksArguments {
+    /// Session whose clocks are found.
+    pub session: SessionId,
+    /// Most frames this call reads around rollovers, 0 through 200; defaults
+    /// to 40. With 0 it reads nothing and needs no OCR runner.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(0..=200))]
+    pub max_frames: Option<u16>,
+    /// The OCR runner for this call only; otherwise the one setup configure
+    /// ocr-runner recorded, else vsift-ocr-runner on PATH.
+    #[arg(long)]
+    pub runner: Option<PathBuf>,
+    /// Inference threads, 1 through 8; defaults to 2.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=8))]
+    pub threads: Option<u16>,
+    /// A clock's zone as the user stated it: <clock>=<+HH:MM or -HH:MM>, for
+    /// example c1=-05:00. Repeatable. Never pass an observation you were not told.
+    #[arg(long, value_name = "CLOCK=OFFSET", value_parser = crate::clocks::parse_screen_zone)]
+    pub screen_zone: Vec<(ClockId, UtcOffset)>,
+    /// A gap the user says is real, so clock times after it move by its length.
+    /// Repeatable. Never pass a gap you were not told to accept.
+    #[arg(long, value_name = "GAP", value_parser = crate::clocks::parse_gap)]
+    pub accept_gap: Vec<GapId>,
 }
 
 /// What `ocr` does instead of reading frames.

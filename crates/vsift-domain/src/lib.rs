@@ -6,6 +6,9 @@ mod admission;
 mod agent_skill;
 mod asr;
 mod checkpoint;
+mod clock_face;
+mod clock_register;
+mod clock_track;
 mod evidence;
 mod failure;
 mod identity;
@@ -56,6 +59,20 @@ pub use asr::{
     settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
+pub use clock_face::{
+    ClockFace, ClockFaceRefusal, ClockFormat, ClockUnit, MAX_CLOCK_LINE_BYTES,
+    MIN_CLOCK_LINE_BASIS_POINTS, read_clock_face,
+};
+pub use clock_register::{
+    ClockConflict, ClockRegister, ClockStatementError, OffsetObservation, RegisteredClock,
+};
+pub use clock_track::{
+    CLOCK_RULES_VERSION, ClockAnalysis, ClockExcursion, ClockFreeze, ClockJump, ClockJumpKind,
+    ClockKind, ClockRate, ClockRead, ClockRefusals, ClockRun, MAX_CLOCK_PLACES,
+    MAX_ROLLOVER_FRAMES, MIN_JUMP_MICROS, MIN_OTHER_CLOCK_JUMP_MICROS, MIN_RUN_READS,
+    OffsetInterval, PAINT_SLACK_MICROS, ROLLOVER_BRACKET_MICROS, ScreenClock, analyse_clocks,
+    analyse_reads, clock_reads, rollover_frames,
+};
 pub use evidence::{
     AUDIO_CLIP_SAMPLE_RATE, AudioRange, BurstCount, BurstExtent, BurstPlan, BurstRange, Confidence,
     ConfidenceError, ConfidenceOrigin, CropRegion, EvidenceDetail, EvidenceItem, EvidenceItemParts,
@@ -127,8 +144,9 @@ pub use storage::{
 };
 pub use time_anchor::{
     ANCHOR_AGREEMENT_MICROS, AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime,
-    ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, MAX_CLOCK_TEXT_BYTES,
-    MAX_TIME_ANCHORS, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor, TimeAnchorError, TimeAnchors,
+    ClockGap, ClockId, ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, GapId,
+    GapState, MAX_CLOCK_GAPS, MAX_CLOCK_TEXT_BYTES, MAX_SCREEN_CLOCKS, MAX_TIME_ANCHORS,
+    ScreenAnchor, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor, TimeAnchorError, TimeAnchors,
     UtcOffset,
 };
 pub use timeline::{
