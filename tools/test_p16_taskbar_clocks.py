@@ -157,6 +157,13 @@ class Rendering(unittest.TestCase):
         native = clocks.screen_filter(combination(), font, files, [Path("text/body.txt")], Path("text/s.txt"), Path("text/d.txt"))
         self.assertNotIn("scale=", native)
 
+    def test_grain_busies_the_encoder_behind_the_text_and_never_over_the_bar(self) -> None:
+        screen = clocks.screen_filter(combination(), Path("font.ttf"), [Path("text/v.txt")], [Path("text/b.txt")],
+                                      Path("text/s.txt"), Path("text/d.txt"))
+        self.assertTrue(screen.startswith("noise="))
+        self.assertEqual(screen.count("noise="), 1)
+        self.assertLess(screen.index("noise="), screen.index("drawbox="))
+
     def test_a_path_a_filter_would_interpret_is_refused(self) -> None:
         with self.assertRaises(clocks.TaskbarCheckError):
             clocks.checked_filter_path(Path("text/a:b.txt"))

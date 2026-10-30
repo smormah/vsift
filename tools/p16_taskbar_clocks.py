@@ -61,7 +61,8 @@ DATE_TEXT = "10/21/2026"
 # screen. None of it is time-shaped.
 BODY_LINES = ("Build finished, see the report for details", "Deployment notes for the next release",
               "Open items from the review", "Customer feedback, first batch")
-SCROLLING_LINE = "Scrolling text keeps the encoder busy, as a real screen does"
+SCROLLING_LINE = "Scrolling text moves as it does on a real screen"
+BACKGROUND_GRAIN = 6
 _FILTER_SAFE_PATH = re.compile(r"^[A-Za-z0-9_./-]+$")
 
 READ_PERIOD_S = 10
@@ -312,8 +313,11 @@ def screen_filter(combination: Combination, font: Path, value_files: Sequence[Pa
     width, height, bar = SCALES[combination.scale]
     size = SIZES[combination.size][combination.scale]
     colours = BARS[combination.bar]
-    parts = [drawtext(font, file, size + 2, colours["text"], "120", str(120 + index * 3 * size))
-             for index, file in enumerate(body_files)]
+    # A still desktop costs the encoder almost nothing, so a fixed rate would never be felt.
+    # Moving grain behind the text keeps it busy; the bar is drawn after it and stays clean.
+    parts = [f"noise=alls={BACKGROUND_GRAIN}:allf=t"]
+    parts += [drawtext(font, file, size + 2, colours["text"], "120", str(120 + index * 3 * size))
+              for index, file in enumerate(body_files)]
     parts.append(drawtext(font, scrolling_file, size + 2, colours["text"], "120", f"{height // 2}+8*t"))
     parts.append(f"drawbox=x=0:y={height - bar}:w={width}:h={bar}:color={colours['bar']}:t=fill")
     clock_y, date_y = height - bar + size // 3, height - bar + size // 3 + size + size // 3
