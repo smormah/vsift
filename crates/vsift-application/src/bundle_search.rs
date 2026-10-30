@@ -349,7 +349,7 @@ pub struct BundleSessionCoverage {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BundleSessionEntry {
     /// The bundle was opened and searched.
-    Searched(BundleSessionCoverage),
+    Searched(Box<BundleSessionCoverage>),
     /// The bundle could not be opened.
     Unavailable {
         /// The bundle folder's name.
@@ -610,14 +610,15 @@ where
         if self.first_session.is_none() {
             self.first_session = Some(identity.session_id.clone());
         }
-        self.sessions
-            .push(BundleSessionEntry::Searched(BundleSessionCoverage {
+        self.sessions.push(BundleSessionEntry::Searched(Box::new(
+            BundleSessionCoverage {
                 bundle: found.name.clone(),
                 identity: identity.clone(),
                 hits,
                 transcript,
                 screen_text,
-            }));
+            },
+        )));
         Ok(())
     }
 

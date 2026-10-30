@@ -181,13 +181,15 @@ fn searched(
     transcript: BundleTranscript,
     screen_text: BundleScreenText,
 ) -> Built<BundleSessionEntry> {
-    Ok(BundleSessionEntry::Searched(BundleSessionCoverage {
-        bundle: bundle.to_owned(),
-        identity: identity(number)?,
-        hits,
-        transcript,
-        screen_text,
-    }))
+    Ok(BundleSessionEntry::Searched(Box::new(
+        BundleSessionCoverage {
+            bundle: bundle.to_owned(),
+            identity: identity(number)?,
+            hits,
+            transcript,
+            screen_text,
+        },
+    )))
 }
 
 /// Three recordings: `call-1`, heard and read; `call-2`, with a gap, whose
