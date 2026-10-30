@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="470" viewBox="0 0 1200 470" role="img" aria-labelledby="title desc" xml:space="preserve">
 <title id="title">VSift architecture</title>
-<desc id="desc">Five Rust crates with dependencies pointing inward: vsift-cli depends on the vsift engine, which depends on vsift-infrastructure, then vsift-application, then vsift-domain at the centre. The vsift-contract crate sits beside the engine, and hosts depend only on vsift and vsift-contract. FFmpeg, FFprobe and whisper.cpp run as separate external processes. Rules: no shell, no unsafe code, typed errors, verified and size-bounded downloads.</desc>
+<desc id="desc">Five Rust layers with dependencies pointing inward: vsift-cli depends on the vsift engine, which depends on vsift-infrastructure, then vsift-application, then vsift-domain at the centre. The vsift-contract crate sits beside the engine, and hosts depend only on vsift and vsift-contract. FFmpeg, FFprobe and whisper.cpp run as separate external processes. Everything sits inside a dashed boundary labelled on your machine, VSift uploads nothing. Rules: no shell, no unsafe code but one reviewed Windows crate, typed errors, verified and size-bounded downloads.</desc>
 <style>
 .s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
 .t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
@@ -9,7 +9,7 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <rect width="1200" height="470" rx="20" fill="#0e1a2b"/><rect x="0.5" y="0.5" width="1199" height="469" rx="20" fill="none" stroke="#25405f"/>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9fb2c8"/></marker><marker id="aht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2dd4bf"/></marker></defs>
 <text x="40" y="50" font-size="12.5" class="s b" text-anchor="start" fill="#2dd4bf" letter-spacing="1.6">UNDER THE HOOD</text>
-<text x="40" y="78" font-size="19" class="s t b" text-anchor="start" >Five Rust crates. Dependencies point inward; tools run as separate processes.</text>
+<text x="40" y="78" font-size="19" class="s t b" text-anchor="start" >Five Rust layers. Dependencies point inward; tools run as separate processes.</text>
 <rect x="40" y="130" width="198" height="92" rx="12" fill="#13233a" stroke="#2dd4bf" stroke-opacity="0.7" stroke-width="1.5"/>
 <text x="58" y="162" font-size="15" class="m t b" text-anchor="start" >vsift-domain</text>
 <text x="58" y="186" font-size="12.5" class="s mu" text-anchor="start" >evidence, sessions, time</text>
@@ -54,9 +54,11 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <circle cx="46" cy="344" r="3" fill="#2dd4bf"/>
 <text x="58" y="348" font-size="13" class="s mu" text-anchor="start" >No shell: explicit executable and arguments</text>
 <circle cx="46" cy="368" r="3" fill="#2dd4bf"/>
-<text x="58" y="372" font-size="13" class="s mu" text-anchor="start" >No unsafe code in VSift crates</text>
+<text x="58" y="372" font-size="13" class="s mu" text-anchor="start" >No unsafe code but one reviewed Windows crate</text>
 <circle cx="46" cy="392" r="3" fill="#2dd4bf"/>
 <text x="58" y="396" font-size="13" class="s mu" text-anchor="start" >Typed errors, no strings</text>
 <circle cx="46" cy="416" r="3" fill="#2dd4bf"/>
 <text x="58" y="420" font-size="13" class="s mu" text-anchor="start" >Verified, size-bounded downloads</text>
+<rect x="24" y="94" width="1158" height="358" rx="16" fill="none" stroke="#2dd4bf" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="8 7"/>
+<text x="1168" y="436" font-size="13.5" class="s b" text-anchor="end" fill="#2dd4bf">On your machine · VSift uploads nothing</text>
 </svg>
