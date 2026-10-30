@@ -1297,7 +1297,6 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
     for seed in SEEDS {
         let data = fs::read(seed_directory(seed.target).join(seed.file))?;
         let matches = match seed.origin {
-            Origin::Written => true,
             Origin::Copy(path) => {
                 let path = repository(path);
                 let source = if path.is_dir() {
@@ -1310,7 +1309,8 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
             Origin::InlineIn(path) => {
                 fs::read_to_string(repository(path))?.contains(std::str::from_utf8(&data)?)
             }
-            Origin::EncodedF01LocalAsr
+            Origin::Written
+            | Origin::EncodedF01LocalAsr
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_) => true,
             Origin::RecordedCrops(count) => data == crops_seed(count)?,

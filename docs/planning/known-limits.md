@@ -5279,7 +5279,7 @@ that week.**
 - **Evidence:** ADR 0029, the amendment of 2026-10-30; `crates/vsift-domain/src/clock_track.rs` and its property tests; `clocks_cli_contract`; run 41069543181.
 - **Impact: low by the rubric** (nothing here changes a clock time without a person's word, except that a dated clock can be the only anchor a session has, which is marked by its source).
 - **Mitigation:** check the frames each claim names; give `--recorded-at`; accept a gap or a zone only from what you know: an `--accept-gap` cannot be taken back in that session.
-- **Next step:** a real clock has not been tested, and a recording with one has been asked for.
+- **Next step:** a real clock has not been tested yet. One is being tried locally, and this entry gets its numbers.
 - **Owner:** `0.3.0`. **Issue:** none. **Status:** open. **Review:** pending.
 
 ### L-214

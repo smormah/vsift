@@ -438,11 +438,13 @@ async fn a_held_misread_is_reported_as_an_excursion_with_both_explanations() -> 
     let root = OwnedRoot::new()?;
     let seeded = seed(&root, Some("2026-10-21T14:00:00Z")).await?;
     let mut reads: Vec<(u64, String)> = (0..12).map(|at| (at, second_text(50_400 + at))).collect();
+    // One wrong value held still: nothing here moves like a clock.
     for read in reads.iter_mut().filter(|read| (4..7).contains(&read.0)) {
-        read.1 = second_text(50_400 + read.0 + 300);
+        read.1 = second_text(50_704);
     }
     commit_reads(&seeded, &reads)?;
     let value = clocks_json(&root, &[])?;
+    assert_eq!(value["data"]["clocks"].as_array().map(Vec::len), Some(1));
     let clock = &value["data"]["clocks"][0];
     assert_eq!(clock["jumps"], serde_json::json!([]));
     assert_eq!(clock["excursions_total"], 1);
@@ -453,6 +455,31 @@ async fn a_held_misread_is_reported_as_an_excursion_with_both_explanations() -> 
         serde_json::json!(["misread", "another_clock"])
     );
     assert_eq!(value["data"]["time_anchor"].get("segments"), None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_stretch_that_returns_and_moves_like_a_clock_is_a_second_clock_and_changes_nothing()
+-> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root, Some("2026-10-21T14:00:00Z")).await?;
+    let mut reads: Vec<(u64, String)> = (0..12).map(|at| (at, second_text(50_400 + at))).collect();
+    // A misread that advances looks the same as a turn, so it is reported as one.
+    for read in reads.iter_mut().filter(|read| (4..7).contains(&read.0)) {
+        read.1 = second_text(50_400 + read.0 + 300);
+    }
+    commit_reads(&seeded, &reads)?;
+    let value = clocks_json(&root, &[])?;
+    let clocks = value["data"]["clocks"]
+        .as_array()
+        .ok_or("the clocks are not a list")?;
+    assert_eq!(clocks.len(), 2);
+    for clock in clocks {
+        assert_eq!(clock["jumps"], serde_json::json!([]));
+        assert_eq!(clock["excursions_total"], 0);
+    }
+    assert_eq!(value["data"]["time_anchor"].get("segments"), None);
+    assert_eq!(value["data"]["time_anchor"]["source"], "operator");
     Ok(())
 }
 
