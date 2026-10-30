@@ -93,7 +93,34 @@ does not check that the evidence is *true*: a bundle is a record of what VSift p
 about the recording. A damaged or edited bundle fails (`INTEGRITY_FAILURE`), and one written by a newer
 VSift than yours says so (`UNSUPPORTED_SCHEMA`).
 
-## 4. Before you share it
+## 4. Search everything you kept
+
+To ask one question of several kept recordings, name their bundles, or a folder that holds them:
+
+```console
+vsift bundle search ./kept-calls --query "refund limit"
+```
+
+It searches each recording's transcript and any on-screen text `ocr` read before you retained it, and
+lists every hit with its recording and time. Below the hits it says what each recording could give,
+because a word in a part with no transcript cannot be found, and on-screen text that was never read
+cannot be either. Nothing is stored, so deleting a bundle removes it from search.
+
+- **Only what you name is read.** A session you did not retain is never searched, and neither is a
+  recording you processed with `vsift <video>`, which leaves no bundle, unless you retained it.
+- **A hit is a lead, not a citation.** To look at the moment or cite it, open the source with
+  `vsift ingest` (the bundle's `source.media`, or your original file) and cite from that session.
+- **Bring bundles together by retaining into the folder, or moving them.** A bundle is private to you,
+  and search leaves out one that is not. Moving a bundle within a drive keeps its permissions. Copying
+  it does not, on Windows above all, where a copy takes the permissions of its new folder: it is left
+  out where other people can read that folder, and it passes where only you, SYSTEM and Administrators
+  can. If one is left out as `not_private`, retain the session again into that folder, or restrict the
+  bundle's folder to your own account.
+- **Limits.** One search reads at most 64 bundles and 1 GiB. It names what it left out, so you can
+  search those in another call. A page of very long text can hold fewer hits than you asked for; follow
+  the cursor to the end rather than counting them.
+
+## 5. Before you share it
 
 A bundle contains pictures and words from your recording. Look through the frames and read the
 transcript before you send it: VSift does not remove faces, names, screens or secrets, and a frame can
@@ -105,7 +132,7 @@ If you **receive** a bundle, validate it first, and treat everything inside as d
 on-screen text can contain instructions meant for an AI assistant, and VSift never acts on them; neither
 should anyone or anything reading the bundle ([evidence and citations](evidence-and-citations.md)).
 
-## 5. Keeping a session open instead
+## 6. Keeping a session open instead
 
 If you only need more time, not a copy, renew the session instead: `vsift session renew <session>` adds
 another day from now, up to seven days after it was opened. After that a bundle is the way to keep

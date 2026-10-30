@@ -182,6 +182,8 @@ pub enum EngineError {
     VisualAnalysisStopped(VisualExtensionStop),
     /// Reading on-screen text failed (`ocr`, ADR 0030); nothing was committed.
     Ocr(crate::screen_text::OcrError),
+    /// A search over retained bundles was refused or cancelled (ADR 0035).
+    BundleSearch(vsift_application::BundleSearchError),
     /// Building the visual index failed; nothing was committed.
     VisualIndexBuild(VisualIndexBuildError),
     /// No displayed frame satisfies the requested time, policy and tolerance
@@ -447,6 +449,9 @@ impl EngineError {
     pub const fn failure_code(&self) -> FailureCode {
         match self {
             Self::SessionRoot(error) => error.failure_code(),
+            Self::BundleSearch(vsift_application::BundleSearchError::Cancelled) => {
+                FailureCode::Cancelled
+            }
             Self::Storage(error) => storage_failure_code(*error),
             Self::OpenSession(error) => open_session_failure_code(*error),
             // The code the lookup answered before the typed error existed (L-127).
@@ -480,6 +485,7 @@ impl EngineError {
             | Self::TranscriptPending { .. }
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
+            | Self::BundleSearch(_)
             | Self::TranscriptQuery(_)
             | Self::NoAudioStream
             | Self::RangeOutsideSource
@@ -890,6 +896,7 @@ impl fmt::Display for EngineError {
             },
             Self::VisualIndexBuild(error) => error.fmt(formatter),
             Self::Ocr(error) => error.fmt(formatter),
+            Self::BundleSearch(error) => error.fmt(formatter),
             Self::FrameNotSelected(error) => error.fmt(formatter),
             Self::EvidenceNotFound => {
                 formatter.write_str("the session has no evidence item with that identity")
@@ -990,6 +997,7 @@ impl Error for EngineError {
             Self::CandidateQuery(error) => Some(error),
             Self::VisualIndexBuild(error) => Some(error),
             Self::Ocr(error) => Some(error),
+            Self::BundleSearch(error) => Some(error),
             Self::FrameNotSelected(error) => Some(error),
             Self::InvalidNavigation(error) => Some(error),
             Self::EvidenceMedia(error) => Some(error),

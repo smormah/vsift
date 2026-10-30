@@ -1,15 +1,15 @@
 //! Bounded literal search of a session's transcript.
 
 use vsift_application::{
-    ScreenTextPageRequest, SearchPageRequest, clip_to_source, missing_windows, page_screen_text,
-    page_search,
+    ScreenTextPageRequest, SearchPageRequest, page_screen_text, page_search,
+    screen_text_plan_coverage,
 };
 use vsift_contract::{ScreenTextUnavailable, UnreadableIndex, UnreadableReason};
 use vsift_domain::{
-    CursorError, FrameRef, MediaTime, PageLimit, ReadTarget, ScreenTextCoverage, ScreenTextIndex,
+    CursorError, FrameRef, MediaTime, PageLimit, ScreenTextCoverage, ScreenTextIndex,
     ScreenTextLine, ScreenTextOccurrence, SearchCoverage, SearchMatch, SearchQuery, SessionId,
     TimeRange, TranscriptRevision, TranscriptRevisionId, TranscriptSegment, VisualCandidateId,
-    VisualIndex, plan_reads, screen_text_occurrences,
+    VisualIndex, screen_text_occurrences,
 };
 use vsift_infrastructure::FilesystemSessionStore;
 
@@ -460,41 +460,14 @@ fn result_hit(hit: &ScreenTextOccurrence<'_>) -> ScreenTextResultHit {
     }
 }
 
-/// How much of the plan of `range` (the whole video when `None`) `index` has
-/// read, and whether every visual window of it is analysed. Without a visual
-/// index nothing is planned and the candidates are not known.
+/// How much of the plan of `range` `index` has read
+/// ([`screen_text_plan_coverage`]).
 fn plan_coverage(
     visual: Option<&VisualIndex>,
     index: &ScreenTextIndex,
     range: Option<TimeRange>,
 ) -> Result<(ScreenTextCoverage, bool), EngineError> {
-    let (plan, candidates_complete) = match visual {
-        Some(visual) => {
-            let whole = TimeRange::new(MediaTime::from_micros(0), visual.duration())
-                .map_err(|_| EngineError::InvalidTimeRange)?;
-            let searched =
-                range.map_or(Ok(whole), |range| clip_to_source(range, visual.duration()));
-            match searched {
-                Ok(searched) => {
-                    let candidates: Vec<(VisualCandidateId, MediaTime)> = visual
-                        .candidates_in(searched)
-                        .map(|candidate| (candidate.id().clone(), candidate.representative()))
-                        .collect();
-                    let plan = plan_reads(searched, &candidates, index.period_micros())
-                        .unwrap_or_default();
-                    let complete =
-                        missing_windows(Some(visual), visual.duration(), searched).is_empty();
-                    (plan, complete)
-                }
-                Err(_) => (Vec::<ReadTarget>::new(), true),
-            }
-        }
-        None => (Vec::new(), false),
-    };
-    Ok((
-        ScreenTextCoverage::of(&plan, Some(index)),
-        candidates_complete,
-    ))
+    screen_text_plan_coverage(visual, index, range).ok_or(EngineError::InvalidTimeRange)
 }
 
 /// A bounded literal search of one session's on-screen text (`ocr search`,

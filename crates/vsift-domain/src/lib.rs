@@ -105,9 +105,10 @@ pub use screen_text::{
     plan_reads_in_analysed_windows,
 };
 pub use search::{
-    CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice,
-    SearchCoverage, SearchHit, SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection,
-    SearchSlice, normalise_search_text, screen_text_occurrences, search_revision,
+    BundleHitKey, BundleHitKind, BundleHitPosition, CoverageBasis, MAX_SEARCH_QUERY_BYTES,
+    MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice, SearchCoverage, SearchHit,
+    SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
+    normalise_search_text, rank_bundle_hits, screen_text_occurrences, search_hits, search_revision,
     search_screen_text,
 };
 pub use session::{

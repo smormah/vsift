@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/bundle-search-data.schema.json",
+  "title": "VSift bundle.search data v1",
+  "description": "The data member of a complete or partial bundle.search result (0.3.0, ADR 0035): one bounded page of a literal query's hits across the retained bundles the caller named, in rank order: phrase before all_terms, then by bundle (folder name, then whole path), then by time within the bundle, a transcript segment before on-screen text at the same time. Each hit names its bundle, session, source, time and evidence id, and carries its segment (transcript-segment.schema.json, or transcript-segment-brief.schema.json in the brief view, which adds view) or its line (screen-text-data.schema.json#/$defs/hit). A hit is a lead, not a citation: the session that made its ids is gone, so handoff check --session cannot resolve them; to look at a moment or cite it, open the source with ingest and cite from that session. total_hits counts the whole search on every page, because every page reads every bundle searched. A page holds at most --limit hits, and fewer when its text is very long, so follow next_cursor and never count hits: it goes on from the last hit shown. bundles counts what was found, and skipped_entries the subfolders that hold no bundle.json or could not be read; sessions has one entry per bundle opened, never cut; not_searched names, up to 64, the bundles left out: bundle_limit past the first 64 (never opened) and read_budget past 1 GiB of manifests and records. No absolute path is ever presented: bundle is the folder's own name, sanitised and cut to 128 bytes. Validate the envelope with operation-response.schema.json: its status is partial, with a fixed warning, exactly when a searched recording has a transcript gap or a bundle was not searched, and on-screen text never changes it, as for search; its coverage reasons are no_transcript, untranscribed_range, bundle_unavailable, bundle_limit and read_budget, its gaps are empty, because a time range means nothing across videos, and its lifecycle is retained. On-screen coverage is in each sessions entry and counted in bundles.screen_text_incomplete, so a missing on-screen hit in such a recording means nothing. Pass next_cursor back with the same bundles and query; it is rejected once a bundle is added, removed, renamed or retained again, for another query, and after 24 hours.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "query",
+    "hits",
+    "total_hits",
+    "next_cursor",
+    "bundles",
+    "sessions",
+    "not_searched"
+  ],
+  "properties": {
+    "view": { "const": "brief" },
+    "query": { "$ref": "search-data.schema.json#/$defs/query" },
+    "hits": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/hit" }
+    },
+    "total_hits": { "type": "integer", "minimum": 0 },
+    "next_cursor": { "$ref": "search-data.schema.json#/$defs/next_cursor" },
+    "bundles": { "$ref": "#/$defs/counts" },
+    "sessions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/session" }
+    },
+    "not_searched": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bundle", "reason"],
+        "properties": {
+          "bundle": { "$ref": "#/$defs/bundle" },
+          "reason": { "enum": ["bundle_limit", "read_budget"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "bundle": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
+    "hit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "match",
+        "bundle",
+        "manifest_sha256",
+        "session_id",
+        "source_id",
+        "evidence_id",
+        "time_us"
+      ],
+      "properties": {
+        "kind": { "enum": ["transcript", "screen_text"] },
+        "match": { "enum": ["phrase", "all_terms"] },
+        "bundle": { "$ref": "#/$defs/bundle" },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "session_id": { "$ref": "#/$defs/session_id" },
+        "source_id": { "$ref": "#/$defs/source_id" },
+        "evidence_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "time_us": { "type": "integer", "minimum": 0 },
+        "segment": {
+          "oneOf": [
+            { "$ref": "transcript-segment.schema.json" },
+            { "$ref": "transcript-segment-brief.schema.json" }
+          ]
+        },
+        "line": { "$ref": "screen-text-data.schema.json#/$defs/hit" }
+      },
+      "oneOf": [
+        {
+          "properties": { "kind": { "const": "transcript" } },
+          "required": ["segment"],
+          "not": { "required": ["line"] }
+        },
+        {
+          "properties": { "kind": { "const": "screen_text" } },
+          "required": ["line"],
+          "not": { "required": ["segment"] }
+        }
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "found",
+        "searched",
+        "unavailable",
+        "not_searched",
+        "duplicates",
+        "skipped_entries",
+        "screen_text_incomplete"
+      ],
+      "properties": {
+        "found": { "type": "integer", "minimum": 0 },
+        "searched": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "unavailable": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "not_searched": { "type": "integer", "minimum": 0 },
+        "duplicates": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "skipped_entries": { "type": "integer", "minimum": 0 },
+        "screen_text_incomplete": { "type": "integer", "minimum": 0, "maximum": 64 }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundle",
+        "state",
+        "manifest_sha256",
+        "session_id",
+        "source_id",
+        "source_included",
+        "hits",
+        "transcript",
+        "screen_text"
+      ],
+      "properties": {
+        "bundle": { "$ref": "#/$defs/bundle" },
+        "state": { "enum": ["searched", "unavailable"] },
+        "reason": { "$ref": "#/$defs/unreadable" },
+        "manifest_sha256": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }]
+        },
+        "session_id": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/session_id" }]
+        },
+        "source_id": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/source_id" }]
+        },
+        "source_included": { "type": ["boolean", "null"] },
+        "hits": { "type": "integer", "minimum": 0 },
+        "transcript": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/transcript" }]
+        },
+        "screen_text": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/screen_text" }]
+        }
+      }
+    },
+    "unreadable": {
+      "enum": ["not_private", "integrity_failure", "unsupported_version", "unreadable"]
+    },
+    "transcript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "revision_id",
+        "basis",
+        "untranscribed_ranges",
+        "untranscribed_us"
+      ],
+      "properties": {
+        "state": { "enum": ["complete", "partial", "none", "unavailable"] },
+        "reason": { "$ref": "#/$defs/unreadable" },
+        "revision_id": { "type": ["string", "null"] },
+        "basis": {
+          "enum": ["supplied_transcript", "local_asr", "mixed", null]
+        },
+        "untranscribed_ranges": { "type": "integer", "minimum": 0 },
+        "untranscribed_us": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "screen_text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "index_id", "coverage"],
+      "properties": {
+        "state": { "enum": ["not_run", "partial", "complete", "unavailable"] },
+        "reason": {
+          "description": "Why the index could not be read; or, with an index read, why its visual index could not be, so the coverage is not known.",
+          "$ref": "#/$defs/unreadable"
+        },
+        "index_id": { "type": ["string", "null"] },
+        "coverage": { "$ref": "screen-text-data.schema.json#/$defs/coverage" }
+      }
+    }
+  }
+}

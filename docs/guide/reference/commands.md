@@ -41,6 +41,7 @@
 - [vsift crop](#vsift-crop): Crop an orientation-correct evidence image
 - [vsift bundle](#vsift-bundle): Validate portable evidence bundles
 - [vsift bundle validate](#vsift-bundle-validate): Validate a bundle as bounded data without executing its contents
+- [vsift bundle search](#vsift-bundle-search): Search the transcript and on-screen text of retained bundles
 - [vsift job](#vsift-job): Execute or inspect recoverable worker jobs
 - [vsift job run](#vsift-job-run): Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id
 - [vsift job batch](#vsift-job-batch): Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently
@@ -1744,6 +1745,7 @@ Usage: vsift bundle [OPTIONS] <COMMAND>
 
 Commands:
   validate  Validate a bundle as bounded data without executing its contents
+  search    Search the transcript and on-screen text of retained bundles
 
 Options:
       --json
@@ -1805,6 +1807,67 @@ Options:
           - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
 
           [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift bundle search
+
+Search the transcript and on-screen text of retained bundles.
+
+```text
+Search the transcript and on-screen text of retained bundles.
+
+Each path is a bundle, or a folder of bundles read one level down: at most 64 bundles and 1 GiB are read in a call. The session root is never opened, so only what you kept and named is searched. Nothing is written and no tool runs.
+
+Every result says, for each recording, what could be searched. A hit is a lead, not a citation: to look at a moment or cite it, open the source with ingest and cite from that session.
+
+Usage: vsift bundle search [OPTIONS] --query <QUERY> <PATH>...
+
+Arguments:
+  <PATH>...
+          Bundles, or folders of bundles, at most 64
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --query <QUERY>
+          Literal query text, at most 256 bytes; it is never interpreted as code or a regular expression
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --limit <LIMIT>
+          Hits per page, 1 through 100; defaults to 20. A page whose text is very long may hold fewer, and --cursor goes on from there
+
+      --cursor <CURSOR>
+          Opaque continuation token returned by the previous page of the same search
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --view <VIEW>
+          Which answer to give. `brief` keeps each transcript hit's ids, times and `display_text`; on-screen hits and the coverage are the same in both
+
+          Possible values:
+          - full:  Every field of every item: the answer every release gave (the default)
+          - brief: Each item without what the answer already states once: the revision's hashes, source and model details (or the index's source and size). It shapes the --json answer (readable text is the same for both), and --events jsonl refuses it, because a stream's records are complete evidence
+
+          [default: full]
 
   -h, --help
           Print help (see a summary with '-h')

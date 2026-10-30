@@ -1158,6 +1158,17 @@ pub(crate) struct BundleArguments {
 pub(crate) enum BundleCommand {
     /// Validate a bundle as bounded data without executing its contents.
     Validate(BundleValidateArguments),
+    /// Search the transcript and on-screen text of retained bundles.
+    ///
+    /// Each path is a bundle, or a folder of bundles read one level down: at
+    /// most 64 bundles and 1 GiB are read in a call. The session root is never
+    /// opened, so only what you kept and named is searched. Nothing is written
+    /// and no tool runs.
+    ///
+    /// Every result says, for each recording, what could be searched. A hit is
+    /// a lead, not a citation: to look at a moment or cite it, open the source
+    /// with ingest and cite from that session.
+    Search(BundleSearchArguments),
 }
 
 impl BundleCommand {
@@ -1165,6 +1176,7 @@ impl BundleCommand {
     pub(crate) const fn operation_name(&self) -> CommandName {
         match self {
             Self::Validate(_) => CommandName::BundleValidate,
+            Self::Search(_) => CommandName::BundleSearch,
         }
     }
 }
@@ -1336,6 +1348,29 @@ pub(crate) struct SkillShowArguments {
 pub(crate) struct BundleValidateArguments {
     /// Bundle directory to validate.
     pub directory: PathBuf,
+}
+
+/// A bounded literal search of retained bundles (ADR 0035).
+#[derive(Args, Debug)]
+pub(crate) struct BundleSearchArguments {
+    /// Bundles, or folders of bundles, at most 64.
+    #[arg(required = true, value_name = "PATH")]
+    pub paths: Vec<PathBuf>,
+    /// Literal query text, at most 256 bytes; it is never interpreted as code
+    /// or a regular expression.
+    #[arg(long)]
+    pub query: String,
+    /// Hits per page, 1 through 100; defaults to 20. A page whose text is very
+    /// long may hold fewer, and --cursor goes on from there.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=100))]
+    pub limit: Option<u16>,
+    /// Opaque continuation token returned by the previous page of the same search.
+    #[arg(long)]
+    pub cursor: Option<String>,
+    /// Which answer to give. `brief` keeps each transcript hit's ids, times and
+    /// `display_text`; on-screen hits and the coverage are the same in both.
+    #[arg(long = "view", value_enum, default_value_t)]
+    pub view: ViewArgument,
 }
 
 /// Worker-job namespace arguments.

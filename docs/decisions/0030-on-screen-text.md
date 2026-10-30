@@ -168,6 +168,11 @@ first-page member stay as they are. The use case (`page_screen_text` in `vsift-a
 session's index and nothing else, so the search across kept sessions planned for 0.3.0's second wave
 calls it once per session.
 
+**Note of 2026-10-30 (ADR 0035).** The search across kept sessions does not call `page_screen_text`
+once per session, as this decision expected: that use case pages with a cursor of its own for one
+session, while a search across bundles ranks every hit together under one cursor. It calls the domain
+function beneath it, `screen_text_occurrences`, so matching and grouping stay in one place.
+
 ## Note of 2026-10-21: a call bounded to analysed windows (for ADR 0033)
 
 ADR 0033's background `prepare` job runs OCR as one of its streams after its visual stream has

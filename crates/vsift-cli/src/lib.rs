@@ -72,10 +72,10 @@ use vsift_contract::{
     TRANSCRIPT_RUNNING_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
     UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
     UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
-    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
-    non_private_folder_summary, search_query_rejection_summary, source_fetch_remediation,
-    transcript_rejection_summary,
+    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, bundle_search_remediation,
+    local_asr_failure_summary, local_asr_verification_summary, managed_lifecycle_remediation,
+    media_tool_verification_summary, non_private_folder_summary, search_query_rejection_summary,
+    source_fetch_remediation, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -133,11 +133,9 @@ const fn is_long_running(command: &Command) -> bool {
         // `setup install` downloads, verifies and smokes for minutes; an
         // interruption cancels it and discards the stage in progress.
         Command::Setup(arguments) => matches!(arguments.command, Some(SetupCommand::Install(_))),
-        Command::Session(_)
-        | Command::Search(_)
-        | Command::Bundle(_)
-        | Command::Handoff(_)
-        | Command::Skill(_) => false,
+        // One search reads up to 1 GiB of bundles.
+        Command::Bundle(arguments) => matches!(arguments.command, BundleCommand::Search(_)),
+        Command::Session(_) | Command::Search(_) | Command::Handoff(_) | Command::Skill(_) => false,
     }
 }
 
@@ -633,6 +631,11 @@ where
                     let result = session::validate_bundle(&engine, &arguments.directory);
                     write_session_result(&mut writer, mode, operation, result)
                 }
+                BundleCommand::Search(arguments) => {
+                    let view = read_view::presented_view(mode, arguments.view);
+                    let result = search::bundles(&engine, arguments, view, &cancellation);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
             }
         }
         Command::Search(arguments) if mode == OutputMode::JsonLines => {
@@ -1064,6 +1067,7 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::Ocr(
             OcrError::BudgetExhausted | OcrError::Stopped(ScreenTextStop::IndexFull),
         ) => Some(OCR_INDEX_FULL_REMEDIATION.to_owned()),
+        EngineError::BundleSearch(error) => bundle_search_remediation(*error).map(str::to_owned),
         EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),
         EngineError::JobBusy { .. } => Some(JOB_BUSY_REMEDIATION.to_owned()),
         EngineError::TranscriptionRunning { .. } => {

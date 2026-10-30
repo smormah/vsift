@@ -32,6 +32,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [audio-stream-data.schema.json](#audio-stream-dataschemajson): VSift audio JSON Lines terminal data v1
 - [bundle-evidence-record.schema.json](#bundle-evidence-recordschemajson): VSift retained bundle evidence record v1
 - [bundle-screen-text-index-record.schema.json](#bundle-screen-text-index-recordschemajson): VSift retained bundle screen-text index record v1
+- [bundle-search-data.schema.json](#bundle-search-dataschemajson): VSift bundle.search data v1
 - [bundle-transcript-record.schema.json](#bundle-transcript-recordschemajson): VSift retained bundle transcript record v1
 - [bundle-visual-index-record.schema.json](#bundle-visual-index-recordschemajson): VSift retained bundle visual-index record v1
 - [candidates-brief-data.schema.json](#candidates-brief-dataschemajson): VSift candidates data, brief view v1
@@ -328,6 +329,95 @@ The content of a session or retained bundle artifact whose kind is screen_text_i
 | `unresolved[].candidate_id` | string | no | pattern `^vcd_[a-z0-9]{16,64}$` |
 
 This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/bundle-screen-text-index-record.schema.json) for it.
+
+### bundle-search-data.schema.json
+
+**VSift bundle.search data v1** ([the schema](../../../schemas/v1/bundle-search-data.schema.json))
+
+The data member of a complete or partial bundle.search result (0.3.0, ADR 0035): one bounded page of a literal query's hits across the retained bundles the caller named, in rank order: phrase before all_terms, then by bundle (folder name, then whole path), then by time within the bundle, a transcript segment before on-screen text at the same time. Each hit names its bundle, session, source, time and evidence id, and carries its segment (transcript-segment.schema.json, or transcript-segment-brief.schema.json in the brief view, which adds view) or its line (screen-text-data.schema.json#/$defs/hit). A hit is a lead, not a citation: the session that made its ids is gone, so handoff check --session cannot resolve them; to look at a moment or cite it, open the source with ingest and cite from that session. total_hits counts the whole search on every page, because every page reads every bundle searched. A page holds at most --limit hits, and fewer when its text is very long, so follow next_cursor and never count hits: it goes on from the last hit shown. bundles counts what was found, and skipped_entries the subfolders that hold no bundle.json or could not be read; sessions has one entry per bundle opened, never cut; not_searched names, up to 64, the bundles left out: bundle_limit past the first 64 (never opened) and read_budget past 1 GiB of manifests and records. No absolute path is ever presented: bundle is the folder's own name, sanitised and cut to 128 bytes. Validate the envelope with operation-response.schema.json: its status is partial, with a fixed warning, exactly when a searched recording has a transcript gap or a bundle was not searched, and on-screen text never changes it, as for search; its coverage reasons are no_transcript, untranscribed_range, bundle_unavailable, bundle_limit and read_budget, its gaps are empty, because a time range means nothing across videos, and its lifecycle is retained. On-screen coverage is in each sessions entry and counted in bundles.screen_text_incomplete, so a missing on-screen hit in such a recording means nothing. Pass next_cursor back with the same bundles and query; it is rejected once a bundle is added, removed, renamed or retained again, for another query, and after 24 hours.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `view` | constant "brief" | no |  |
+| `query` | object | yes |  |
+| `query.terms` | array of string | yes | The normalised query words, in query order: lowercase letters and digits, with a decimal point only between digits.; 1 to 16 items; each: 1 to 1024 characters |
+| `hits` | array of object or object | yes | at most 100 items |
+| `hits[].kind` | "transcript" \| "screen_text" | yes |  |
+| `hits[].match` | "phrase" \| "all_terms" | yes |  |
+| `hits[].bundle` | string | yes | 1 to 128 characters |
+| `hits[].manifest_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `hits[].session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `hits[].source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `hits[].evidence_id` | string | yes | 1 to 128 characters |
+| `hits[].time_us` | integer | yes | at least 0 |
+| `hits[].segment` | object, see [transcript-segment.schema.json](#transcript-segmentschemajson) or object, see [transcript-segment-brief.schema.json](#transcript-segment-briefschemajson) | no |  |
+| `hits[].line` | object | no | One occurrence of the query in on-screen text: a line read on a frame, and how long the same words stayed in the same place over consecutive read frames. |
+| `hits[].line.line_id` | string | yes | pattern `^stl_[a-z0-9]{16,64}$` |
+| `hits[].line.match` | "phrase" \| "all_terms" | yes | phrase or all_terms, by the rule search applies to transcript segments. |
+| `hits[].line.text` | string | yes | The line as the engine read it on the first frame. Hidden characters are kept raw; quote display_text instead.; 1 to 512 characters |
+| `hits[].line.display_text` | string | yes | text with every hidden character written as visible <U+XXXX> notation, as transcript-segment.schema.json defines it.; 1 to 5120 characters |
+| `hits[].line.confidence` | object | yes | The engine's own recognition score for the line, provider_uncalibrated: not a probability that the text is right. |
+| `hits[].line.confidence.value_basis_points` | integer | yes | 0 to 10000 |
+| `hits[].line.confidence.origin` | constant "provider_uncalibrated" | yes |  |
+| `hits[].line.frame` | object | yes | The exact displayed frame a line was read from, in frame-evidence.schema.json's terms: frame get at time_us returns it. |
+| `hits[].line.frame.stream_index` | integer | yes | 0 to 4294967295 |
+| `hits[].line.frame.time_base_numerator` | integer | yes | 1 to 4294967295 |
+| `hits[].line.frame.time_base_denominator` | integer | yes | 1 to 4294967295 |
+| `hits[].line.frame.pts` | integer | yes |  |
+| `hits[].line.frame.time_us` | integer | yes | at least 0 |
+| `hits[].line.frame.width` | integer | yes | 1 to 4294967295 |
+| `hits[].line.frame.height` | integer | yes | 1 to 4294967295 |
+| `hits[].line.region` | object | yes | The upright rectangle of the frame's displayed pixels the line lies in, inside the frame. |
+| `hits[].line.region.x` | integer | yes | 0 to 4294967295 |
+| `hits[].line.region.y` | integer | yes | 0 to 4294967295 |
+| `hits[].line.region.width` | integer | yes | 1 to 4294967295 |
+| `hits[].line.region.height` | integer | yes | 1 to 4294967295 |
+| `hits[].line.last_time_us` | integer | yes | The time of the last consecutive read frame that held the same words in the same place; equal to frame.time_us when only one did.; at least 0 |
+| `hits[].line.frames` | integer | yes | How many consecutive read frames held it.; 1 to 4096 |
+| `hits[].line.candidate_ids` | array of string | yes | The visual candidates whose representative frame the first frame is, in time order; empty for a frame read only for its period. At most 32 are listed.; at most 32 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
+| `total_hits` | integer | yes | at least 0 |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
+| `bundles` | object | yes |  |
+| `bundles.found` | integer | yes | at least 0 |
+| `bundles.searched` | integer | yes | 0 to 64 |
+| `bundles.unavailable` | integer | yes | 0 to 64 |
+| `bundles.not_searched` | integer | yes | at least 0 |
+| `bundles.duplicates` | integer | yes | 0 to 64 |
+| `bundles.skipped_entries` | integer | yes | at least 0 |
+| `bundles.screen_text_incomplete` | integer | yes | 0 to 64 |
+| `sessions` | array of object | yes | at most 64 items |
+| `sessions[].bundle` | string | yes | 1 to 128 characters |
+| `sessions[].state` | "searched" \| "unavailable" | yes |  |
+| `sessions[].reason` | "not_private" \| "integrity_failure" \| "unsupported_version" \| "unreadable" | no |  |
+| `sessions[].manifest_sha256` | string or null | yes | pattern `^[0-9a-f]{64}$` |
+| `sessions[].session_id` | string or null | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `sessions[].source_id` | string or null | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `sessions[].source_included` | boolean or null | yes |  |
+| `sessions[].hits` | integer | yes | at least 0 |
+| `sessions[].transcript` | object or null | yes |  |
+| `sessions[].transcript.state` | "complete" \| "partial" \| "none" \| "unavailable" | yes |  |
+| `sessions[].transcript.reason` | "not_private" \| "integrity_failure" \| "unsupported_version" \| "unreadable" | no |  |
+| `sessions[].transcript.revision_id` | string or null | yes |  |
+| `sessions[].transcript.basis` | "supplied_transcript" \| "local_asr" \| "mixed" \| null | yes |  |
+| `sessions[].transcript.untranscribed_ranges` | integer | yes | at least 0 |
+| `sessions[].transcript.untranscribed_us` | integer | yes | at least 0 |
+| `sessions[].screen_text` | object or null | yes |  |
+| `sessions[].screen_text.state` | "not_run" \| "partial" \| "complete" \| "unavailable" | yes |  |
+| `sessions[].screen_text.reason` | "not_private" \| "integrity_failure" \| "unsupported_version" \| "unreadable" | no | Why the index could not be read; or, with an index read, why its visual index could not be, so the coverage is not known. |
+| `sessions[].screen_text.index_id` | string or null | yes |  |
+| `sessions[].screen_text.coverage` | object | yes | How much of the range's plan the index has read. Every planned frame is counted once: planned = read + failed + unresolved + pending; awaiting_analysis counts reads not yet planned. read: its frame was read (it may hold no text). failed: the runner rejected the image or failed on it; it is not read again by the same build. unresolved: the target time resolved to no decodable frame. pending: not attempted yet. Text that appears and goes between two planned frames is not read. |
+| `sessions[].screen_text.coverage.scope` | constant "screen_text" | yes | What the block covers: on-screen text only. |
+| `sessions[].screen_text.coverage.period_us` | integer or null | yes | The period of the frames planned between candidates: the call's --period-us (default 10000000). In search, the period of the index's latest call; null before ocr has run.; 1000000 to 600000000 |
+| `sessions[].screen_text.coverage.planned` | integer | yes | at least 0 |
+| `sessions[].screen_text.coverage.read` | integer | yes | at least 0 |
+| `sessions[].screen_text.coverage.failed` | integer | yes | at least 0 |
+| `sessions[].screen_text.coverage.unresolved` | integer | yes | at least 0 |
+| `sessions[].screen_text.coverage.pending` | integer | yes | at least 0 |
+| `sessions[].screen_text.coverage.awaiting_analysis` | integer | yes | Periodic reads of the range left out of the plan, not counted in planned, because their visual window is not analysed yet: always 0 when the call analyses missing windows itself, as vsift ocr does; counted by the engine's analysed-windows-only calls (ADR 0033's background prepare job). Coverage is not complete while it is above 0, and the envelope reason is frames_awaiting_analysis.; at least 0 |
+| `sessions[].screen_text.coverage.candidates_complete` | boolean | yes | True when no visual window of the range is still to be analysed or tried again (not_analyzed, deadline_exceeded), so the plan holds every candidate the range will have. |
+| `not_searched` | array of object | yes | at most 64 items |
+| `not_searched[].bundle` | string | yes | 1 to 128 characters |
+| `not_searched[].reason` | "bundle_limit" \| "read_budget" | yes |  |
 
 ### bundle-transcript-record.schema.json
 

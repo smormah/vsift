@@ -15,6 +15,8 @@
 //!   [`SavedSetupPlan`] input, and the configured-selection responses; the managed
 //!   lifecycle data [`SetupListResponse`], [`SetupRollbackResponse`],
 //!   [`SetupRemoveResponse`] and [`SetupRepairResponse`] (P13 PR 6).
+//! - **Bundle search (ADR 0035):** [`BundleSearchData`] and
+//!   [`bundle_search_response`], one question over retained bundles.
 //! - **Session:** [`OpenData`], [`StatusData`], [`PageData`], [`CleanData`],
 //!   [`BundleData`] and their item types; `session status` adds its newest
 //!   jobs through [`SessionStatusData`].
@@ -112,6 +114,7 @@
 #![forbid(unsafe_code)]
 
 mod batch;
+mod bundle_search;
 mod candidates;
 mod clock;
 mod command;
@@ -185,6 +188,12 @@ pub use workspace::{
     WORKSPACE_ROOT_REMEDIATION, WorkspaceData, WorkspaceInitOutcome, WorkspacePolicyError,
 };
 
+pub use bundle_search::{
+    BUNDLE_CURSOR_REMEDIATION, BUNDLE_LIMIT_REASON, BUNDLE_NOT_PRIVATE_WARNING,
+    BUNDLE_SEARCH_PARTIAL_WARNING, BUNDLE_UNAVAILABLE_REASON, BundleSearchData,
+    NO_BUNDLES_REMEDIATION, NO_TRANSCRIPT_REASON, READ_BUDGET_REASON, TOO_MANY_ENTRIES_REMEDIATION,
+    TOO_MANY_PATHS_REMEDIATION, bundle_search_remediation, bundle_search_response,
+};
 pub use candidates::{
     CANDIDATE_CURSOR_REMEDIATION, CandidatesBriefData, CandidatesData, CandidatesEvidenceStream,
     CandidatesPresentation, CandidatesStreamData, NO_VIDEO_STREAM_REMEDIATION,
@@ -255,10 +264,11 @@ pub use screen_text::{
     CANDIDATES_INCOMPLETE_REASON, FRAMES_AWAITING_ANALYSIS_REASON, FRAMES_FAILED_REASON,
     FRAMES_PENDING_REASON, NOT_RUN_REASON, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
     OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OCR_SEARCH_PARTIAL_WARNING,
-    SCREEN_TEXT_PARTIAL_WARNING, SCREEN_TEXT_SCOPE, ScreenTextData, ScreenTextHitPresentation,
-    ScreenTextPresentation, ScreenTextSearchData, ScreenTextSearchPageData,
-    ScreenTextSearchPagePresentation, ScreenTextSearchPresentation, ScreenTextUnavailable,
-    UnreadableIndex, UnreadableReason, screen_text_response, screen_text_search_response,
+    SCREEN_TEXT_PARTIAL_WARNING, SCREEN_TEXT_SCOPE, ScreenTextData, ScreenTextHitData,
+    ScreenTextHitPresentation, ScreenTextPresentation, ScreenTextSearchData,
+    ScreenTextSearchPageData, ScreenTextSearchPagePresentation, ScreenTextSearchPresentation,
+    ScreenTextUnavailable, UnreadableIndex, UnreadableReason, screen_text_response,
+    screen_text_search_response,
 };
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,

@@ -98,6 +98,7 @@
 
 mod asr;
 mod batch;
+mod bundle_search;
 mod candidates;
 mod engine;
 mod error;
@@ -128,6 +129,7 @@ pub use asr::{
     RetranscribePublication, RetranscribeRange, RetranscribeRequest,
 };
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
+pub use bundle_search::{BundleSearchRequest, BundleSearchResults};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, ManagedRootLocation,
