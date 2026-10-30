@@ -127,6 +127,9 @@ const EXPLICIT: [&str; 7] = [
     // On-screen text costs minutes of CPU on a long video and is opt-in by the
     // maintainer's decision of 2026-10-21 (ADR 0030).
     "ocr",
+    // Reading around rollovers costs CPU like ocr, and its two options change
+    // clock times, so they carry only what the user stated (ADR 0029 decision 17).
+    "clocks",
 ];
 
 /// Read-only forms of `explicit` commands that the skill may run freely: the

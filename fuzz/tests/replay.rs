@@ -64,6 +64,8 @@ type TestResult = Result<(), Box<dyn Error>>;
 
 /// Where a committed seed came from.
 enum Origin {
+    /// Clock lines written for this target: no fixture holds a clock on a screen.
+    Written,
     /// A byte-for-byte copy of this repository file.
     Copy(&'static str),
     /// An inline test document that appears verbatim in this repository file.
@@ -561,6 +563,14 @@ const SEEDS: &[Seed] = &[
         "F01-crop-x2.bin",
         Origin::RecordedCrops(2),
     ),
+    seed(Target::ClockFace, "taskbar-minutes.txt", Origin::Written),
+    seed(
+        Target::ClockFace,
+        "twelve-hour-midnight.txt",
+        Origin::Written,
+    ),
+    seed(Target::ClockFace, "stated-zones.txt", Origin::Written),
+    seed(Target::ClockFace, "refused.txt", Origin::Written),
     seed(
         Target::SearchQuery,
         "f10-r-17.txt",
@@ -1070,6 +1080,9 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
     Ok(match target {
         Target::TranscriptSrt | Target::TranscriptWebVtt => parse_supplied_transcript(data).is_ok(),
         Target::WhisperFullJson => parse_whisper_full_json(data, WhisperOutputLimits::R0).is_ok(),
+        Target::ClockFace => std::str::from_utf8(data)?
+            .lines()
+            .any(|line| vsift_domain::read_clock_face(line).is_ok()),
         Target::TranscriptRecord => decode_transcript_record(data).is_ok(),
         Target::TranscriptPart => decode_transcript_parts(
             &data
@@ -1284,6 +1297,7 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
     for seed in SEEDS {
         let data = fs::read(seed_directory(seed.target).join(seed.file))?;
         let matches = match seed.origin {
+            Origin::Written => true,
             Origin::Copy(path) => {
                 let path = repository(path);
                 let source = if path.is_dir() {
@@ -1546,7 +1560,8 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
         let derived = match seed.origin {
             Origin::RecordedShowinfo(fixture) => showinfo_seed(fixture)?,
             Origin::RecordedVisualIndex(fixture) => visual_index_seed(fixture)?,
-            Origin::Copy(_)
+            Origin::Written
+            | Origin::Copy(_)
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedCrops(_)
@@ -1784,7 +1799,8 @@ fn the_derived_seeds_are_rebuilt_by_the_harness() -> TestResult {
                 member,
                 value,
             } => edited_example(example, member, value)?,
-            Origin::Copy(_)
+            Origin::Written
+            | Origin::Copy(_)
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedShowinfo(_)

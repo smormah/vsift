@@ -137,6 +137,10 @@ pub enum Target {
     /// against segment text. The input is the query, a line feed, and the
     /// segment text.
     SearchQuery,
+    /// Lines of on-screen text through `read_clock_face`, then the faces, one a
+    /// frame in one place, through the clock model and its rollover search
+    /// (ADR 0029). The input is the lines.
+    ClockFace,
     /// `showinfo` and `ashowinfo` diagnostics through the single-frame and
     /// first-audio-sample parsers (`parse_frame_showinfo`,
     /// `parse_ashowinfo_start`). The input is the diagnostics.
@@ -242,7 +246,7 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 37] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -252,6 +256,7 @@ impl Target {
         Self::VisualSamples,
         Self::VisualIndexRecord,
         Self::SearchQuery,
+        Self::ClockFace,
         Self::FrameShowinfo,
         Self::FrameListing,
         Self::PngSequence,
@@ -294,6 +299,7 @@ impl Target {
             Self::VisualSamples => "visual_samples",
             Self::VisualIndexRecord => "visual_index_record",
             Self::SearchQuery => "search_query",
+            Self::ClockFace => "clock_face",
             Self::FrameShowinfo => "frame_showinfo",
             Self::FrameListing => "frame_listing",
             Self::PngSequence => "png_sequence",
@@ -340,6 +346,7 @@ impl Target {
             Self::VisualSamples => check_visual_samples(data),
             Self::VisualIndexRecord => check_visual_index_record(data),
             Self::SearchQuery => check_search_query(data),
+            Self::ClockFace => check_clock_face(data),
             Self::FrameShowinfo => check_frame_showinfo(data),
             Self::FrameListing => check_frame_listing(data),
             Self::PngSequence => check_png_sequence(data),
@@ -405,6 +412,8 @@ pub enum Violation {
     DuplicateStreamIndex,
     /// A video stream lacks dimensions or another stream has them.
     DimensionsMismatch,
+    /// A clock face or the clock model broke its own bounds (ADR 0029).
+    ClockModelInvalid,
     /// Accepted metadata reports more recording-time tags than the probe
     /// names, one twice, the operator's source, or one away from the start.
     ClockTagsInvalid,
@@ -528,6 +537,7 @@ impl fmt::Display for Violation {
             Self::ZeroDuration => "accepted metadata has a zero duration",
             Self::DuplicateStreamIndex => "accepted metadata repeats a stream index",
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
+            Self::ClockModelInvalid => "a clock face or the clock model broke its own bounds",
             Self::ClockTagsInvalid => "accepted metadata reports impossible recording-time tags",
             Self::CursorRoundTripChanged => "an accepted cursor changed in a round trip",
             Self::VisualSamplesMismatch => "accepted visual samples do not match the frames",
@@ -964,6 +974,64 @@ fn checked_words(text: &str) -> Result<Vec<String>, Violation> {
     Ok(words)
 }
 
+fn check_clock_face(data: &[u8]) -> Result<(), Violation> {
+    const SECONDS_PER_DAY: u32 = 86_400;
+    let Ok(input) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    let Ok(dimensions) = vsift_domain::FrameDimensions::new(1920, 1080) else {
+        return Err(Violation::HarnessSetup);
+    };
+    let Ok(region) = vsift_domain::TextRegion::new(1800, 1040, 60, 14, dimensions) else {
+        return Err(Violation::HarnessSetup);
+    };
+    let mut reads = Vec::new();
+    for (at, line) in input.lines().take(4_096).enumerate() {
+        let Ok(face) = vsift_domain::read_clock_face(line) else {
+            continue;
+        };
+        if face.second_of_day() >= SECONDS_PER_DAY {
+            return Err(Violation::ClockModelInvalid);
+        }
+        if face.wraps() != face.reading().is_none() {
+            return Err(Violation::ClockModelInvalid);
+        }
+        let (Ok(pts), Ok(step)) = (i64::try_from(at), u64::try_from(at)) else {
+            return Ok(());
+        };
+        reads.push(vsift_domain::ClockRead {
+            time: MediaTime::from_micros(step * 10_000_000),
+            pts,
+            region,
+            face,
+        });
+    }
+    let held = reads.len();
+    let analysis = vsift_domain::analyse_reads(
+        reads,
+        vsift_domain::ClockRefusals::default(),
+        MediaTime::from_micros(14_400_000_000),
+    );
+    let tracked: usize = analysis
+        .clocks
+        .iter()
+        .map(vsift_domain::ScreenClock::read_count)
+        .sum();
+    if tracked > held {
+        return Err(Violation::ClockModelInvalid);
+    }
+    for clock in &analysis.clocks {
+        if clock
+            .tightest_offset()
+            .is_some_and(|offset| offset.width() <= 0)
+        {
+            return Err(Violation::ClockModelInvalid);
+        }
+    }
+    let _ = analysis.next_reads();
+    Ok(())
+}
+
 fn check_search_query(data: &[u8]) -> Result<(), Violation> {
     let Ok(input) = std::str::from_utf8(data) else {
         return Ok(());
@@ -1348,7 +1416,9 @@ fn paths_reparse(target: &WorkTarget) -> bool {
     let reparses =
         |path: &RelativeInputPath| RelativeInputPath::parse(path.as_str()).as_ref() == Ok(path);
     match target {
-        WorkTarget::Ingest { source, transcript } => {
+        WorkTarget::Ingest {
+            source, transcript, ..
+        } => {
             reparses(source)
                 && transcript
                     .as_ref()
