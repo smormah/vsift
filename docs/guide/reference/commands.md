@@ -188,7 +188,7 @@ Check what is installed and set up what is missing (run it any time).
 Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what can be installed here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
 
 Usage: vsift setup [OPTIONS]
-       vsift.exe setup <COMMAND>
+       vsift setup <COMMAND>
 
 Commands:
   check            Inspect local dependencies without changing the machine
@@ -1345,7 +1345,7 @@ Read on-screen text off a session's frames with the optional OCR runner.
 Opt-in and bounded: each call reads at most --max-frames frames of the range's plan (every visual candidate's frame and one frame every --period-us), then stops; run it again to continue. The answer counts the frames read, failed and pending, and is partial until the plan is read. ocr search then pages the text it read, each hit citing its frame, time and region, with or without a transcript (search's first page shows it beside the transcript).
 
 Usage: vsift ocr [OPTIONS] <SESSION>
-       vsift.exe ocr <COMMAND>
+       vsift ocr <COMMAND>
 
 Commands:
   search  Page the on-screen text ocr has read for a literal query

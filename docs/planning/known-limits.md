@@ -5304,7 +5304,7 @@ that week.**
   - a kept recording exists only as a retained bundle, and nothing records where a bundle went, so a person must name the folders; a bundle moved or forgotten is not searched, and a result cannot say what was not named;
   - a recording processed with `vsift <video>` leaves no bundle: ADR 0037 closes its session at the end of the run, so this command cannot find it unless it was retained separately;
   - a session still open in the root is not searched, even if it was retained: the bundle is;
-  - a hit has no frame at hand, and `handoff check --session` cannot resolve its ids, because the session that made them is gone. To look at a moment or cite it, a person or an agent opens the source with `ingest` (the bundle's `source.media`, or the original, whose SHA-256 the `source_id` names) and cites from that session; that session's ids differ from the hit's;
+  - a hit has no frame at hand, and `handoff check --session` cannot resolve its ids: a revision's identity is derived from its session, so the same video with the same transcript, opened again, has other ids (`a_hits_id_does_not_resolve_in_a_session_opened_to_cite_it`). To look at a moment or cite it, a person or an agent opens the source with `ingest` (the bundle's `source.media`, or the original, whose SHA-256 the `source_id` names) and cites from that session;
   - no hit has a clock time until bundles carry time anchors ([L-210](#l-210));
   - one call opens at most 64 bundles and reads at most 1 GiB of manifests and records, and every page reads them all again; bundles left out are named, and a caller names them in another call, so hits of two calls are not ranked together. A folder of more than 4,096 entries is refused;
   - a bundle copied without its private permissions is left out as `not_private`, which on Windows is what a copy does: it takes the permissions of its new folder. A move within a drive keeps them;
@@ -5313,7 +5313,7 @@ that week.**
 - **Evidence:** ADR 0035; `crates/vsift-application/src/bundle_search.rs` and its tests; `bundle_search_cli_contract`; `bundle_search_contract`.
 - **Impact: low by the rubric** (a disclosed estimate): every result lists what each recording could give and names what it left out, and nothing is hidden behind the status.
 - **Mitigation:** one folder of bundles is one path; the human view and the skill line both say a hit is a lead.
-- **Next step:** P18's catalogue can answer "every kept session" with no folder named, and an index belongs there if the hosted speed check shows one is needed. Whether `vsift <video>` should keep a bundle is with the maintainer.
+- **Next step:** P18's catalogue can answer "every kept session" with no folder named, and an index belongs there if the hosted speed check shows one is needed. The maintainer has ruled on `vsift <video>`: story W6h adds `--keep` after this merges, and this part of the limit stays until W6h removes it.
 - **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 ### L-210
 

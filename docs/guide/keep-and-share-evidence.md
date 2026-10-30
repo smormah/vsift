@@ -112,11 +112,13 @@ cannot be either. Nothing is stored, so deleting a bundle removes it from search
   `vsift ingest` (the bundle's `source.media`, or your original file) and cite from that session.
 - **Bring bundles together by retaining into the folder, or moving them.** A bundle is private to you,
   and search leaves out one that is not. Moving a bundle within a drive keeps its permissions. Copying
-  it does not, on Windows above all, where a copy takes the permissions of its new folder. If one is
-  left out as `not_private`, retain the session again into that folder, or restrict the bundle's folder
-  to your own account.
+  it does not, on Windows above all, where a copy takes the permissions of its new folder: it is left
+  out where other people can read that folder, and it passes where only you, SYSTEM and Administrators
+  can. If one is left out as `not_private`, retain the session again into that folder, or restrict the
+  bundle's folder to your own account.
 - **Limits.** One search reads at most 64 bundles and 1 GiB. It names what it left out, so you can
-  search those in another call.
+  search those in another call. A page of very long text can hold fewer hits than you asked for; follow
+  the cursor to the end rather than counting them.
 
 ## 5. Before you share it
 

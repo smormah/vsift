@@ -146,18 +146,25 @@ impl FilesystemSessionStore {
                 if entries > MAX_BUNDLE_SEARCH_ENTRIES {
                     return Err(BundleSearchError::TooManyEntries);
                 }
+                // An entry that cannot be read may be a bundle, so it is
+                // counted and never dropped: the result must not read as if it
+                // saw everything.
                 let Ok(entry) = entry else {
+                    skipped_entries = skipped_entries.saturating_add(1);
                     continue;
                 };
                 // `DirEntry::file_type` does not follow a link.
-                if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                let Ok(kind) = entry.file_type() else {
+                    skipped_entries = skipped_entries.saturating_add(1);
+                    continue;
+                };
+                if !kind.is_dir() {
                     continue;
                 }
                 let child = entry.path();
-                if holds_manifest(&child) {
-                    located.push(locate(&child)?);
-                } else {
-                    skipped_entries = skipped_entries.saturating_add(1);
+                match holds_manifest(&child).then(|| locate(&child)) {
+                    Some(Ok(bundle)) => located.push(bundle),
+                    Some(Err(_)) | None => skipped_entries = skipped_entries.saturating_add(1),
                 }
             }
             if located.len() == before {

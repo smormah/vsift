@@ -186,10 +186,22 @@ fn revision_texts(
 /// Opens session number `number` with a transcript of `texts`, retains it to
 /// `output` with the binary, and closes nothing: the bundle stands alone.
 async fn kept(root: &OwnedRoot, number: u32, texts: &[&str], output: &Path) -> Built<String> {
+    kept_recording(root, number, number, texts, output).await
+}
+
+/// [`kept`], with the video named apart from the session, so two sessions can
+/// open the same recording.
+async fn kept_recording(
+    root: &OwnedRoot,
+    number: u32,
+    recording: u32,
+    texts: &[&str],
+    output: &Path,
+) -> Built<String> {
     let source = root.path(&format!("stand-in-{number}.mp4"));
     fs::write(
         &source,
-        format!("\0\0\0\x18ftypisomkept-recording-{number}").as_bytes(),
+        format!("\0\0\0\x18ftypisomkept-recording-{recording}").as_bytes(),
     )?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let session_id = SessionId::parse(format!("ses_{number:032x}"))?;
@@ -763,6 +775,63 @@ async fn a_relative_path_is_read_from_the_working_directory() -> TestResult {
     let value = parsed(&output)?;
     assert_eq!(value["data"]["total_hits"], 1);
     assert!(folder.exists());
+    Ok(())
+}
+
+/// Runs `handoff check --session` on a report citing `segment`.
+fn check_citation(root: &OwnedRoot, session: &str, segment: &str) -> Built<Value> {
+    let handoff = json!({
+        "handoff_version": "1", "status": "complete",
+        "question": "What was said?",
+        "capabilities": {"image_access": "unavailable"},
+        "claims": [{"id": "c1", "section": "actual", "kind": "observed", "support": "supported",
+            "certainty": "medium", "statement": "The refund limit is named.", "citations": ["e1"]}],
+        "citations": [{"id": "e1", "type": "transcript_segment", "segment_id": segment}],
+        "gaps": [{"kind": "image_access", "reason": "image_access_unavailable", "note": null}],
+        "untrusted_instructions": [],
+        "lifecycle": {"action": "left_open"}
+    });
+    let base = root.path("user");
+    let output = Command::cargo_bin("vsift")?
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .arg("--session-root")
+        .arg(root.sessions())
+        .args(["handoff", "check", "--session", session, "--json"])
+        .write_stdin(format!(
+            "## Problem\n\nThe limit is named [c1: e1].\n\n```vsift-handoff\n{handoff}\n```\n"
+        ))
+        .output()?;
+    Ok(serde_json::from_slice(&output.stdout)?)
+}
+
+/// Why a hit is a lead: a revision's identity is derived from its session, so
+/// the same video with the same transcript, opened again, has other ids. A
+/// hit's id resolves in the session that made it and not in the one a person
+/// opens to cite the moment.
+#[tokio::test]
+async fn a_hits_id_does_not_resolve_in_a_session_opened_to_cite_it() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let folder = root.path("kept");
+    fs::create_dir(&folder)?;
+    let texts = ["the refund limit is 50"];
+    let made = kept_recording(&root, 1, 7, &texts, &folder.join("call")).await?;
+    let opened_again = kept_recording(&root, 2, 7, &texts, &root.path("second")).await?;
+    let value = parsed(&search(&root, &[&folder], "refund limit", &[])?)?;
+    let hit = &value["data"]["hits"][0];
+    let segment = hit["evidence_id"].as_str().ok_or("no id")?;
+
+    let resolved = check_citation(&root, &made, segment)?;
+    assert_eq!(resolved["data"]["valid"], true, "{resolved}");
+    assert_eq!(resolved["data"]["session"]["resolved"], true, "{resolved}");
+
+    let refused = check_citation(&root, &opened_again, segment)?;
+    assert_eq!(refused["data"]["valid"], false, "{refused}");
+    assert_eq!(
+        refused["data"]["errors"][0]["rule"], "segment_not_in_session",
+        "{refused}"
+    );
     Ok(())
 }
 

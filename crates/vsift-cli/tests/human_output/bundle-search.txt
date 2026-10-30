@@ -17,7 +17,7 @@ Recordings:
 On-screen text was not read in full for 1 of 2 recordings, so a missing hit there means nothing.
 Bundles not searched: 1
 Bundles that could not be read: 1
-Folders with no bundle.json, left out: 1
+Folders with no bundle.json, or that could not be read, left out: 1
 A hit is a lead, not a citation: to look at a moment or cite it, open the source with vsift ingest and cite from that session.
 More on the next page: repeat the command with --cursor 'cursor-after-call-2'
 

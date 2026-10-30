@@ -307,7 +307,7 @@ fn push_bundle_notes(text: &mut TerminalText, counts: &BundleSearchCounts) {
             .end_line();
     }
     if counts.skipped_entries > 0 {
-        text.push_fixed("Folders with no bundle.json, left out: ")
+        text.push_fixed("Folders with no bundle.json, or that could not be read, left out: ")
             .push_unsigned(counts.skipped_entries)
             .end_line();
     }

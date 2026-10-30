@@ -86,7 +86,8 @@ counts once.
 
 A path resolving to no bundle at all fails the call with `INVALID_ARGUMENT` and a remediation that
 names `session retain`. A wrong folder must never read as "nobody said it". Subfolders with no
-`bundle.json` are counted in `skipped_entries`, because an interrupted `retain` leaves exactly that.
+`bundle.json`, as an interrupted `retain` leaves, and entries that could not be read, which may be
+bundles, are counted in `skipped_entries`, so no entry is dropped without a trace.
 
 Left out of 0.3.0 because the story does not need them: `--from`/`--to` (a range of one video means
 nothing across videos), an evidence stream under `--events jsonl` (it carries the terminal event, as `ocr search` does) and a
@@ -148,7 +149,8 @@ present them, so memory is about one bundle plus one page, however often the que
 **The page fits the result limit.** Long text can make 100 full hits larger than the CLI's 1 MiB result:
 a full hit can hold about 20 KiB. So a page ends early when its hits pass 768 KiB, which leaves room for
 64 coverage entries and 64 names. What gives way is the size of the page, never a hit: `next_cursor` goes
-on from the last hit shown.
+on from the last hit shown, so a page can hold fewer hits than `--limit` with more to come. A reader
+follows `next_cursor` and never counts hits.
 
 **Cancellation.** A Ctrl-C or `SIGTERM` is honoured between bundles and between the records of one
 bundle, and the command ends `CANCELLED` with exit 6, as elsewhere. Nothing was written, so there is
@@ -191,8 +193,9 @@ cursor with `INVALID_ARGUMENT` rather than silently restarting. Pages never repe
 entry per bundle opened) and `not_searched`.
 
 **Hits are leads, not citations.** A hit says where to look. `handoff check --session` cannot resolve its
-ids, because the session that made them is gone. To cite a moment, open the source with `ingest` and
-cite from that new session.
+ids: a revision's identity is derived from its session, so the same video with the same transcript,
+opened again, has other ids (test `a_hits_id_does_not_resolve_in_a_session_opened_to_cite_it`). To cite a
+moment, open the source with `ingest` and cite from that new session.
 
 Every hit is:
 
@@ -303,7 +306,7 @@ speed check shows otherwise, P18 is where an index belongs, and this ADR gets a 
 - Sessions still open in the root are not searched, even if they were retained: the bundle is.
 - **`vsift <video>` leaves no bundle.** ADR 0037 closes its session at the end of the run, so a recording
   processed that way cannot be found by this command unless it was retained separately. This ADR does
-  not change that; the planner has taken it to the maintainer as a separate question.
+  not change that; the maintainer has ruled that story W6h adds `--keep` after this merges.
 
 ## Tests
 

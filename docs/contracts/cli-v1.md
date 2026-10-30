@@ -1982,8 +1982,8 @@ listing gives first is the filesystem's choice. The bundles are ordered by folde
 two folders of one name, by their whole path, so the order of the paths changes nothing and the
 same folder named twice counts once. A path with no bundle fails the call with
 `INVALID_ARGUMENT`: a wrong folder must never read as "nobody said it". Subfolders with no
-`bundle.json` are counted in `bundles.skipped_entries`, because an interrupted `retain` leaves
-exactly that.
+`bundle.json`, as an interrupted `retain` leaves, and entries that could not be read, which may be
+bundles, are counted in `bundles.skipped_entries`.
 
 **What is read.** Each bundle passes `bundle validate`'s folder and manifest checks, including
 being private to the current user, then only its newest transcript, screen-text and visual
@@ -2020,7 +2020,8 @@ because 64 sets of range lists would not fit a result) and its `screen_text` (as
 carries `clock_time`: bundles hold no time anchors yet (known limit L-210).
 
 **A hit is a lead, not a citation.** The session that made its ids is gone, so `handoff check
---session` cannot resolve them, and no frame is at hand. To look at a moment or cite it, open the
+--session` cannot resolve them, even in a new session of the same video and transcript, because a
+revision's identity is derived from its session; and no frame is at hand. To look at a moment or cite it, open the
 source with `ingest` (the bundle's `source.media`, or the original, whose SHA-256 the `source_id`
 names) and cite from that new session. `vsift <video>` closes its session when it ends and leaves no
 bundle, so a recording processed that way is not found here unless it was retained separately.
@@ -2037,7 +2038,8 @@ any: on-screen text was not read in full for 2 of 3 recordings, so a missing hit
 **Paging.** 20 hits by default, 1 to 100 with `--limit`. `total_hits` is exact on every page, because
 every page reads every bundle. A page ends early when its hits pass 768 KiB, so a page of very long
 text fits a host's 1 MiB result; what gives way is the size of the page, never a hit, and
-`next_cursor` goes on from the last hit shown. A cursor is bound to the manifests of the bundles
+`next_cursor` goes on from the last hit shown. **So a page can hold fewer hits than `--limit` with more
+to come: follow `next_cursor`, and never count hits.** A cursor is bound to the manifests of the bundles
 searched, in order, and the normalised query, and lasts 24 hours. A bundle added, removed, renamed
 or retained again rejects it with `INVALID_ARGUMENT`. Pages never repeat or skip a hit.
 
