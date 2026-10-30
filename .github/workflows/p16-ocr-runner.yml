@@ -39,6 +39,11 @@ on:
       - tools/p16_ocr_runner.py
       - tools/test_p16_ocr_runner.py
   workflow_dispatch:
+    inputs:
+      clock_tracks:
+        description: "Only the second clock evidence for time anchoring stage 2 (tools/p16_clock_tracks.py)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -73,9 +78,113 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tools -p test_p16_ocr_runner.py
           python3 -m unittest discover -s tools -p test_p16_ocr_evaluation.py
+          python3 -m unittest discover -s tools -p test_p16_taskbar_clocks.py
+          python3 -m unittest discover -s tools -p test_p16_clock_tracks.py
+
+  # The second and last evidence run of time anchoring stage 2, synthetic only: does a
+  # misread persist across a held minute, and do the clocks work end to end? Only on a
+  # dispatch that asks for it, and the parity jobs are skipped then. Two jobs, so a
+  # failure in one cannot hide the other's numbers, and each uploads them.
+  clock-persistence:
+    name: Clock misreads held for a minute
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.clock_tracks }}
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the synthesis tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg fonts-dejavu-core fonts-liberation2
+
+      - name: Build the commit's OCR runner
+        run: cargo build --release --locked -p vsift-ocr-runner
+
+      - name: Stage the runner folder with the pinned ONNX Runtime and models
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py stage --out "$RUNNER_TEMP/runner" --platform linux-x64 \
+            --runner target/release/vsift-ocr-runner --inventory "$RUNNER_TEMP/inventory.json"
+
+      - name: Hold each value for a minute and read it four times
+        run: |
+          set -euo pipefail
+          python3 tools/p16_clock_tracks.py persistence --work "$RUNNER_TEMP/persistence" --ffmpeg /usr/bin/ffmpeg \
+            --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" \
+            --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --font /usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf \
+            --report "$RUNNER_TEMP/report/clock-persistence.json" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report (our own synthetic text only)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-clock-persistence
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 30
+
+  clock-tracks:
+    name: Clocks end to end
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.clock_tracks }}
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the synthesis tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg fonts-dejavu-core fonts-liberation2
+
+      - name: Stage the pinned FFmpeg and FFprobe for vsift
+        run: python3 tools/p16_ocr_evaluation.py stage-ffmpeg --out "$RUNNER_TEMP/vsift-tools"
+
+      - name: Build the commit's vsift and OCR runner
+        run: cargo build --release --locked -p vsift-cli -p vsift-ocr-runner
+
+      - name: Stage the runner folder with the pinned ONNX Runtime and models
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py stage --out "$RUNNER_TEMP/runner" --platform linux-x64 \
+            --runner target/release/vsift-ocr-runner --inventory "$RUNNER_TEMP/inventory.json"
+
+      - name: Run ocr and clocks over recordings of known clocks
+        run: |
+          set -euo pipefail
+          python3 tools/p16_clock_tracks.py tracks --work "$RUNNER_TEMP/tracks" --ffmpeg /usr/bin/ffmpeg \
+            --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
+            --pinned-ffmpeg "$VSIFT_EVAL_FFMPEG" --pinned-ffprobe "$VSIFT_EVAL_FFPROBE" \
+            --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --report "$RUNNER_TEMP/report/clock-tracks.json" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report (our own synthetic text only)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-clock-tracks
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 30
 
   linux:
     name: Parity and end to end (ubuntu-24.04)
+    if: ${{ !inputs.clock_tracks }}
     needs: tooling-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -246,7 +355,7 @@ jobs:
     name: Runner on ${{ matrix.os }}
     # Staging and `describe` run whatever Linux's job did; reading Linux's frames needs them.
     needs: [tooling-tests, linux]
-    if: ${{ !cancelled() && needs.tooling-tests.result == 'success' }}
+    if: ${{ !cancelled() && needs.tooling-tests.result == 'success' && !inputs.clock_tracks }}
     strategy:
       fail-fast: false
       matrix:
