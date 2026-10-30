@@ -790,6 +790,40 @@ async fn a_hit_is_a_lead_and_says_so() -> TestResult {
     Ok(())
 }
 
+/// The speed check: 64 bundles of an hour of speech each, the most one call
+/// opens. It is load, so it is ignored and never runs on a development machine:
+/// a hosted runner or LOKI runs it and reads the printed times (ADR 0035).
+#[tokio::test]
+#[ignore = "load: run on a hosted runner or LOKI only"]
+async fn speed_with_the_most_bundles_one_call_opens() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let folder = root.path("kept");
+    fs::create_dir(&folder)?;
+    let cue = "the refund limit was discussed again in this part of a long customer call";
+    let texts = vec![cue; 1_200];
+    for number in 1..=64 {
+        kept(
+            &root,
+            number,
+            &texts,
+            &folder.join(format!("call-{number:02}")),
+        )
+        .await?;
+    }
+    for (label, query) in [("common", "refund limit"), ("absent", "nothing-like-this")] {
+        let started = std::time::Instant::now();
+        let value = parsed(&search(&root, &[&folder], query, &["--limit", "100"])?)?;
+        println!(
+            "{label}: {} ms, {} hits, {} bundles searched",
+            started.elapsed().as_millis(),
+            value["data"]["total_hits"],
+            value["data"]["bundles"]["searched"]
+        );
+        assert_eq!(value["data"]["bundles"]["searched"], 64);
+    }
+    Ok(())
+}
+
 /// Ctrl-C cannot be timed against a short search here, so this pins the code
 /// the application's cancellation tests reach: the engine's failure is
 /// `CANCELLED`, the code every command ends with on exit 6

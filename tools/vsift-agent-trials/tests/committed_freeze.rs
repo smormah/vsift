@@ -60,7 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 development freeze, written on the head of W9's last pull request** (ADR 0038 slice 5, 2026-10-29): the
+/// **Draft freeze, rewritten at the merge rebase** (W2, ADR 0035, 2026-10-30): `references/commands.md` classes
+/// `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and this digest `78a332a2...`
+/// to the value below; the other six components are unchanged.
+///
+/// The freeze before it: **0.3.0 development freeze, written on the head of W9's last pull request** (ADR 0038 slice 5, 2026-10-29): the
 /// skill allows `ingest --url` in `references/commands.md`, the cold scenarios gain `C-04-f05-bug-report`, and the
 /// campaign plan runs it in batch 3 with the summary reporting it apart from the 80% target, so three components moved:
 /// `skill` `2807b370...` to `6a3104bd...`, `cold` `b288c18b...` to `853d8da3...` and `grader` `9ecd1121...` to
@@ -159,7 +163,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "78a332a27e36e0dd3e5bbe1106b9bd625d776c36dc3a270784368742873af748";
+const CUT_FREEZE_SHA256: &str = "cdfb205e0dcb96a2201e8e7c30947eb9385e1d24f4ef2a138c7f9cc713927d68";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
