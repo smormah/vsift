@@ -238,8 +238,9 @@ letter, digit, `/` or a further `:` or `.` group (`16:9`, `10:30:00.0`, `1.2.3:4
 without AM or PM (`1:23` is a duration far more often than a time), numeric dates with slashes or
 dots (`10/21/2026` is two different days), zone abbreviations (`IST` and `CST` each name several
 zones, so a dated face followed by one counts as having no stated zone), and lines scoring under
-0.80. That bound only trims junk and is **no defence against a misread**: on compressed clocks,
-wrong readings scored as high as right ones (decision 22), so the model has to catch them (decision
+0.80. That bound only trims junk and is **no defence against a misread**. ADR 0030 calls the score
+uncalibrated, and on compressed clocks wrong readings scored as high as right ones, 0.8993 to 0.9997
+against a lowest right reading of 0.9057 (decision 22), so the model has to deal with them (decision
 13). A fraction of a second is read and ignored: the unit stays 1 s.
 
 *Step 2, the track.* Faces of one format class in one place (`TextRegion::same_place`) over
@@ -309,14 +310,23 @@ itself an interval. What it means depends on its sign and shape:
 | `freeze` | A value holds past its unit, then the clock resumes | The screen stopped while the video ran, so video time is still right | No |
 | (another clock) | The jump is within its width of a multiple of 15 minutes, and at least 30 minutes | Most likely another machine's clock in the same place | No: two clocks |
 
-**A misread comes first.** OCR reads a plausible wrong digit (`14:17` as `14:13`) with a high score,
-and a minute clock's pixels hold for a minute, so one misread is likely to repeat on every read of
-that minute. Three reads therefore do not make a misread into a run of its own in any useful sense. So
-before any row below applies: a stretch with runs on both sides that share an offset interval is a
-**misread**, whatever its length. Its reads are dropped and counted in the report, and no jump is
-recorded. A misread of an hour digit lands on whole hours, so the last row below catches it. One at the
-very end of a recording, with nothing after it to return to, stays a detected gap, which changes no
-value (below).
+**An excursion comes first.** OCR reads a plausible wrong digit (`14:17` as `14:13`) with a high score,
+and a minute clock's pixels hold for a minute, so one misread may repeat on every read of that minute
+(an inference, to be measured by the second dispatch). So three reads cannot be trusted to mean a run
+of its own. But a stretch with matching runs either side is not always a misread: presenter A, then B
+with a clock 30 s apart, then A again gives the same shape. So the rule does not claim the cause.
+
+- An **excursion** is a stretch of reads in one place whose offset departs and returns to the same
+  interval, checked before any row below applies. It is reported in `clocks` with its span, its frames
+  and its read count, offering both explanations, a misread or another clock's turn, without choosing.
+- Its reads leave the track and are never dropped silently. Nothing about it is a gap, and it makes no
+  segment. The rollover search never brackets across an excursion's reads.
+- An offset that departs and does not return is not an excursion. It stays a detected gap, which
+  changes no value (below), so a misread held long enough at the end of a recording reads as a detected
+  gap (L-213).
+- A misread of an hour digit lands on whole hours, so the last row below reports it as two clocks and
+  changes nothing: `10:45` read as `20:45` is a whole 10 hours, which gives a second clock with no
+  effect on anchors unless the user confirms a zone on it (L-213).
 
 The last row is what decision 9 demands. Two presenters' taskbars in one place differ by whole hours,
 and that must never read as a cut. The cost is that a real pause of exactly an hour is reported as
@@ -427,6 +437,7 @@ vsift clocks <session> [--from <us> --to <us>] [--max-frames 0..200] [--runner <
   `partial`, naming `ocr`. Absence is never a claim: "no clock found" speaks only for the frames read.
 - It reads at most `--max-frames` refinement frames (default 40), then recomputes and commits.
   `--max-frames 0` reads nothing and needs no runner, so a confirmation never needs one.
+- It reports each excursion (decision 13) with its span, frames and read count.
 - `--screen-zone` and `--accept-gap` take only what the user stated, never an observation or a
   detected gap. The skill's command reference, which classes `clocks` as `explicit`, says so. They are
   the only two ways an open session's clock times change.
@@ -526,6 +537,11 @@ this shows that small text survives at this quality, not that a real taskbar rea
 
 A slice that does not qualify at the cut leaves the earlier ones standing.
 
+**After slices 1 and 2:** the second and last dispatch, small and synthetic only. It holds each value
+for 60 s of real video at CRF 32, measures how often a misread persists across consecutive frames of
+one minute, which is the basis of the excursion rule, and exercises the tracks. Its numbers go in the
+run's artifact as well as the job summary, because a summary can be read only when signed in.
+
 ### Limits (L-213)
 
 A clock in a script the recogniser does not read, or a format outside the grammar, is not seen. A
@@ -534,14 +550,19 @@ with no clock in view is silent. A real pause of a whole number of quarter hours
 A screen showing a video that shows a clock is reported as a clock. A real clock passing midnight
 during the recording, with seconds and no date, reads as a counter. Zones are confirmed as an offset,
 not an IANA name. A detected gap can be a change of machine rather than a cut, which is why it changes
-nothing until a person accepts it. A screen clock that was simply wrong gives a wrong reading: stage 2
-reports how clocks move, not that any of them is right.
+nothing until a person accepts it. A misread held long enough at the end of a recording reads as a
+detected gap, and an hour-digit misread reads as a second clock. An excursion's cause is not known.
+Real clocks are untested: the evidence is synthetic, in stand-in fonts without ClearType. A screen
+clock that was simply wrong gives a wrong reading: stage 2 reports how clocks move, not that any of
+them is right.
 
 ### Verification planned
 
 - Domain: grammar tables, and property tests for the model (decision 11), with generated clocks of
-  known offset, rate, cuts and midnight crossings. Pure planner tests for the rollover search,
-  including a misread midpoint and a resumed search.
+  known offset, rate, cuts and midnight crossings, and with a misread injected and held across several
+  reads of one minute at each digit position: no gap, the offset unchanged, the excursion reported.
+  Pure planner tests for the rollover search, including a misread midpoint, a resumed search and never
+  bracketing across an excursion's reads.
 - Application and engine: the stand-in reader, covering a search stopped and resumed, a concurrent
   commit, and `--max-frames 0` starting no runner.
 - Store: every new member round-trips, refuses each modification and is absent when unused.
