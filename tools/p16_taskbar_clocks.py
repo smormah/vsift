@@ -45,8 +45,10 @@ SIZES = {12: {"1080p": 12, "1440p-scaled": 16}, 13: {"1080p": 13, "1440p-scaled"
 BARS = {"light": {"bar": "0xF3F3F3", "text": "0x1B1B1B", "screen": "white"},
         "dark": {"bar": "0x202020", "text": "white", "screen": "0x1e1e1e"}}
 FACES = ("24h", "24h_seconds", "12h", "12h_seconds")
-# CRF 23 is the judged rate; 1 Mbit/s is reported at native 1080p only, to keep the run under an hour.
-ENCODINGS = {"crf23": ["-crf", "23"], "1mbit": ["-b:v", "1000k", "-maxrate", "1500k", "-bufsize", "2000k"]}
+# CRF 23 is the judged quality. CRF 32 stands in for a starved encoder, at native 1080p only, to keep
+# the run under an hour. It is a quality, not a bit rate, because a desktop this still costs about
+# 60 kbit/s, so a fixed rate would never be felt, and moving grain did not change that (local renders).
+ENCODINGS = {"crf23": ["-crf", "23"], "crf32": ["-crf", "32"]}
 JUDGED_ENCODING = "crf23"
 JUDGED_SCALE = "1080p"
 GO_SHARE = 2 / 3
@@ -62,7 +64,6 @@ DATE_TEXT = "10/21/2026"
 BODY_LINES = ("Build finished, see the report for details", "Deployment notes for the next release",
               "Open items from the review", "Customer feedback, first batch")
 SCROLLING_LINE = "Scrolling text moves as it does on a real screen"
-BACKGROUND_GRAIN = 6
 _FILTER_SAFE_PATH = re.compile(r"^[A-Za-z0-9_./-]+$")
 
 READ_PERIOD_S = 10
@@ -261,7 +262,7 @@ def tally_groups(frames: Sequence[tuple[Combination, str, Verdict, str]]) -> dic
                 groups[f"verdict/font/{combination.font}"].add(verdict)
             groups[f"scale/{combination.scale}"].add(verdict)
         else:
-            groups["rate/1mbit"].add(verdict)
+            groups[f"quality/{combination.encoding}"].add(verdict)
         if verdict.outcome != "parsed_exact":
             read = verdict.read or seen
             if verdict.read and len(verdict.read) == len(truth):
@@ -313,11 +314,8 @@ def screen_filter(combination: Combination, font: Path, value_files: Sequence[Pa
     width, height, bar = SCALES[combination.scale]
     size = SIZES[combination.size][combination.scale]
     colours = BARS[combination.bar]
-    # A still desktop costs the encoder almost nothing, so a fixed rate would never be felt.
-    # Moving grain behind the text keeps it busy; the bar is drawn after it and stays clean.
-    parts = [f"noise=alls={BACKGROUND_GRAIN}:allf=t"]
-    parts += [drawtext(font, file, size + 2, colours["text"], "120", str(120 + index * 3 * size))
-              for index, file in enumerate(body_files)]
+    parts = [drawtext(font, file, size + 2, colours["text"], "120", str(120 + index * 3 * size))
+             for index, file in enumerate(body_files)]
     parts.append(drawtext(font, scrolling_file, size + 2, colours["text"], "120", f"{height // 2}+8*t"))
     parts.append(f"drawbox=x=0:y={height - bar}:w={width}:h={bar}:color={colours['bar']}:t=fill")
     clock_y, date_y = height - bar + size // 3, height - bar + size // 3 + size + size // 3

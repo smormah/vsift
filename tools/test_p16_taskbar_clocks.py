@@ -86,10 +86,10 @@ class Report(unittest.TestCase):
 
     def test_other_scales_and_rates_never_decide(self) -> None:
         good = clocks.Verdict("parsed_exact", 0.9, "2:03 PM")
-        frames = [(combination(scale="1440p-scaled"), "2:03 PM", good, ""), (combination(encoding="1mbit"), "2:03 PM", good, "")]
+        frames = [(combination(scale="1440p-scaled"), "2:03 PM", good, ""), (combination(encoding="crf32"), "2:03 PM", good, "")]
         report = clocks.tally_groups(frames + self.frames(0, 1, 0))
         self.assertFalse(report["goes"])
-        self.assertEqual(report["groups"]["rate/1mbit"]["frames"], 1)
+        self.assertEqual(report["groups"]["quality/crf32"]["frames"], 1)
         self.assertEqual(report["groups"]["scale/1440p-scaled"]["frames"], 1)
 
     def test_a_wrong_read_names_its_confusion_and_the_scores_stay_apart(self) -> None:
@@ -136,14 +136,14 @@ class Rendering(unittest.TestCase):
     def test_the_set_holds_every_factor_and_the_second_rate_only_at_native_size(self) -> None:
         chosen = clocks.combinations(["DejaVuSans", "LiberationSans-Regular"])
         self.assertEqual(sum(item.encoding == "crf23" for item in chosen), 96)
-        self.assertEqual(sum(item.encoding == "1mbit" for item in chosen), 48)
-        self.assertTrue(all(item.scale == "1080p" for item in chosen if item.encoding == "1mbit"))
+        self.assertEqual(sum(item.encoding == "crf32" for item in chosen), 48)
+        self.assertTrue(all(item.scale == "1080p" for item in chosen if item.encoding == "crf32"))
 
     def test_values_are_distinct_repeatable_and_shared_by_both_rates(self) -> None:
         values = clocks.clock_values(combination())
         self.assertEqual(len(set(values)), clocks.VALUES_PER_COMBINATION)
         self.assertEqual(values, clocks.clock_values(combination()))
-        self.assertEqual(values, clocks.clock_values(combination(encoding="1mbit")))
+        self.assertEqual(values, clocks.clock_values(combination(encoding="crf32")))
 
     def test_each_value_holds_its_own_stretch_and_a_1440p_screen_is_scaled_down(self) -> None:
         files = [Path("text") / f"value-{index}.txt" for index in range(2)]
@@ -156,13 +156,6 @@ class Rendering(unittest.TestCase):
         self.assertTrue(screen.endswith("scale=1920:1080:flags=bicubic"))
         native = clocks.screen_filter(combination(), font, files, [Path("text/body.txt")], Path("text/s.txt"), Path("text/d.txt"))
         self.assertNotIn("scale=", native)
-
-    def test_grain_busies_the_encoder_behind_the_text_and_never_over_the_bar(self) -> None:
-        screen = clocks.screen_filter(combination(), Path("font.ttf"), [Path("text/v.txt")], [Path("text/b.txt")],
-                                      Path("text/s.txt"), Path("text/d.txt"))
-        self.assertTrue(screen.startswith("noise="))
-        self.assertEqual(screen.count("noise="), 1)
-        self.assertLess(screen.index("noise="), screen.index("drawbox="))
 
     def test_a_path_a_filter_would_interpret_is_refused(self) -> None:
         with self.assertRaises(clocks.TaskbarCheckError):
