@@ -115,7 +115,7 @@ mod tests {
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-    fn screen(kept: serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
+    fn screen(kept: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
         let file = serde_json::json!({ "name": "call.txt" });
         let envelope: Envelope<Watched> = serde_json::from_value(serde_json::json!({
             "status": "complete",
@@ -144,7 +144,7 @@ mod tests {
 
     #[test]
     fn a_kept_recording_says_so_and_how_to_find_it() -> TestResult {
-        let text = screen(serde_json::json!({ "name": "call", "failure_code": null }))?;
+        let text = screen(&serde_json::json!({ "name": "call", "failure_code": null }))?;
         assert!(text.contains("call/   kept for later search"), "{text}");
         assert!(text.contains("vsift bundle search"), "{text}");
         Ok(())
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn no_option_says_nothing_about_keeping() -> TestResult {
-        let text = screen(serde_json::Value::Null)?;
+        let text = screen(&serde_json::Value::Null)?;
         assert!(!text.contains("kept"), "{text}");
         assert!(!text.contains("Not kept"), "{text}");
         Ok(())
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn a_bundle_not_written_gives_the_command_with_the_session() -> TestResult {
-        let text = screen(serde_json::json!({
+        let text = screen(&serde_json::json!({
             "name": "call",
             "failure_code": "STORAGE_IO",
         }))?;

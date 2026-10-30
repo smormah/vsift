@@ -928,7 +928,8 @@ on a sealed job keeps, closes after the bundle, and reports the failed output; t
 the session open; without `--keep` that failure closes as before; a rerun with, without and with another `--keep`, each
 finding its job by the same names. Infrastructure: the keep check on real folders (taken by a folder, a
 file and a link; a new folder; a missing parent; inside a root; the name rule; nothing left after a pass or a refusal).
-Engine, opt-in (FFmpeg and a stand-in recogniser): a name already kept, the rerun table through a real job, and a final
+Engine, opt-in and run by the `Nightly` workflow on Ubuntu from this change, which left `engine_watch` unguarded before
+it (the planner's ruling, 2026-10-30; FFmpeg and a stand-in recogniser): a name already kept, the rerun table through a real job, and a final
 write refused on a sealed job, whose bundle `bundle search` finds. CLI: the JSON contract with `kept`, the schema and
 example, the failure's data, the finish screen's forms. End to end: the action with `--keep` on the synthetic clip, a
 second recording into the same folder, then `bundle search` on the folder finds the words of both.

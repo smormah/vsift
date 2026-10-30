@@ -4,6 +4,7 @@ name: Nightly
 # pull-request gate leaves out or runs only for some changes. The whole workspace
 # suite on Ubuntu, Windows and macOS (with the exhaustive Linux kill scenarios of
 # the managed store) and the release build, the npm launcher on all three systems,
+# `vsift <video>` through the engine on real FFmpeg (Ubuntu, `engine_watch`),
 # the fuzz harness replay, the strict worker boundary, the documentation and
 # governance checks, the guide's examples against the real binary and tools, and the
 # `P14 local upgrade` workflow (RQ-04's local mode: this build upgrades a published
@@ -161,6 +162,16 @@ jobs:
 
       - name: Build release binary
         run: cargo build --workspace --release --locked
+
+      # `vsift <video>` is what 0.3.0 leads with, and these tests need FFmpeg, so
+      # they are left out of the pull-request gate. Ubuntu's own FFmpeg, with a
+      # stand-in recogniser (ADR 0037, the amendment of 2026-10-30).
+      - name: Run vsift <video> on real FFmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
+          cargo test --release --locked -p vsift --test engine_watch -- --ignored
 
       # Saved from `main` only, once a night per system, for the pull requests
       # to restore. A run whose tests failed still saves what it compiled.

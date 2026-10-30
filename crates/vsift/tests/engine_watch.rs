@@ -12,7 +12,8 @@
 //!
 //! `cargo test -p vsift --locked --test engine_watch -- --ignored`
 //!
-//! with `ffmpeg` and `ffprobe` on `PATH`.
+//! with `ffmpeg` and `ffprobe` on `PATH`. The `Nightly` workflow runs them on
+//! Ubuntu; the pull-request gate does not.
 
 use std::{
     env,

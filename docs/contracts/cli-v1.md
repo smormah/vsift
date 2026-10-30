@@ -3644,7 +3644,7 @@ work and not held during the run; nothing is ever replaced (L-244).
   need the outputs, and the session closes only once the bundle is committed. The failure keeps its own code and
   remediation, the remediation's last words say what became of the bundle, and `data` holds `session_id`,
   `session_closed` and `kept` ([`watch-failure-data.schema.json`](../../schemas/v1/watch-failure-data.schema.json)).
-  Every other failed `watch` has `data` null.
+  This is the only failure of `watch` that carries `data`; every other failed `watch` has `data` null.
 - **Run again.** The option is not recorded in the job: the run that finishes does what its own command line says, so
   adding, dropping or changing `--keep` on a rerun continues the job and keeps as that line says.
 

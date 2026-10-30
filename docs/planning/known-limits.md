@@ -5516,7 +5516,7 @@ that week.**
   - a failed write leaves the session open for about a day unused, with VSift's private copy of the video, and may leave an incomplete folder at the name, which `bundle validate` rejects and `bundle search` counts as skipped. VSift never deletes a caller-selected export (ADR 0013), so a person removes it;
   - in that case the `<stem>.txt` header's "closed when this run finished", written before the bundle, is untrue until the session ends;
   - the option is not recorded in the job, so dropping it on a rerun keeps nothing.
-- **Evidence:** ADR 0037's amendment; `run_watch` and its tests in `crates/vsift-application/src/watch`; `check_bundle_destination`; `prepare_keep`'s tests; `engine_watch`, opt-in with FFmpeg.
+- **Evidence:** ADR 0037's amendment; `run_watch` and its tests in `crates/vsift-application/src/watch`; `check_bundle_destination`; `prepare_keep`'s tests; `engine_watch`, which needs FFmpeg and runs in the `Nightly` workflow on Ubuntu, not in the pull-request gate.
 - **Impact: low by the rubric** (a disclosed estimate): nothing is replaced, a failed write is stated in the result and the finish screen with the command that recovers it, and every search states what each recording could give.
 - **Mitigation:** the guide and the help say what is kept. `session retain` with `--include-source` after `vsift ingest` keeps the video too, and `ocr` before it keeps on-screen text.
 - **Next step:** section 10's `--include on-screen-text` brings on-screen text into the bundle with no change here.
