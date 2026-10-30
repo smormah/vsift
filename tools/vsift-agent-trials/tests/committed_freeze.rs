@@ -60,9 +60,9 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **Draft freeze, rewritten at the merge rebase** (W2, ADR 0035, 2026-10-30): `references/commands.md` classes
-/// `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and this digest `78a332a2...`
-/// to the value below; the other six components are unchanged.
+/// **0.3.0 development freeze, rewritten at W2's merge rebase** (ADR 0035, 2026-10-30): `references/commands.md`
+/// classes `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and this digest
+/// `78a332a2...` to the value below; the other six components are unchanged.
 ///
 /// The freeze before it: **0.3.0 development freeze, written on the head of W9's last pull request** (ADR 0038 slice 5, 2026-10-29): the
 /// skill allows `ingest --url` in `references/commands.md`, the cold scenarios gain `C-04-f05-bug-report`, and the
