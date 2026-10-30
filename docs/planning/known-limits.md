@@ -5309,11 +5309,11 @@ that week.**
   - one call opens at most 64 bundles and reads at most 1 GiB of manifests and records, and every page reads them all again; bundles left out are named, and a caller names them in another call, so hits of two calls are not ranked together. A folder of more than 4,096 entries is refused;
   - a bundle copied without its private permissions is left out as `not_private`, which on Windows is what a copy does: it takes the permissions of its new folder. A move within a drive keeps them;
   - a record's digest is only as good as the manifest, which is not signed, as for `bundle validate`; and search does not read the source, the frames or the evidence records, so damage there is `bundle validate`'s to find;
-  - no speed has been measured with many bundles.
+  - speed is measured only on transcript-only bundles: about 200 ms a page over 64 bundles of 1,200 cues each (hosted run 41079426645); bundles with on-screen text, or at the record limits, are not measured.
 - **Evidence:** ADR 0035; `crates/vsift-application/src/bundle_search.rs` and its tests; `bundle_search_cli_contract`; `bundle_search_contract`.
 - **Impact: low by the rubric** (a disclosed estimate): every result lists what each recording could give and names what it left out, and nothing is hidden behind the status.
 - **Mitigation:** one folder of bundles is one path; the human view and the skill line both say a hit is a lead.
-- **Next step:** P18's catalogue can answer "every kept session" with no folder named, and an index belongs there if the hosted speed check shows one is needed. The maintainer has ruled on `vsift <video>`: story W6h adds `--keep` after this merges, and this part of the limit stays until W6h removes it.
+- **Next step:** P18's catalogue can answer "every kept session" with no folder named, and an index belongs there if larger bundles show one is needed. The maintainer has ruled on `vsift <video>`: story W6h adds `--keep` after this merges, and this part of the limit stays until W6h removes it.
 - **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 ### L-210
 

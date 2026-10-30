@@ -1,8 +1,7 @@
 # ADR 0035: Search across kept sessions
 
-- Status: **Proposed**, 2026-10-30. The planner accepted decisions 1, 2 and 3 on 2026-10-30 with seven
-  changes, which this text includes. It is built in one pull request: transcript hits first, then
-  on-screen text.
+- Status: **Accepted by the planner, 2026-10-30**, with seven changes, which this text includes. It is
+  built in one pull request.
 - Date: 2026-10-30
 - Refines: [ADR 0013](0013-retained-bundle-publication.md) (retained bundles),
   [ADR 0018](0018-visual-candidate-index-and-transcript-search.md) (literal search and its ranking) and
@@ -286,10 +285,12 @@ Nothing is stored. Every call reads the records it needs, so there is no index t
 delete or leak, and deleting a bundle removes it from search. That also keeps ADR 0013's line: a bundle
 is a data folder, and VSift keeps no memory of it.
 
-The estimate, not yet measured: reading and decoding a few MiB per bundle costs tens of milliseconds, so
-64 ordinary bundles take a few seconds per page and the worst case stays within the 1 GiB budget. An
-index would save that per-page cost for a set that a person chose and usually keeps small. If the hosted
-speed check shows otherwise, P18 is where an index belongs, and this ADR gets a note with the numbers.
+Measured on 2026-10-30 (hosted run 41079426645, ubuntu-24.04, release build): a page over 64 bundles of
+1,200 cues each took 197 ms for a common query with 76,800 hits and 208 ms for an absent one, process
+start included. Those bundles held transcripts only, well below the 80 MiB worst case, so the run says
+nothing about bundles with on-screen text or at the limits. An index would save that per-page cost for a
+set that a person chose and usually keeps small, so none is needed at this size. If larger bundles show
+otherwise, P18 is where an index belongs.
 
 ## Consequences
 
@@ -322,4 +323,5 @@ speed check shows otherwise, P18 is where an index belongs, and this ADR gets a 
   `not_searched` and not `unavailable`, which proves it was never opened; 64 bundles at the record limits
   stopping at the budget; cancellation between bundles and between records; the largest page, 100 hits
   plus 64 coverage entries, within the CLI's 1 MiB result limit.
-- **Speed (load, never on the development machine):** a hosted or LOKI run with 64 bundles.
+- **Speed (load, never on the development machine):** the ignored test
+  `speed_with_the_most_bundles_one_call_opens`, on a hosted runner or LOKI (decision 9 has the result).
