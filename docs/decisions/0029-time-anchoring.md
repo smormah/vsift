@@ -268,10 +268,15 @@ every 10 s therefore already narrows the offset as reads accumulate, with no ext
   (*tentative*) for how late a screen paints its clock. Its offset interval is their intersection,
   so its width is the run's precision, and every statement about the clock carries that width.
 - Time-of-day faces wrap at 24 hours: each read is unwrapped to the value nearest the run's prediction.
-- A **rate** is judged only where it is proved. From a run's first and last reads, the slope lies in
-  `[(Δr − u) / Δt, (Δr + u) / Δt]`. A rate is flagged only when 1.0 lies outside that range, so a
-  short run cannot accuse a clock. Two clocks over the same stretch with different flagged rates are a
-  conflict (decision 14). A difference in their offsets is not (decision 9).
+- A **rate** is judged only where it is proved. A single run always fits the video's rate, because its
+  reads share an offset by definition, so a different rate shows as runs that creep apart by steps too
+  small to be jumps. The rate is therefore judged across a stretch of consecutive runs with no jump or
+  freeze between them. A step under the 2 s that decision 13 does not report stays inside the stretch,
+  so its drift still counts: the steps add up over the stretch, and a chain of small steps cannot pass
+  as neither a jump nor a rate. A rate is flagged only where 1.0 is proved to be impossible, when the
+  drift over the stretch exceeds the face's unit plus the paint allowance, so a short stretch cannot
+  accuse a clock. A clock of one run reports no rate. Two clocks over the same stretch with different
+  flagged rates are a conflict (decision 14). A difference in their offsets is not (decision 9).
 
 This is the domain's clock model, pure and deterministic, with its rules under a version
 (`CLOCK_RULES_VERSION`). Its properties are tested directly: reordering reads changes nothing, a read
@@ -548,7 +553,9 @@ A clock in a script the recogniser does not read, or a format outside the gramma
 12-hour clock without AM or PM is refused. A clock read only every 10 s can hide a short cut; a cut
 with no clock in view is silent. A real pause of a whole number of quarter hours reads as two clocks.
 A screen showing a video that shows a clock is reported as a clock. A real clock passing midnight
-during the recording, with seconds and no date, reads as a counter. Zones are confirmed as an offset,
+during the recording, with seconds and no date, reads as a counter. A timer that began before the
+recording and is past its first hour reads as a clock, because it never read zero in view; it has no
+date, so it gives no anchor. Zones are confirmed as an offset,
 not an IANA name. A detected gap can be a change of machine rather than a cut, which is why it changes
 nothing until a person accepts it. A misread held long enough at the end of a recording reads as a
 detected gap, and an hour-digit misread reads as a second clock. An excursion's cause is not known.

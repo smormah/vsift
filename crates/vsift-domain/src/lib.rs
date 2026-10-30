@@ -6,6 +6,8 @@ mod admission;
 mod agent_skill;
 mod asr;
 mod checkpoint;
+mod clock_face;
+mod clock_track;
 mod evidence;
 mod failure;
 mod identity;
@@ -56,6 +58,16 @@ pub use asr::{
     settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
+pub use clock_face::{
+    ClockFace, ClockFaceRefusal, ClockFormat, ClockUnit, MAX_CLOCK_LINE_BYTES,
+    MIN_CLOCK_LINE_BASIS_POINTS, read_clock_face,
+};
+pub use clock_track::{
+    CLOCK_RULES_VERSION, ClockAnalysis, ClockExcursion, ClockFreeze, ClockJump, ClockJumpKind,
+    ClockKind, ClockRate, ClockRead, ClockRefusals, ClockRun, MAX_CLOCK_PLACES, MIN_JUMP_MICROS,
+    MIN_OTHER_CLOCK_JUMP_MICROS, MIN_RUN_READS, OffsetInterval, PAINT_SLACK_MICROS,
+    ROLLOVER_BRACKET_MICROS, ScreenClock, analyse_clocks, analyse_reads, clock_reads,
+};
 pub use evidence::{
     AUDIO_CLIP_SAMPLE_RATE, AudioRange, BurstCount, BurstExtent, BurstPlan, BurstRange, Confidence,
     ConfidenceError, ConfidenceOrigin, CropRegion, EvidenceDetail, EvidenceItem, EvidenceItemParts,
