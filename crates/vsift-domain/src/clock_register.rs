@@ -112,15 +112,14 @@ impl ClockRegister {
                     entry.offset = offset;
                     Some(entry.id)
                 }
-                (None, Some(offset)) => next_id(&entries).map(|id| {
+                (None, Some(offset)) => next_id(&entries).inspect(|id| {
                     entries.push(RegisteredClock {
-                        id,
+                        id: *id,
                         format: clock.format(),
                         unit: clock.unit(),
                         offset,
                         confirmed_offset: None,
                     });
-                    id
                 }),
                 (_, None) => None,
             };

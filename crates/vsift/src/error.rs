@@ -479,6 +479,7 @@ impl EngineError {
             )
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
+            | Self::Clocks(_)
             | Self::ArtifactDirectoryNotAbsolute
             | Self::JobNotResumable { .. }
             | Self::JobSessionNotOpen { .. }
@@ -522,7 +523,6 @@ impl EngineError {
             Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::Ocr(error) => error.failure_code(),
-            Self::Clocks(_) => FailureCode::InvalidArgument,
             Self::Watch(failure) => failure.failure_code(),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid

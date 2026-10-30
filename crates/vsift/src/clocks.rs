@@ -216,6 +216,29 @@ fn frames_pending(
     )
 }
 
+/// What a call answers before `ocr` has read the session.
+fn clocks_not_run(status: &SessionStatus, now: u64) -> ClocksResults {
+    let analysis = ClockAnalysis::default();
+    let register = ClockRegister::of(
+        status.screen_clocks(),
+        status.time_anchors().gaps(),
+        &analysis,
+    );
+    ClocksResults {
+        session: SessionSnapshot::observe(status, now),
+        index: None,
+        analysis,
+        register,
+        observations: Vec::new(),
+        conflicts: Vec::new(),
+        read_now: 0,
+        stop: None,
+        reads_pending: 0,
+        frames_pending: true,
+        state: ClocksState::NotRun,
+    }
+}
+
 impl Engine {
     /// Finds a session's clocks, and records what it found and what the request
     /// states (see the module documentation).
@@ -250,7 +273,7 @@ impl Engine {
             if let Some(statement) = request.statement() {
                 return Err(statement);
             }
-            return self.clocks_not_run(&status, now);
+            return Ok(clocks_not_run(&status, now));
         };
         let wants_reads = max_frames > 0 && !next_targets(held).is_empty();
         let (index, read_now, stop) = if wants_reads {
@@ -311,32 +334,6 @@ impl Engine {
             reads_pending,
             frames_pending,
             state,
-        })
-    }
-
-    fn clocks_not_run(
-        &self,
-        status: &SessionStatus,
-        now: u64,
-    ) -> Result<ClocksResults, EngineError> {
-        let analysis = ClockAnalysis::default();
-        let register = ClockRegister::of(
-            status.screen_clocks(),
-            status.time_anchors().gaps(),
-            &analysis,
-        );
-        Ok(ClocksResults {
-            session: SessionSnapshot::observe(status, now),
-            index: None,
-            analysis,
-            register,
-            observations: Vec::new(),
-            conflicts: Vec::new(),
-            read_now: 0,
-            stop: None,
-            reads_pending: 0,
-            frames_pending: true,
-            state: ClocksState::NotRun,
         })
     }
 

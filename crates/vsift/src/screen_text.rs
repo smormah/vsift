@@ -599,6 +599,10 @@ impl Engine {
     /// revision (see the module documentation): `ocr` plans once, and `clocks`
     /// plans again from what each round read, because its search narrows as it
     /// goes. One revision a call keeps a search from spending the session's 64.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "The stage order is the contract; keep it visible in one place"
+    )]
     pub(crate) async fn read_in_rounds(
         &self,
         call: ReadCall<'_>,

@@ -93,6 +93,10 @@ impl ReadData {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The names are the published JSON, and every time in it says its unit"
+)]
 struct OffsetData {
     low_us: i64,
     high_us: i64,

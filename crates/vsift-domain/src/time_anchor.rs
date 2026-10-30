@@ -570,7 +570,7 @@ impl AnchorSource {
     }
 }
 
-/// A clock on the screen, in the order VSift first registered it: `c1`, `c2`.
+/// A clock on the screen, in the order `VSift` first registered it: `c1`, `c2`.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ClockId(u8);
 
@@ -772,7 +772,7 @@ pub struct ClockTime {
 /// Most gaps one session keeps.
 pub const MAX_CLOCK_GAPS: usize = 32;
 
-/// A gap a clock showed, in the order VSift first registered it: `g1`, `g2`.
+/// A gap a clock showed, in the order `VSift` first registered it: `g1`, `g2`.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct GapId(u8);
 
