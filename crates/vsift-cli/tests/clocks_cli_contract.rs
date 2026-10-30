@@ -620,3 +620,15 @@ async fn a_person_reads_what_a_gap_does_and_does_not_do() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn the_published_examples_are_valid() -> TestResult {
+    for name in ["clocks.json", "clocks.not-run.json"] {
+        let example: Value = serde_json::from_str(&fs::read_to_string(
+            repository("schemas/v1/examples").join(name),
+        )?)?;
+        validate("operation-response.schema.json", &example)?;
+        validate("clocks-data.schema.json", &example["data"])?;
+    }
+    Ok(())
+}

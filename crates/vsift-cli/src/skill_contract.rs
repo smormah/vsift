@@ -117,7 +117,7 @@ const NEVER: [&str; 9] = [
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.
-const EXPLICIT: [&str; 7] = [
+const EXPLICIT: [&str; 8] = [
     "setup.configure",
     "setup.configure-model",
     "session.renew",

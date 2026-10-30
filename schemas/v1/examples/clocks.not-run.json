@@ -1,0 +1,42 @@
+{
+  "command": "clocks",
+  "coverage": {
+    "gaps": [],
+    "reasons": [
+      "not_run"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "clocks": [],
+    "conflicts": [],
+    "index": null,
+    "observations": [],
+    "read_now": 0,
+    "reads_pending": 0,
+    "refused": {
+      "irregular": 0,
+      "low_score": 0,
+      "places_past_bound": 0,
+      "several_times": 0,
+      "stood_still": 0,
+      "too_long": 0
+    },
+    "rules_version": 1,
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "state": "not_run",
+    "stopped": null,
+    "time_anchor": null
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "Not everything is known about this session's clocks yet: frames ocr planned are unread, or the search around a clock's rollovers has reads left. Run ocr, then clocks, again to continue. A clock not listed may simply not have been read."
+  ]
+}

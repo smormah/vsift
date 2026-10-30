@@ -250,6 +250,12 @@ These files are the machine-readable public v1 boundary:
 - `bundle-search-data.schema.json` - the `data` member of a complete or partial `bundle.search`
   result (0.3.0, ADR 0035): one page of a query's hits across retained bundles, with what each
   recording could give.
+- `clocks-data.schema.json` - the `data` member of a `clocks` result (0.3.0, ADR 0029,
+  stage 2): the clocks found in what `ocr` read, each with its offset against the video
+  and the frames that prove it, its excursions, freezes and jumps, offset observations
+  (always inferences, never applied), conflicts, and the session's `time_anchor` after the
+  call. Examples: [`clocks.json`](examples/clocks.json),
+  [`clocks.not-run.json`](examples/clocks.not-run.json).
 - `ocr-search-data.schema.json` - the `data` member of a complete or partial `ocr.search`
   result (0.3.0, ADR 0030 decision 13): one page of the query's on-screen occurrences of one
   session, with or without a transcript (`query.terms`, `range`, `state`, `index`, `hits` as

@@ -1279,6 +1279,8 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "job-run-replayed",
         ),
         (CommandName::JobBatch, "job-batch.json", "job-batch"),
+        (CommandName::Clocks, "clocks.json", "clocks"),
+        (CommandName::Clocks, "clocks.not-run.json", "clocks-not-run"),
         (CommandName::Ocr, "ocr.json", "ocr"),
         (CommandName::Ocr, "ocr.partial.json", "ocr-partial"),
         (
@@ -1371,6 +1373,7 @@ fn only_setup_check_and_rejected_command_lines_have_no_result_renderer() -> Test
         CommandName::JobStatus,
         CommandName::JobRun,
         CommandName::JobBatch,
+        CommandName::Clocks,
         CommandName::Ocr,
         CommandName::OcrSearch,
         CommandName::BundleSearch,
