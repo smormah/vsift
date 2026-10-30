@@ -135,10 +135,10 @@ pub use filesystem_session_store::{
     FilesystemAdmissionPermit, FilesystemJobOwner, FilesystemSessionStore, FreeSpaceCheck,
     JOB_CANCEL_POLL, MAX_QUEUED_JOBS, MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS,
     MAX_REQUEST_RECORD_BYTES, MAX_REQUEST_RECORDS, QueueTurn, QueuedEntry, RecordedRequestResult,
-    RequestRecordWrite, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
-    SessionStoreOpenError, SessionWorkDirectory, WorkerRequestClaim, WorkerRequestOwner,
-    WorkerRequestRecord, decode_chunk_checkpoint, decode_job_record, decode_request_record,
-    encode_chunk_checkpoint, encode_job_record, encode_request_record,
+    RequestRecordWrite, SearchableBundle, SessionIndexPage, SessionReadHold, SessionRegistration,
+    SessionStatus, SessionStoreOpenError, SessionWorkDirectory, WorkerRequestClaim,
+    WorkerRequestOwner, WorkerRequestRecord, decode_chunk_checkpoint, decode_job_record,
+    decode_request_record, encode_chunk_checkpoint, encode_job_record, encode_request_record,
 };
 pub use gzip_tar_inventory::{
     GzipTarInventoryError, MAX_GZIP_ARCHIVE_BYTES, inspect_gzip_tar_inventory,

@@ -247,6 +247,9 @@ These files are the machine-readable public v1 boundary:
   bundle's `visual_index_record` artifact: one revision of the visual index with every
   recorded window and candidate, as stored (P08). A storage record, not a response:
   its `schema_version` is the integer record version `1`;
+- `bundle-search-data.schema.json` - the `data` member of a complete or partial `bundle.search`
+  result (0.3.0, ADR 0035): one page of a query's hits across retained bundles, with what each
+  recording could give.
 - `ocr-search-data.schema.json` - the `data` member of a complete or partial `ocr.search`
   result (0.3.0, ADR 0030 decision 13): one page of the query's on-screen occurrences of one
   session, with or without a transcript (`query.terms`, `range`, `state`, `index`, `hits` as
@@ -429,6 +432,9 @@ transcript cue and two on-screen hits, one held over two frames in the same plac
 `search.screen-text-unavailable.json` is the same search on a session whose screen-text record
 fails verification: the transcript page is unchanged and the member is `unavailable`, naming the
 index and `integrity_failure`.
+`bundle-search.json` is one page across four bundles found: a transcript hit, an on-screen hit, a
+recording with a gap, a bundle that is not private and a bundle left out by the read budget.
+
 `ocr-search.json` pages the same index for `R-17` one hit at a time (the first page, with its
 cursor) and `ocr-search.not-run.json` is the answer before `ocr` has read the session (`partial`,
 reason `not_run`); both are built by `screen_text_contract`.

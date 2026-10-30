@@ -3,14 +3,21 @@
 //! The engine searches; this module maps its typed page into the
 //! `vsift-contract` result or evidence stream and formats the session expiry.
 
-use vsift::{Engine, FailureCode, ScreenTextSearch, SearchRange, SearchRequest, SearchResults};
+use vsift::{
+    BundleSearchRequest, Cancellation, Engine, FailureCode, ScreenTextSearch, SearchRange,
+    SearchRequest, SearchResults,
+};
 use vsift_contract::{
     LifecycleResponse, OperationResponse, ResultView, ScreenTextHitPresentation,
-    ScreenTextSearchPresentation, SearchEvidenceStream, SearchPresentation,
+    ScreenTextSearchPresentation, SearchEvidenceStream, SearchPresentation, bundle_search_response,
     search_response_with_view,
 };
 
-use crate::{CommandFailure, command::SearchArguments, session::session_lifecycle};
+use crate::{
+    CommandFailure,
+    command::{BundleSearchArguments, SearchArguments},
+    session::session_lifecycle,
+};
 
 fn run(engine: &Engine, arguments: SearchArguments) -> Result<SearchResults, CommandFailure> {
     let range = arguments
@@ -88,6 +95,25 @@ pub(crate) fn search(
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
     let results = run(engine, arguments)?;
     search_response_with_view(&presentation(&results), lifecycle(&results)?, view)
+        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+}
+
+/// Searches retained bundles and presents one page as one result, in `view`
+/// (ADR 0035).
+pub(crate) fn bundles(
+    engine: &Engine,
+    arguments: BundleSearchArguments,
+    view: ResultView,
+    cancellation: &Cancellation,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
+    let results = engine.search_bundles(BundleSearchRequest {
+        paths: arguments.paths,
+        query: arguments.query,
+        limit: arguments.limit,
+        cursor: arguments.cursor,
+        cancellation: cancellation.clone(),
+    })?;
+    bundle_search_response(results.query(), results.outcome(), view)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 

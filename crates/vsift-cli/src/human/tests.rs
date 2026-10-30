@@ -1281,6 +1281,11 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
         (CommandName::JobBatch, "job-batch.json", "job-batch"),
         (CommandName::Ocr, "ocr.json", "ocr"),
         (CommandName::Ocr, "ocr.partial.json", "ocr-partial"),
+        (
+            CommandName::BundleSearch,
+            "bundle-search.json",
+            "bundle-search",
+        ),
         (CommandName::OcrSearch, "ocr-search.json", "ocr-search"),
         (
             CommandName::OcrSearch,
@@ -1368,6 +1373,7 @@ fn only_setup_check_and_rejected_command_lines_have_no_result_renderer() -> Test
         CommandName::JobBatch,
         CommandName::Ocr,
         CommandName::OcrSearch,
+        CommandName::BundleSearch,
     ] {
         assert!(render_value(command, &json!({})).is_err(), "{command:?}");
     }

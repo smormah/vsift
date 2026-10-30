@@ -83,6 +83,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
+| `bundle search` | One literal search over the transcript and on-screen text of retained bundles the caller names, with coverage for each recording | Implemented in 0.3.0 (ADR 0035) |
 | `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
 | `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
@@ -1958,6 +1959,92 @@ expired session; `--limit 0`, `--limit 101`, a lone `--from` or `--to` and a mal
 `--revision` are parse errors. A stored record that fails verification is
 `INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA`, as for every read.
 
+### 0.3.0 `bundle search`: one question over kept recordings
+
+```console
+vsift bundle search ./kept-calls --query "refund limit" --json
+vsift bundle search ./kept/call-1 ./kept/call-2 --query "E-409" --limit 50 --json
+```
+
+`bundle search <path>... --query <text> [--limit 1..100] [--cursor <token>] [--view
+full|brief]` ([ADR 0035](../decisions/0035-search-across-kept-sessions.md)) searches the newest
+transcript and on-screen text of retained bundles. A kept recording exists only as a bundle
+(`session retain`): a session in the root always expires, and nothing records where a bundle
+went. So the command reads the bundles named on its command line and **never opens the session
+root**, which means a disposable session cannot be reached. It writes nothing, runs no tool and
+keeps no index: each call reads what it needs and deleting a bundle removes it from search.
+`--events jsonl` carries only the terminal event, as for `ocr search`.
+
+**Paths.** Each `<path>` (at most 64) is a bundle, a folder holding a `bundle.json`, or a folder of
+bundles, read one level down. A link is never followed. Finding the bundles reads no manifest: at
+most 4,096 entries are looked at across the call, and more is refused, because which entries a
+listing gives first is the filesystem's choice. The bundles are ordered by folder name and, for
+two folders of one name, by their whole path, so the order of the paths changes nothing and the
+same folder named twice counts once. A path with no bundle fails the call with
+`INVALID_ARGUMENT`: a wrong folder must never read as "nobody said it". Subfolders with no
+`bundle.json` are counted in `bundles.skipped_entries`, because an interrupted `retain` leaves
+exactly that.
+
+**What is read.** Each bundle passes `bundle validate`'s folder and manifest checks, including
+being private to the current user, then only its newest transcript, screen-text and visual
+records are read, each checked by size and SHA-256 against the manifest and decoded strictly. The
+source, frames, audio and evidence records are neither read nor hashed, so a damaged frame is
+`bundle validate`'s to find. A bundle that cannot be read does not fail the search: it is listed
+`unavailable` with `not_private`, `integrity_failure`, `unsupported_version` or `unreadable`. A
+bundle whose transcript or index alone cannot be read still gives what it can.
+
+**Bounds.** At most 64 bundles are opened and at most 1 GiB of manifests and records is read in a
+call. Bundles past the 64th are never opened. Each manifest is charged 128 KiB, and a bundle's
+records are charged what its manifest declares before any is read, so which bundles fit does not
+depend on how busy the machine is. A bundle left out is in `not_searched` (at most 64 named, all
+counted) with `bundle_limit` or `read_budget`. To search those, name them in another call. A
+Ctrl-C or `SIGTERM` is honoured between bundles and between records and ends `CANCELLED` (exit 6).
+
+**Ranking.** Literal and deterministic, with no scoring: `phrase` before `all_terms`, then by
+bundle, then by time within the bundle, a transcript segment before on-screen text at the same
+time. Matching and on-screen grouping are `search`'s and `ocr search`'s. The same bundle found
+twice (the same manifest) is searched once and counted in `duplicates`; two different bundles of
+one session or source are both searched, because they can hold different revisions.
+
+**Result.** `data` ([`bundle-search-data.schema.json`](../../schemas/v1/bundle-search-data.schema.json),
+example [`bundle-search.json`](../../schemas/v1/examples/bundle-search.json)) holds `query`, `hits`,
+`total_hits`, `next_cursor`, `bundles` (the counts), `sessions` (one entry per bundle opened, never
+cut) and `not_searched`. A hit names its `kind`, `match`, `bundle`, `manifest_sha256`, `session_id`,
+`source_id`, `evidence_id` and `time_us`, and carries `segment` (as `transcript get` returns it, or
+its brief form with `--view brief`) or `line` (as `ocr search` returns it). `bundle` is the folder's
+own name, sanitised and cut to 128 bytes; no absolute path is ever returned. A `sessions` entry gives
+the recording's `hits`, its `transcript` (`complete`, `partial`, `none` or `unavailable`, with the
+revision, basis, and how many ranges and how many microseconds have no transcript: a summary,
+because 64 sets of range lists would not fit a result) and its `screen_text` (as `search`'s member:
+`not_run`, `partial`, `complete` or `unavailable`, with the index and the coverage block). No hit
+carries `clock_time`: bundles hold no time anchors yet (known limit L-210).
+
+**A hit is a lead, not a citation.** The session that made its ids is gone, so `handoff check
+--session` cannot resolve them, and no frame is at hand. To look at a moment or cite it, open the
+source with `ingest` (the bundle's `source.media`, or the original, whose SHA-256 the `source_id`
+names) and cite from that new session. `vsift <video>` closes its session when it ends and leaves no
+bundle, so a recording processed that way is not found here unless it was retained separately.
+
+**Status.** As for `search`, on-screen text never changes the status or the envelope coverage,
+because a bundle cannot run `ocr` and a bundle retained without it would stay `partial` for ever. The
+status is `partial`, with a fixed warning, only for a transcript gap or a bundle not searched.
+`coverage.gaps` is empty and `coverage.reasons` holds `no_transcript`, `untranscribed_range`,
+`bundle_unavailable`, `bundle_limit` and `read_budget`. On-screen gaps are in each `sessions` entry,
+counted in `bundles.screen_text_incomplete` and stated by the human view on every result that has
+any: on-screen text was not read in full for 2 of 3 recordings, so a missing hit there means nothing. A
+`not_private` bundle adds a second fixed warning saying what to do. `lifecycle` is `retained`.
+
+**Paging.** 20 hits by default, 1 to 100 with `--limit`. `total_hits` is exact on every page, because
+every page reads every bundle. A page ends early when its hits pass 768 KiB, so a page of very long
+text fits a host's 1 MiB result; what gives way is the size of the page, never a hit, and
+`next_cursor` goes on from the last hit shown. A cursor is bound to the manifests of the bundles
+searched, in order, and the normalised query, and lasts 24 hours. A bundle added, removed, renamed
+or retained again rejects it with `INVALID_ARGUMENT`. Pages never repeat or skip a hit.
+
+**Failures** use existing codes: `INVALID_ARGUMENT` for a rejected query, a path with no bundle, more
+than 64 paths, more than 4,096 entries or a rejected cursor, each with a fixed remediation; `--limit 0`,
+`--limit 101` and no path are parse errors.
+
 ### P08 visual candidates
 
 ```console
@@ -3534,7 +3621,7 @@ for parsing, above). Every human result and failure is written through one build
 PR 2a rendered `setup check`, `setup plan`, `setup configure`, `setup configure-model`,
 `ingest`, `session list/status/renew/close/retain/clean/init-workspace`, `transcript
 get`, `transcript retranscribe`, `search`, `bundle validate`, every failure and
-rejected command lines. PR 2b renders `candidates` (the index, the analysed ranges and
+rejected command lines; `bundle search` (0.3.0) renders its hits, then every recording's coverage. PR 2b renders `candidates` (the index, the analysed ranges and
 typed gaps, then each candidate's time, span, reasons and change), `frame
 get/neighbours/burst` and `crop` (the request, the burst plan or the neighbours' stops,
 each selection's requested and actual time, then each item with its image facts and

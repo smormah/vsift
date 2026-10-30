@@ -71,6 +71,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift crop` | free | Counts as a refinement and an image. |
 | `vsift audio` | free | For a human listener; you cannot hear it and its file tells you nothing: read speech with `transcript get`. |
 | `vsift bundle validate` | free | Read-only, on a bundle the user named or one you retained for them. |
+| `vsift bundle search` | free | Read-only, on bundles or a folder the user named. A hit is a lead, not a citation: to cite a moment, open the source with `ingest` and cite from that session. Read its `sessions` list: a recording's on-screen text may not have been read. |
 | `vsift handoff check` | free | Read-only; checks your draft report once before you send it, in one of the two forms under "Checking the draft". |
 | `vsift handoff skeleton` | free | Read-only; prints a valid handoff that states nothing yet, with your session's ids filled in, to start the JSON from (handoff.md). |
 | `vsift skill install` | never | Copies the skill into another client's folder: the person's own configuration, which only they change. |
@@ -151,6 +152,7 @@ vsift session close <session> --json
 vsift session clean --expired --dry-run --json
 vsift session clean --expired --dry-run --cursor <n> --json
 vsift bundle validate <bundle-directory> --json
+vsift bundle search <bundle-directory> --query "<text>" --json
 vsift handoff skeleton <session> --question "<question>" --json
 vsift skill status --json
 vsift skill show <skill-file> --json

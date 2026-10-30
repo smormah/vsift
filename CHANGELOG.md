@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **`vsift bundle search`: one question over the recordings you kept (0.3.0, ADR 0035; draft).** `vsift bundle search ./kept-calls --query "refund limit"` searches the newest transcript and on-screen text of the retained bundles you name, or of a folder holding them, and lists each hit with its recording, session, source, time and evidence id, phrase matches first. It never opens the session root, so a disposable session cannot be reached; it writes nothing, runs no tool and keeps no index.
+  - **Honest coverage:** every result lists what each recording could give. The status is `partial` for a transcript gap or a bundle not searched, as for `search`; on-screen text never changes it, and is counted and stated instead. One damaged bundle costs that bundle only, and a wrong folder is refused rather than read as "nobody said it".
+  - **Bounds:** at most 64 paths, 4,096 entries, 64 bundles and 1 GiB of manifests and records in a call, chosen from folder names before anything is opened; bundles left out are named. A page ends early rather than pass the 1 MiB result limit, and its cursor goes on from there.
+  - **A hit is a lead, not a citation:** to cite a moment, open the source with `ingest` and cite from that session. The skill classes the command `free` (one line in `references/commands.md`).
+  - **Records:** `cli-v1.md`, the schema and example, the guide, [L-212](docs/planning/known-limits.md#l-212), and a note on ADR 0030 decision 13.
+
 ### Changed
 
 - **The README is VSift's front page (W6a; pages and graphics only; a draft).** The opening carries the category, a video evidence engine, and the decided position in two sentences, with installation right after it. The first demo is a made-up claim refused: a draft report written for the demo cites a frame that does not exist, `vsift handoff check` answers `evidence_not_in_session`, and the report without that claim passes, recorded on the synthetic 14-second clip from a build of `main` at `8a35d1f4`. The walk-through, the hero, the evidence timeline and the terminal demo all carry that one session. Three pillars and an answer on what VSift adds to FFmpeg and whisper.cpp join "Why" and "How it works"; "Honest status" and the roadmap now show `0.2.3`, `0.2.4`, `0.3.0` and `1.0.0`; the architecture picture gains the on-your-machine boundary and says that one reviewed Windows crate uses `unsafe` (ADR 0026), which it had left out; the pipeline picture shows the refusal. [`docs/planning/readme-0.3.0-sections.md`](docs/planning/readme-0.3.0-sections.md) holds the sections prepared for `vsift setup`, `vsift <video>`, `vsift skill install`, the plugin, the extras, speakers and speech on Windows, each with the condition that lets it into the README.

@@ -193,38 +193,13 @@ impl FilesystemSessionStore {
         reason = "Keep every bundle check and its order visible together"
     )]
     pub fn validate_bundle(path: &Path) -> Result<BundleStatus, SessionStorageError> {
-        validate_root_selection(path).map_err(map_open_error)?;
-        let metadata = fs::symlink_metadata(path).map_err(map_storage_io)?;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(SessionStorageError::IntegrityFailure);
-        }
-        let parent_path = path.parent().ok_or(SessionStorageError::AccessDenied)?;
-        let name = path.file_name().ok_or(SessionStorageError::AccessDenied)?;
-        let parent = Dir::open_ambient_dir(parent_path, cap_std::ambient_authority())
-            .map_err(map_storage_io)?;
-        let bundle = parent
-            .open_dir_nofollow(Path::new(name))
-            .map_err(map_committed_io)?;
-        validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
-        validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
-        let manifest_bytes = open_regular_file(&bundle, "bundle.json", false)
-            .and_then(read_bounded_manifest)
-            .map_err(map_committed_io)?;
-        let manifest: BundleManifest = parse_versioned_json(&manifest_bytes)?;
-        if manifest.format != "vsift.bundle"
-            || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
-            || manifest.source_bytes == 0
-            || manifest.source_bytes > crate::MAX_SOURCE_BYTES
-        {
-            return Err(SessionStorageError::IntegrityFailure);
-        }
-        let session_id = SessionId::parse(&manifest.session_id)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let source_id = SourceId::parse(&manifest.source_id)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        if manifest.artifacts.len() > MAX_SESSION_ARTIFACTS {
-            return Err(SessionStorageError::CapacityExhausted);
-        }
+        let bundle = open_selected_bundle(path)?;
+        let ReadManifest {
+            manifest,
+            bytes: manifest_bytes,
+            session_id,
+            source_id,
+        } = read_bundle_manifest(&bundle)?;
         let expected_entries = 1 + manifest.artifacts.len() + usize::from(manifest.source_included);
         let mut entries = 0_usize;
         for entry in bundle.entries().map_err(map_storage_io)? {
@@ -326,6 +301,63 @@ impl FilesystemSessionStore {
             manifest_sha256: sha256_hex(&manifest_bytes),
         })
     }
+}
+
+/// Opens a selected bundle folder: an absolute path, a real folder that is no
+/// link, and private to the current user, which is also the rule that a search
+/// never reads another user's bundle (ADR 0035).
+pub(super) fn open_selected_bundle(path: &Path) -> Result<Dir, SessionStorageError> {
+    validate_root_selection(path).map_err(map_open_error)?;
+    let metadata = fs::symlink_metadata(path).map_err(map_storage_io)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let parent_path = path.parent().ok_or(SessionStorageError::AccessDenied)?;
+    let name = path.file_name().ok_or(SessionStorageError::AccessDenied)?;
+    let parent =
+        Dir::open_ambient_dir(parent_path, cap_std::ambient_authority()).map_err(map_storage_io)?;
+    let bundle = parent
+        .open_dir_nofollow(Path::new(name))
+        .map_err(map_committed_io)?;
+    validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
+    validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
+    Ok(bundle)
+}
+
+/// A bundle's manifest, strictly parsed, with its identities.
+pub(super) struct ReadManifest {
+    pub(super) manifest: BundleManifest,
+    pub(super) bytes: Vec<u8>,
+    pub(super) session_id: SessionId,
+    pub(super) source_id: SourceId,
+}
+
+/// Reads and checks a bundle's `bundle.json`, bounded.
+pub(super) fn read_bundle_manifest(bundle: &Dir) -> Result<ReadManifest, SessionStorageError> {
+    let bytes = open_regular_file(bundle, "bundle.json", false)
+        .and_then(read_bounded_manifest)
+        .map_err(map_committed_io)?;
+    let manifest: BundleManifest = parse_versioned_json(&bytes)?;
+    if manifest.format != "vsift.bundle"
+        || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
+        || manifest.source_bytes == 0
+        || manifest.source_bytes > crate::MAX_SOURCE_BYTES
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let session_id = SessionId::parse(&manifest.session_id)
+        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let source_id =
+        SourceId::parse(&manifest.source_id).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    if manifest.artifacts.len() > MAX_SESSION_ARTIFACTS {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    Ok(ReadManifest {
+        manifest,
+        bytes,
+        session_id,
+        source_id,
+    })
 }
 
 /// Checks a bundle's evidence records against its media (ADR 0013 note of

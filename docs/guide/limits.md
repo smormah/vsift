@@ -122,6 +122,10 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **It looks twice a second** ([L-029](../planning/known-limits.md#l-029)). A change shorter than half a second
   can fall between looks and is not reported, and the coverage lines cannot say so. A burst of frames around a
   moment finds it if you suspect one.
+- **Searching what you kept (`vsift bundle search`, new in 0.3.0) reads only the bundles you name**, at most 64 and
+  1 GiB a call, and a hit is a lead and not a citation: to cite a moment, open the source with `ingest`. A recording you
+  processed with `vsift <video>` leaves no bundle, so it is not found unless you retained it
+  ([L-212](../planning/known-limits.md#l-212)).
 - **No real motion has been measured** ([L-030](../planning/known-limits.md#l-030)). The practice recordings
   draw no scrolling, cursor movement or loading animation, so how well VSift sees those is unknown.
 - **VSift reads text in a picture only when you ask** (`vsift ocr`, new in 0.3.0, with the optional OCR runner). It

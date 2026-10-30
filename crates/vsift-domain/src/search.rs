@@ -48,6 +48,7 @@
 //! rank is exactly (tier, ordinal), which is what a continuation cursor
 //! records.
 
+mod bundles;
 mod coverage;
 mod screen_text;
 
@@ -56,6 +57,7 @@ mod tests;
 
 use std::{error::Error, fmt};
 
+pub use bundles::{BundleHitKey, BundleHitKind, BundleHitPosition, rank_bundle_hits};
 pub(crate) use coverage::carried_untranscribed_for;
 pub use coverage::{CoverageBasis, SearchCoverage};
 pub use screen_text::{
@@ -388,6 +390,29 @@ pub fn search_revision<'a>(
     let has_more = hits.len() > limit;
     hits.truncate(limit);
     SearchSlice { hits, has_more }
+}
+
+/// Every hit of `query` in `revision`, in rank order. Unlike [`search_revision`]
+/// it has no page: a search across bundles ranks the hits of every bundle
+/// together (ADR 0035). The revision's own bounds bound the work.
+#[must_use]
+pub fn search_hits<'a>(
+    revision: &'a TranscriptRevision,
+    query: &SearchQuery,
+) -> Vec<SearchHit<'a>> {
+    let mut matcher = Matcher::new(query);
+    let mut hits: Vec<SearchHit<'a>> = revision
+        .segments()
+        .iter()
+        .filter_map(|segment| {
+            matcher
+                .classify(segment.text().text())
+                .map(|tier| SearchHit { segment, tier })
+        })
+        .collect();
+    // A stable sort: inside a tier the hits stay in ordinal order.
+    hits.sort_by_key(SearchHit::tier);
+    hits
 }
 
 /// Segments of `segments` (in start order) that intersect `window`, or all of

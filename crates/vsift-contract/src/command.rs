@@ -65,6 +65,8 @@ pub enum CommandName {
     Crop,
     /// `bundle validate`.
     BundleValidate,
+    /// `bundle search` (ADR 0035): one question over retained bundles.
+    BundleSearch,
     /// `job run` (reserved).
     JobRun,
     /// `job batch` (reserved).
@@ -110,7 +112,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 43] = [
+    pub const ALL: [Self; 44] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -154,6 +156,7 @@ impl CommandName {
         Self::SkillInstall,
         Self::SkillStatus,
         Self::SkillShow,
+        Self::BundleSearch,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -187,6 +190,7 @@ impl CommandName {
             Self::Audio => "audio",
             Self::Crop => "crop",
             Self::BundleValidate => "bundle.validate",
+            Self::BundleSearch => "bundle.search",
             Self::JobRun => "job.run",
             Self::JobBatch => "job.batch",
             Self::JobStatus => "job.status",
@@ -259,6 +263,7 @@ impl CommandName {
             Self::SkillInstall => 40,
             Self::SkillStatus => 41,
             Self::SkillShow => 42,
+            Self::BundleSearch => 43,
         }
     }
 }

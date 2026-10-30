@@ -16,6 +16,7 @@
 #[cfg(test)]
 mod abandon_tests;
 mod bundle;
+mod bundle_search;
 mod chain;
 mod cleanup;
 mod commit;
@@ -69,6 +70,7 @@ use vsift_domain::{
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+pub use bundle_search::SearchableBundle;
 pub use job_records::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
 };
@@ -88,7 +90,7 @@ const MAX_METADATA_BYTES: u64 = 64 * 1024;
 /// Largest generation manifest (and retained bundle manifest), which lists
 /// every artifact: 512 entries of about 200 bytes need about 100 KiB (ADR
 /// 0020 D-2). Every other metadata file keeps [`MAX_METADATA_BYTES`].
-const MAX_MANIFEST_BYTES: u64 = 128 * 1024;
+const MAX_MANIFEST_BYTES: u64 = vsift_application::MAX_BUNDLE_MANIFEST_BYTES;
 const OWNERSHIP_FILE: &str = "ownership.json";
 const COORDINATION_DIRECTORY: &str = "coordination";
 const SESSIONS_DIRECTORY: &str = "sessions";

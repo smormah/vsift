@@ -280,6 +280,77 @@ pub(crate) struct OcrSearch {
     pub(crate) part: SearchScreenText,
 }
 
+/// `bundle search` data (`bundle-search-data.schema.json`): one page of hits
+/// across retained bundles, with what each recording could give.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearch {
+    pub(crate) query: SearchQuery,
+    pub(crate) hits: Vec<BundleSearchHit>,
+    pub(crate) total_hits: u64,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) bundles: BundleSearchCounts,
+    pub(crate) sessions: Vec<BundleSearchSession>,
+    pub(crate) not_searched: Vec<BundleNotSearched>,
+}
+
+/// One hit of a `bundle search` page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchHit {
+    pub(crate) kind: String,
+    #[serde(rename = "match")]
+    pub(crate) tier: String,
+    pub(crate) bundle: String,
+    pub(crate) session_id: String,
+    pub(crate) evidence_id: String,
+    pub(crate) time_us: u64,
+    #[serde(default)]
+    pub(crate) segment: Option<BundleHitText>,
+    #[serde(default)]
+    pub(crate) line: Option<BundleHitText>,
+}
+
+/// The one member of a hit's evidence that a renderer may quote.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleHitText {
+    pub(crate) display_text: DisplayText,
+}
+
+/// The counts of a `bundle search`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchCounts {
+    pub(crate) searched: u64,
+    pub(crate) unavailable: u64,
+    pub(crate) not_searched: u64,
+    pub(crate) duplicates: u64,
+    pub(crate) skipped_entries: u64,
+    pub(crate) screen_text_incomplete: u64,
+}
+
+/// What a `bundle search` saw of one bundle.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchSession {
+    pub(crate) bundle: String,
+    pub(crate) state: String,
+    #[serde(default)]
+    pub(crate) reason: Option<String>,
+    pub(crate) hits: u64,
+    pub(crate) transcript: Option<BundleSearchPart>,
+    pub(crate) screen_text: Option<BundleSearchPart>,
+}
+
+/// The state of one part of a bundle.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchPart {
+    pub(crate) state: String,
+}
+
+/// A bundle found and not searched.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleNotSearched {
+    pub(crate) bundle: String,
+    pub(crate) reason: String,
+}
+
 /// The on-screen text part of a `search` first page.
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchScreenText {

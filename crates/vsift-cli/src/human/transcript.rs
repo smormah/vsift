@@ -3,10 +3,11 @@
 use super::{
     clock, push_outcome,
     text::{Placement, RenderedText, TerminalText, TooLarge},
-    time::{push_range, push_span},
+    time::{push_clock, push_range, push_span},
     view::{
-        Envelope, Markup, OcrSearch, Retranscription, Search, SearchScreenText, Since,
-        TranscriptCoverage, TranscriptPage, TranscriptRevision, TranscriptSegment,
+        BundleSearch, BundleSearchCounts, Envelope, Markup, OcrSearch, Retranscription, Search,
+        SearchScreenText, Since, TranscriptCoverage, TranscriptPage, TranscriptRevision,
+        TranscriptSegment,
     },
 };
 
@@ -200,6 +201,119 @@ pub(super) fn ocr_search(envelope: &Envelope<OcrSearch>) -> Result<RenderedText,
     push_next_page(&mut text, data.next_cursor.as_deref());
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// `bundle search`: one page of hits across retained bundles, then what each
+/// recording could give. A hit is a lead, and the page says so; the on-screen
+/// gaps are stated on every result that has any, because they do not reach the
+/// status (ADR 0035).
+pub(super) fn bundle_search(envelope: &Envelope<BundleSearch>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Kept recordings searched: ")
+        .push_unsigned(data.bundles.searched)
+        .end_line();
+    // The terms are the caller's own text; only their number is shown.
+    text.push_fixed("Query terms: ")
+        .push_unsigned(count(data.query.terms.len()))
+        .end_line();
+    text.push_fixed("Hits: ")
+        .push_unsigned(count(data.hits.len()))
+        .push_fixed(" of ")
+        .push_unsigned(data.total_hits)
+        .end_line();
+    if !data.hits.is_empty() {
+        text.push_fixed(UNTRUSTED_EVIDENCE).end_line();
+    }
+    for hit in &data.hits {
+        text.blank_line();
+        text.push_value(&hit.bundle)
+            .push_fixed("  ")
+            .push_value(&hit.evidence_id)
+            .push_fixed("  ");
+        push_clock(&mut text, hit.time_us);
+        text.push_fixed("  ")
+            .push_value(&hit.kind)
+            .push_fixed("  match: ")
+            .push_value(&hit.tier)
+            .push_fixed("  session: ")
+            .push_value(&hit.session_id)
+            .end_line();
+        if let Some(quoted) = hit.segment.as_ref().or(hit.line.as_ref()) {
+            text.push_untrusted(&quoted.display_text, Placement::Quoted);
+        }
+    }
+    text.blank_line();
+    text.push_fixed("Recordings:").end_line();
+    for session in &data.sessions {
+        text.push_fixed("  ").push_value(&session.bundle);
+        match (&session.transcript, &session.screen_text) {
+            (Some(transcript), Some(screen_text)) => {
+                text.push_fixed(": hits ")
+                    .push_unsigned(session.hits)
+                    .push_fixed(", transcript ")
+                    .push_value(&transcript.state)
+                    .push_fixed(", on-screen text ")
+                    .push_value(&screen_text.state);
+            }
+            _ => {
+                text.push_fixed(": ").push_value(&session.state);
+                if let Some(reason) = &session.reason {
+                    text.push_fixed(" (").push_value(reason).push_fixed(")");
+                }
+            }
+        }
+        text.end_line();
+    }
+    for bundle in &data.not_searched {
+        text.push_fixed("  ")
+            .push_value(&bundle.bundle)
+            .push_fixed(": not searched (")
+            .push_value(&bundle.reason)
+            .push_fixed(")")
+            .end_line();
+    }
+    push_bundle_notes(&mut text, &data.bundles);
+    text.push_fixed(
+        "A hit is a lead, not a citation: to look at a moment or cite it, open the source with \
+         vsift ingest and cite from that session.",
+    )
+    .end_line();
+    push_next_page(&mut text, data.next_cursor.as_deref());
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes what the counts of a `bundle search` add to its list.
+fn push_bundle_notes(text: &mut TerminalText, counts: &BundleSearchCounts) {
+    if counts.screen_text_incomplete > 0 {
+        text.push_fixed("On-screen text was not read in full for ")
+            .push_unsigned(counts.screen_text_incomplete)
+            .push_fixed(" of ")
+            .push_unsigned(counts.searched)
+            .push_fixed(" recordings, so a missing hit there means nothing.")
+            .end_line();
+    }
+    if counts.not_searched > 0 {
+        text.push_fixed("Bundles not searched: ")
+            .push_unsigned(counts.not_searched)
+            .end_line();
+    }
+    if counts.unavailable > 0 {
+        text.push_fixed("Bundles that could not be read: ")
+            .push_unsigned(counts.unavailable)
+            .end_line();
+    }
+    if counts.duplicates > 0 {
+        text.push_fixed("The same bundle found again, searched once: ")
+            .push_unsigned(counts.duplicates)
+            .end_line();
+    }
+    if counts.skipped_entries > 0 {
+        text.push_fixed("Folders with no bundle.json, left out: ")
+            .push_unsigned(counts.skipped_entries)
+            .end_line();
+    }
 }
 
 /// Writes the on-screen text part of a search: how much was read, then each

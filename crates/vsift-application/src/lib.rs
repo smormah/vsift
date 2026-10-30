@@ -8,6 +8,7 @@ use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, Runti
 
 mod agent_skill;
 mod asr;
+mod bundle_search;
 mod clock;
 mod evidence;
 mod identifiers;
@@ -39,6 +40,14 @@ pub use asr::{
     TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,
     build_open_asr_revision, build_stopped_asr_revision, retranscription_range, transcribe_range,
     transcribe_range_checkpointed,
+};
+pub use bundle_search::{
+    BUNDLE_SEARCH_READ_BUDGET, BundleHit, BundleHitEvidence, BundleIdentity, BundleNotSearched,
+    BundleNotSearchedReason, BundleScreenText, BundleScreenTextHit, BundleSearchCounts,
+    BundleSearchError, BundleSearchInput, BundleSearchOutcome, BundleSessionCoverage,
+    BundleSessionEntry, BundleTranscript, BundleUnreadable, FoundBundle, FoundBundles,
+    MAX_BUNDLE_MANIFEST_BYTES, MAX_BUNDLE_SEARCH_ENTRIES, MAX_BUNDLE_SEARCH_PATHS,
+    MAX_BUNDLES_PER_SEARCH, OpenedBundle, search_bundles,
 };
 pub use clock::{Clock, ClockError, StoppedStopwatch, Stopwatch};
 pub use evidence::{
@@ -82,7 +91,8 @@ pub use screen_text::{
     screen_text_index_id, screen_text_line_id, verify_screen_text_identities,
 };
 pub use screen_text_search::{
-    ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_query_digest,
+    ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_plan_coverage,
+    screen_text_query_digest,
 };
 pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
 pub use session::{
