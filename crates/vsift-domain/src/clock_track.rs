@@ -43,6 +43,16 @@ pub struct OffsetInterval {
 }
 
 impl OffsetInterval {
+    /// The interval `[low, high)`; `None` if it holds nothing.
+    #[must_use]
+    pub const fn new(low: i64, high: i64) -> Option<Self> {
+        if low < high {
+            Some(Self { low, high })
+        } else {
+            None
+        }
+    }
+
     /// What one reading proves, widened for how late a screen paints.
     #[must_use]
     pub const fn of_reading(value_micros: i64, unit: ClockUnit, time: MediaTime) -> Self {

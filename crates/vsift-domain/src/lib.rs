@@ -7,6 +7,7 @@ mod agent_skill;
 mod asr;
 mod checkpoint;
 mod clock_face;
+mod clock_register;
 mod clock_track;
 mod evidence;
 mod failure;
@@ -62,6 +63,7 @@ pub use clock_face::{
     ClockFace, ClockFaceRefusal, ClockFormat, ClockUnit, MAX_CLOCK_LINE_BYTES,
     MIN_CLOCK_LINE_BASIS_POINTS, read_clock_face,
 };
+pub use clock_register::{ClockRegister, RegisteredClock};
 pub use clock_track::{
     CLOCK_RULES_VERSION, ClockAnalysis, ClockExcursion, ClockFreeze, ClockJump, ClockJumpKind,
     ClockKind, ClockRate, ClockRead, ClockRefusals, ClockRun, MAX_CLOCK_PLACES, MIN_JUMP_MICROS,
@@ -139,9 +141,9 @@ pub use storage::{
 };
 pub use time_anchor::{
     ANCHOR_AGREEMENT_MICROS, AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime,
-    ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, MAX_CLOCK_TEXT_BYTES,
-    MAX_TIME_ANCHORS, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor, TimeAnchorError, TimeAnchors,
-    UtcOffset,
+    ClockId, ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, MAX_CLOCK_TEXT_BYTES,
+    MAX_SCREEN_CLOCKS, MAX_TIME_ANCHORS, ScreenAnchor, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor,
+    TimeAnchorError, TimeAnchors, UtcOffset,
 };
 pub use timeline::{
     CropParseError, CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,

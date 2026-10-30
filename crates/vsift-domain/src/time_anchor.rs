@@ -29,6 +29,8 @@ use crate::MediaTime;
 
 /// Most anchors one session holds.
 pub const MAX_TIME_ANCHORS: usize = 16;
+/// Most clocks on the screen one session keeps track of.
+pub const MAX_SCREEN_CLOCKS: usize = 8;
 /// Longest clock text the parser reads; anything longer is refused unread.
 pub const MAX_CLOCK_TEXT_BYTES: usize = 40;
 /// How far apart two comparable anchors may be and still agree, in
@@ -498,18 +500,29 @@ pub enum AnchorSource {
     /// The recording app's own local-time tag
     /// (`com.apple.quicktime.creationdate`), which usually carries its zone.
     QuicktimeCreationDate,
+    /// A clock on the screen whose zone the user confirmed: an instant. The
+    /// user confirmed a zone, not that the clock was right, so it does not
+    /// displace the recorder's tag (ADR 0029 decision 15).
+    ScreenClockConfirmed,
     /// The container's UTC creation time (`creation_time`: an MP4 movie
     /// header or Matroska's `DateUTC`). Many tools write the time they encoded
     /// or remuxed the file, and some devices the end of the recording.
     ContainerCreationTime,
+    /// A clock on the screen that states its zone: an instant.
+    ScreenTimestamp,
+    /// A dated clock on the screen with no zone: a local time, no instant.
+    ScreenClock,
 }
 
 impl AnchorSource {
     /// Every source, in ladder order.
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 6] = [
         Self::Operator,
         Self::QuicktimeCreationDate,
+        Self::ScreenClockConfirmed,
         Self::ContainerCreationTime,
+        Self::ScreenTimestamp,
+        Self::ScreenClock,
     ];
 
     /// Stable public and stored identifier.
@@ -518,7 +531,10 @@ impl AnchorSource {
         match self {
             Self::Operator => "operator",
             Self::QuicktimeCreationDate => "quicktime_creationdate",
+            Self::ScreenClockConfirmed => "screen_clock_confirmed",
             Self::ContainerCreationTime => "container_creation_time",
+            Self::ScreenTimestamp => "screen_timestamp",
+            Self::ScreenClock => "screen_clock",
         }
     }
 
@@ -536,8 +552,59 @@ impl AnchorSource {
         match self {
             Self::Operator => AnchorConfidence::Exact,
             Self::QuicktimeCreationDate => AnchorConfidence::High,
-            Self::ContainerCreationTime => AnchorConfidence::Medium,
+            Self::ScreenClockConfirmed
+            | Self::ContainerCreationTime
+            | Self::ScreenTimestamp
+            | Self::ScreenClock => AnchorConfidence::Medium,
         }
+    }
+
+    /// Whether the source is a clock on the screen, which may give one anchor
+    /// per clock; each stage-1 source gives at most one.
+    #[must_use]
+    pub const fn is_on_screen(self) -> bool {
+        matches!(
+            self,
+            Self::ScreenClockConfirmed | Self::ScreenTimestamp | Self::ScreenClock
+        )
+    }
+}
+
+/// A clock on the screen, in the order VSift first registered it: `c1`, `c2`.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ClockId(u8);
+
+impl ClockId {
+    /// The clock of this ordinal, from 1 to [`MAX_SCREEN_CLOCKS`].
+    #[must_use]
+    pub const fn new(ordinal: u8) -> Option<Self> {
+        if ordinal == 0 || ordinal as usize > MAX_SCREEN_CLOCKS {
+            None
+        } else {
+            Some(Self(ordinal))
+        }
+    }
+
+    /// The clock `c<ordinal>` names.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        let digits = text.strip_prefix('c')?;
+        if digits.is_empty() || digits.starts_with('0') {
+            return None;
+        }
+        Self::new(digits.parse().ok()?)
+    }
+
+    /// Its ordinal, from 1.
+    #[must_use]
+    pub const fn ordinal(self) -> u8 {
+        self.0
+    }
+}
+
+impl fmt::Display for ClockId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "c{}", self.0)
     }
 }
 
@@ -596,6 +663,17 @@ pub struct TimeAnchor {
     source: AnchorSource,
     media_time: MediaTime,
     reading: ClockReading,
+    screen: Option<ScreenAnchor>,
+}
+
+/// What an anchor from a clock on the screen adds: which clock, and how far
+/// its reading can be from the truth.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScreenAnchor {
+    /// The clock.
+    pub clock: ClockId,
+    /// How wide its offset interval is, in microseconds.
+    pub precision_micros: u64,
 }
 
 impl TimeAnchor {
@@ -606,7 +684,30 @@ impl TimeAnchor {
             source,
             media_time,
             reading,
+            screen: None,
         }
+    }
+
+    /// An anchor from a clock on the screen.
+    #[must_use]
+    pub const fn on_screen(
+        source: AnchorSource,
+        media_time: MediaTime,
+        reading: ClockReading,
+        screen: ScreenAnchor,
+    ) -> Self {
+        Self {
+            source,
+            media_time,
+            reading,
+            screen: Some(screen),
+        }
+    }
+
+    /// Which clock on the screen it came from, if one did.
+    #[must_use]
+    pub const fn screen(&self) -> Option<ScreenAnchor> {
+        self.screen
     }
 
     /// Where the reading came from.
@@ -633,6 +734,14 @@ impl TimeAnchor {
         self.reading
     }
 
+    /// How far its reading can be from the truth, by what it was read off.
+    const fn precision_micros(&self) -> i64 {
+        match self.screen {
+            Some(detail) => detail.precision_micros.cast_signed(),
+            None => 0,
+        }
+    }
+
     /// The clock reading at another timeline position: the anchor's reading
     /// moved by the distance between the two. `None` outside years 1 to 9999.
     #[must_use]
@@ -653,9 +762,12 @@ pub struct ClockTime {
     pub source: AnchorSource,
     /// The anchor's confidence.
     pub confidence: AnchorConfidence,
+    /// The clock on the screen it came from, if one did.
+    pub clock: Option<ClockId>,
 }
 
-/// A session's anchors in ladder order (stage 1: at most one per source).
+/// A session's anchors in ladder order: at most one per stage-1 source, and one
+/// per clock and moment for a clock on the screen.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct TimeAnchors {
     anchors: Vec<TimeAnchor>,
@@ -674,20 +786,39 @@ impl TimeAnchors {
     ///
     /// # Errors
     ///
-    /// [`TimeAnchorError::TooManyAnchors`] for more than [`MAX_TIME_ANCHORS`]
-    /// or two anchors from one source (stage 1 has one reading per source).
+    /// [`TimeAnchorError::TooManyAnchors`] for more than [`MAX_TIME_ANCHORS`],
+    /// two anchors from one stage-1 source, or two of one clock at one moment.
     pub fn new(mut anchors: Vec<TimeAnchor>) -> Result<Self, TimeAnchorError> {
         if anchors.len() > MAX_TIME_ANCHORS {
             return Err(TimeAnchorError::TooManyAnchors);
         }
-        anchors.sort_by_key(|anchor| (anchor.source, anchor.media_time));
-        if anchors
-            .windows(2)
-            .any(|pair| pair[0].source == pair[1].source)
-        {
+        anchors.sort_by_key(ladder_key);
+        if anchors.windows(2).any(|pair| {
+            pair[0].source == pair[1].source
+                && (!pair[0].source.is_on_screen() || ladder_key(&pair[0]) == ladder_key(&pair[1]))
+        }) {
             return Err(TimeAnchorError::TooManyAnchors);
         }
         Ok(Self { anchors })
+    }
+
+    /// These anchors with their screen anchors replaced by `screen`, the most
+    /// precise first where the bound of [`MAX_TIME_ANCHORS`] leaves no room:
+    /// the report lists every clock, so a dropped anchor loses nothing.
+    #[must_use]
+    pub fn with_screen_anchors(&self, mut screen: Vec<TimeAnchor>) -> Self {
+        let mut anchors: Vec<TimeAnchor> = self
+            .anchors
+            .iter()
+            .filter(|anchor| !anchor.source.is_on_screen())
+            .copied()
+            .collect();
+        screen.sort_by_key(|anchor| anchor.screen.map(|detail| detail.precision_micros));
+        screen.truncate(MAX_TIME_ANCHORS.saturating_sub(anchors.len()));
+        anchors.extend(screen);
+        anchors.sort_by_key(ladder_key);
+        anchors.dedup_by_key(|anchor| ladder_key(anchor));
+        Self { anchors }
     }
 
     /// The anchors of a newly ingested source: the operator's statement, if
@@ -750,16 +881,17 @@ impl TimeAnchors {
     pub fn consistency(&self) -> Option<AnchorConsistency> {
         self.selected()?;
         let start = MediaTime::from_micros(0);
-        let readings: Vec<ClockReading> = self
+        let readings: Vec<(ClockReading, i64)> = self
             .anchors
             .iter()
-            .filter_map(|anchor| anchor.reading_at(start))
+            .filter_map(|anchor| Some((anchor.reading_at(start)?, anchor.precision_micros())))
             .collect();
         let mut compared = false;
-        for (index, first) in readings.iter().enumerate() {
-            for second in &readings[index + 1..] {
+        for (index, (first, first_precision)) in readings.iter().enumerate() {
+            for (second, second_precision) in &readings[index + 1..] {
+                let allowed = ANCHOR_AGREEMENT_MICROS + first_precision + second_precision;
                 match apart_micros(*first, *second) {
-                    Some(apart) if apart > ANCHOR_AGREEMENT_MICROS => {
+                    Some(apart) if apart > allowed => {
                         return Some(AnchorConsistency::Conflicting);
                     }
                     Some(_) => compared = true,
@@ -783,8 +915,18 @@ impl TimeAnchors {
             reading: anchor.reading_at(media_time)?,
             source: anchor.source,
             confidence: anchor.confidence(),
+            clock: anchor.screen.map(|detail| detail.clock),
         })
     }
+}
+
+/// The order of the ladder: by source, then by clock, then by position.
+fn ladder_key(anchor: &TimeAnchor) -> (AnchorSource, Option<ClockId>, MediaTime) {
+    (
+        anchor.source,
+        anchor.screen.map(|detail| detail.clock),
+        anchor.media_time,
+    )
 }
 
 /// How far apart two readings are, when both are absolute instants.
@@ -1034,7 +1176,14 @@ mod tests {
         ];
         let anchors = TimeAnchors::from_ingest(Some(stated), &tags, now);
         let order: Vec<AnchorSource> = anchors.anchors().iter().map(TimeAnchor::source).collect();
-        assert_eq!(order, AnchorSource::ALL.to_vec());
+        assert_eq!(
+            order,
+            vec![
+                AnchorSource::Operator,
+                AnchorSource::QuicktimeCreationDate,
+                AnchorSource::ContainerCreationTime
+            ]
+        );
         assert_eq!(
             anchors.selected().map(TimeAnchor::source),
             Some(AnchorSource::Operator)
@@ -1151,6 +1300,169 @@ mod tests {
             TimeAnchors::none().clock_time_at(MediaTime::from_micros(0)),
             None
         );
+        Ok(())
+    }
+
+    fn screen_anchor(
+        source: AnchorSource,
+        ordinal: u8,
+        at_seconds: u64,
+        reading: ClockReading,
+        precision_micros: u64,
+    ) -> Result<TimeAnchor, Box<dyn Error>> {
+        let clock = ClockId::new(ordinal).ok_or("no clock")?;
+        Ok(TimeAnchor::on_screen(
+            source,
+            MediaTime::from_micros(at_seconds * 1_000_000),
+            reading,
+            ScreenAnchor {
+                clock,
+                precision_micros,
+            },
+        ))
+    }
+
+    #[test]
+    fn the_ladders_confidence_never_rises_as_it_goes_down() {
+        for pair in AnchorSource::ALL.windows(2) {
+            assert!(pair[0].confidence() <= pair[1].confidence(), "{pair:?}");
+        }
+    }
+
+    #[test]
+    fn a_confirmed_clock_ranks_below_the_recorder_and_above_the_container() {
+        let rank = |source| AnchorSource::ALL.iter().position(|held| *held == source);
+        assert!(
+            rank(AnchorSource::QuicktimeCreationDate) < rank(AnchorSource::ScreenClockConfirmed)
+        );
+        assert!(
+            rank(AnchorSource::ScreenClockConfirmed) < rank(AnchorSource::ContainerCreationTime)
+        );
+        assert!(rank(AnchorSource::ContainerCreationTime) < rank(AnchorSource::ScreenTimestamp));
+        assert!(rank(AnchorSource::ScreenTimestamp) < rank(AnchorSource::ScreenClock));
+    }
+
+    #[test]
+    fn clock_ids_read_back_and_refuse_what_is_not_one() {
+        for ordinal in 1..=8 {
+            let id = ClockId::new(ordinal);
+            assert_eq!(id.and_then(|id| ClockId::parse(&id.to_string())), id);
+        }
+        for text in ["c0", "c9", "c", "1", "c01", "d1", "c1 "] {
+            assert_eq!(ClockId::parse(text), None, "{text}");
+        }
+    }
+
+    #[test]
+    fn running_clocks_leaves_a_stage_1_selection_alone() -> TestResult {
+        let created = ClockReading::parse("2026-10-21T09:00:00Z")?;
+        let anchors = TimeAnchors::from_ingest(
+            None,
+            &[tag(AnchorSource::ContainerCreationTime, created)],
+            1_792_587_792,
+        );
+        let on_screen = ClockReading::parse("2026-10-21T09:00:30Z")?;
+        let with_clock = anchors.with_screen_anchors(vec![screen_anchor(
+            AnchorSource::ScreenTimestamp,
+            1,
+            30,
+            on_screen,
+            500_000,
+        )?]);
+        assert_eq!(
+            with_clock.selected().map(TimeAnchor::source),
+            Some(AnchorSource::ContainerCreationTime)
+        );
+        assert_eq!(with_clock.anchors().len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn a_session_with_no_other_anchor_takes_its_clock_time_from_a_dated_clock() -> TestResult {
+        let local = ClockReading::parse("2026-10-21T14:00:30")?;
+        let anchors = TimeAnchors::none().with_screen_anchors(vec![screen_anchor(
+            AnchorSource::ScreenClock,
+            2,
+            30,
+            local,
+            500_000,
+        )?]);
+        let clock = anchors
+            .clock_time_at(MediaTime::from_micros(90_000_000))
+            .ok_or("no clock time")?;
+        assert_eq!(clock.source, AnchorSource::ScreenClock);
+        assert_eq!(clock.clock, ClockId::new(2));
+        assert_eq!(clock.reading.local(), Some(civil("2026-10-21T14:01:30")?));
+        assert_eq!(clock.reading.utc_unix_micros(), None);
+        Ok(())
+    }
+
+    #[test]
+    fn a_screen_anchor_is_compared_with_its_precision_allowed() -> TestResult {
+        let created = ClockReading::parse("2026-10-21T09:00:00Z")?;
+        let base = TimeAnchors::from_ingest(
+            None,
+            &[tag(AnchorSource::ContainerCreationTime, created)],
+            1_792_587_792,
+        );
+        // Five seconds off at time 0: disputed unless the clock's width covers it.
+        let reading = ClockReading::parse("2026-10-21T09:00:35Z")?;
+        let exact = base.with_screen_anchors(vec![screen_anchor(
+            AnchorSource::ScreenTimestamp,
+            1,
+            30,
+            reading,
+            0,
+        )?]);
+        assert_eq!(exact.consistency(), Some(AnchorConsistency::Conflicting));
+        let wide = base.with_screen_anchors(vec![screen_anchor(
+            AnchorSource::ScreenTimestamp,
+            1,
+            30,
+            reading,
+            4_000_000,
+        )?]);
+        assert_eq!(wide.consistency(), Some(AnchorConsistency::Consistent));
+        Ok(())
+    }
+
+    #[test]
+    fn two_clocks_may_each_give_an_anchor_but_a_stage_1_source_only_one() -> TestResult {
+        let reading = ClockReading::parse("2026-10-21T14:00:30")?;
+        let first = screen_anchor(AnchorSource::ScreenClock, 1, 30, reading, 1)?;
+        let second = screen_anchor(AnchorSource::ScreenClock, 2, 30, reading, 1)?;
+        assert!(TimeAnchors::new(vec![first, second]).is_ok());
+        assert_eq!(
+            TimeAnchors::new(vec![first, first]),
+            Err(TimeAnchorError::TooManyAnchors)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_bound_keeps_the_most_precise_screen_anchors() -> TestResult {
+        let reading = ClockReading::parse("2026-10-21T14:00:30")?;
+        let stated = ClockReading::parse("2026-10-21T14:00:00")?;
+        let base = TimeAnchors::from_ingest(Some(stated), &[], 0);
+        let many = (1..=8_u8)
+            .flat_map(|clock| (0..4_u64).map(move |at| (clock, at)))
+            .map(|(clock, at)| {
+                screen_anchor(
+                    AnchorSource::ScreenClock,
+                    clock,
+                    at,
+                    reading,
+                    u64::from(clock),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let bounded = base.with_screen_anchors(many);
+        assert_eq!(bounded.anchors().len(), MAX_TIME_ANCHORS);
+        assert!(bounded.anchors().iter().all(|anchor| {
+            anchor
+                .screen()
+                .is_none_or(|detail| detail.precision_micros <= 4)
+        }));
         Ok(())
     }
 
