@@ -23,6 +23,12 @@
     ],
     "frames_stopped_for_room": false,
     "job_id": "job_0123456789abcdef0123456789abcdef",
+    "kept": {
+      "failure_code": null,
+      "name": "meeting",
+      "path": "/home/example/kept-calls/meeting",
+      "state": "kept"
+    },
     "names_shortened": false,
     "not_transcribed": [
       {

@@ -869,6 +869,15 @@ impl CommandFailure {
         self
     }
 
+    /// Adds fixed words after the remediation it already has.
+    pub(crate) fn with_added_remediation(mut self, words: &str) -> Self {
+        self.remediation = Some(match self.remediation.take() {
+            Some(remediation) => format!("{remediation} {words}"),
+            None => words.to_owned(),
+        });
+        self
+    }
+
     /// Also tells the caller how long to wait before retrying.
     pub(crate) const fn with_retry_after_ms(mut self, retry_after_ms: u64) -> Self {
         self.retry_after_ms = Some(retry_after_ms);

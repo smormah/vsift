@@ -202,6 +202,9 @@ pub(crate) enum Command {
     /// video players pick up) and <name>-vsift/ (the screen changes, with a
     /// frame for each and their list) beside the video, or into --output. It
     /// never replaces a file: a name that is taken is refused before any work.
+    /// With --keep it also keeps the recording for  vsift bundle search : the
+    /// bundle holds the transcript and the frames, not the video or any
+    /// on-screen text.
     /// Each file names the video's SHA-256 and the ids of the run; every
     /// frame's SHA-256 is in the list. Video tools and speech recognition must
     /// be set up first (vsift setup check). Not for AI assistants: they use the
@@ -218,6 +221,13 @@ pub(crate) struct WatchArguments {
     /// folder, or a new one whose parent exists.
     #[arg(long, value_name = "FOLDER")]
     pub output: Option<PathBuf>,
+    /// Keep the recording for later search, in a private subfolder of this
+    /// folder named after the video (an existing folder, or a new one whose
+    /// parent exists). The same folder takes every recording you keep; find
+    /// them with  vsift bundle search <FOLDER> . The video is not copied in,
+    /// and on-screen text is not read.
+    #[arg(long, value_name = "FOLDER")]
+    pub keep: Option<PathBuf>,
 }
 
 /// Setup namespace arguments: plain `vsift setup` is the setup door (ADR

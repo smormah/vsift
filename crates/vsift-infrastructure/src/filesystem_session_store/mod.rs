@@ -70,6 +70,7 @@ use vsift_domain::{
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+pub use bundle::BundleDestinationRefusal;
 pub use bundle_search::SearchableBundle;
 pub use job_records::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,

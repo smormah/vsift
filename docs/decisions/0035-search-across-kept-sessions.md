@@ -309,6 +309,11 @@ otherwise, P18 is where an index belongs.
   processed that way cannot be found by this command unless it was retained separately. This ADR does
   not change that; the maintainer has ruled that story W6h adds `--keep` after this merges.
 
+**Note, 2026-10-30 (W6h).** The consequence above no longer holds: `vsift <video> --keep <folder>` (ADR 0037, amendment of
+2026-10-30) writes a bundle into a folder this command reads, so a recording kept that way is found with no second step.
+Its transcript is searched; its on-screen text is not, because the action does not run `ocr`, and each result says so per
+recording.
+
 ## Tests
 
 - **Domain and application:** the ranking across bundles, the page and cursor over a mixed set, a cursor

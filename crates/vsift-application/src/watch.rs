@@ -37,6 +37,14 @@
 //! snapshot and marker, and the same command continues the job: the job's
 //! own record of its claimed names ([`WatchClaimLog`]) is what finds it,
 //! never the text of a file in the person's folder.
+//!
+//! **`--keep` writes a bundle once the job has sealed** (the amendment of
+//! 2026-10-30). The bundle comes after the outputs and before the close, and
+//! the session closes only after it is committed: a bundle that cannot be
+//! written leaves the session open, and a final write that fails on a sealed
+//! job does not stop the bundle, which does not need the outputs. A run that
+//! stops or fails before the seal keeps nothing. The option is never recorded
+//! in the job: the run that finishes does what its own command line says.
 
 use std::{
     ffi::OsStr,
@@ -46,7 +54,7 @@ use std::{
 
 use crate::{Clock, SessionStorageError};
 use vsift_domain::{
-    CandidateReason, EvidenceId, JobId, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime,
+    CandidateReason, EvidenceId, FailureCode, JobId, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime,
     OutputNameError, SessionId, SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId,
     VisualIndexId, WatchOutputNames, frame_file_name, frames_that_fit, settled_screens,
     spread_evenly,
@@ -348,6 +356,15 @@ pub trait WatchSteps: Send + Sync {
         session: &SessionId,
     ) -> Result<WatchProvenance, Self::Error>;
 
+    /// Writes the session as a retained bundle at `bundle`, as `session
+    /// retain` does, without the source (ADR 0013).
+    ///
+    /// # Errors
+    ///
+    /// The public code of `session retain`'s failure: the run reports it and
+    /// leaves the session open, so the work is not lost.
+    fn keep_session(&self, session: &SessionId, bundle: &Path) -> Result<(), FailureCode>;
+
     /// Closes the session; whether it closed.
     fn close_session(&self, session: &SessionId) -> bool;
 }
@@ -363,6 +380,8 @@ pub enum WatchOutputKind {
     Folder,
     /// A frame or the screen-change list inside the folder.
     FolderContent,
+    /// The bundle `--keep` writes, `<folder>/<name>`.
+    Kept,
 }
 
 /// Why an output could not be claimed or written.
@@ -384,6 +403,14 @@ pub enum WatchOutputError {
     /// The folder lies inside `VSift`'s own session or managed root, which
     /// `VSift` cleans automatically.
     InsideVsift,
+    /// `--keep` names a folder whose parent does not exist, something that
+    /// is not a folder, or a place a bundle cannot be (a network path).
+    KeepFolderUnusable,
+    /// `--keep` names a folder inside `VSift`'s own roots.
+    KeepInsideVsift,
+    /// The video's name cannot name a bundle's folder (a Windows device
+    /// name, which a bundle refuses on every system).
+    KeepNameNotAllowed,
 }
 
 impl fmt::Display for WatchOutputError {
@@ -406,6 +433,13 @@ impl fmt::Display for WatchOutputError {
             Self::FolderUnusable => formatter.write_str("the output folder cannot be used"),
             Self::InsideVsift => {
                 formatter.write_str("the output folder is inside VSift's own folders")
+            }
+            Self::KeepFolderUnusable => formatter.write_str("the keep folder cannot be used"),
+            Self::KeepInsideVsift => {
+                formatter.write_str("the keep folder is inside VSift's own folders")
+            }
+            Self::KeepNameNotAllowed => {
+                formatter.write_str("the video's name cannot name a bundle's folder")
             }
         }
     }
@@ -643,6 +677,25 @@ pub trait WatchOutputs: Send {
     /// run created (a link, a folder where a file was).
     fn reclaim(&mut self, claimed: &ClaimedOutputs) -> Result<(), WatchOutputError>;
 
+    /// Resolves the `--keep` folder (an existing folder, or a new one whose
+    /// parent exists, never inside `VSift`'s own roots) and checks, before
+    /// any work, that a bundle can be written at `<folder>/<name>`; that
+    /// path. The name is checked, not held: `retain_bundle` must create the
+    /// bundle's folder itself (ADR 0013).
+    ///
+    /// # Errors
+    ///
+    /// [`WatchOutputError::Exists`] for a taken name,
+    /// [`WatchOutputError::Refused`] when the folder refuses,
+    /// [`WatchOutputError::KeepFolderUnusable`],
+    /// [`WatchOutputError::KeepInsideVsift`] and
+    /// [`WatchOutputError::KeepNameNotAllowed`].
+    fn prepare_keep(
+        &mut self,
+        folder: &Path,
+        names: &WatchOutputNames,
+    ) -> Result<PathBuf, WatchOutputError>;
+
     /// Writes a snapshot of the transcript and the subtitles with their
     /// in-progress markers, each to an exclusive temporary file moved over
     /// the claimed name only (the planner's condition B). One attempt: a
@@ -720,6 +773,15 @@ pub struct WatchFrame {
     pub sha256: String,
 }
 
+/// What became of the bundle `--keep` asked for.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WatchKept {
+    /// Where the bundle is, or where it was to go.
+    pub path: PathBuf,
+    /// Why it was not written; `None` when it is committed.
+    pub failure: Option<FailureCode>,
+}
+
 /// What one `watch` run wrote.
 #[allow(clippy::struct_excessive_bools)] // Independent facts the run reports, not switches.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -765,6 +827,8 @@ pub struct WatchOutcome {
     /// change had its frame: the run stopped taking frames, listed the rest
     /// without one, and is partial (known limit L-234).
     pub frames_stopped_for_room: bool,
+    /// The bundle `--keep` asked for; `None` without the option.
+    pub kept: Option<WatchKept>,
 }
 
 /// Why a `watch` run failed.
@@ -785,6 +849,19 @@ pub enum WatchError<E> {
         /// The video's length, when a part had said it.
         duration: Option<MediaTime>,
     },
+    /// The run failed after the job sealed, and `--keep` still wrote, or
+    /// tried to write, the bundle: a person never loses the kept copy to a
+    /// failed output.
+    FailedAfterKeep {
+        /// What failed.
+        error: Box<Self>,
+        /// What became of the bundle.
+        kept: WatchKept,
+        /// The session.
+        session: SessionId,
+        /// Whether it was closed: never when the bundle was not written.
+        session_closed: bool,
+    },
 }
 
 /// The least time between two snapshots of a file that grows, in seconds
@@ -792,9 +869,10 @@ pub enum WatchError<E> {
 pub const SNAPSHOT_INTERVAL_SECONDS: u64 = 10;
 
 /// Watches one `video` (ADR 0037 section 3): writes `<stem>.txt`,
-/// `<stem>.srt` and `<stem>-vsift/` beside it or into `output`.
+/// `<stem>.srt` and `<stem>-vsift/` beside it or into `output`, and, with
+/// `keep`, a retained bundle under that folder once the job has sealed.
 ///
-/// `video` and `output` are absolute. Nothing is copied or written before
+/// `video`, `output` and `keep` are absolute. Nothing is copied or written before
 /// every output name is claimed. When a name is taken, the run continues an
 /// interrupted run of the same video only if its job's own record claimed
 /// exactly these names in a session still open (section 8); otherwise it is
@@ -802,18 +880,22 @@ pub const SNAPSHOT_INTERVAL_SECONDS: u64 = 10;
 /// grow by snapshots, and the frames are written once the visual stream is
 /// done. Stopped by the caller, the run keeps the files with their last
 /// snapshot and the session; after any other failure it releases the claim
-/// and closes the session.
+/// and closes the session. With `keep`, a session whose job has sealed closes
+/// only once its bundle is committed.
 ///
 /// # Errors
 ///
 /// [`WatchError::Step`] for the operations' errors,
-/// [`WatchError::UnusableName`] or [`WatchError::Output`] for the outputs, and
-/// [`WatchError::Stopped`] when the caller stopped the run.
+/// [`WatchError::UnusableName`] or [`WatchError::Output`] for the outputs,
+/// [`WatchError::Stopped`] when the caller stopped the run, and
+/// [`WatchError::FailedAfterKeep`] for a failure after the job sealed, with
+/// `keep`.
 pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
     steps: &S,
     outputs: &mut O,
     video: &Path,
     output: Option<&Path>,
+    keep: Option<&Path>,
 ) -> Result<WatchOutcome, WatchError<S::Error>> {
     steps.check_source(video).await.map_err(WatchError::Step)?;
     steps.check_capabilities().map_err(WatchError::Step)?;
@@ -822,6 +904,16 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
         .ok_or(WatchError::UnusableName(OutputNameError::Empty))?;
     let names = WatchOutputNames::from_video_name(file_name).map_err(WatchError::UnusableName)?;
     let (claimed, unfinished) = claim_or_continue(steps, outputs, video, output, &names).await?;
+    // After the claim, so a run refused for a taken output leaves no new keep
+    // folder; before the session, so a refusal costs nothing.
+    let bundle = match keep.map(|folder| outputs.prepare_keep(folder, &names)) {
+        Some(Err(error)) => {
+            outputs.release();
+            return Err(WatchError::Output(error));
+        }
+        Some(Ok(bundle)) => Some(bundle),
+        None => None,
+    };
     let (session, job) = match unfinished {
         Some(unfinished) => (unfinished.session, Some(unfinished.job)),
         None => match steps.open_session(video).await {
@@ -840,19 +932,37 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
         claimed,
         taken_over: job.is_some(),
     };
-    let written = Box::pin(run.write(outputs, job)).await;
+    let (written, sealed) = Box::pin(run.write(outputs, job)).await;
     if let Err(stopped @ WatchError::Stopped { .. }) = written {
         return Err(stopped);
     }
-    let closed = steps.close_session(&session.session_id);
+    // A run that did not reach the seal keeps nothing. Past it, the bundle
+    // does not need the outputs, so a failed one does not stop it.
+    let kept = bundle.filter(|_| sealed).map(|path| WatchKept {
+        failure: steps.keep_session(&session.session_id, &path).err(),
+        path,
+    });
+    // Never a close that loses the kept copy: a session whose bundle failed
+    // stays open for `session retain`.
+    let keep_failed = kept.as_ref().is_some_and(|kept| kept.failure.is_some());
+    let closed = !keep_failed && steps.close_session(&session.session_id);
     match written {
         Ok(mut outcome) => {
             outcome.session_closed = closed;
+            outcome.kept = kept;
             Ok(outcome)
         }
         Err(error) => {
             outputs.release();
-            Err(error)
+            Err(match kept {
+                Some(kept) => WatchError::FailedAfterKeep {
+                    error: Box::new(error),
+                    kept,
+                    session: session.session_id.clone(),
+                    session_closed: closed,
+                },
+                None => error,
+            })
         }
     }
 }
@@ -929,6 +1039,8 @@ struct Following<E> {
     last_snapshot_at: Option<u64>,
     /// Whether this run wrote a snapshot into the files.
     snapshot_written: bool,
+    /// Whether the job ended well: its revision is sealed.
+    sealed: bool,
     screens: Option<Result<Screens, WatchError<E>>>,
 }
 
@@ -937,12 +1049,13 @@ impl<S: WatchSteps> WatchRun<'_, S> {
     /// snapshot (this run's, or the interrupted run's it took over) rewrites
     /// them, best effort, to say the run failed and they will not be
     /// finished: they are never removed and never left saying `VSift` is
-    /// working.
+    /// working. Also says whether the job sealed, whatever became of the
+    /// files.
     async fn write<O: WatchOutputs>(
         self,
         outputs: &mut O,
         unfinished_job: Option<JobId>,
-    ) -> Result<WatchOutcome, WatchError<S::Error>> {
+    ) -> (Result<WatchOutcome, WatchError<S::Error>>, bool) {
         let mut following = Following {
             revision: None,
             lines: Vec::new(),
@@ -951,6 +1064,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             duration: None,
             last_snapshot_at: None,
             snapshot_written: false,
+            sealed: false,
             screens: None,
         };
         let written = self.run(outputs, unfinished_job, &mut following).await;
@@ -961,7 +1075,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             self.refresh(&mut following);
             let _best_effort = self.snapshot(outputs, &mut following, SnapshotState::Failed);
         }
-        written
+        (written, following.sealed)
     }
 
     async fn run<O: WatchOutputs>(
@@ -1000,6 +1114,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             }
             Err(PrepareStop::Failed(error)) => return Err(WatchError::Step(error)),
         };
+        following.sealed = true;
         let screens = match following.screens.take() {
             Some(screens) => screens?,
             None => self.screens(outputs).await?,
@@ -1218,6 +1333,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             beyond_visual_bound,
             names_shortened: self.names.shortened(),
             frames_stopped_for_room: screens.taken.stopped_for_room,
+            kept: None,
         })
     }
 

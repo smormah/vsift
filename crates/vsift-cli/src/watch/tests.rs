@@ -2,7 +2,10 @@ use std::{error::Error, ffi::OsString, fs};
 
 use clap::Parser as _;
 
-use super::route_bare_video;
+use vsift::EngineError;
+use vsift_contract::CommandName;
+
+use super::{WatchFailure, route_bare_video};
 use crate::command::{Cli, Command};
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -122,4 +125,79 @@ fn options_the_parser_owns_are_left_alone() {
         routed(&["vsift", "--unknown", "a.mp4"]),
         ["vsift", "--unknown", "a.mp4"]
     );
+}
+
+fn failed_after_keep(failure: Option<vsift::FailureCode>) -> Result<EngineError, Box<dyn Error>> {
+    Ok(EngineError::WatchFailedAfterKeep(Box::new(
+        vsift::WatchFailedAfterKeep {
+            error: EngineError::Watch(WatchFailure::OutputHeld(vsift::WatchOutputKind::Transcript)),
+            kept: vsift::WatchKept {
+                path: std::env::temp_dir().join("kept").join("meeting"),
+                failure,
+            },
+            session: vsift::SessionId::parse("ses_0123456789abcdef")?,
+            session_closed: failure.is_none(),
+        },
+    )))
+}
+
+#[test]
+fn a_failure_after_the_seal_keeps_its_own_code_and_says_what_was_kept() -> TestResult {
+    let response =
+        crate::failure_response(CommandName::Watch, super::failure(failed_after_keep(None)?));
+    let value = serde_json::to_value(&response)?;
+    assert_eq!(value["error"]["code"], "STORAGE_IO", "{value}");
+    assert_eq!(value["data"]["kept"]["state"], "kept", "{value}");
+    assert_eq!(value["data"]["kept"]["name"], "meeting", "{value}");
+    assert_eq!(value["data"]["session_closed"], true, "{value}");
+    let words = value["error"]["remediation"][0]["summary"].to_string();
+    assert!(words.contains("still kept for later search"), "{words}");
+    Ok(())
+}
+
+#[test]
+fn a_failure_with_no_bundle_gives_the_retain_command_with_the_real_session() -> TestResult {
+    let response = crate::failure_response(
+        CommandName::Watch,
+        super::failure(failed_after_keep(Some(vsift::FailureCode::StorageIo))?),
+    );
+    let value = serde_json::to_value(&response)?;
+    assert_eq!(value["data"]["kept"]["state"], "not_kept", "{value}");
+    assert_eq!(
+        value["data"]["kept"]["failure_code"], "STORAGE_IO",
+        "{value}"
+    );
+    assert_eq!(value["data"]["session_closed"], false, "{value}");
+    let words = value["error"]["remediation"][0]["summary"].to_string();
+    assert!(
+        words.contains("vsift session retain ses_0123456789abcdef --output"),
+        "{words}"
+    );
+    assert!(words.contains("private copy of the video"), "{words}");
+    Ok(())
+}
+
+/// The option parses on both forms of the command.
+#[test]
+fn keep_is_an_option_of_the_action() -> TestResult {
+    for line in [
+        ["vsift", "watch", "call.mp4", "--keep", "kept"],
+        ["vsift", "call.mp4", "--keep", "kept", ""],
+    ] {
+        let arguments: Vec<&str> = line.into_iter().filter(|word| !word.is_empty()).collect();
+        let parsed = Cli::try_parse_from(route_bare_video_for_test(&arguments))?;
+        let Some(Command::Watch(arguments)) = parsed.command else {
+            return Err("not the action".into());
+        };
+        assert_eq!(
+            arguments.keep.as_deref(),
+            Some(std::path::Path::new("kept"))
+        );
+    }
+    Ok(())
+}
+
+fn route_bare_video_for_test(arguments: &[&str]) -> Vec<OsString> {
+    let line = arguments.iter().map(OsString::from).collect();
+    route_bare_video(line)
 }

@@ -86,6 +86,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [visual-candidate-brief.schema.json](#visual-candidate-briefschemajson): VSift visual candidate, brief view v1
 - [visual-candidate.schema.json](#visual-candidateschemajson): VSift visual candidate v1
 - [watch-data.schema.json](#watch-dataschemajson): VSift watch data v1
+- [watch-failure-data.schema.json](#watch-failure-dataschemajson): vsift watch failure data
 - [workspace-data.schema.json](#workspace-dataschemajson): VSift session.init-workspace data v1
 
 ## Schemas
@@ -2726,7 +2727,7 @@ One visual candidate, a published evidence record (P08, ADR 0018): a moment at w
 
 **VSift watch data v1** ([the schema](../../../schemas/v1/watch-data.schema.json))
 
-The data member of a complete watch result, from vsift <video> or vsift watch <video> (0.3.0, ADR 0037): what the run wrote, where, and the ids and hashes every output names. source_id is the video's content identity; the SHA-256 after src_sha256_ is the one the transcript's header gives, and anyone can check it against the video with any hashing tool. session_id, job_id, transcript_revision_id, visual_index_revision_id, and each frame's candidate_id and evidence_id name items of the session the run used, which it closes when everything is written (session_closed): they say which run made the files, and the same video watched again gives a new session and new ids (known limit L-236). The hashes outlive the session: each file's sha256 is the SHA-256 of its bytes as written, and each frame's sha256 is the SHA-256 of the PNG beside the list, byte for byte the session's evidence artifact. outcome is partial when part of the video was not transcribed (not_transcribed, half-open ranges in time order) or when the video runs past the first four hours, the part screen changes are found in (screen_changes_beyond_bound, known limit L-235); the envelope's status is complete either way. Every screen change found is counted (changes_found); the screen_changes file lists the settled screens among them (changes_listed): the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it, each with its reason. Frames are written for at most 180 of the listed changes, and never more than the session has evidence room for (each frame takes two of its 384 evidence slots), spread evenly over the video when there are more (known limit L-234); should the session still refuse a frame for room, the frames stop there, frames_stopped_for_room is true and outcome is partial. subtitles is null for a video with no sound track, transcript_revision_id too; visual_index_revision_id is null for a video with no picture. names_shortened says a name was shortened to fit the system's limit, so the subtitles no longer share the video's name. Paths are absolute, delivered as frame.get delivers its files; name members are file names in display form, hidden characters made visible, because they derive from the video's untrusted name. Validate the envelope with operation-response.schema.json.
+The data member of a complete watch result, from vsift <video> or vsift watch <video> (0.3.0, ADR 0037): what the run wrote, where, and the ids and hashes every output names. source_id is the video's content identity; the SHA-256 after src_sha256_ is the one the transcript's header gives, and anyone can check it against the video with any hashing tool. session_id, job_id, transcript_revision_id, visual_index_revision_id, and each frame's candidate_id and evidence_id name items of the session the run used, which it closes when everything is written (session_closed): they say which run made the files, and the same video watched again gives a new session and new ids (known limit L-236). The hashes outlive the session: each file's sha256 is the SHA-256 of its bytes as written, and each frame's sha256 is the SHA-256 of the PNG beside the list, byte for byte the session's evidence artifact. outcome is partial when part of the video was not transcribed (not_transcribed, half-open ranges in time order) or when the video runs past the first four hours, the part screen changes are found in (screen_changes_beyond_bound, known limit L-235); the envelope's status is complete either way. Every screen change found is counted (changes_found); the screen_changes file lists the settled screens among them (changes_listed): the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it, each with its reason. Frames are written for at most 180 of the listed changes, and never more than the session has evidence room for (each frame takes two of its 384 evidence slots), spread evenly over the video when there are more (known limit L-234); should the session still refuse a frame for room, the frames stop there, frames_stopped_for_room is true and outcome is partial. subtitles is null for a video with no sound track, transcript_revision_id too; visual_index_revision_id is null for a video with no picture. names_shortened says a name was shortened to fit the system's limit, so the subtitles no longer share the video's name. Paths are absolute, delivered as frame.get delivers its files; name members are file names in display form, hidden characters made visible, because they derive from the video's untrusted name. kept is null without --keep. With it, kept says what became of the bundle: state kept, with the bundle at path (absolute, as the outputs' paths) under the name bundle search shows, or state not_kept, with failure_code, when it could not be written: the outputs stand, the session is left open (session_closed is false), outcome is partial, the envelope's status stays complete and a warning gives the session retain command. So a script reads data.outcome and kept.state, not only status. Validate the envelope with operation-response.schema.json.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -2769,8 +2770,31 @@ The data member of a complete watch result, from vsift <video> or vsift watch <v
 | `frames[].evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
 | `frames[].path` | string | yes | 1 to 4096 characters |
 | `frames[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `kept` | object or null | yes |  |
+| `kept.state` | "kept" \| "not_kept" | yes |  |
+| `kept.path` | string | yes | 1 to 4096 characters |
+| `kept.name` | string | yes | at least 1 characters |
+| `kept.failure_code` | string or null | yes | pattern `^[A-Z][A-Z_]+$` |
 
-This schema also holds 3 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/watch-data.schema.json) for them.
+This schema also holds 5 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/watch-data.schema.json) for them.
+
+### watch-failure-data.schema.json
+
+**vsift watch failure data** ([the schema](../../../schemas/v1/watch-failure-data.schema.json))
+
+The data member of a failed watch result, only when the run was given --keep and failed after its job sealed, a final write refused for example (0.3.0, ADR 0037, amendment of 2026-10-30). The error says what failed, as for any failed watch; this says what became of the bundle, because the transcript exists and the person asked to keep it. kept.state is kept when the bundle was written anyway, and session_closed is then true; it is not_kept with failure_code when that failed too, and the session is then left open (session_closed false) so that session retain can still export it. Every other failed watch has a null data member. Validate the envelope with operation-response.schema.json.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `session_closed` | boolean | yes |  |
+| `kept` | object | yes |  |
+| `kept.state` | "kept" \| "not_kept" | yes |  |
+| `kept.path` | string | yes | 1 to 4096 characters |
+| `kept.name` | string | yes | at least 1 characters |
+| `kept.failure_code` | string or null | yes | pattern `^[A-Z][A-Z_]+$` |
+
+This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/watch-failure-data.schema.json) for it.
 
 ### workspace-data.schema.json
 

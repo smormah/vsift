@@ -5,9 +5,13 @@
 use std::{ffi::OsString, path::Path};
 
 use clap::CommandFactory as _;
-use vsift::{Cancellation, Engine, ProgressObserver, WatchFailure, WatchRequest};
+use vsift::{
+    Cancellation, Engine, EngineError, ProgressObserver, WatchFailedAfterKeep, WatchFailure,
+    WatchKept, WatchRequest,
+};
 use vsift_contract::{
-    CommandName, OperationResponse, WatchCompleteness, WatchData, WatchFrameData, WatchOutputData,
+    CommandName, OperationResponse, WATCH_KEPT_AFTER_FAILURE_REMEDIATION, WATCH_NOT_KEPT_WARNING,
+    WatchCompleteness, WatchData, WatchFailureData, WatchFrameData, WatchKeptData, WatchOutputData,
     WatchOutputsData, WatchRangeData,
 };
 
@@ -154,10 +158,12 @@ pub(crate) async fn watch(
         .watch(WatchRequest {
             source: arguments.source.clone(),
             output: arguments.output.clone(),
+            keep: arguments.keep.clone(),
             cancellation: cancellation.clone(),
             progress,
         })
-        .await?;
+        .await
+        .map_err(failure)?;
     let output = |file: &vsift::WatchFile| {
         WatchOutputData::new(&file.path, file.sha256.clone())
             .ok_or_else(|| CommandFailure::from(vsift::FailureCode::Internal))
@@ -179,9 +185,14 @@ pub(crate) async fn watch(
             })
         })
         .collect::<Result<Vec<_>, CommandFailure>>()?;
+    let not_kept = outcome
+        .kept
+        .as_ref()
+        .is_some_and(|kept| kept.failure.is_some());
     let partial = !outcome.not_transcribed.is_empty()
         || outcome.beyond_visual_bound
-        || outcome.frames_stopped_for_room;
+        || outcome.frames_stopped_for_room
+        || not_kept;
     let data = WatchData {
         source_id: outcome.source_id.as_str().to_owned(),
         session_id: outcome.session_id.as_str().to_owned(),
@@ -221,9 +232,56 @@ pub(crate) async fn watch(
         changes_found: u64::try_from(outcome.changes_found).unwrap_or(u64::MAX),
         changes_listed: u64::try_from(outcome.changes_listed).unwrap_or(u64::MAX),
         frames,
+        kept: outcome.kept.as_ref().map(kept_data).transpose()?,
     };
-    OperationResponse::complete(CommandName::Watch.identifier(), &data)
+    let response = OperationResponse::complete(CommandName::Watch.identifier(), &data)
+        .map_err(|_| CommandFailure::from(vsift::FailureCode::Internal))?;
+    // The envelope stays `complete` for every partial of `watch`: a script
+    // reads `data.outcome` and `kept.state` (ADR 0037, amendment of 2026-10-30).
+    Ok(if not_kept {
+        response.with_warnings(&[WATCH_NOT_KEPT_WARNING])
+    } else {
+        response
+    })
+}
+
+fn kept_data(kept: &WatchKept) -> Result<WatchKeptData, CommandFailure> {
+    WatchKeptData::new(&kept.path, kept.failure.map(vsift::FailureCode::identifier))
+        .ok_or_else(|| CommandFailure::from(vsift::FailureCode::Internal))
+}
+
+/// The failure of a run: as any engine error, and one that came after the
+/// job sealed, with `--keep`, also says what became of the bundle, in `data`
+/// and in the remediation's last words.
+fn failure(error: EngineError) -> CommandFailure {
+    let EngineError::WatchFailedAfterKeep(failed) = error else {
+        return error.into();
+    };
+    let WatchFailedAfterKeep {
+        error,
+        kept,
+        session,
+        session_closed,
+    } = *failed;
+    let words = if kept.failure.is_some() {
+        WATCH_NOT_KEPT_WARNING.replace("<session_id>", session.as_str())
+    } else {
+        WATCH_KEPT_AFTER_FAILURE_REMEDIATION.to_owned()
+    };
+    let data = kept_data(&kept).and_then(|kept| {
+        serde_json::to_value(WatchFailureData {
+            session_id: session.as_str().to_owned(),
+            session_closed,
+            kept,
+        })
         .map_err(|_| CommandFailure::from(vsift::FailureCode::Internal))
+    });
+    match data {
+        Ok(data) => CommandFailure::from(error)
+            .with_added_remediation(&words)
+            .with_data(data),
+        Err(failure) => failure,
+    }
 }
 
 /// The remediation for a `watch` failure: fixed prose, never a path or a
@@ -248,11 +306,13 @@ fn fixed_remediation(failure: WatchFailure) -> &'static str {
     use vsift::{OutputNameError, WatchOutputKind};
     use vsift_contract::{
         WATCH_FOLDER_EXISTS_REMEDIATION, WATCH_FRAME_MISMATCH_REMEDIATION,
-        WATCH_NAME_EMPTY_REMEDIATION, WATCH_NAME_NOT_UNICODE_REMEDIATION,
-        WATCH_OUTPUT_FOLDER_REMEDIATION, WATCH_OUTPUT_HELD_REMEDIATION,
-        WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION, WATCH_OUTPUT_REFUSED_REMEDIATION,
-        WATCH_STOPPED_REMEDIATION, WATCH_SUBTITLES_EXISTS_REMEDIATION,
-        WATCH_TRANSCRIPT_EXISTS_REMEDIATION,
+        WATCH_KEEP_FOLDER_REMEDIATION, WATCH_KEEP_INSIDE_VSIFT_REMEDIATION,
+        WATCH_KEEP_NAME_NOT_ALLOWED_REMEDIATION, WATCH_KEEP_NAME_TAKEN_REMEDIATION,
+        WATCH_KEEP_REFUSED_REMEDIATION, WATCH_NAME_EMPTY_REMEDIATION,
+        WATCH_NAME_NOT_UNICODE_REMEDIATION, WATCH_OUTPUT_FOLDER_REMEDIATION,
+        WATCH_OUTPUT_HELD_REMEDIATION, WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION,
+        WATCH_OUTPUT_REFUSED_REMEDIATION, WATCH_STOPPED_REMEDIATION,
+        WATCH_SUBTITLES_EXISTS_REMEDIATION, WATCH_TRANSCRIPT_EXISTS_REMEDIATION,
     };
     match failure {
         WatchFailure::UnusableName(OutputNameError::NotUnicode) => {
@@ -268,7 +328,12 @@ fn fixed_remediation(failure: WatchFailure) -> &'static str {
         WatchFailure::OutputExists(WatchOutputKind::Folder | WatchOutputKind::FolderContent) => {
             WATCH_FOLDER_EXISTS_REMEDIATION
         }
+        WatchFailure::OutputExists(WatchOutputKind::Kept) => WATCH_KEEP_NAME_TAKEN_REMEDIATION,
+        WatchFailure::OutputRefused(WatchOutputKind::Kept) => WATCH_KEEP_REFUSED_REMEDIATION,
         WatchFailure::OutputRefused(_) => WATCH_OUTPUT_REFUSED_REMEDIATION,
+        WatchFailure::KeepFolderUnusable => WATCH_KEEP_FOLDER_REMEDIATION,
+        WatchFailure::KeepInsideVsift => WATCH_KEEP_INSIDE_VSIFT_REMEDIATION,
+        WatchFailure::KeepNameNotAllowed => WATCH_KEEP_NAME_NOT_ALLOWED_REMEDIATION,
         WatchFailure::OutputInsideVsift => WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION,
         WatchFailure::OutputFolderUnusable => WATCH_OUTPUT_FOLDER_REMEDIATION,
         WatchFailure::FrameMismatch => WATCH_FRAME_MISMATCH_REMEDIATION,

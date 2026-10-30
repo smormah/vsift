@@ -122,6 +122,9 @@ pub enum EngineError {
     Clock(ClockError),
     /// `vsift <video>` could not write its outputs (ADR 0037).
     Watch(crate::WatchFailure),
+    /// `vsift <video> --keep` failed after its job sealed; the bundle was
+    /// still written, or tried (ADR 0037, amendment of 2026-10-30).
+    WatchFailedAfterKeep(Box<crate::WatchFailedAfterKeep>),
     /// The injected identifier source could not issue a fresh identifier.
     Identifier(IdentifierGenerationError),
     /// The automatic preflight could not verify the selected `FFmpeg` and
@@ -524,6 +527,7 @@ impl EngineError {
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::Ocr(error) => error.failure_code(),
             Self::Watch(failure) => failure.failure_code(),
+            Self::WatchFailedAfterKeep(failed) => failed.error.failure_code(),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
@@ -827,6 +831,7 @@ impl fmt::Display for EngineError {
             }
             Self::Clock(error) => error.fmt(formatter),
             Self::Watch(failure) => failure.fmt(formatter),
+            Self::WatchFailedAfterKeep(failed) => failed.error.fmt(formatter),
             Self::Identifier(error) => error.fmt(formatter),
             Self::MediaToolVerificationFailed(failure) => write!(
                 formatter,
@@ -986,6 +991,7 @@ impl Error for EngineError {
             Self::Storage(error) => Some(error),
             Self::OpenSession(error) => Some(error),
             Self::Watch(failure) => Some(failure),
+            Self::WatchFailedAfterKeep(failed) => Some(&failed.error),
             Self::UserConfiguration(error) => Some(error),
             Self::Executable(error) => Some(error),
             Self::Clock(error) => Some(error),

@@ -1,7 +1,8 @@
 //! The `watch` use case over fakes of its two ports (ADR 0037 section 14):
 //! the order of the steps, refusals before any work, stated gaps, the frame
 //! bound with its even spread and its backstop, the snapshots of the files
-//! that grow, Ctrl-C keeping the session, and a rerun continuing the job.
+//! that grow, Ctrl-C keeping the session, a rerun continuing the job, and
+//! `--keep`: a bundle only of a sealed job, and a close only after it.
 
 use std::{
     ffi::OsStr,
@@ -12,9 +13,9 @@ use std::{
 use crate::{Clock, ClockError};
 
 use vsift_domain::{
-    CandidateReason, EvidenceId, IdentifierError, JobId, MAX_WATCH_FRAMES, MediaTime, SessionId,
-    SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId, VisualIndexId, WatchOutputNames,
-    spread_evenly,
+    CandidateReason, EvidenceId, FailureCode, IdentifierError, JobId, MAX_WATCH_FRAMES, MediaTime,
+    SessionId, SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId, VisualIndexId,
+    WatchOutputNames, spread_evenly,
 };
 
 use super::{
@@ -91,6 +92,8 @@ struct FakeSteps {
     evidence_slots: usize,
     /// Frames the session stores before it is full.
     frame_room: usize,
+    /// Why the bundle cannot be written.
+    keep_failure: Option<FailureCode>,
     calls: Mutex<Vec<String>>,
 }
 
@@ -129,6 +132,7 @@ impl FakeSteps {
             changes: vec![change(1)?, change(0)?],
             evidence_slots: 384,
             frame_room: usize::MAX,
+            keep_failure: None,
             calls: Mutex::new(Vec::new()),
         })
     }
@@ -327,6 +331,11 @@ impl WatchSteps for FakeSteps {
         })
     }
 
+    fn keep_session(&self, _session: &SessionId, bundle: &Path) -> Result<(), FailureCode> {
+        self.record(format!("keep_session {}", bundle.display()));
+        self.keep_failure.map_or(Ok(()), Err)
+    }
+
     fn close_session(&self, _session: &SessionId) -> bool {
         self.record("close_session");
         true
@@ -338,6 +347,10 @@ impl WatchSteps for FakeSteps {
 #[derive(Default)]
 struct FakeOutputs {
     taken: bool,
+    /// The keep check's refusal.
+    keep_refused: Option<WatchOutputError>,
+    /// The final write fails, as for a file held open.
+    final_write_fails: bool,
     calls: Vec<String>,
     documents: Option<WatchDocuments>,
     listed: Option<(ScreenChangeSummary, Vec<ScreenChangeEntry>)>,
@@ -388,6 +401,17 @@ impl WatchOutputs for FakeOutputs {
         Ok(())
     }
 
+    fn prepare_keep(
+        &mut self,
+        folder: &Path,
+        names: &WatchOutputNames,
+    ) -> Result<PathBuf, WatchOutputError> {
+        self.calls.push("prepare_keep".to_owned());
+        self.keep_refused
+            .take()
+            .map_or_else(|| Ok(folder.join(names.bundle())), Err)
+    }
+
     fn write_snapshot(&mut self, snapshot: &WatchSnapshot) -> Result<(), WatchOutputError> {
         self.calls.push("write_snapshot".to_owned());
         self.snapshots.push(snapshot.clone());
@@ -419,6 +443,9 @@ impl WatchOutputs for FakeOutputs {
         documents: &WatchDocuments,
     ) -> Result<FinalisedOutputs, WatchOutputError> {
         self.calls.push("finalise".to_owned());
+        if self.final_write_fails {
+            return Err(WatchOutputError::Held(WatchOutputKind::Transcript));
+        }
         self.documents = Some(documents.clone());
         Ok(FinalisedOutputs {
             transcript: file("meeting.txt"),
@@ -440,7 +467,7 @@ const VIDEO: &str = "/videos/meeting.mp4";
 async fn the_steps_run_in_their_order_and_the_session_is_closed() -> TestResult {
     let steps = FakeSteps::new()?;
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert_eq!(
@@ -489,7 +516,7 @@ async fn a_missing_capability_refuses_before_anything_is_claimed() -> TestResult
     let mut steps = FakeSteps::new()?;
     steps.fail = Some(StepFailure::Capabilities);
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Step(StepFailure::Capabilities))
@@ -510,7 +537,7 @@ async fn a_name_that_is_taken_refuses_before_any_session() -> TestResult {
         taken: true,
         ..FakeOutputs::default()
     };
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Output(WatchOutputError::Exists(
@@ -535,7 +562,7 @@ async fn a_source_that_is_not_a_video_file_refuses_first() -> TestResult {
     let mut steps = FakeSteps::new()?;
     steps.fail = Some(StepFailure::Source);
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(result, Err(WatchError::Step(StepFailure::Source))));
     assert_eq!(steps.calls(), vec!["check_source"]);
     assert_eq!(outputs.calls, Vec::<String>::new());
@@ -546,7 +573,14 @@ async fn a_source_that_is_not_a_video_file_refuses_first() -> TestResult {
 async fn a_name_with_nothing_before_its_extension_refuses_before_the_claim() -> TestResult {
     let steps = FakeSteps::new()?;
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new("/videos/...mp4"), None).await;
+    let result = run_watch(
+        &steps,
+        &mut outputs,
+        Path::new("/videos/...mp4"),
+        None,
+        None,
+    )
+    .await;
     assert!(matches!(result, Err(WatchError::UnusableName(_))));
     assert_eq!(outputs.calls, Vec::<String>::new());
     Ok(())
@@ -557,7 +591,7 @@ async fn a_failure_after_the_claim_releases_it_and_closes_the_session() -> TestR
     let mut steps = FakeSteps::new()?;
     steps.fail = Some(StepFailure::Prepare);
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Step(StepFailure::Prepare))
@@ -575,7 +609,7 @@ async fn a_session_that_cannot_open_releases_the_claim() -> TestResult {
     let mut steps = FakeSteps::new()?;
     steps.fail = Some(StepFailure::Open);
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(result, Err(WatchError::Step(StepFailure::Open))));
     assert_eq!(outputs.calls, vec!["claim", "release"]);
     assert!(!steps.calls().contains(&"close_session".to_owned()));
@@ -595,7 +629,7 @@ async fn a_failed_chunk_becomes_a_stated_gap_in_time_order() -> TestResult {
         text: "After the gap.".to_owned(),
     });
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert_eq!(outcome.not_transcribed, vec![gap]);
@@ -623,7 +657,7 @@ async fn a_video_with_no_sound_track_has_no_subtitles() -> TestResult {
     let mut steps = FakeSteps::new()?;
     steps.transcript = None;
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert!(outcome.subtitles.is_none());
@@ -643,7 +677,7 @@ async fn more_changes_than_the_bound_get_frames_spread_evenly_and_all_are_listed
     let count = 576;
     steps.changes = (0..count).map(change).collect::<Result<_, _>>()?;
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     let expected: Vec<String> = spread_evenly(count, MAX_WATCH_FRAMES)
@@ -672,7 +706,7 @@ async fn the_frames_fit_the_room_measured_before_the_first() -> TestResult {
     steps.changes = (0..40).map(change).collect::<Result<_, _>>()?;
     steps.evidence_slots = 21;
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert_eq!(
@@ -690,7 +724,7 @@ async fn a_session_out_of_room_ends_the_frames_not_the_run() -> TestResult {
     steps.changes = (0..10).map(change).collect::<Result<_, _>>()?;
     steps.frame_room = 3;
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert!(
@@ -714,7 +748,7 @@ async fn any_other_frame_failure_ends_the_run_and_releases_the_claim() -> TestRe
     let mut steps = FakeSteps::new()?;
     steps.fail = Some(StepFailure::Frame);
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(result, Err(WatchError::Step(StepFailure::Frame))));
     assert_eq!(
         outputs.calls,
@@ -761,7 +795,7 @@ async fn the_list_holds_the_settled_screens_and_only_they_get_frames() -> TestRe
         })
         .collect::<Result<_, _>>()?;
     let mut outputs = FakeOutputs::default();
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert_eq!(outcome.changes_found, 6, "every change found is counted");
@@ -794,7 +828,7 @@ async fn the_list_holds_the_settled_screens_and_only_they_get_frames() -> TestRe
 async fn a_publication_writes_a_snapshot_of_what_was_published() -> TestResult {
     let steps = FakeSteps::new()?;
     let mut outputs = FakeOutputs::default();
-    run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     let snapshot = outputs.snapshots.first().ok_or("a snapshot was written")?;
@@ -814,7 +848,7 @@ async fn snapshots_are_at_least_ten_seconds_apart() -> TestResult {
     let mut steps = FakeSteps::new()?;
     steps.notices = vec![FakeNotice::Published; 5];
     let mut outputs = FakeOutputs::default();
-    run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert_eq!(
@@ -848,6 +882,7 @@ async fn snapshots_are_at_least_ten_seconds_apart() -> TestResult {
         duration: None,
         last_snapshot_at: None,
         snapshot_written: false,
+        sealed: false,
         screens: None,
     };
     for _ in 0..3 {
@@ -880,7 +915,7 @@ async fn signal_twice_ten_seconds_apart(
 async fn the_frames_are_written_when_the_visual_stream_is_done() -> TestResult {
     let steps = FakeSteps::new()?;
     let mut outputs = FakeOutputs::default();
-    run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     let calls = steps.calls();
@@ -912,7 +947,7 @@ async fn ctrl_c_keeps_the_files_and_the_session() -> TestResult {
     let mut steps = FakeSteps::new()?;
     steps.stopped = true;
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Stopped {
@@ -953,7 +988,7 @@ async fn a_rerun_continues_the_unfinished_job_of_the_same_names() -> TestResult 
         taken: true,
         ..FakeOutputs::default()
     };
-    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None)
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
         .await
         .map_err(|error| format!("{error:?}"))?;
     assert_eq!(
@@ -984,7 +1019,7 @@ async fn taken_names_without_an_unfinished_job_are_refused() -> TestResult {
         taken: true,
         ..FakeOutputs::default()
     };
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Output(WatchOutputError::Exists(
@@ -1010,7 +1045,7 @@ async fn a_failed_rerun_leaves_the_taken_over_files_saying_so() -> TestResult {
         taken: true,
         ..FakeOutputs::default()
     };
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Step(StepFailure::Prepare))
@@ -1032,11 +1067,274 @@ async fn a_failure_before_any_snapshot_writes_none() -> TestResult {
     let mut steps = FakeSteps::new()?;
     steps.fail = Some(StepFailure::Prepare);
     let mut outputs = FakeOutputs::default();
-    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None).await;
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
     assert!(matches!(
         result,
         Err(WatchError::Step(StepFailure::Prepare))
     ));
     assert_eq!(outputs.snapshots, Vec::new(), "the empty claim is released");
+    Ok(())
+}
+
+const KEEP: &str = "/kept-calls";
+
+fn bundle_path() -> PathBuf {
+    Path::new(KEEP).join("meeting")
+}
+
+fn keep_call() -> String {
+    format!("keep_session {}", bundle_path().display())
+}
+
+fn position(calls: &[String], call: &str) -> Result<usize, String> {
+    calls
+        .iter()
+        .position(|made| made == call)
+        .ok_or(format!("{call} was not made: {calls:?}"))
+}
+
+async fn run_keeping(
+    steps: &FakeSteps,
+    outputs: &mut FakeOutputs,
+) -> Result<super::WatchOutcome, WatchError<StepFailure>> {
+    run_watch(
+        steps,
+        outputs,
+        Path::new(VIDEO),
+        None,
+        Some(Path::new(KEEP)),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn the_bundle_comes_after_the_outputs_and_before_the_close() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs::default();
+    let outcome = run_keeping(&steps, &mut outputs)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        outcome.kept.as_ref().map(|kept| kept.path.clone()),
+        Some(bundle_path())
+    );
+    assert_eq!(outcome.kept.and_then(|kept| kept.failure), None);
+    assert!(outcome.session_closed);
+    assert!(outputs.calls.contains(&"finalise".to_owned()));
+    assert!(!outputs.calls.contains(&"release".to_owned()));
+    let calls = steps.calls();
+    assert!(position(&calls, &keep_call())? < position(&calls, "close_session")?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn without_the_option_no_bundle_is_written() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs::default();
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(outcome.kept, None);
+    assert!(!outputs.calls.contains(&"prepare_keep".to_owned()));
+    assert!(!steps.calls().iter().any(|call| call.starts_with("keep_")));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_bundle_that_cannot_be_written_leaves_the_outputs_and_the_session_open() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.keep_failure = Some(FailureCode::StorageIo);
+    let mut outputs = FakeOutputs::default();
+    let outcome = run_keeping(&steps, &mut outputs)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        outcome.kept.as_ref().and_then(|kept| kept.failure),
+        Some(FailureCode::StorageIo)
+    );
+    assert!(!outcome.session_closed, "the work is not lost");
+    assert!(!steps.calls().contains(&"close_session".to_owned()));
+    assert!(
+        !outputs.calls.contains(&"release".to_owned()),
+        "the outputs stand"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_keep_folder_that_is_refused_stops_the_run_before_any_session() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs {
+        keep_refused: Some(WatchOutputError::Exists(WatchOutputKind::Kept)),
+        ..FakeOutputs::default()
+    };
+    let result = run_keeping(&steps, &mut outputs).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Output(WatchOutputError::Exists(
+            WatchOutputKind::Kept
+        )))
+    ));
+    assert_eq!(
+        outputs.calls,
+        vec!["claim", "prepare_keep", "release"],
+        "the claim comes first and is given back"
+    );
+    assert_eq!(steps.calls(), vec!["check_source", "check_capabilities"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rerun_refused_for_its_keep_folder_leaves_the_interrupted_job_alone() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.unfinished = Some(UnfinishedWatch {
+        session: FakeSteps::session()?,
+        job: JobId::parse("job_fedcba9876543210")?,
+    });
+    let mut outputs = FakeOutputs {
+        taken: true,
+        keep_refused: Some(WatchOutputError::Exists(WatchOutputKind::Kept)),
+        ..FakeOutputs::default()
+    };
+    let result = run_keeping(&steps, &mut outputs).await;
+    assert!(matches!(result, Err(WatchError::Output(_))));
+    let calls = steps.calls();
+    assert!(!calls.contains(&"close_session".to_owned()));
+    assert!(!calls.iter().any(|call| call.starts_with("prepare")));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_stopped_run_keeps_nothing() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.stopped = true;
+    let mut outputs = FakeOutputs::default();
+    let result = run_keeping(&steps, &mut outputs).await;
+    assert!(matches!(result, Err(WatchError::Stopped { .. })));
+    let calls = steps.calls();
+    assert!(!calls.iter().any(|call| call.starts_with("keep_")));
+    assert!(!calls.contains(&"close_session".to_owned()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_run_that_fails_before_the_seal_keeps_nothing_and_closes_as_before() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.fail = Some(StepFailure::Prepare);
+    let mut outputs = FakeOutputs::default();
+    let result = run_keeping(&steps, &mut outputs).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Step(StepFailure::Prepare))
+    ));
+    let calls = steps.calls();
+    assert!(!calls.iter().any(|call| call.starts_with("keep_")));
+    assert!(calls.contains(&"close_session".to_owned()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_final_write_that_fails_on_a_sealed_job_still_keeps_the_recording() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs {
+        final_write_fails: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_keeping(&steps, &mut outputs).await;
+    let Err(WatchError::FailedAfterKeep {
+        error,
+        kept,
+        session_closed,
+        ..
+    }) = result
+    else {
+        return Err(format!("{result:?}").into());
+    };
+    assert!(
+        matches!(
+            *error,
+            WatchError::Output(WatchOutputError::Held(WatchOutputKind::Transcript))
+        ),
+        "the failed output is reported as it is today"
+    );
+    assert_eq!(kept.path, bundle_path());
+    assert_eq!(kept.failure, None);
+    assert!(session_closed, "the bundle is committed, so it closes");
+    let calls = steps.calls();
+    assert!(position(&calls, &keep_call())? < position(&calls, "close_session")?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_final_write_and_a_bundle_that_both_fail_leave_the_session_open() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.keep_failure = Some(FailureCode::StorageIo);
+    let mut outputs = FakeOutputs {
+        final_write_fails: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_keeping(&steps, &mut outputs).await;
+    let Err(WatchError::FailedAfterKeep {
+        kept,
+        session_closed,
+        ..
+    }) = result
+    else {
+        return Err(format!("{result:?}").into());
+    };
+    assert_eq!(kept.failure, Some(FailureCode::StorageIo));
+    assert!(!session_closed);
+    assert!(!steps.calls().contains(&"close_session".to_owned()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_final_write_that_fails_without_the_option_closes_as_before() -> TestResult {
+    let steps = FakeSteps::new()?;
+    let mut outputs = FakeOutputs {
+        final_write_fails: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
+    assert!(matches!(
+        result,
+        Err(WatchError::Output(WatchOutputError::Held(_)))
+    ));
+    assert!(steps.calls().contains(&"close_session".to_owned()));
+    Ok(())
+}
+
+/// The rerun table: the run that finishes does what its own command line
+/// says, and finds its job by the output names alone.
+#[tokio::test]
+async fn a_rerun_keeps_where_its_own_command_line_says() -> TestResult {
+    for keep in [Some("/a"), Some("/b"), None] {
+        let mut steps = FakeSteps::new()?;
+        steps.unfinished = Some(UnfinishedWatch {
+            session: FakeSteps::session()?,
+            job: JobId::parse("job_fedcba9876543210")?,
+        });
+        let mut outputs = FakeOutputs {
+            taken: true,
+            ..FakeOutputs::default()
+        };
+        let outcome = run_watch(
+            &steps,
+            &mut outputs,
+            Path::new(VIDEO),
+            None,
+            keep.map(Path::new),
+        )
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+        let calls = steps.calls();
+        assert!(calls.contains(&"prepare job_fedcba9876543210".to_owned()));
+        assert!(!calls.contains(&"open_session".to_owned()));
+        assert_eq!(
+            outcome.kept.map(|kept| kept.path),
+            keep.map(|folder| Path::new(folder).join("meeting"))
+        );
+        assert!(outcome.session_closed);
+    }
     Ok(())
 }

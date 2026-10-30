@@ -606,3 +606,116 @@ fn a_release_after_a_failure_leaves_only_what_was_there() -> TestResult {
     ));
     Ok(())
 }
+
+fn keep_names(video: &str) -> Result<WatchOutputNames, Box<dyn Error>> {
+    Ok(WatchOutputNames::from_video_name(OsStr::new(video))?)
+}
+
+fn entries(folder: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+    Ok(fs::read_dir(folder)?
+        .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
+        .collect::<Result<_, std::io::Error>>()?)
+}
+
+#[test]
+fn a_keep_target_is_named_after_the_stem_and_leaves_nothing_there() -> TestResult {
+    let folder = TestFolder::new("vsift-keep-target")?;
+    let target = fixed_outputs().prepare_keep(&folder, &keep_names("meeting.mp4")?)?;
+    assert_eq!(target, fs::canonicalize(&*folder)?.join("meeting"));
+    assert_eq!(entries(&folder)?, Vec::<String>::new());
+    Ok(())
+}
+
+#[test]
+fn a_new_keep_folder_is_created_with_its_parent_required() -> TestResult {
+    let base = TestFolder::new("vsift-keep-new")?;
+    let new = base.join("kept");
+    fixed_outputs().prepare_keep(&new, &keep_names("meeting.mp4")?)?;
+    assert!(new.is_dir());
+    let result = fixed_outputs().prepare_keep(&base.join("no/parent"), &keep_names("meeting.mp4")?);
+    assert!(matches!(result, Err(WatchOutputError::KeepFolderUnusable)));
+    Ok(())
+}
+
+#[test]
+fn a_taken_name_is_refused_and_replaces_nothing() -> TestResult {
+    let folder = TestFolder::new("vsift-keep-taken")?;
+    fs::create_dir(folder.join("a folder"))?;
+    fs::write(folder.join("a folder").join("inside.txt"), "kept")?;
+    fs::write(folder.join("a file"), "kept")?;
+    for video in ["a folder.mp4", "a file.mp4"] {
+        let result = fixed_outputs().prepare_keep(&folder, &keep_names(video)?);
+        assert!(
+            matches!(result, Err(WatchOutputError::Exists(WatchOutputKind::Kept))),
+            "{result:?}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(folder.join("a folder").join("inside.txt"))?,
+        "kept"
+    );
+    assert_eq!(fs::read_to_string(folder.join("a file"))?, "kept");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_at_the_name_is_taken_and_never_followed() -> TestResult {
+    let folder = TestFolder::new("vsift-keep-link")?;
+    let elsewhere = TestFolder::new("vsift-keep-elsewhere")?;
+    std::os::unix::fs::symlink(elsewhere.join("gone"), folder.join("meeting"))?;
+    let result = fixed_outputs().prepare_keep(&folder, &keep_names("meeting.mp4")?);
+    assert!(matches!(
+        result,
+        Err(WatchOutputError::Exists(WatchOutputKind::Kept))
+    ));
+    assert_eq!(entries(&elsewhere)?, Vec::<String>::new());
+    Ok(())
+}
+
+#[test]
+fn something_that_is_not_a_folder_is_refused() -> TestResult {
+    let base = TestFolder::new("vsift-keep-file")?;
+    let file = base.join("not a folder");
+    fs::write(&file, "text")?;
+    let result = fixed_outputs().prepare_keep(&file, &keep_names("meeting.mp4")?);
+    assert!(matches!(result, Err(WatchOutputError::KeepFolderUnusable)));
+    assert_eq!(fs::read_to_string(&file)?, "text");
+    Ok(())
+}
+
+#[test]
+fn a_keep_folder_inside_vsifts_roots_is_refused_and_a_new_one_removed() -> TestResult {
+    let root = TestFolder::new("vsift-keep-root")?;
+    let mut outputs = FolderWatchOutputs::new(vec![fs::canonicalize(&*root)?]);
+    let new = root.join("kept");
+    let result = outputs.prepare_keep(&new, &keep_names("meeting.mp4")?);
+    assert!(matches!(result, Err(WatchOutputError::KeepInsideVsift)));
+    assert!(!new.exists(), "a folder this run made is removed");
+    Ok(())
+}
+
+#[test]
+fn a_name_a_bundle_may_not_have_is_refused_before_any_work() -> TestResult {
+    let base = TestFolder::new("vsift-keep-device")?;
+    let new = base.join("kept");
+    let result = fixed_outputs().prepare_keep(&new, &keep_names("aux.v2.mp4")?);
+    assert!(matches!(result, Err(WatchOutputError::KeepNameNotAllowed)));
+    assert!(!new.exists(), "a folder this run made is removed");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn a_folder_that_refuses_the_write_is_refused() -> TestResult {
+    use std::os::unix::fs::PermissionsExt as _;
+    let folder = TestFolder::new("vsift-keep-readonly")?;
+    fs::set_permissions(&*folder, fs::Permissions::from_mode(0o500))?;
+    let result = fixed_outputs().prepare_keep(&folder, &keep_names("meeting.mp4")?);
+    fs::set_permissions(&*folder, fs::Permissions::from_mode(0o700))?;
+    assert!(matches!(
+        result,
+        Err(WatchOutputError::Refused(WatchOutputKind::Kept, _))
+    ));
+    Ok(())
+}

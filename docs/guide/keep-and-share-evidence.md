@@ -106,8 +106,23 @@ lists every hit with its recording and time. Below the hits it says what each re
 because a word in a part with no transcript cannot be found, and on-screen text that was never read
 cannot be either. Nothing is stored, so deleting a bundle removes it from search.
 
+To keep a recording as you process it, with no second step, add `--keep` to the one command, and use the
+same folder for each recording:
+
+```console
+vsift ./call.mp4 --keep ./kept-calls
+vsift ./second-call.mp4 --keep ./kept-calls
+```
+
+Each recording becomes a private bundle in its own subfolder, named after the video, and your files are
+written as usual. **What `--keep` keeps is the transcript and the frames: the video is not copied in, and
+on-screen text is not read**, because `vsift <video>` does not run `ocr`, and search says so for each
+recording. A video whose name is already kept in that folder is refused before any work, so two videos
+called `call` need two folders, or a new name. If you stop a run with Ctrl-C, nothing is kept until a run
+finishes; run the command again with `--keep` to continue and keep.
+
 - **Only what you name is read.** A session you did not retain is never searched, and neither is a
-  recording you processed with `vsift <video>`, which leaves no bundle, unless you retained it.
+  recording you processed with `vsift <video>` without `--keep`, unless you retained it.
 - **A hit is a lead, not a citation.** To look at the moment or cite it, open the source with
   `vsift ingest` (the bundle's `source.media`, or your original file) and cite from that session.
 - **Bring bundles together by retaining into the folder, or moving them.** A bundle is private to you,

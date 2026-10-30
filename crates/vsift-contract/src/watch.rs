@@ -74,6 +74,61 @@ pub struct WatchRangeData {
     pub to_us: u64,
 }
 
+/// What became of the bundle `--keep` asked for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WatchKeptState {
+    /// The bundle is committed at `path`.
+    Kept,
+    /// It could not be written; the session was left open.
+    NotKept,
+}
+
+/// The bundle `--keep` asked for (ADR 0037, amendment of 2026-10-30).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct WatchKeptData {
+    /// Whether it is committed.
+    pub state: WatchKeptState,
+    /// Where it is, or where it was to go; absolute, as the outputs' paths.
+    pub path: String,
+    /// Its folder's name in display form, the name `bundle search` shows.
+    pub name: String,
+    /// The public code of the failure when `not_kept`; `null` when `kept`.
+    pub failure_code: Option<String>,
+}
+
+impl WatchKeptData {
+    /// Describes the bundle at `path`, kept unless `failure_code` says why
+    /// not; `None` when the path is not Unicode text, which a name derived
+    /// from a video's Unicode name never is.
+    #[must_use]
+    pub fn new(path: &Path, failure_code: Option<&str>) -> Option<Self> {
+        let output = WatchOutputData::new(path, None)?;
+        Some(Self {
+            state: if failure_code.is_some() {
+                WatchKeptState::NotKept
+            } else {
+                WatchKeptState::Kept
+            },
+            path: output.path,
+            name: output.name,
+            failure_code: failure_code.map(str::to_owned),
+        })
+    }
+}
+
+/// `data` of a failed `watch` whose job had sealed, with `--keep`: the error
+/// says what failed, and this says what became of the bundle.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct WatchFailureData {
+    /// The session the run used.
+    pub session_id: String,
+    /// Whether the run closed it; never when the bundle was not written.
+    pub session_closed: bool,
+    /// The bundle.
+    pub kept: WatchKeptData,
+}
+
 /// Whether everything the run set out to write is there.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,8 +137,8 @@ pub enum WatchCompleteness {
     /// changes found.
     Complete,
     /// Part of the video was not transcribed, runs past the part screen
-    /// changes are found in, or the frames stopped for room; the outputs say
-    /// which.
+    /// changes are found in, the frames stopped for room, or the bundle
+    /// `--keep` asked for could not be written; the data says which.
     Partial,
 }
 
@@ -130,6 +185,8 @@ pub struct WatchData {
     pub changes_listed: u64,
     /// The frames written, at most 180 (known limit L-234).
     pub frames: Vec<WatchFrameData>,
+    /// The bundle `--keep` asked for; `null` without the option.
+    pub kept: Option<WatchKeptData>,
 }
 
 /// Remediation when the readable transcript's name is taken.
@@ -155,5 +212,21 @@ pub const WATCH_OUTPUT_FOLDER_REMEDIATION: &str =
 pub const WATCH_NAME_NOT_UNICODE_REMEDIATION: &str = "The video's file name is not Unicode text, so VSift cannot name its files after it. Rename the video, then run it again.";
 /// Remediation when the video's name has nothing before its extension.
 pub const WATCH_NAME_EMPTY_REMEDIATION: &str = "The video's file name has nothing before its extension, so VSift cannot name its files after it. Rename the video, then run it again.";
+/// Remediation when the bundle's name is taken under the `--keep` folder.
+pub const WATCH_KEEP_NAME_TAKEN_REMEDIATION: &str = "A recording of this name is already kept in that folder, and VSift never replaces it. Keep this one in another folder with --keep <folder>, or rename the video.";
+/// Remediation when `--keep` cannot be used as a folder.
+pub const WATCH_KEEP_FOLDER_REMEDIATION: &str = "--keep takes a folder on a local drive: an existing one, or a new one whose parent folder exists.";
+/// Remediation when `--keep` is inside `VSift`'s own folders.
+pub const WATCH_KEEP_INSIDE_VSIFT_REMEDIATION: &str = "--keep names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.";
+/// Remediation when the video's name cannot name a bundle's folder.
+pub const WATCH_KEEP_NAME_NOT_ALLOWED_REMEDIATION: &str = "The video's name is one a kept recording's folder cannot have on every system (a Windows device name). Rename the video, then run it again.";
+/// Remediation when the `--keep` folder refuses the check.
+pub const WATCH_KEEP_REFUSED_REMEDIATION: &str = "VSift could not write a private folder into that folder (it may be read-only, full, or not able to hold private folders). Choose a folder you can write to with --keep <folder>.";
+/// The warning when the bundle could not be written; the outputs stand. The
+/// session's id is in the result's `session_id`.
+pub const WATCH_NOT_KEPT_WARNING: &str = "VSift could not keep the recording for later search, so it left the session open, with its private copy of the video, until it expires about a day unused. Keep it now with: vsift session retain <session_id> --output <a new folder>. Anything left at the kept name is incomplete and can be removed.";
+/// Added to a failure after the job sealed, when the bundle was written.
+pub const WATCH_KEPT_AFTER_FAILURE_REMEDIATION: &str = "The transcription was finished, so the recording was still kept for later search, as you asked.";
+
 /// Remediation when a copied frame does not match its digest.
 pub const WATCH_FRAME_MISMATCH_REMEDIATION: &str = "A frame copied out of VSift's private copy did not match its recorded SHA-256, so the run kept nothing. Run it again; if it happens again, report it.";

@@ -193,8 +193,8 @@ pub use vsift_domain::{
 /// the executable and its arguments, and the runner outlives it.
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
 pub use watch::{
-    OutputNameError, WatchFailure, WatchFile, WatchFrame, WatchOutcome, WatchOutputKind,
-    WatchOutputNames, WatchRequest,
+    OutputNameError, WatchFailedAfterKeep, WatchFailure, WatchFile, WatchFrame, WatchKept,
+    WatchOutcome, WatchOutputKind, WatchOutputNames, WatchRequest,
 };
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
