@@ -39,6 +39,11 @@ on:
       - tools/p16_ocr_runner.py
       - tools/test_p16_ocr_runner.py
   workflow_dispatch:
+    inputs:
+      taskbar_clocks:
+        description: "Only the taskbar-clock evidence for time anchoring stage 2 (tools/p16_taskbar_clocks.py)"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -73,9 +78,119 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tools -p test_p16_ocr_runner.py
           python3 -m unittest discover -s tools -p test_p16_ocr_evaluation.py
+          python3 -m unittest discover -s tools -p test_p16_taskbar_clocks.py
+
+  # Can the runner read taskbar-sized clocks? Synthetic only; this job's result
+  # decides whether time anchoring stage 2 goes ahead as designed. Only on a
+  # dispatch that asks for it, and the parity jobs are skipped then.
+  taskbar-clocks:
+    name: Taskbar clocks (synthetic)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.taskbar_clocks }}
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the synthesis tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg fonts-dejavu-core fonts-liberation2
+
+      - name: Build the commit's OCR runner
+        run: cargo build --release --locked -p vsift-ocr-runner
+
+      - name: Stage the runner folder with the pinned ONNX Runtime and models
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py stage --out "$RUNNER_TEMP/runner" --platform linux-x64 \
+            --runner target/release/vsift-ocr-runner --inventory "$RUNNER_TEMP/inventory.json"
+
+      - name: Draw, encode and read the taskbars
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          python3 tools/p16_taskbar_clocks.py synthetic --work "$RUNNER_TEMP/taskbars" --ffmpeg /usr/bin/ffmpeg \
+            --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" \
+            --font /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+            --font /usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf \
+            --report "$RUNNER_TEMP/report/taskbar-clocks.json" --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the report (our own synthetic text only)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-taskbar-clocks
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Counts of time-shaped lines on RM01, RM04 and RM10. A job of its own, beside
+  # the synthetic one, so it can neither hold that up nor fail the run. The frames
+  # and the recognised text stay on the runner: this job uploads nothing, and only
+  # numbers reach its summary.
+  taskbar-real-counts:
+    name: Time-shaped lines on real recordings (counts only)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.taskbar_clocks }}
+    needs: tooling-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install FFmpeg
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
+
+      - name: Fetch RM01, RM04 and RM10 and cross-check their pins
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/real-media"
+          node tools/p14-campaigns/real-media.cjs cross-check "$RUNNER_TEMP/real-media" --item RM01 --item RM04 --item RM10
+
+      - name: Build the commit's OCR runner
+        run: cargo build --release --locked -p vsift-ocr-runner
+
+      - name: Stage the runner folder with the pinned ONNX Runtime and models
+        run: |
+          set -euo pipefail
+          python3 tools/p16_ocr_runner.py stage --out "$RUNNER_TEMP/runner" --platform linux-x64 \
+            --runner target/release/vsift-ocr-runner --inventory "$RUNNER_TEMP/inventory.json"
+
+      - name: Count time-shaped lines (numbers only)
+        run: |
+          set -euo pipefail
+          real=()
+          for item in RM01 RM04 RM10; do
+            file="$(node -e "const m=require('./tools/p14-campaigns/real-media/manifest.json');const i=m.items.find((x)=>x.id===process.argv[1]);process.stdout.write(i.file_name)" "$item")"
+            real+=(--real "$item=$RUNNER_TEMP/real-media/$item/$file")
+          done
+          python3 tools/p16_taskbar_clocks.py real --work "$RUNNER_TEMP/counts" --ffmpeg /usr/bin/ffmpeg \
+            --runner "$RUNNER_TEMP/runner/vsift-ocr-runner" "${real[@]}" --summary "$GITHUB_STEP_SUMMARY"
 
   linux:
     name: Parity and end to end (ubuntu-24.04)
+    if: ${{ !inputs.taskbar_clocks }}
     needs: tooling-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -246,7 +361,7 @@ jobs:
     name: Runner on ${{ matrix.os }}
     # Staging and `describe` run whatever Linux's job did; reading Linux's frames needs them.
     needs: [tooling-tests, linux]
-    if: ${{ !cancelled() && needs.tooling-tests.result == 'success' }}
+    if: ${{ !cancelled() && needs.tooling-tests.result == 'success' && !inputs.taskbar_clocks }}
     strategy:
       fail-fast: false
       matrix:
