@@ -137,6 +137,8 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
      - Only the user confirms a zone, with an option such as `--screen-zone <IANA zone>`
        naming the clock source it applies to. A confirmed clock then becomes zone-aware,
        with its own source and confidence.
+     - *Note of 2026-10-30:* `0.3.0` takes an offset (`±HH:MM`), not an IANA name; see decision
+       16 of the amendment below.
    - **The zone-independent parts of stage 2 are its core value:**
      - cut and pause detection, from how each clock moves against video time;
      - rollover precision within each clock's own timeline;
@@ -158,6 +160,9 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
   recorded the verification; the docs say so.
 - A session's clock times are fixed when it opens; `--recorded-at` cannot be added to an
   open session in stage 1 (a later `session` command could add an operator anchor).
+  *Amended 2026-10-30:* an open session's clock times now change only through a user's
+  explicit `--accept-gap` or `--screen-zone` (decisions 13 and 16); `--recorded-at` still
+  cannot be added later.
 - Worker job requests carry no `recorded_at` in stage 1; their ingests read the tags as a
   plain ingest does.
 
@@ -200,9 +205,10 @@ The four questions this pull request left open were answered at the merge rebase
 
 ## Amendment of 2026-10-30: stage 2, clocks on screen (Proposed)
 
-Status: **Proposed, 2026-10-30.** Sent for review before building. Stage 1's decisions above stand,
-except where a decision below names what it changes. Decision 9 binds everything here. The
-thresholds marked *tentative* are starting values, set by the tests and the hosted evidence.
+Status: **Proposed, 2026-10-30; reviewed by the planner the same day, with its rulings written in
+below.** Stage 1's decisions above stand, except where a decision below names what it changes.
+Decision 9 binds everything here. The thresholds marked *tentative* are starting values, set by the
+tests and the hosted evidence.
 
 ### Why the shape
 
@@ -231,8 +237,10 @@ Refused: a line with two or more time tokens (`9:00 - 10:00`, `1:23 / 4:56`), a 
 letter, digit, `/` or a further `:` or `.` group (`16:9`, `10:30:00.0`, `1.2.3:45`), a one-digit hour
 without AM or PM (`1:23` is a duration far more often than a time), numeric dates with slashes or
 dots (`10/21/2026` is two different days), zone abbreviations (`IST` and `CST` each name several
-zones, so a dated face followed by one counts as having no stated zone), and lines read with the
-engine's score under 0.80 (*tentative*). A fraction of a second is read and ignored: the unit stays 1 s.
+zones, so a dated face followed by one counts as having no stated zone), and lines under a score
+bound. ADR 0030 calls the engine's score uncalibrated, so that bound is set from the measured
+distribution (see "Evidence first"), not assumed. A fraction of a second is read and ignored: the
+unit stays 1 s.
 
 *Step 2, the track.* Faces of one format class in one place (`TextRegion::same_place`) over
 consecutive read frames become a **clock** only with at least three reads and at least one advance,
@@ -242,8 +250,11 @@ fails this test by design: a log line's timestamp is when something happened, no
 now, so a scrolling line is not an anchor. A status line that stays in place and moves is.
 
 *Counters.* An elapsed timer moves at the rate of the video too and looks like a time of day. A
-face with seconds, no date, no AM or PM and hour `00` is a `counter`: it is listed, and it gives no
-anchor, no offset observation and no change to a clock time.
+moving face with seconds, no date and no AM or PM is a `counter` when its hour is `00`, or when its
+offset (decision 11) lies in `(−duration, 0]`, because it then read zero during the recording, as a
+meeting timer past its first hour (`01:03:22`) does. A counter is listed, and it gives no anchor, no
+offset observation and no gap. The cost is that a real clock passing midnight during the recording
+reads as a counter (L-213).
 
 ### 11. The model: an offset that is an interval
 
@@ -293,7 +304,7 @@ itself an interval. What it means depends on its sign and shape:
 
 | Kind | Shape | Meaning | Changes `clock_time`? |
 | --- | --- | --- | --- |
-| `gap` | The offset rises | Time is missing from the video: a cut, or a paused recording | Yes (below) |
+| `gap` | The offset rises | Time may be missing from the video: a cut, or a paused recording | Only when a person accepts it (below) |
 | `backward` | The offset falls | A stretch repeated or moved, or a clock set back | No: reported as a conflict |
 | `freeze` | A value holds past its unit, then the clock resumes | The screen stopped while the video ran, so video time is still right | No |
 | (another clock) | The jump is within its width of a multiple of 15 minutes, and at least 30 minutes | Most likely another machine's clock in the same place | No: two clocks |
@@ -303,13 +314,27 @@ and that must never read as a cut. The cost is that a real pause of exactly an h
 two clocks. A jump under 2 s (*tentative*) is not reported at all. The same rule means a change of
 daylight saving during a recording is two clocks.
 
-**A `gap` corrects clock times.** It is independent of any zone, and without it every clock time after
-a cut is wrong by the length of the cut (L-210). Decision 7 allows this. The correction is applied
-when the two runs qualify and no other clock spans the same moment without jumping. If one does, the
-jump is a conflict and nothing is corrected. Corrections divide the timeline into **segments**, the
-selected anchor's reading is moved by the corrections between it and the item, and each item says
-which segment it is in. Nothing is hidden: the segment names its jump, its uncertainty and the clock
-that proved it. A session without a qualifying gap has one segment and answers exactly as it did.
+**A detected `gap` is reported; only a person applies it.** Decision 7 allows a correction, but this
+design cannot tell a cut from a change of clock. Two people in one zone whose machines differ by 30 s,
+sharing in turn in the same place, make a positive jump of 30 s. The quarter-hour rule does not catch
+that, and with no other clock in view nothing contradicts it. A virtual machine's or remote desktop's
+clock in the same place does the same, as does a machine correcting its own time. Applying such a
+jump would make every later time silently wrong by a value VSift itself introduced. So a gap follows
+decision 16's rule: an inference is reported, and only the user applies it.
+
+- Gaps divide the timeline into **segments**. A gap has a stable id (`g1`, `g2`) and a state,
+  `detected` or `accepted`.
+- While `detected`, the gap changes no value. Each item after it carries `segment`, and the `clock_time`
+  value stays what the anchor gives, so nobody reads a suspect time without being able to see why: the
+  segment names the jump, its uncertainty and the clock that proved it.
+- `vsift clocks <session> --accept-gap <id>`, repeatable, makes it `accepted`: `adjusted_by_us` takes
+  effect, and the selected anchor's reading is moved by the accepted corrections between it and the
+  item. Only what the person stated is applied, and an unknown id is `INVALID_ARGUMENT`.
+- A gap that another clock contradicts (it spans the moment without jumping) is also a conflict, and
+  it can still be accepted, because the person may know more.
+- A session with no gap has one segment and answers exactly as it did.
+
+So the logs-by-clock subtraction stays right unless a person accepted a gap.
 
 ### 14. The conflict report
 
@@ -328,17 +353,25 @@ Three sources are added, after which `AnchorSource`'s order is the ladder:
 | Order | Source | Confidence | Reading |
 | --- | --- | --- | --- |
 | 1 | `operator` | `exact` | as stage 1 |
-| 2 | `screen_clock_confirmed` (new) | `medium` | a clock whose zone the user confirmed: an instant |
-| 3 | `quicktime_creationdate` | `high` | as stage 1 |
+| 2 | `quicktime_creationdate` | `high` | as stage 1 |
+| 3 | `screen_clock_confirmed` (new) | `medium` | a clock whose zone the user confirmed: an instant |
 | 4 | `container_creation_time` | `medium` | as stage 1 |
 | 5 | `screen_timestamp` (new) | `medium` | a moving clock that states its zone: an instant |
-| 6 | `screen_clock` (new) | `low` (new) | a dated clock with no zone: `local` only |
+| 6 | `screen_clock` (new) | `medium` | a dated clock with no zone: `local` only |
 
-A confirmation ranks second because it is the user's explicit statement, as `--recorded-at` is. The
-two sources that nobody confirmed rank below every stage-1 source, so running `clocks` never changes
-which anchor a session's clock times come from unless the session had none. When `screen_clock` is
-selected, clock times are local with `utc` null, as a zoneless `--recorded-at` gives. Selection stays
-per session, never per item, so one session's items never mix two clock faces.
+**No new confidence label.** `confidence` is a closed list of the three labels the maintainer
+accepted, and decision 7 tells readers to tolerate an unknown `source` or `consistency`, not an unknown
+`confidence`. All three new sources are `medium`; for `screen_clock`, `local` with `utc` null and the
+source's name already say what is unknown. **The ladder is monotone:** confidence never rises as it
+goes down.
+
+The user confirmed a zone, not that the clock was right, so a confirmation does not displace the
+recorder's tag, and a disagreement shows as `instants_disagree`. It does beat the container's time,
+which is often the encode time (L-210). The two sources nobody confirmed rank below every stage-1
+source, so running `clocks` never changes which anchor a session's clock times come from unless the
+session had none. When `screen_clock` is selected, clock times are local with `utc` null, as a zoneless
+`--recorded-at` gives. Selection stays per session, never per item, so one session's items never mix
+two clock faces.
 
 **A clock without a date is not an anchor.** Stage 1's `local` is a date and time, and a time of day
 alone cannot be written as one, so a taskbar's `2:03 PM` adds nothing to `anchors` until it is
@@ -347,8 +380,10 @@ silently.
 
 `TimeAnchors` now allows one anchor per clock per segment for the screen sources, keeping the bound of
 16: the most precise are kept and the report lists all of them. Stage 1's one-per-source rule stays
-for its three sources. `consistency` compares anchors at their own positions, through the segments,
-with each anchor's precision added to the two seconds. A local time is still never compared.
+for its three sources. `consistency` compares anchors at their own positions, through accepted gaps
+only, with each anchor's precision added to the two seconds. So an anchor after a detected gap that
+disagrees with one before it is `conflicting`, which is what it is until a person says otherwise. A
+local time is still never compared.
 
 ### 16. Offset observations and the user's confirmation
 
@@ -366,21 +401,26 @@ difference shows as `instants_disagree`. With no absolute anchor it cannot be co
 `INVALID_ARGUMENT`, whose remediation names `--recorded-at`. Confirming a `counter` or an unknown
 clock is `INVALID_ARGUMENT`.
 
-Zones are given as an offset, not an IANA name, for this release. An offset is what the observation
-already showed, it is exact for the moment observed, and it needs no zone database in the binary. A
-name would add a dependency that must follow rule changes.
+Zones are given as an offset, not an IANA name, for `0.3.0` (the form decision 9 gave only as an
+example; L-213). An offset is what the observation already showed, it is exact for the moment
+observed, and it needs no zone database in the binary. A name would add a dependency that must follow
+rule changes.
 
 ### 17. The command: `vsift clocks`
 
 ```console
 vsift clocks <session> [--from <us> --to <us>] [--max-frames 0..200] [--runner <path>]
-                       [--threads 1..8] [--screen-zone <clock>=<±HH:MM>]... --json
+                       [--threads 1..8] [--screen-zone <clock>=<±HH:MM>]...
+                       [--accept-gap <id>]... --json
 ```
 
 - It is opt-in and bounded, and it never runs `ocr`'s plan: with no index it answers `state: not_run`,
   `partial`, naming `ocr`. Absence is never a claim: "no clock found" speaks only for the frames read.
 - It reads at most `--max-frames` refinement frames (default 40), then recomputes and commits.
   `--max-frames 0` reads nothing and needs no runner, so a confirmation never needs one.
+- `--screen-zone` and `--accept-gap` take only what the user stated, never an observation or a
+  detected gap. The skill's command reference, which classes `clocks` as `explicit`, says so. They are
+  the only two ways an open session's clock times change.
 - Its order follows `ocr`'s (ADR 0030 decision 8). The commit merges onto a concurrent writer's work at
   most three times.
 - `state` is `complete` when no refinement is pending and every planned `ocr` read of the range is
@@ -401,23 +441,29 @@ session that never runs `clocks` is recorded byte for byte as before:
 - `screen_clocks`, at most 8 (*tentative*): for each clock its id, format class, offset interval and
   any confirmed offset. This registry keeps ids stable when later `ocr` calls read earlier frames: a
   recomputed clock takes the id of the entry whose interval it meets, in `c1`, `c2` order.
-- `clock_segments`, at most 32 (*tentative*): the corrections of decision 13.
+- `clock_segments`, at most 32 (*tentative*): the gaps of decision 13, each with its id, state,
+  position, jump and proving clock. Gap ids stay stable as clock ids do: a recomputed gap takes the id
+  of the entry whose position and jump it meets, and an accepted gap stays accepted.
 
 They are stored there, not in an artifact, because every command that presents a `clock_time` reads
 the lifecycle already and none should have to open a 48 MiB index. They are written by a new lifecycle
 update under the session's writer lock, and decoding rebuilds them through the domain constructors,
-so a modified record is an integrity failure. This replaces the consequence "a session's clock times
-are fixed when it opens" for screen sources only. A session's operator and tag anchors still are.
+so a modified record is an integrity failure. A worst-case lifecycle record (16 anchors, 8 clocks, 32
+segments) is tested against the manifest's 128 KiB bound. Running `clocks` adds anchors and segments
+but changes a clock time only where it fills an empty ladder; a session's clock times otherwise change
+only through `--accept-gap` or `--screen-zone`. Its operator and tag anchors stay as they were opened.
 
 ### 19. The JSON, additive only
 
-- `time_anchor.anchors[]` gains optional `clock_id` and `precision_us`; `source` gains the three
-  values above, and `confidence` gains `low`. The schema's description has told readers since stage 1
-  to treat an unknown value as a reason to read the anchors.
-- `time_anchor` gains optional `segments`: `segment`, `from_us`, `to_us`, `adjusted_by_us`,
-  `uncertainty_us`, `clock_id`. It is absent with one segment.
+- `time_anchor.anchors[]` gains optional `clock_id` and `precision_us`, and `source` gains the three
+  values above: the schema's description has told readers since stage 1 to treat an unknown source as
+  a reason to read the anchors. `confidence` does not change.
+- `time_anchor` gains optional `segments`: `segment`, `from_us`, `to_us`, and for each gap its
+  `gap_id`, `state` (`detected`, `accepted`), `jump_us`, `uncertainty_us`, `clock_id` and
+  `adjusted_by_us` (0 while `detected`). It is absent with one segment.
 - `clock_time` gains optional `segment` and, when the source is a clock, `clock_id`. Both are absent
-  when they say nothing, so a session without them answers byte for byte as before.
+  when they say nothing, so a session without them answers byte for byte as before. `segment` on an
+  item whose gap is `detected` is the sign that its time may be off by that gap.
 - `time_anchor` stays absent while a session has no anchor, as in stage 1. A session whose only clock
   has no date therefore has none; `clocks` reports it.
 - `session status` does not list the clocks. `clocks` with `--max-frames 0` does.
@@ -426,28 +472,40 @@ are fixed when it opens" for screen sources only. A session's operator and tag a
 
 - The bundle manifest gains an optional `time_anchors` member, with the segments and the registry,
   written only when present and checked by `bundle validate`, so a retained session keeps its anchors.
+  `BundleManifest` denies unknown fields, so `bundle validate` of a release before `0.3.0` refuses a
+  bundle that carries the member; `cli-v1.md` says so, as for earlier members. A worst-case manifest is
+  tested against its bound.
 - Worker job requests gain an optional `recorded_at`, parsed as `ingest --recorded-at` is.
 
 ### 21. What this does not change
 
-- **L-239.** No command takes a clock time, and stage 2 adds none. Its subtraction gets harder across a
-  gap: `recording_start` is no longer enough after a cut, so a window computed from it lands off by the
-  jump. Step 5 of the logs-by-clock workflow, which cites only items whose own `clock_time` falls in
-  the window, shows that as a mismatch rather than a false match. The workflow's wording about
-  `time_anchor.segments` belongs to the one skill change at the `0.3.0` freeze.
-- **L-210** is rewritten: its cut bullet becomes what decision 13 covers and what it does not (a cut
-  with no clock in view is still silent), and its "no command adds one later", worker and bundle
-  clauses go.
+- **L-239.** No command takes a clock time, and stage 2 adds none. The logs-by-clock subtraction stays
+  right unless a person accepted a gap, since a detected gap changes no value. Where one was accepted,
+  `recording_start` alone no longer gives the window, and step 5 of the workflow, which cites only
+  items whose own `clock_time` falls in the window, shows that as a mismatch rather than a false match.
+- **The skill.** Only `clocks`' line in `references/commands.md` changes here. The handoff's clock
+  citations and the workflow's segment wording are the one skill change the maintainer ruled, in a
+  small pull request of their own after this one.
+- **L-210** is rewritten: its cut bullet says that `clocks` detects cuts where a clock is in view, that
+  a detected gap changes no value until a person accepts it, and that a cut with no clock in view is
+  still silent; its "no command adds one later", worker and bundle clauses go.
 - No clock is read from speech, and no modification time or upload date becomes a source.
 - Clocks are not read in the background: `prepare` and `vsift <video>` do not run `clocks`.
 
-### 22. Slices, in one pull request
+### 22. Evidence first, then slices in one pull request
+
+**Before slice 1:** one hosted dispatch, synthetic only, with the existing `ocr` and no new code in
+VSift. It covers taskbar-sized clocks at 1080p and at 1440p downscaled to 1080p, at a screen
+recording's usual H.264 quality, on light and dark bars, in 12-hour and 24-hour faces, and it reports
+the share of reads that parse exactly and the score distribution. That sets the score bound. If under
+two thirds of reads parse exactly at 1080p, three reads in a row will not hold and the story's value
+changes, so the work stops for a decision before building.
 
 1. Zoneless clocks as their own sources: grammar, tracks, intervals, rollover search, `clocks`, the
    registry, the anchors, the schema and the contract tests.
-2. Cuts and pauses: discontinuities, segments, the corrected `clock_time`, the conflict report.
+2. Cuts and pauses: discontinuities, segments, `--accept-gap`, the conflict report.
 3. Offset observations and `--screen-zone`.
-4. Bundles and worker requests.
+4. Bundles and worker requests, as the last commit, cuttable.
 
 A slice that does not qualify at the cut leaves the earlier ones standing.
 
@@ -456,8 +514,11 @@ A slice that does not qualify at the cut leaves the earlier ones standing.
 A clock in a script the recogniser does not read, or a format outside the grammar, is not seen. A
 12-hour clock without AM or PM is refused. A clock read only every 10 s can hide a short cut; a cut
 with no clock in view is silent. A real pause of a whole number of quarter hours reads as two clocks.
-A screen showing a video that shows a clock is reported as a clock. A screen clock that was simply
-wrong gives a wrong reading: stage 2 reports how clocks move, not that any of them is right.
+A screen showing a video that shows a clock is reported as a clock. A real clock passing midnight
+during the recording, with seconds and no date, reads as a counter. Zones are confirmed as an offset,
+not an IANA name. A detected gap can be a change of machine rather than a cut, which is why it changes
+nothing until a person accepts it. A screen clock that was simply wrong gives a wrong reading: stage 2
+reports how clocks move, not that any of them is right.
 
 ### Verification planned
 
@@ -469,7 +530,8 @@ wrong gives a wrong reading: stage 2 reports how clocks move, not that any of th
 - Store: every new member round-trips, refuses each modification and is absent when unused.
 - Contract: schema conformance, examples, `time_anchor_cli_contract` extended, and a session that never
   ran `clocks` compared byte for byte.
-- Hosted only, on `P14 real media`, at most two dispatches: synthetic recordings of known clocks
-  generated on the runner (one clock, two clocks in different zones, a cut, a pause, a freeze, a
-  midnight crossing, a chat full of static times, a scrolling log), and RM01, RM04 and RM10 as the
-  negative control: no recording may gain a clock that a person cannot see.
+- Hosted only, at most two dispatches, the first being decision 22's. The second, on `P14 real media`:
+  synthetic recordings of known clocks generated on the runner (one clock, two clocks in different
+  zones, a cut, a pause, a freeze, a midnight crossing, a meeting timer past its first hour, a chat full
+  of static times, a scrolling log), and RM01, RM04 and RM10: no recording may gain a clock that a
+  person cannot see.
