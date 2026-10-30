@@ -166,10 +166,11 @@ impl ClockRun {
     }
 }
 
-/// Reads whose offset departed from a clock and returned to the same interval
-/// (ADR 0029 decision 13). The cause is not known: it may be a misread, or
-/// another clock's turn in the same place. Its reads leave the track, are never
-/// lost, and change nothing.
+/// Reads whose offset departed from a clock and returned to the same interval,
+/// with nothing among them that moves like a clock (ADR 0029 decision 13). The
+/// cause is not known: it may be a misread, or a turn too short to tell. Its
+/// reads leave the track, are never lost, and change nothing. A stretch that
+/// does move like a clock is that clock's turn, tracked and named as one.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClockExcursion {
     reads: Vec<ClockRead>,
@@ -284,6 +285,8 @@ pub struct ScreenClock {
     excursions: Vec<ClockExcursion>,
     freezes: Vec<ClockFreeze>,
     jumps: Vec<ClockJump>,
+    /// When another clock took a turn in this one's place.
+    turns: Vec<MediaTime>,
 }
 
 impl ScreenClock {
@@ -377,13 +380,15 @@ impl ScreenClock {
     }
 
     /// The moments that do not belong to the clock: the reads of its excursions
-    /// and freezes. A bracket holding one cannot be searched.
+    /// and freezes, and another clock's turn. A bracket holding one cannot be
+    /// searched.
     fn outside_reads(&self) -> Vec<MediaTime> {
         self.excursions
             .iter()
             .flat_map(|excursion| excursion.reads.iter())
             .chain(self.freezes.iter().flat_map(|freeze| freeze.reads.iter()))
             .map(|read| read.time)
+            .chain(self.turns.iter().copied())
             .collect()
     }
 
@@ -505,6 +510,7 @@ impl ScreenClock {
         self.excursions.extend(other.excursions);
         self.freezes.extend(other.freezes);
         self.jumps.extend(other.jumps);
+        self.turns.extend(other.turns);
     }
 }
 
@@ -777,10 +783,22 @@ fn tracked_read(read: ClockRead, reference: Option<i64>) -> Tracked {
     }
 }
 
-/// Folds every stretch that left a run and returned to it.
-fn fold_excursions(runs: Vec<ClockRun>) -> (Vec<ClockRun>, Vec<Vec<Tracked>>) {
-    let mut kept: Vec<ClockRun> = Vec::new();
-    let mut departures = Vec::new();
+/// What folding a place's runs gave.
+#[derive(Default)]
+struct Folded {
+    /// The runs that continue one another.
+    kept: Vec<ClockRun>,
+    /// Stretches that left and returned, and do not move like a clock.
+    departures: Vec<Vec<Tracked>>,
+    /// Stretches that left and returned and do: other clocks' turns.
+    turns: Vec<Vec<ClockRun>>,
+}
+
+/// Folds every stretch that left a run and returned to it. One holding a run
+/// that qualifies as a clock is that clock's turn, so a presenter who hands
+/// back keeps their clock; any other is an excursion (ADR 0029 decision 13).
+fn fold_excursions(runs: Vec<ClockRun>) -> Folded {
+    let mut folded = Folded::default();
     let mut rest = runs.into_iter().collect::<std::collections::VecDeque<_>>();
     while let Some(mut run) = rest.pop_front() {
         // The nearest later run with this one's offset. One side must be long
@@ -790,25 +808,42 @@ fn fold_excursions(runs: Vec<ClockRun>) -> (Vec<ClockRun>, Vec<Vec<Tracked>>) {
             run.offset.meet(later.offset).is_some()
                 && run.reads.len().max(later.reads.len()) >= MIN_RUN_READS
         }) {
-            let mut stretch: Vec<Tracked> = Vec::new();
-            for between in rest.drain(..found) {
-                stretch.extend(between.reads);
+            let stretch: Vec<ClockRun> = rest.drain(..found).collect();
+            if stretch.iter().any(ClockRun::qualifies) {
+                folded.turns.push(stretch);
+            } else {
+                folded
+                    .departures
+                    .push(stretch.into_iter().flat_map(|run| run.reads).collect());
             }
-            departures.push(stretch);
             let Some(later) = rest.pop_front() else { break };
             if let Some(met) = run.offset.meet(later.offset) {
                 run.offset = met;
             }
             run.reads.extend(later.reads);
         }
-        kept.push(run);
+        folded.kept.push(run);
     }
-    (kept, departures)
+    folded
 }
 
 /// The clocks of one place, and how many reads gave none.
 fn clocks_of_place(place: &Place, duration: MediaTime) -> (Vec<ScreenClock>, usize) {
-    let (runs, departures) = fold_excursions(runs_of(&place.reads));
+    let (mut clocks, unplaced) = clocks_of_runs(runs_of(&place.reads), place);
+    for clock in &mut clocks {
+        clock.kind = kind_of(clock, duration);
+    }
+    (clocks, unplaced)
+}
+
+/// The clocks a sequence of runs gives. Other clocks' turns give theirs the same
+/// way, and each stretch is shorter than what held it, so this ends.
+fn clocks_of_runs(runs: Vec<ClockRun>, place: &Place) -> (Vec<ScreenClock>, usize) {
+    let Folded {
+        kept: runs,
+        departures,
+        turns,
+    } = fold_excursions(runs);
     let mut clocks: Vec<ScreenClock> = Vec::new();
     let mut between: Vec<Tracked> = Vec::new();
     let mut unplaced = 0;
@@ -883,8 +918,27 @@ fn clocks_of_place(place: &Place, duration: MediaTime) -> (Vec<ScreenClock>, usi
             clock.excursions.push(ClockExcursion { reads });
         }
     }
-    for clock in &mut clocks {
-        clock.kind = kind_of(clock, duration);
+    let mut others = Vec::new();
+    for turn in turns {
+        let times = turn
+            .iter()
+            .flat_map(|run| run.reads.iter())
+            .map(|tracked| tracked.read.time);
+        let start = times.clone().next();
+        // The clock it interrupted carries on: it searches around the turn.
+        if let Some(clock) = clocks
+            .iter_mut()
+            .rev()
+            .find(|clock| clock.first_time() < start)
+        {
+            clock.turns.extend(times);
+        }
+        others.extend(turn);
+    }
+    if !others.is_empty() {
+        let (found, left) = clocks_of_runs(others, place);
+        unplaced += left;
+        clocks.extend(found);
     }
     (clocks, unplaced)
 }
@@ -898,6 +952,7 @@ fn new_clock(place: &Place, run: ClockRun) -> ScreenClock {
         excursions: Vec::new(),
         freezes: Vec::new(),
         jumps: Vec::new(),
+        turns: Vec::new(),
     }
 }
 

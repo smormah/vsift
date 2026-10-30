@@ -325,9 +325,14 @@ clock 30 s apart, then A again gives the same shape. So the rule does not claim 
 reasoned from a misread filling a whole held minute; that was not observed (decision 22), and the rule
 stands because a presenter's turn, and a misread of any length, still take this shape.
 
-- An **excursion** is a stretch of reads in one place whose offset departs and returns to the same
-  interval, checked before any row below applies. It is reported in `clocks` with its span, its frames
-  and its read count, offering both explanations, a misread or another clock's turn, without choosing.
+- A stretch whose offset departs and returns to the same interval is checked before any row below
+  applies. **If it holds a run that qualifies as a clock (three reads and an advance), that is another
+  clock's turn:** it is tracked and named as a clock of its own, and the clock it interrupted carries on
+  with no gap and no backward jump for that turn, and never searches a bracket across it. So presenters
+  who hand back keep their clocks, as decision 9 requires, and two machines 30 s apart taking turns are
+  two clocks.
+- Otherwise it is an **excursion**, reported in `clocks` with its span, its frames and its read count,
+  offering both explanations, a misread or a turn too short to tell, without choosing.
 - Its reads leave the track and are never dropped silently. Nothing about it is a gap, and it makes no
   segment. The rollover search never brackets across an excursion's reads.
 - An offset that departs and does not return is not an excursion. It stays a detected gap, which

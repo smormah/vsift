@@ -331,3 +331,115 @@ fn a_clock_of_no_date_with_no_absolute_anchor_cannot_be_confirmed() -> TestResul
     );
     Ok(())
 }
+
+const PLACE: u32 = 1800;
+const A: u64 = 14 * 3_600;
+
+/// A, then B, then A: B's turn is a clock of its own, named and observed, and A
+/// carries on with no jump (ADR 0029 decision 13, the planner's review).
+fn assert_two_clocks(analysis: &ClockAnalysis, stated_at: &str) -> TestResult {
+    assert_eq!(analysis.clocks.len(), 2, "{:?}", analysis.clocks);
+    let register = ClockRegister::of(&[], &[], analysis);
+    assert!(register.gaps().is_empty(), "{:?}", register.gaps());
+    for (index, clock) in analysis.clocks.iter().enumerate() {
+        assert_eq!(clock.jumps(), [], "clock {index} jumped");
+        assert!(register.id_of(index).is_some(), "clock {index} has no id");
+    }
+    let observations = register.observations(analysis, &stated(stated_at)?);
+    assert_eq!(observations.len(), 2, "{observations:?}");
+    Ok(())
+}
+
+#[test]
+fn a_presenter_who_hands_back_on_whole_hours_keeps_their_clock() -> TestResult {
+    let mut reads = minute_clock(A, 0, 300, PLACE)?;
+    reads.extend(minute_clock(A + 5 * 3_600, 300, 900, PLACE)?);
+    reads.extend(minute_clock(A, 900, 1200, PLACE)?);
+    assert_two_clocks(&analyse(reads), "2026-10-21T14:00:00Z")
+}
+
+#[test]
+fn machines_thirty_seconds_apart_taking_turns_are_two_clocks() -> TestResult {
+    let mut reads = minute_clock(A, 0, 300, PLACE)?;
+    reads.extend(minute_clock(A + 30, 300, 900, PLACE)?);
+    reads.extend(minute_clock(A, 900, 1200, PLACE)?);
+    assert_two_clocks(&analyse(reads), "2026-10-21T14:00:00Z")
+}
+
+#[test]
+fn turns_back_and_forth_are_two_clocks_with_all_their_reads() -> TestResult {
+    let b = A + 5 * 3_600;
+    let mut reads = minute_clock(A, 0, 300, PLACE)?;
+    reads.extend(minute_clock(b, 300, 600, PLACE)?);
+    reads.extend(minute_clock(A, 600, 900, PLACE)?);
+    reads.extend(minute_clock(b, 900, 1200, PLACE)?);
+    reads.extend(minute_clock(A, 1200, 1500, PLACE)?);
+    let analysis = analyse(reads);
+    assert_two_clocks(&analysis, "2026-10-21T14:00:00Z")?;
+    let total: usize = analysis.clocks.iter().map(ScreenClock::read_count).sum();
+    assert_eq!(total, 150, "no read is lost");
+    Ok(())
+}
+
+#[test]
+fn a_held_misread_inside_a_turn_taker_stays_an_excursion() -> TestResult {
+    let mut reads = minute_clock(A, 0, 240, PLACE)?;
+    let frame = FrameDimensions::new(1920, 1080)?;
+    let region = TextRegion::new(PLACE, 1040, 60, 14, frame)?;
+    for at in [240_u64, 250, 260, 270, 280, 290] {
+        reads.push(ClockRead {
+            time: MediaTime::from_micros(at * SECOND),
+            pts: i64::try_from(at)?,
+            region,
+            face: read_clock_face("14:09")?,
+        });
+    }
+    reads.extend(minute_clock(A, 300, 600, PLACE)?);
+    reads.extend(minute_clock(A + 5 * 3_600, 600, 900, PLACE)?);
+    reads.extend(minute_clock(A, 900, 1200, PLACE)?);
+    let analysis = analyse(reads);
+    assert_two_clocks(&analysis, "2026-10-21T14:00:00Z")?;
+    let excursions: usize = analysis
+        .clocks
+        .iter()
+        .map(|clock| clock.excursions().len())
+        .sum();
+    assert_eq!(excursions, 1, "the misread is not a third clock");
+    Ok(())
+}
+
+#[test]
+fn the_search_never_brackets_across_another_clocks_turn() -> TestResult {
+    // A's rollover from 14:04 to 14:05 falls inside B's turn, so the two reads
+    // either side of the turn are one minute apart.
+    let mut reads = minute_clock(A + 45, 0, 250, PLACE)?;
+    reads.extend(minute_clock(A + 45 + 5 * 3_600, 250, 280, PLACE)?);
+    reads.extend(minute_clock(A + 45, 280, 500, PLACE)?);
+    let analysis = analyse(reads);
+    assert_eq!(analysis.clocks.len(), 2);
+    let before = MediaTime::from_micros(240 * SECOND);
+    let after = MediaTime::from_micros(280 * SECOND);
+    let interrupted = analysis
+        .clocks
+        .iter()
+        .find(|clock| clock.first_time() == Some(MediaTime::from_micros(0)))
+        .ok_or("no interrupted clock")?;
+    assert_eq!(interrupted.stopped_brackets(), vec![(before, after)]);
+    assert!(
+        !analysis
+            .next_reads()
+            .contains(&MediaTime::from_micros(260 * SECOND)),
+        "the interrupted clock's midpoint would read the other clock"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_turn_that_never_hands_back_is_still_a_detected_gap() -> TestResult {
+    let mut reads = minute_clock(A, 0, 300, PLACE)?;
+    reads.extend(minute_clock(A + 437, 300, 600, PLACE)?);
+    let analysis = analyse(reads);
+    assert_eq!(analysis.clocks.len(), 1);
+    assert_eq!(ClockRegister::of(&[], &[], &analysis).gaps().len(), 1);
+    Ok(())
+}
