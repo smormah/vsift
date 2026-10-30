@@ -36,6 +36,7 @@ Architecture decision records explain decisions that constrain future implementa
 - [0030: On-screen text (OCR)](0030-on-screen-text.md) (Accepted 2026-10-21: decisions 1-6 the maintainer's, 7-12 proposed in #499 and accepted by the maintainer as recommended)
 - [0032: Managed installs on Windows, macOS and Linux, optional components, and the engine release workflow](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) (Proposed 2026-10-21)
 - [0033: Progress during long transcriptions: published as it goes, started in the background, read while it runs](0033-progress-during-long-transcriptions.md) (Accepted 2026-10-21; built in five pull requests, the first with `settled_merge`)
+- [0035: Search across kept sessions](0035-search-across-kept-sessions.md) (Proposed 2026-10-30; not built yet)
 - [0036: The setup door: plain `vsift setup`, attended by default, unattended on request](0036-the-setup-door.md) (Proposed 2026-10-27; the design accepted by the planner, the unattended acceptance ratified by the maintainer, superseding that part of ADR 0023; built in two pull requests)
 - [0037: The action: `vsift <video>` (explicitly `vsift watch <video>`), files beside the video](0037-vsift-video-the-action.md) (Accepted by the planner 2026-10-27; the name is the maintainer's)
 - [0038: AI integration without MCP: workflows, the skill everywhere, and the CLI alone](0038-ai-integration-without-mcp.md) (Accepted by the planner 2026-10-28, with conditions; D1 is the maintainer's)
