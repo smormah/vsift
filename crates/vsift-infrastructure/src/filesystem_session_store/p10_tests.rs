@@ -900,6 +900,7 @@ fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
         workspace_retention_seconds: None,
         time_anchors: Vec::new(),
         screen_clocks: Vec::new(),
+        clock_segments: Vec::new(),
         origin: None,
     };
     let add = |count: usize| {
@@ -947,6 +948,19 @@ fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
         })
         .collect::<Result<_, Box<dyn std::error::Error>>>()?;
     full.screen_clocks = super::time_anchors::encode_screen_clocks(&clocks);
+    let gaps: Vec<vsift_domain::ClockGap> = (1..=32_u8)
+        .filter_map(vsift_domain::GapId::new)
+        .map(|id| vsift_domain::ClockGap {
+            id,
+            clock,
+            at: vsift_domain::MediaTime::from_micros(14_400_000_000),
+            jump_low_micros: i64::MIN / 2,
+            jump_high_micros: i64::MAX / 2,
+            state: vsift_domain::GapState::Accepted,
+        })
+        .collect();
+    assert_eq!(gaps.len(), vsift_domain::MAX_CLOCK_GAPS);
+    full.clock_segments = super::time_anchors::encode_clock_gaps(&gaps);
     assert_eq!(
         add(super::MAX_SESSION_ARTIFACTS).err(),
         Some(SessionStorageError::CapacityExhausted)

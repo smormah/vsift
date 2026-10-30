@@ -18,8 +18,9 @@
 use serde::{Deserialize, Serialize};
 use vsift_application::SessionStorageError;
 use vsift_domain::{
-    AnchorSource, ClockFormat, ClockId, ClockReading, ClockUnit, MAX_SCREEN_CLOCKS, MediaTime,
-    OffsetInterval, RegisteredClock, ScreenAnchor, TimeAnchor, TimeAnchors, UtcOffset,
+    AnchorSource, ClockFormat, ClockGap, ClockId, ClockReading, ClockUnit, GapId, GapState,
+    MAX_CLOCK_GAPS, MAX_SCREEN_CLOCKS, MediaTime, OffsetInterval, RegisteredClock, ScreenAnchor,
+    TimeAnchor, TimeAnchors, UtcOffset,
 };
 
 /// One stored anchor.
@@ -53,6 +54,67 @@ pub(super) struct StoredScreenClock {
     offset_high_us: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     confirmed_offset_seconds: Option<i32>,
+}
+
+/// One gap a clock showed.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct StoredClockGap {
+    id: String,
+    clock: String,
+    at_us: u64,
+    jump_low_us: i64,
+    jump_high_us: i64,
+    state: String,
+}
+
+/// The stored form of a session's gaps.
+pub(super) fn encode_clock_gaps(gaps: &[ClockGap]) -> Vec<StoredClockGap> {
+    gaps.iter()
+        .map(|gap| StoredClockGap {
+            id: gap.id.to_string(),
+            clock: gap.clock.to_string(),
+            at_us: gap.at.as_micros(),
+            jump_low_us: gap.jump_low_micros,
+            jump_high_us: gap.jump_high_micros,
+            state: gap.state.identifier().to_owned(),
+        })
+        .collect()
+}
+
+/// The gaps a lifecycle record stores, validated.
+///
+/// # Errors
+///
+/// [`SessionStorageError::IntegrityFailure`] for more gaps than a session
+/// keeps, a repeated id, or a member the domain does not know.
+pub(super) fn decode_clock_gaps(
+    stored: &[StoredClockGap],
+) -> Result<Vec<ClockGap>, SessionStorageError> {
+    if stored.len() > MAX_CLOCK_GAPS {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let mut gaps: Vec<ClockGap> = Vec::with_capacity(stored.len());
+    for gap in stored {
+        let decoded = decode_clock_gap(gap).ok_or(SessionStorageError::IntegrityFailure)?;
+        if gaps.iter().any(|held| held.id == decoded.id) {
+            return Err(SessionStorageError::IntegrityFailure);
+        }
+        gaps.push(decoded);
+    }
+    Ok(gaps)
+}
+
+fn decode_clock_gap(stored: &StoredClockGap) -> Option<ClockGap> {
+    OffsetInterval::new(stored.jump_low_us, stored.jump_high_us)?;
+    Some(ClockGap {
+        id: GapId::parse(&stored.id)?,
+        clock: ClockId::parse(&stored.clock)?,
+        at: MediaTime::from_micros(stored.at_us),
+        jump_low_micros: stored.jump_low_us,
+        jump_high_micros: stored.jump_high_us,
+        state: GapState::from_identifier(&stored.state)?,
+    })
 }
 
 /// The stored form of the session's register of clocks.
@@ -286,6 +348,41 @@ mod tests {
             let read: Vec<StoredTimeAnchor> = serde_json::from_str(&changed)?;
             assert_eq!(
                 decode_time_anchors(&read),
+                Err(SessionStorageError::IntegrityFailure),
+                "{to}"
+            );
+        }
+        Ok(())
+    }
+
+    fn stored_gaps() -> Result<Vec<ClockGap>, Box<dyn Error>> {
+        Ok(vec![ClockGap {
+            id: GapId::new(1).ok_or("no gap")?,
+            clock: ClockId::new(1).ok_or("no clock")?,
+            at: MediaTime::from_micros(300_000_000),
+            jump_low_micros: 430_000_000,
+            jump_high_micros: 440_000_000,
+            state: GapState::Accepted,
+        }])
+    }
+
+    #[test]
+    fn gaps_round_trip_and_a_modified_gap_is_an_integrity_failure() -> TestResult {
+        let gaps = stored_gaps()?;
+        let json = serde_json::to_string(&encode_clock_gaps(&gaps))?;
+        let read: Vec<StoredClockGap> = serde_json::from_str(&json)?;
+        assert_eq!(decode_clock_gaps(&read)?, gaps);
+        for (from, to) in [
+            (r#""id":"g1""#, r#""id":"g0""#),
+            (r#""clock":"c1""#, r#""clock":"c9""#),
+            (r#""jump_low_us":430000000"#, r#""jump_low_us":440000000"#),
+            (r#""state":"accepted""#, r#""state":"assumed""#),
+        ] {
+            let changed = json.replace(from, to);
+            assert_ne!(changed, json, "{from}");
+            let read: Vec<StoredClockGap> = serde_json::from_str(&changed)?;
+            assert_eq!(
+                decode_clock_gaps(&read),
                 Err(SessionStorageError::IntegrityFailure),
                 "{to}"
             );

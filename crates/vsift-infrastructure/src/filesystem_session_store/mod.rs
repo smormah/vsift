@@ -660,6 +660,7 @@ enum LifecycleUpdate {
     SetClocks {
         time_anchors: Vec<time_anchors::StoredTimeAnchor>,
         screen_clocks: Vec<time_anchors::StoredScreenClock>,
+        clock_segments: Vec<time_anchors::StoredClockGap>,
         now: u64,
     },
     AddArtifact {
@@ -1283,6 +1284,10 @@ struct StoredLifecycle {
     /// absent until `clocks` finds one.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     screen_clocks: Vec<time_anchors::StoredScreenClock>,
+    /// The gaps those clocks showed, which divide the timeline into segments
+    /// (ADR 0029 decision 13); absent until one is found.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    clock_segments: Vec<time_anchors::StoredClockGap>,
     /// Where a fetched source came from (ADR 0028), written at activation
     /// and carried unchanged; absent for a local file's copy, so such a
     /// session is recorded exactly as before.

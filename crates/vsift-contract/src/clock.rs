@@ -11,12 +11,15 @@
 //! `-HH:MM`, present only when both are. A local time with no offset is a
 //! local time whose zone is not known: it names no instant.
 //!
-//! The summary lists every anchor, so a later source (stage 2: clocks visible
-//! on screen, at other positions of the timeline) adds entries and the
-//! `consistency` verdict covers them, without any member changing meaning.
+//! The summary lists every anchor, so clocks on the screen, at other positions
+//! of the timeline, add entries and the `consistency` verdict covers them,
+//! without any member changing meaning. A gap a clock showed divides the
+//! timeline into `segments`, and each item after it says which segment it is
+//! in. A detected gap changes no value: only a person accepts one (ADR 0029
+//! decision 13).
 
 use serde::Serialize;
-use vsift_domain::{CivilDateTime, ClockReading, MediaTime, TimeAnchors, TimeRange};
+use vsift_domain::{CivilDateTime, ClockReading, ClockTime, MediaTime, TimeAnchors, TimeRange};
 
 /// One clock reading on the wire.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -54,6 +57,10 @@ pub struct ClockTimeData {
     source: &'static str,
     confidence: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    clock_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    segment: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     at: Option<ClockData>,
     #[serde(skip_serializing_if = "Option::is_none")]
     start: Option<ClockData>,
@@ -67,12 +74,21 @@ impl ClockTimeData {
     pub fn point(anchors: &TimeAnchors, at: MediaTime) -> Option<Self> {
         let clock = anchors.clock_time_at(at)?;
         Some(Self {
+            at: Some(ClockData::new(clock.reading)?),
+            ..Self::of(&clock)
+        })
+    }
+
+    fn of(clock: &ClockTime) -> Self {
+        Self {
             source: clock.source.identifier(),
             confidence: clock.confidence.identifier(),
-            at: Some(ClockData::new(clock.reading)?),
+            clock_id: clock.clock.map(|id| id.to_string()),
+            segment: clock.segment,
+            at: None,
             start: None,
             end: None,
-        })
+        }
     }
 
     /// The clock times of a range's ends; `None` without an anchor.
@@ -81,11 +97,9 @@ impl ClockTimeData {
         let start = anchors.clock_time_at(range.start())?;
         let end = anchors.clock_time_at(range.end())?;
         Some(Self {
-            source: start.source.identifier(),
-            confidence: start.confidence.identifier(),
-            at: None,
             start: Some(ClockData::new(start.reading)?),
             end: Some(ClockData::new(end.reading)?),
+            ..Self::of(&start)
         })
     }
 
@@ -110,6 +124,65 @@ struct AnchorData {
     confidence: &'static str,
     media_time_us: u64,
     time: ClockData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    precision_us: Option<u64>,
+}
+
+/// One stretch of the timeline between gaps a clock showed. The first has none
+/// of the gap's members.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct SegmentData {
+    segment: usize,
+    from_us: u64,
+    to_us: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gap_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    jump_us: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uncertainty_us: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    adjusted_by_us: Option<i64>,
+}
+
+fn segments(anchors: &TimeAnchors) -> Vec<SegmentData> {
+    let gaps = anchors.gaps();
+    if gaps.is_empty() {
+        return Vec::new();
+    }
+    let mut list = vec![SegmentData {
+        segment: 0,
+        from_us: 0,
+        to_us: gaps.first().map(|gap| gap.at.as_micros()),
+        gap_id: None,
+        state: None,
+        clock_id: None,
+        jump_us: None,
+        uncertainty_us: None,
+        adjusted_by_us: None,
+    }];
+    let mut adjusted = 0;
+    for (index, gap) in gaps.iter().enumerate() {
+        adjusted += gap.adjustment_micros();
+        list.push(SegmentData {
+            segment: index + 1,
+            from_us: gap.at.as_micros(),
+            to_us: gaps.get(index + 1).map(|next| next.at.as_micros()),
+            gap_id: Some(gap.id.to_string()),
+            state: Some(gap.state.identifier()),
+            clock_id: Some(gap.clock.to_string()),
+            jump_us: Some(gap.jump_micros()),
+            uncertainty_us: Some(gap.uncertainty_micros()),
+            adjusted_by_us: Some(adjusted),
+        });
+    }
+    list
 }
 
 /// The session's `time_anchor` summary in `ingest` and `session status`
@@ -122,6 +195,8 @@ pub struct TimeAnchorData {
     confidence: &'static str,
     recording_start: ClockData,
     anchors: Vec<AnchorData>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    segments: Vec<SegmentData>,
 }
 
 impl TimeAnchorData {
@@ -144,9 +219,12 @@ impl TimeAnchorData {
                         confidence: anchor.confidence().identifier(),
                         media_time_us: anchor.media_time().as_micros(),
                         time: ClockData::new(anchor.reading())?,
+                        clock_id: anchor.screen().map(|screen| screen.clock.to_string()),
+                        precision_us: anchor.screen().map(|screen| screen.precision_micros),
                     })
                 })
                 .collect::<Option<Vec<_>>>()?,
+            segments: segments(anchors),
         })
     }
 }
@@ -226,6 +304,62 @@ mod tests {
                 "at": {"utc": null, "local": "2026-10-21T14:04:12.000000", "utc_offset": null}
             })
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_detected_gap_marks_the_item_and_changes_no_value() -> TestResult {
+        let plain = anchors("2026-10-21T14:00:00Z", &[])?;
+        let gap = vsift_domain::ClockGap {
+            id: vsift_domain::GapId::new(1).ok_or("no gap")?,
+            clock: vsift_domain::ClockId::new(2).ok_or("no clock")?,
+            at: MediaTime::from_micros(300_000_000),
+            jump_low_micros: 430_000_000,
+            jump_high_micros: 440_000_000,
+            state: vsift_domain::GapState::Detected,
+        };
+        let marked = plain.with_gaps(vec![gap]);
+        let after = MediaTime::from_micros(400_000_000);
+        assert_eq!(
+            serde_json::to_value(ClockTimeData::point(&marked, after))?,
+            json!({
+                "source": "operator",
+                "confidence": "exact",
+                "segment": 1,
+                "at": {"utc": "2026-10-21T14:06:40.000000Z", "local": null, "utc_offset": null}
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(TimeAnchorData::new(&marked))?["segments"],
+            json!([
+                {"segment": 0, "from_us": 0, "to_us": 300_000_000},
+                {"segment": 1, "from_us": 300_000_000, "to_us": null, "gap_id": "g1",
+                 "state": "detected", "clock_id": "c2", "jump_us": 435_000_000,
+                 "uncertainty_us": 5_000_000, "adjusted_by_us": 0}
+            ])
+        );
+        let accepted = plain.with_gaps(vec![vsift_domain::ClockGap {
+            state: vsift_domain::GapState::Accepted,
+            ..gap
+        }]);
+        assert_eq!(
+            serde_json::to_value(ClockTimeData::point(&accepted, after))?["at"]["utc"],
+            json!("2026-10-21T14:13:55.000000Z")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_session_with_no_gap_and_no_screen_anchor_adds_no_member() -> TestResult {
+        let anchors = anchors("2026-10-21T14:03:12Z", &[])?;
+        let summary = serde_json::to_value(TimeAnchorData::new(&anchors))?;
+        assert_eq!(summary.get("segments"), None);
+        assert_eq!(summary["anchors"][0].get("clock_id"), None);
+        assert_eq!(summary["anchors"][0].get("precision_us"), None);
+        let point =
+            serde_json::to_value(ClockTimeData::point(&anchors, MediaTime::from_micros(0)))?;
+        assert_eq!(point.get("segment"), None);
+        assert_eq!(point.get("clock_id"), None);
         Ok(())
     }
 

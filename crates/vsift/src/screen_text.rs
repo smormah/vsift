@@ -34,10 +34,11 @@ use std::{
 };
 
 use vsift_application::{
-    DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineReading, EvidenceControl, EvidenceMediaError, FrameExtractor,
-    EvidenceStop, MAX_SCREEN_TEXT_FRAMES_PER_CALL, ReadScreenTextRequest, ScreenTextBuildError,
-    ScreenTextExtension, ScreenTextImage, ScreenTextReadError, ScreenTextReader, ScreenTextStop, SessionStorageError,
-    merge_screen_text, read_screen_text_within,
+    DEFAULT_SCREEN_TEXT_FRAMES_PER_CALL, EngineReading, EvidenceControl, EvidenceMediaError,
+    EvidenceStop, FrameExtractor, MAX_SCREEN_TEXT_FRAMES_PER_CALL, ReadScreenTextRequest,
+    ScreenTextBuildError, ScreenTextExtension, ScreenTextImage, ScreenTextReadError,
+    ScreenTextReader, ScreenTextStop, SessionStorageError, merge_screen_text,
+    read_screen_text_within,
 };
 use vsift_domain::{
     CandidateOmission, CursorError, DEFAULT_READ_PERIOD_MICROS, FailureCode,
@@ -431,10 +432,7 @@ where
 
 /// One round's extension added to the rounds before it. A target of a later
 /// round may join a frame an earlier one read, which the index does not hold yet.
-fn absorbed(
-    mut earlier: ScreenTextExtension,
-    later: ScreenTextExtension,
-) -> ScreenTextExtension {
+fn absorbed(mut earlier: ScreenTextExtension, later: ScreenTextExtension) -> ScreenTextExtension {
     for (pts, targets) in later.joined {
         if let Some(frame) = earlier
             .frames
@@ -701,7 +699,8 @@ impl Engine {
         let snapshot = bound
             .release_identity_checked()
             .map_err(|error| EngineError::Storage(snapshot_storage_error(&error)))?;
-        let index = self.commit_screen_text(store, session, previous, status, &extension, period)?;
+        let index =
+            self.commit_screen_text(store, session, previous, status, &extension, period)?;
         drop(snapshot);
         Ok(ReadDone {
             index,
@@ -802,7 +801,7 @@ impl Engine {
     }
 
     /// The runner executable: `selected`, else the configured one, else `PATH`.
-    fn resolve_ocr_runner(
+    pub(crate) fn resolve_ocr_runner(
         &self,
         selected: Option<PathBuf>,
     ) -> Result<TrustedExecutable, EngineError> {

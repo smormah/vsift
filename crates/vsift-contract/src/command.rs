@@ -104,6 +104,8 @@ pub enum CommandName {
     SkillStatus,
     /// `skill show` (ADR 0038): print one text file of the shipped skill.
     SkillShow,
+    /// `clocks` (ADR 0029, stage 2): find the clocks on a session's screen.
+    Clocks,
 }
 
 impl CommandName {
@@ -112,7 +114,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 44] = [
+    pub const ALL: [Self; 45] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -157,6 +159,7 @@ impl CommandName {
         Self::SkillStatus,
         Self::SkillShow,
         Self::BundleSearch,
+        Self::Clocks,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -202,6 +205,7 @@ impl CommandName {
             Self::SkillInstall => "skill.install",
             Self::SkillStatus => "skill.status",
             Self::SkillShow => "skill.show",
+            Self::Clocks => "clocks",
             Self::Ocr => "ocr",
             Self::OcrSearch => "ocr.search",
             Self::JobStart => "job.start",
@@ -264,6 +268,7 @@ impl CommandName {
             Self::SkillStatus => 41,
             Self::SkillShow => 42,
             Self::BundleSearch => 43,
+            Self::Clocks => 44,
         }
     }
 }

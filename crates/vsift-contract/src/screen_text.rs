@@ -93,7 +93,7 @@ struct EngineData {
 
 /// One revision of a session's screen-text index, as published.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct IndexData {
+pub(crate) struct IndexData {
     index_id: String,
     revision: u32,
     engine: EngineData,
@@ -102,7 +102,7 @@ struct IndexData {
 }
 
 impl IndexData {
-    fn new(index: &ScreenTextIndex) -> Self {
+    pub(crate) fn new(index: &ScreenTextIndex) -> Self {
         let scope = index.scope();
         Self {
             index_id: index.id().as_str().to_owned(),

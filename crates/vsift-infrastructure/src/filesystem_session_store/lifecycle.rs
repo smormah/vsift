@@ -295,6 +295,7 @@ impl FilesystemSessionStore {
             LifecycleUpdate::SetClocks {
                 time_anchors: super::time_anchors::encode_time_anchors(anchors),
                 screen_clocks: super::time_anchors::encode_screen_clocks(clocks),
+                clock_segments: super::time_anchors::encode_clock_gaps(anchors.gaps()),
                 now: now_unix_seconds,
             },
             LifetimeHold::Shared,

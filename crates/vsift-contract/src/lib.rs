@@ -117,6 +117,7 @@ mod batch;
 mod bundle_search;
 mod candidates;
 mod clock;
+mod clocks;
 mod command;
 mod delivered_path;
 mod envelope;
@@ -201,6 +202,10 @@ pub use candidates::{
     candidates_response_with_view,
 };
 pub use clock::{ClockData, ClockTimeData, TimeAnchorData};
+pub use clocks::{
+    CLOCK_RULES_REMEDIATION, CLOCKS_PARTIAL_WARNING, ClocksData, ClocksPresentation,
+    READS_PENDING_REASON, clocks_response,
+};
 pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, MAX_AFFECTED_IDS,

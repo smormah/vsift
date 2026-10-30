@@ -17,8 +17,8 @@ use super::{
     time::{push_clock, push_range, push_span},
     transcript::{count, push_next_page},
     view::{
-        AudioData, AudioEvidence, CandidatesPage, DeliveredFile, Envelope, FrameData,
-        FrameEvidence, Range, ScreenTextResult, Selection, VisualCandidate,
+        AudioData, AudioEvidence, CandidatesPage, ClocksResult, DeliveredFile, Envelope, FrameData,
+        FrameEvidence, Range, ScreenClockView, ScreenTextResult, Selection, VisualCandidate,
     },
 };
 
@@ -48,6 +48,149 @@ const FILES_HEADING: &str =
 
 /// The prefix of Windows' extended-length path form.
 const EXTENDED_LENGTH_PREFIX: &str = r"\\?\";
+
+/// `clocks`: what the screen's clocks do. The zone of a clock is never guessed
+/// here, and a gap is shown as what it is: detected, and changing nothing.
+pub(super) fn clocks(envelope: &Envelope<ClocksResult>) -> Result<RenderedText, TooLarge> {
+    let call = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Clocks on the screen of session ")
+        .push_value(&call.session_id)
+        .end_line();
+    text.push_fixed("State: ").push_value(&call.state);
+    if call.state == "not_run" {
+        text.push_fixed(" (run vsift ocr first)");
+    }
+    text.end_line();
+    text.push_fixed("Read by this call: ")
+        .push_unsigned(call.read_now)
+        .push_fixed(" frames, ")
+        .push_unsigned(call.reads_pending)
+        .push_fixed(" reads still to make");
+    if let Some(stopped) = &call.stopped {
+        text.push_fixed(", stopped: ").push_value(stopped);
+    }
+    text.end_line();
+    if call.clocks.is_empty() {
+        text.push_fixed("No clock in the frames read: this says nothing of the frames not read.")
+            .end_line();
+    }
+    for clock in &call.clocks {
+        push_screen_clock(&mut text, clock);
+    }
+    for observation in &call.observations {
+        text.push_fixed("Observed, not applied: ")
+            .push_value(&observation.clock_id)
+            .push_fixed(" against ")
+            .push_value(&observation.anchor);
+        if observation.fits.is_empty() {
+            text.push_fixed(" fits no UTC offset");
+        } else {
+            text.push_fixed(" fits ");
+            for (index, offset) in observation.fits.iter().enumerate() {
+                if index > 0 {
+                    text.push_fixed(" or ");
+                }
+                text.push_value(offset);
+            }
+            text.push_fixed(" (only the user confirms a zone)");
+        }
+        text.end_line();
+    }
+    for conflict in &call.conflicts {
+        text.push_fixed("Conflict: ").push_value(&conflict.kind);
+        if let Some(clock) = &conflict.clock_id {
+            text.push_fixed(" ").push_value(clock);
+        }
+        if let Some(other) = &conflict.other_clock_id {
+            text.push_fixed(" and ").push_value(other);
+        }
+        text.end_line();
+    }
+    text.push_fixed("Set aside: ")
+        .push_unsigned(call.refused.stood_still)
+        .push_fixed(" times that never moved, ")
+        .push_unsigned(call.refused.irregular)
+        .push_fixed(" that moved unlike a clock")
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+fn push_screen_clock(text: &mut TerminalText, clock: &ScreenClockView) {
+    text.push_fixed("Clock ");
+    match &clock.clock_id {
+        Some(id) => text.push_value(id),
+        None => text.push_fixed("(no id: past the session's bound)"),
+    };
+    text.push_fixed(" (")
+        .push_value(&clock.kind)
+        .push_fixed(", ")
+        .push_value(&clock.format)
+        .push_fixed("): ")
+        .push_unsigned(clock.reads)
+        .push_fixed(" reads");
+    if let (Some(first), Some(last)) = (clock.first_us, clock.last_us) {
+        text.push_fixed(", ");
+        push_clock(text, first);
+        text.push_fixed(" to ");
+        push_clock(text, last);
+    }
+    if let Some(offset) = &clock.offset {
+        text.push_fixed(", known to ");
+        push_clock(text, offset.precision_us);
+    }
+    match &clock.confirmed_utc_offset {
+        Some(zone) => text.push_fixed(", zone confirmed ").push_value(zone),
+        None => text.push_fixed(", zone unknown"),
+    };
+    text.end_line();
+    if let Some(rate) = clock.rate.as_ref().filter(|rate| rate.differs) {
+        text.push_fixed("  Runs at another rate than the video, ");
+        push_clock(text, rate.drift_us.unsigned_abs());
+        text.push_fixed(if rate.drift_us > 0 {
+            " ahead"
+        } else {
+            " behind"
+        })
+        .end_line();
+    }
+    for jump in &clock.jumps {
+        text.push_fixed("  ").push_value(&jump.kind);
+        if let Some(gap) = &jump.gap_id {
+            text.push_fixed(" ").push_value(gap);
+        }
+        text.push_fixed(" between ");
+        push_clock(text, jump.before.time_us);
+        text.push_fixed(" and ");
+        push_clock(text, jump.after.time_us);
+        text.push_fixed(", about ");
+        push_clock(text, jump.jump_us.unsigned_abs());
+        text.push_fixed(": changes no clock time until a person accepts it")
+            .end_line();
+    }
+    for excursion in &clock.excursions {
+        text.push_fixed("  Left and returned, ");
+        push_clock(text, excursion.from_us);
+        text.push_fixed(" to ");
+        push_clock(text, excursion.to_us);
+        text.push_fixed(", ")
+            .push_unsigned(excursion.reads)
+            .push_fixed(" reads: a misread or another clock's turn, not known which")
+            .end_line();
+    }
+    if clock.excursions_total > clock.excursions.len() as u64 {
+        text.push_fixed("  More such stretches are in --json")
+            .end_line();
+    }
+    for freeze in &clock.freezes {
+        text.push_fixed("  Stood still, ");
+        push_clock(text, freeze.from_us);
+        text.push_fixed(" to ");
+        push_clock(text, freeze.to_us);
+        text.end_line();
+    }
+}
 
 /// `ocr`: what one call read and how much of the range's plan is read.
 pub(super) fn screen_text(envelope: &Envelope<ScreenTextResult>) -> Result<RenderedText, TooLarge> {

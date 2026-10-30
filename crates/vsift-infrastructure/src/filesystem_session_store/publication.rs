@@ -250,6 +250,7 @@ pub(super) fn update_lifecycle(
                 verified_source_identity: None,
                 time_anchors,
                 screen_clocks: Vec::new(),
+                clock_segments: Vec::new(),
                 origin,
             }))
         }
@@ -277,6 +278,7 @@ pub(super) fn update_lifecycle(
         LifecycleUpdate::SetClocks {
             time_anchors,
             screen_clocks,
+            clock_segments,
             now,
         } => {
             let mut record = current.ok_or(SessionStorageError::StateConflict)?;
@@ -300,8 +302,10 @@ pub(super) fn update_lifecycle(
                 return Err(SessionStorageError::IntegrityFailure);
             }
             super::time_anchors::decode_screen_clocks(&screen_clocks)?;
+            super::time_anchors::decode_clock_gaps(&clock_segments)?;
             record.time_anchors = time_anchors;
             record.screen_clocks = screen_clocks;
+            record.clock_segments = clock_segments;
             Ok(Some(record))
         }
         LifecycleUpdate::SealTranscript { artifact, now } => {

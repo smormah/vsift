@@ -156,6 +156,7 @@ fn render_value(
         CommandName::Search => transcript::search(&envelope(value)?),
         CommandName::Candidates => evidence::candidates(&envelope(value)?),
         CommandName::Ocr => evidence::screen_text(&envelope(value)?),
+        CommandName::Clocks => evidence::clocks(&envelope(value)?),
         CommandName::OcrSearch => transcript::ocr_search(&envelope(value)?),
         CommandName::BundleSearch => transcript::bundle_search(&envelope(value)?),
         CommandName::FrameGet
