@@ -38,6 +38,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [candidates-brief-data.schema.json](#candidates-brief-dataschemajson): VSift candidates data, brief view v1
 - [candidates-data.schema.json](#candidates-dataschemajson): VSift candidates data v1
 - [candidates-stream-data.schema.json](#candidates-stream-dataschemajson): VSift candidates JSON Lines terminal data v1
+- [clocks-data.schema.json](#clocks-dataschemajson): VSift clocks data v1
 - [config.schema.json](#configschemajson): VSift user configuration v1
 - [evidence-event.schema.json](#evidence-eventschemajson): VSift JSONL evidence record event v1
 - [frame-data.schema.json](#frame-dataschemajson): VSift frame and crop data v1
@@ -125,8 +126,10 @@ One published audio_evidence record (P09, ADR 0019): a WAV clip of the session's
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `clock_time` | any or any | no | The clip's real-world clock times (time anchoring, 0.3.0): start and end of its planned range, and at, its first decoded sample (actual_start_us); absent when the session has no time anchor. See time-anchor.schema.json. |
-| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `clock_time.segment` | integer | no | at least 0 |
 | `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
@@ -744,6 +747,114 @@ The data member of the complete or partial terminal result that ends a candidate
 | `record_count` | integer | yes | 0 to 100 |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 
+### clocks-data.schema.json
+
+**VSift clocks data v1** ([the schema](../../../schemas/v1/clocks-data.schema.json))
+
+The data member of a clocks result (0.3.0, ADR 0029, stage 2): the clocks found in the text ocr read. A time on a screen counts as a clock only if it moves with the video. Each clock is a source of its own, compared only with itself, so clock faces from different zones are never mixed, and no zone is ever guessed. offset is the clock's reading minus the video's own time, an interval whose width is its precision. Every claim comes with the frames that prove it. An observation is an inference and is never applied. An excursion offers two explanations and chooses neither: a misread, or another clock's turn in the same place. A gap changes no clock time until the user accepts it with --accept-gap, and a zone is confirmed only by the user, with --screen-zone. Absence is never a claim: no clock listed speaks only for the frames read.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes |  |
+| `state` | "not_run" \| "partial" \| "complete" | yes | not_run until ocr has read the session; partial while ocr has planned frames unread or the search has reads left; complete otherwise. |
+| `rules_version` | integer | yes | The version of the rules that derived this result.; at least 1 |
+| `index` | object or null | yes | The session's newest screen-text index; null before ocr has read it. |
+| `read_now` | integer | yes | Frames this call read.; at least 0 |
+| `stopped` | "frame_limit" \| "deadline_exceeded" \| "cancelled" \| "engine_failed" \| "media_failed" \| "index_full" \| null | yes |  |
+| `reads_pending` | integer | yes | How many reads the search around rollovers would make next.; at least 0 |
+| `clocks` | array of object | yes |  |
+| `clocks[].clock_id` | string or null | yes | Null past the eight clocks a session names.; pattern `^c[1-8]$` |
+| `clocks[].kind` | "clock" \| "counter" | yes | counter: an elapsed timer, which gives no anchor, no observation and no gap. |
+| `clocks[].format` | "24_hour" \| "12_hour" \| "dated" \| "dated_with_zone" | yes |  |
+| `clocks[].unit` | "minute" \| "second" | yes | What the face shows: a minute face's reading holds for 60 s. |
+| `clocks[].reads` | integer | yes | at least 0 |
+| `clocks[].first_us` | integer or null | yes | at least 0 |
+| `clocks[].last_us` | integer or null | yes | at least 0 |
+| `clocks[].offset` | object or null | yes |  |
+| `clocks[].offset.low_us` | integer | yes |  |
+| `clocks[].offset.high_us` | integer | yes |  |
+| `clocks[].offset.precision_us` | integer | yes | at least 0 |
+| `clocks[].confirmed_utc_offset` | string or null | yes | The zone the user confirmed; null when unknown.; pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `clocks[].rate` | object or null | yes | Over the clock's longest stretch without a jump; null for one run, which always fits. differs is true only where the video's rate is proved impossible. |
+| `clocks[].rate.span_us` | integer | yes |  |
+| `clocks[].rate.drift_us` | integer | yes |  |
+| `clocks[].rate.differs` | boolean | yes |  |
+| `clocks[].first` | object or null | yes |  |
+| `clocks[].first.time_us` | integer | yes | at least 0 |
+| `clocks[].first.pts` | integer | yes |  |
+| `clocks[].first.region` | object | yes |  |
+| `clocks[].first.region.x` | integer | yes | at least 0 |
+| `clocks[].first.region.y` | integer | yes | at least 0 |
+| `clocks[].first.region.width` | integer | yes | at least 0 |
+| `clocks[].first.region.height` | integer | yes | at least 0 |
+| `clocks[].excursions` | array of object | yes | at most 64 items |
+| `clocks[].excursions[].from_us` | integer | yes | at least 0 |
+| `clocks[].excursions[].to_us` | integer | yes | at least 0 |
+| `clocks[].excursions[].reads` | integer | yes | at least 1 |
+| `clocks[].excursions[].first` | object | yes | An exact place on a frame: open it with frame get --at time_us. |
+| `clocks[].excursions[].first.time_us` | integer | yes | at least 0 |
+| `clocks[].excursions[].first.pts` | integer | yes |  |
+| `clocks[].excursions[].first.region` | object | yes |  |
+| `clocks[].excursions[].first.region.x` | integer | yes | at least 0 |
+| `clocks[].excursions[].first.region.y` | integer | yes | at least 0 |
+| `clocks[].excursions[].first.region.width` | integer | yes | at least 0 |
+| `clocks[].excursions[].first.region.height` | integer | yes | at least 0 |
+| `clocks[].excursions[].last` | object | yes | An exact place on a frame: open it with frame get --at time_us. |
+| `clocks[].excursions[].last.time_us` | integer | yes | at least 0 |
+| `clocks[].excursions[].last.pts` | integer | yes |  |
+| `clocks[].excursions[].last.region` | object | yes |  |
+| `clocks[].excursions[].last.region.x` | integer | yes | at least 0 |
+| `clocks[].excursions[].last.region.y` | integer | yes | at least 0 |
+| `clocks[].excursions[].last.region.width` | integer | yes | at least 0 |
+| `clocks[].excursions[].last.region.height` | integer | yes | at least 0 |
+| `clocks[].excursions[].explanations` | array of any | yes | Both are always offered; the cause is not known.; at least 2 items |
+| `clocks[].excursions_total` | integer | yes | at least 0 |
+| `clocks[].freezes` | array of object | yes | at most 64 items |
+| `clocks[].freezes[].from_us` | integer | yes | at least 0 |
+| `clocks[].freezes[].to_us` | integer | yes | at least 0 |
+| `clocks[].freezes[].reads` | integer | yes | at least 0 |
+| `clocks[].jumps` | array of object | yes | at most 64 items |
+| `clocks[].jumps[].kind` | "gap" \| "backward" | yes | gap: time may be missing from the video, or the machine changed; it changes no clock time until accepted. backward: a stretch repeated or moved, or a clock set back. |
+| `clocks[].jumps[].gap_id` | string or null | yes | pattern `^g[1-9][0-9]?$` |
+| `clocks[].jumps[].before` | object | yes | An exact place on a frame: open it with frame get --at time_us. |
+| `clocks[].jumps[].before.time_us` | integer | yes | at least 0 |
+| `clocks[].jumps[].before.pts` | integer | yes |  |
+| `clocks[].jumps[].before.region` | object | yes |  |
+| `clocks[].jumps[].before.region.x` | integer | yes | at least 0 |
+| `clocks[].jumps[].before.region.y` | integer | yes | at least 0 |
+| `clocks[].jumps[].before.region.width` | integer | yes | at least 0 |
+| `clocks[].jumps[].before.region.height` | integer | yes | at least 0 |
+| `clocks[].jumps[].after` | object | yes | An exact place on a frame: open it with frame get --at time_us. |
+| `clocks[].jumps[].after.time_us` | integer | yes | at least 0 |
+| `clocks[].jumps[].after.pts` | integer | yes |  |
+| `clocks[].jumps[].after.region` | object | yes |  |
+| `clocks[].jumps[].after.region.x` | integer | yes | at least 0 |
+| `clocks[].jumps[].after.region.y` | integer | yes | at least 0 |
+| `clocks[].jumps[].after.region.width` | integer | yes | at least 0 |
+| `clocks[].jumps[].after.region.height` | integer | yes | at least 0 |
+| `clocks[].jumps[].jump_us` | integer | yes |  |
+| `clocks[].jumps[].uncertainty_us` | integer | yes | at least 0 |
+| `observations` | array of object | yes |  |
+| `observations[].clock_id` | string | yes | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `observations[].anchor` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
+| `observations[].inference` | constant true | yes |  |
+| `observations[].measured_us` | integer | yes |  |
+| `observations[].uncertainty_us` | integer | yes | at least 0 |
+| `observations[].fits` | array of string | yes | The UTC offsets it fits; empty when none, which usually means the anchor is not the recording's start. A clock with no date can fit two.; each: pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `conflicts` | array of object | yes |  |
+| `conflicts[].kind` | "instants_disagree" \| "rates_differ" \| "jump_not_shared" \| "backward" | yes |  |
+| `conflicts[].clock_id` | string or null | yes |  |
+| `conflicts[].other_clock_id` | string or null | yes |  |
+| `conflicts[].at_us` | integer or null | yes | at least 0 |
+| `refused` | object | yes | Lines that gave no clock, by why. |
+| `refused.too_long` | integer | yes | at least 0 |
+| `refused.several_times` | integer | yes | at least 0 |
+| `refused.low_score` | integer | yes | at least 0 |
+| `refused.stood_still` | integer | yes | at least 0 |
+| `refused.irregular` | integer | yes | at least 0 |
+| `refused.places_past_bound` | integer | yes | at least 0 |
+| `time_anchor` | object, see [time-anchor.schema.json](#time-anchorschemajson) or null | yes | The session's anchors after the call; null when it has none. |
+
 ### config.schema.json
 
 **VSift user configuration v1** ([the schema](../../../schemas/v1/config.schema.json))
@@ -824,8 +935,10 @@ One published frame_evidence record (P09, ADR 0019): a whole displayed frame of 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `clock_time` | any or any | no | The frame's real-world clock time, at (time anchoring, 0.3.0); absent when the session has no time anchor. See time-anchor.schema.json. |
-| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `clock_time.segment` | integer | no | at least 0 |
 | `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
@@ -1008,7 +1121,7 @@ The data member of the terminal job.batch result (P11, ADR 0021): per-status cou
 | `items[].operation_id` | string or null | yes | pattern `^op_[a-z0-9]{16,64}$` |
 | `items[].status` | "complete" \| "partial" \| "failed" \| "cancelled" \| "rejected" | yes |  |
 | `items[].code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" or null | yes |  |
-| `items[].rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" or null | yes |  |
+| `items[].rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" \| "invalid_recorded_at" or null | yes |  |
 | `not_started_from_line` | integer or null | yes | 1 to 1001 |
 | `termination_reason` | "end_of_input" \| "shutdown" \| "line_limit" \| "input_error" | yes |  |
 
@@ -1084,6 +1197,7 @@ One request of `job run --request <file>`, or one line of `job batch --requests 
 | `target.ingest.transcript` | object or null | yes |  |
 | `target.ingest.transcript.path` | string | yes | 1 to 1024 characters; pattern `^[^/\\:<>"\|?*\x00-\x1f\x7f-\x9f]+(?:/[^/\\:<>"\|?*\x00-\x1f\x7f-\x9f]+){0,31}$` |
 | `target.ingest.transcript.offset_us` | integer | yes | -86400000000 to 86400000000 |
+| `target.ingest.recorded_at` | string | no | When the recording started, as ingest --recorded-at takes it: RFC 3339, with an offset, Z, or no zone for a local time whose zone is unknown. Clock times need it or the file's own tags. Since 0.3.0 (ADR 0029 decision 20); a request without it keeps its digest.; at most 40 characters |
 | `target.session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
 | `steps` | array of object or object or object or object | yes | at most 8 items |
 | `steps[].retranscribe` | object | yes |  |
@@ -1138,7 +1252,7 @@ The answer to one job request (P11, ADR 0021): the data of a job.run result and 
 | `failure.retryable` | boolean | yes |  |
 | `failure.retry_after_ms` | integer or null | yes | 1 to 86400000 |
 | `failure.step` | integer or null | yes | 0 to 8 |
-| `failure.rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" or null | yes |  |
+| `failure.rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" \| "invalid_recorded_at" or null | yes |  |
 | `controls` | object | yes |  |
 | `controls.isolation` | "process_only" \| "strict_linux" | yes |  |
 | `controls.admission_capacity` | integer | yes | 1 to 65535 |
@@ -1196,7 +1310,7 @@ A worker host's own state in a job.run or job.batch --events jsonl stream (P11, 
 | `request_operation_id` | string or null | yes | at most 67 characters; pattern `^op_[a-z0-9]{16,64}$` |
 | `status` | "complete" \| "partial" \| "failed" \| "cancelled" \| "rejected" or null | yes |  |
 | `code` | "INTERNAL" \| "INVALID_ARGUMENT" \| "UNSUPPORTED_SCHEMA" \| "MISSING_CAPABILITY" \| "ISOLATION_UNAVAILABLE" \| "COMMAND_NOT_IMPLEMENTED" \| "INVALID_SOURCE" \| "BUSY" \| "DEADLINE_EXCEEDED" \| "RESOURCE_LIMIT" \| "CANCELLED" \| "STORAGE_IO" \| "INTEGRITY_FAILURE" \| "IDEMPOTENCY_CONFLICT" \| "DOWNLOAD_FAILED" \| "SOURCE_FETCH_FAILED" or null | yes |  |
-| `rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" or null | yes |  |
+| `rejection` | "request_too_large" \| "request_too_deep" \| "malformed_request" \| "unsupported_schema_version" \| "invalid_operation_id" \| "invalid_session_id" \| "invalid_path" \| "invalid_transcript_offset" \| "invalid_deadline" \| "invalid_range" \| "invalid_bundle_name" \| "too_many_steps" \| "step_order" \| "no_work" \| "path_outside_input_root" \| "duplicate_operation_id" \| "workspace_not_durable" \| "invalid_recorded_at" or null | yes |  |
 | `progress_dropped` | integer or null | yes | at least 0 |
 | `readiness` | object or null | yes |  |
 | `readiness.publication` | "process_crash_consistent" \| "os_crash_durable" | yes |  |
@@ -2150,25 +2264,37 @@ The last line of every --events jsonl stream; exactly one per stream. Its sequen
 
 **VSift time anchor v1** ([the schema](../../../schemas/v1/time-anchor.schema.json))
 
-Time anchoring (0.3.0, ADR 0029): the time_anchor member of ingest and session status data, which says when the recording happened by the real-world clock and on what authority. It is present only when the session has an anchor; a session without one omits it, and every timestamped item then omits clock_time. An anchor ties one position of the timeline (media_time_us) to one clock reading from one source. The sources, in the order clock times are taken from them: operator (ingest --recorded-at, confidence exact), quicktime_creationdate (the recording app's own local-time tag, high) and container_creation_time (the container's UTC creation time, medium: many tools write the time they encoded or remuxed the file, and some devices the end of the recording). A file's modification time is never a source, and an online provider's upload date is not a recording time. consistency says whether the anchors agree: single (one anchor, or no two that name an instant), consistent (every two that name an instant agree within two seconds) or conflicting (two disagree; clock times still come from the first source, and a reader should say they are disputed). Only anchors that name an instant are compared: a local time whose zone is unknown (a clock face, or a statement without an offset) is never compared with another reading. Later releases may add sources (for example clocks visible on screen, at other positions of the timeline) and consistency values; a reader treats an unknown value as a reason to check the anchors list.
+Time anchoring (0.3.0, ADR 0029): the time_anchor member of ingest and session status data, which says when the recording happened by the real-world clock and on what authority. It is present only when the session has an anchor; a session without one omits it, and every timestamped item then omits clock_time. An anchor ties one position of the timeline (media_time_us) to one clock reading from one source. The sources, in the order clock times are taken from them: operator (ingest --recorded-at, confidence exact), quicktime_creationdate (the recording app's own local-time tag, high) and container_creation_time (the container's UTC creation time, medium: many tools write the time they encoded or remuxed the file, and some devices the end of the recording). A file's modification time is never a source, and an online provider's upload date is not a recording time. consistency says whether the anchors agree: single (one anchor, or no two that name an instant), consistent (every two that name an instant agree within two seconds) or conflicting (two disagree; clock times still come from the first source, and a reader should say they are disputed). Only anchors that name an instant are compared: a local time whose zone is unknown (a clock face, or a statement without an offset) is never compared with another reading. Clocks on the screen (ADR 0029, stage 2, the clocks command) add three sources at other positions of the timeline: screen_clock_confirmed (a clock whose zone the user confirmed, ranked after quicktime_creationdate), then, after container_creation_time, screen_timestamp (a moving clock that states its zone) and screen_clock (a dated clock with no zone, local only). All three are medium. Anchors are compared at their own positions, with each screen anchor's precision_us added to the two seconds. segments lists the gaps a clock showed: a gap in state detected changes no clock time, and only a person accepts one. Later releases may add sources and consistency values; a reader treats an unknown value as a reason to check the anchors list.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `consistency` | "single" \| "consistent" \| "conflicting" | yes |  |
-| `source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes | The anchor every clock time of the session comes from: the first of anchors. |
+| `source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes | The anchor every clock time of the session comes from: the first of anchors. |
 | `confidence` | "exact" \| "high" \| "medium" | yes |  |
 | `recording_start` | object or object | yes | The clock time of the start of the timeline (media time 0) by the selected anchor. |
 | `recording_start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `recording_start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
 | `recording_start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `anchors` | array of object | yes | Every anchor, in the order clock times are taken from them.; 1 to 16 items |
-| `anchors[].source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `anchors[].source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `anchors[].confidence` | "exact" \| "high" \| "medium" | yes |  |
-| `anchors[].media_time_us` | integer | yes | The timeline position, in microseconds, whose clock reading this is. 0 for every source of 0.3.0.; at least 0 |
+| `anchors[].media_time_us` | integer | yes | The timeline position, in microseconds, whose clock reading this is: 0 for a statement or a tag, and where a clock was best read for a clock on the screen.; at least 0 |
 | `anchors[].time` | object or object | yes | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `anchors[].time.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `anchors[].time.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
 | `anchors[].time.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `anchors[].clock_id` | string | no | The clock on the screen this anchor came from.; pattern `^c[1-8]$` |
+| `anchors[].precision_us` | integer | no | How far a clock on the screen's reading can be from the truth, in microseconds.; at least 0 |
+| `segments` | array of object | no | The timeline divided by gaps a clock on the screen showed, in order; absent when there is none. The first segment has only segment, from_us and to_us. A gap in state detected changes no clock time: adjusted_by_us is what accepted gaps add, and an item after a detected gap carries segment as a sign that its time may be off by jump_us. Only vsift clocks --accept-gap, on the user's word, accepts one.; 2 to 33 items |
+| `segments[].segment` | integer | yes | at least 0 |
+| `segments[].from_us` | integer | yes | at least 0 |
+| `segments[].to_us` | integer or null | yes | at least 0 |
+| `segments[].gap_id` | string | no | pattern `^g[1-9][0-9]?$` |
+| `segments[].state` | "detected" \| "accepted" | no |  |
+| `segments[].clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `segments[].jump_us` | integer | no |  |
+| `segments[].uncertainty_us` | integer | no | at least 0 |
+| `segments[].adjusted_by_us` | integer | no |  |
 
 This schema also holds 1 conditional rule (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/time-anchor.schema.json) for it.
 
@@ -2404,8 +2530,10 @@ One transcript segment as the brief view of transcript.get and search gives it (
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `clock_time` | any or any | no | As in the full segment: its clock times, start and end; absent when the session has no time anchor. |
-| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `clock_time.segment` | integer | no | at least 0 |
 | `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
@@ -2438,8 +2566,10 @@ One citable, timestamped transcript segment. Each record names its own revision,
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `clock_time` | any or any | no | The segment's real-world clock times, start and end (time anchoring, 0.3.0); absent when the session has no time anchor. See time-anchor.schema.json. |
-| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `clock_time.segment` | integer | no | at least 0 |
 | `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
@@ -2505,8 +2635,10 @@ One visual candidate as the brief view of candidates gives it (--view brief, 0.2
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `clock_time` | any or any | no | As in the full candidate: the clock times of its span and representative frame; absent when the session has no time anchor. |
-| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `clock_time.segment` | integer | no | at least 0 |
 | `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
@@ -2540,8 +2672,10 @@ One visual candidate, a published evidence record (P08, ADR 0018): a moment at w
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `clock_time` | any or any | no | The candidate's real-world clock times (time anchoring, 0.3.0): start and end of its span, and at, its representative frame; absent when the session has no time anchor. See time-anchor.schema.json. |
-| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "container_creation_time" | yes |  |
+| `clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
 | `clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `clock_time.segment` | integer | no | at least 0 |
 | `clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
 | `clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
 | `clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |

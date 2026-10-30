@@ -33,6 +33,7 @@
 - [vsift candidates](#vsift-candidates): Page through visual evidence candidates
 - [vsift ocr](#vsift-ocr): Read on-screen text off a session's frames with the optional OCR runner
 - [vsift ocr search](#vsift-ocr-search): Page the on-screen text ocr has read for a literal query
+- [vsift clocks](#vsift-clocks): Find the clocks on a session's screen, in what ocr read
 - [vsift frame](#vsift-frame): Extract or navigate source-grounded frames
 - [vsift frame get](#vsift-frame-get): Extract the frame a time or a visual candidate names
 - [vsift frame neighbours](#vsift-frame-neighbours): Extract consecutive frames on each side of an earlier frame
@@ -75,6 +76,7 @@ Commands:
   search      Search timestamped transcript evidence
   candidates  Page through visual evidence candidates
   ocr         Read on-screen text off a session's frames with the optional OCR runner
+  clocks      Find the clocks on a session's screen, in what ocr read
   frame       Extract or navigate source-grounded frames
   audio       Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get
   crop        Crop an orientation-correct evidence image
@@ -1449,6 +1451,62 @@ Options:
 
       --cursor <CURSOR>
           Opaque continuation token returned by the previous page of the same search
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## vsift clocks
+
+Find the clocks on a session's screen, in what ocr read.
+
+```text
+Find the clocks on a session's screen, in what ocr read.
+
+A time on a screen counts as a clock only if it moves with the video. Each clock is its own source and is never converted between zones. The answer says how each moves against the video: precision to the second, gaps, freezes and what disagrees, with the frames that prove it. Bounded and resumable like ocr: run ocr first, then this, then again to continue. A gap and an observed offset change no clock time: only --accept-gap and --screen-zone do, and only with what the user stated.
+
+Usage: vsift clocks [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session whose clocks are found
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --max-frames <MAX_FRAMES>
+          Most frames this call reads around rollovers, 0 through 200; defaults to 40. With 0 it reads nothing and needs no OCR runner
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --runner <RUNNER>
+          The OCR runner for this call only; otherwise the one setup configure ocr-runner recorded, else vsift-ocr-runner on PATH
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --threads <THREADS>
+          Inference threads, 1 through 8; defaults to 2
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --screen-zone <CLOCK=OFFSET>
+          A clock's zone as the user stated it: <clock>=<+HH:MM or -HH:MM>, for example c1=-05:00. Repeatable. Never pass an observation you were not told
+
+      --accept-gap <GAP>
+          A gap the user says is real, so clock times after it move by its length. Repeatable. Never pass a gap you were not told to accept
 
   -h, --help
           Print help (see a summary with '-h')

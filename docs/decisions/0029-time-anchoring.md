@@ -295,10 +295,12 @@ between narrows the offset to the frame where it changed. **The search keeps no 
   repeated by the same engine build, the 40-frame default, 200-frame limit and 300 s deadline hold,
   the index's bounds hold, and a new engine build starts again, because its index is a new one.
 - A search stops at a bracket of 500 ms (*tentative*), which from a 10 s grid takes five reads. A
-  midpoint that shows neither side's value is treated as unreadable, and the frame after it is tried
-  once. Each run searches its first and last rollover only, since one fixes the offset and two prove
-  the rate. A discontinuity's position is narrowed the same way. A session spends at most 256 such
-  frames (*tentative*).
+  midpoint that shows neither side's value becomes an excursion's read, so that bracket's search ends
+  at the width it has (decision 13). Each run searches its first and last rollover only, since one
+  fixes the offset and two prove the rate. A jump's position is narrowed the same way. A session
+  spends at most 256 such frames (*tentative*).
+- One call reads in rounds, each seeing what the last read, and commits them all as **one** index
+  revision, so a search does not spend the session's 64 revisions.
 - A clock with seconds needs no search: one read is already within a second.
 - Reads added this way extend `ocr search` hits and are not part of `ocr`'s coverage, which counts its
   own plan.
@@ -433,11 +435,11 @@ rule changes.
 ### 17. The command: `vsift clocks`
 
 ```console
-vsift clocks <session> [--from <us> --to <us>] [--max-frames 0..200] [--runner <path>]
-                       [--threads 1..8] [--screen-zone <clock>=<±HH:MM>]...
-                       [--accept-gap <id>]... --json
+vsift clocks <session> [--max-frames 0..200] [--runner <path>] [--threads 1..8]
+                       [--screen-zone <clock>=<±HH:MM>]... [--accept-gap <id>]... --json
 ```
 
+- It works on the whole session, because an anchor and a segment are the session's, not a range's.
 - It is opt-in and bounded, and it never runs `ocr`'s plan: with no index it answers `state: not_run`,
   `partial`, naming `ocr`. Absence is never a claim: "no clock found" speaks only for the frames read.
 - It reads at most `--max-frames` refinement frames (default 40), then recomputes and commits.
