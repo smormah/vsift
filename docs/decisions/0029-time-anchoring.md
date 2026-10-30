@@ -551,24 +551,40 @@ this shows that small text survives at this quality, not that a real taskbar rea
 
 A slice that does not qualify at the cut leaves the earlier ones standing.
 
-**After slices 1 and 2:** the second and last dispatch, small and synthetic only, run 41111066004 at
-`9c95bff8` (so before the search learned to pass over a stopped bracket).
+**After slices 1 and 2:** the second dispatch, small and synthetic only, run 41111066004 at `9c95bff8`
+(so before the search learned to pass over a stopped bracket).
 
 *Held values.* 320 consecutive minutes, each held for 60 s of video at 12 px and CRF 32 and read four
 times from 5 s after it changed: **1,280 exact, none wrong, none missing.** So whether a misread persists
-across a held minute is **not answered**: there was no misread to follow. It bounds misreads of a held
-value at under about 1% (none in 320), against 3.33% of reads in the first run. The two runs differ in how
-soon they read after a change (1 s against 5 s or more), in how many digits changed, and in the frame rate
-(30 against 10), and these were not separated. One reading, unproved: misreads gather in the frames just
-after a change, which are the frames a rollover search reads.
+across a held minute is **not answered**: there was no misread to follow.
 
 *End to end.* The commit's `vsift ocr` and `vsift clocks` over four recordings of known clocks, at 14 px
-and CRF 23: all four gave the clocks and gaps drawn, `complete` in one `clocks` call, each precise to
-250 ms. The cut of 420 s was measured as 419.8 s, ±0.45 s. A screen of static times set 92 reads aside and
-made no clock. **Not explained:** each scene reported excursions on a clock drawn without a fault (1, 2, 1
-and 1). The likely cause is the test, not the model: FFmpeg's `between()` includes both ends, so the frame
-at each exact minute shows both values drawn over each other, and `ocr`'s 10 s grid reads those frames.
-The report holds no read text, so this is not proved.
+and CRF 23: all four gave the clocks and gaps drawn. **Its precision of 250 ms and its measured cut of
+419.8 s, ±0.45 s, are withdrawn, and so is every excursion it reported (1, 2, 1 and 1 on clocks drawn
+without a fault):** the test's drawing was at fault. FFmpeg's `between()` includes both ends, so the frame
+at each exact minute showed both values, and `ocr`'s 10 s grid reads those frames. Two reads either side
+of a rollover give an offset as wide as the time between them plus the paint slack, so 250 ms is what two
+readings on one frame give.
+
+**After the planner's review:** the third dispatch, small and synthetic only, run 41115362147 at
+`5a5a0144`, after the turn fix and with one value drawn on each frame.
+
+*Held values.* 240 consecutive minutes, each held for 60 s of video at 12 px and CRF 32 and read at 0.1,
+0.5, 1, 2 and 30 s after it changed: **1,200 exact, none wrong, none missing,** at each of the five times.
+So misreads do not gather in the frames just after a change, on these recordings, which rules out the
+fear that a rollover search reads the worst frames. Whether a misread persists is **still not answered**,
+and the excursion rule stands regardless, because a presenter's turn takes the same shape. Together the
+two runs held 560 values with no misread, which bounds a misread of a held value at about 0.5%, against
+3.33% of reads in the first run. Reading soon after a change does not explain the difference on its own. Still not separated:
+how often the screen changes (every 2 s against every 60 s), how many digits change, and the frame rate
+(30 against 10).
+
+*End to end.* The same two commands at 14 px and CRF 23 over five recordings of known clocks, now with a
+presenter who hands back: **all five gave the clocks and gaps drawn, `complete` in one `clocks` call, with
+no excursion and no stopped bracket on any clock.** The two presenters gave two clocks and no gap. Each
+clock is precise to 550 ms, which is what the rollover search reaches on 10 fps video: a 300 ms bracket
+plus the 250 ms paint slack. The cut of 420 s was measured as 420.0 s, ±0.55 s. A screen of static times
+set 92 reads aside and made no clock.
 
 ### Limits (L-213)
 
