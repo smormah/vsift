@@ -470,6 +470,10 @@ pub(crate) struct ClockExcursionView {
 
 /// A rollover whose search an excursion or a freeze ended.
 #[derive(Debug, Deserialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The names are the published JSON"
+)]
 pub(crate) struct ClockBracketView {
     pub(crate) from_us: u64,
     pub(crate) to_us: u64,
