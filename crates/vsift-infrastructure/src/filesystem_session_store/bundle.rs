@@ -118,6 +118,9 @@ impl FilesystemSessionStore {
                 .identifier()
                 .to_owned(),
             artifacts: record.artifacts.clone(),
+            time_anchors: record.time_anchors.clone(),
+            screen_clocks: record.screen_clocks.clone(),
+            clock_segments: record.clock_segments.clone(),
         };
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
@@ -349,6 +352,9 @@ pub(super) fn read_bundle_manifest(bundle: &Dir) -> Result<ReadManifest, Session
         .map_err(|_| SessionStorageError::IntegrityFailure)?;
     let source_id =
         SourceId::parse(&manifest.source_id).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    super::time_anchors::decode_time_anchors(&manifest.time_anchors)?;
+    super::time_anchors::decode_screen_clocks(&manifest.screen_clocks)?;
+    super::time_anchors::decode_clock_gaps(&manifest.clock_segments)?;
     if manifest.artifacts.len() > MAX_SESSION_ARTIFACTS {
         return Err(SessionStorageError::CapacityExhausted);
     }

@@ -1680,9 +1680,9 @@ rejection and fixed remediation, never an echo of the input: `request_too_large`
 `request_too_deep`, `malformed_request`, `unsupported_schema_version`,
 `invalid_operation_id`, `invalid_session_id`, `invalid_path`,
 `invalid_transcript_offset`, `invalid_deadline`, `invalid_range`, `invalid_bundle_name`,
-`too_many_steps`, `step_order`, `no_work`, and, decided by the host,
-`path_outside_input_root`, `duplicate_operation_id` (another line of the same batch)
-and `workspace_not_durable`.
+`too_many_steps`, `step_order`, `no_work`, `invalid_recorded_at` (0.3.0), and, decided by
+the host, `path_outside_input_root`, `duplicate_operation_id` (another line of the same
+batch) and `workspace_not_durable`.
 
 **Job result** ([`job-result.schema.json`](../../schemas/v1/job-result.schema.json);
 examples [`job-run.json`](../../schemas/v1/examples/job-run.json),

@@ -558,6 +558,17 @@ struct BundleManifest {
     source_included: bool,
     publication: String,
     artifacts: Vec<StoredArtifact>,
+    /// The session's anchors, written only when it has some, so a bundle
+    /// without them is written as before (ADR 0029 decision 20). A release
+    /// before 0.3.0 refuses a bundle that carries them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+    /// The clocks the session named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    screen_clocks: Vec<time_anchors::StoredScreenClock>,
+    /// The gaps those clocks showed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    clock_segments: Vec<time_anchors::StoredClockGap>,
 }
 
 impl MetadataVersion for BundleManifest {

@@ -30,7 +30,9 @@ use std::fmt;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest as _, Sha256};
-use vsift_domain::{FailureCode, MediaTime, OperationId, SessionId, TimeRange, TranscriptOffset};
+use vsift_domain::{
+    ClockReading, FailureCode, MediaTime, OperationId, SessionId, TimeRange, TranscriptOffset,
+};
 
 pub use path::{
     InputPathError, MAX_INPUT_PATH_BYTES, MAX_INPUT_PATH_COMPONENTS, RelativeInputPath,
@@ -166,6 +168,23 @@ impl SuppliedTranscriptInput {
     }
 }
 
+/// When a recording started, as a request stated it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecordedAtInput {
+    /// The text as given, which the request's digest covers.
+    text: String,
+    /// What it says.
+    reading: ClockReading,
+}
+
+impl RecordedAtInput {
+    /// What it says.
+    #[must_use]
+    pub const fn reading(&self) -> ClockReading {
+        self.reading
+    }
+}
+
 /// What a request works on.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkTarget {
@@ -176,6 +195,8 @@ pub enum WorkTarget {
         source: RelativeInputPath,
         /// The supplied transcript, if any.
         transcript: Option<SuppliedTranscriptInput>,
+        /// When the recording started, as `ingest --recorded-at` states it.
+        recorded_at: Option<RecordedAtInput>,
     },
     /// An existing session of the workspace.
     Session(SessionId),
@@ -382,6 +403,8 @@ pub enum RequestRejection {
     InvalidPath,
     /// A transcript offset beyond twenty-four hours.
     InvalidTranscriptOffset,
+    /// A `recorded_at` that is not a clock time `ingest --recorded-at` takes.
+    InvalidRecordedAt,
     /// A deadline of 0 or more than one day.
     InvalidDeadline,
     /// A range whose end is not after its start.
@@ -405,7 +428,7 @@ pub enum RequestRejection {
 
 impl RequestRejection {
     /// Every rejection, in declaration order.
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::TooLarge,
         Self::TooDeep,
         Self::Malformed,
@@ -423,6 +446,7 @@ impl RequestRejection {
         Self::PathOutsideInputRoot,
         Self::DuplicateOperationId,
         Self::WorkspaceNotDurable,
+        Self::InvalidRecordedAt,
     ];
 
     /// The stable identifier.
@@ -446,6 +470,7 @@ impl RequestRejection {
             Self::PathOutsideInputRoot => "path_outside_input_root",
             Self::DuplicateOperationId => "duplicate_operation_id",
             Self::WorkspaceNotDurable => "workspace_not_durable",
+            Self::InvalidRecordedAt => "invalid_recorded_at",
         }
     }
 
@@ -504,6 +529,9 @@ impl RequestRejection {
             Self::WorkspaceNotDurable => {
                 "Send durability ephemeral, or run the request in a workspace initialised as durable."
             }
+            Self::InvalidRecordedAt => {
+                "Give recorded_at in RFC 3339, such as 2026-10-21T14:03:12+01:00, or omit it."
+            }
         }
     }
 
@@ -526,6 +554,7 @@ impl RequestRejection {
             Self::PathOutsideInputRoot => 14,
             Self::DuplicateOperationId => 15,
             Self::WorkspaceNotDurable => 16,
+            Self::InvalidRecordedAt => 17,
         }
     }
 }
@@ -652,6 +681,14 @@ fn validate(wire: WireRequest) -> Result<WorkRequest, RequestRejection> {
                     })
                 })
                 .transpose()?,
+            recorded_at: ingest
+                .recorded_at
+                .map(|text| {
+                    let reading = ClockReading::parse(&text)
+                        .map_err(|_| RequestRejection::InvalidRecordedAt)?;
+                    Ok::<_, RequestRejection>(RecordedAtInput { text, reading })
+                })
+                .transpose()?,
         },
         WireTarget::SessionId(session) => WorkTarget::Session(
             SessionId::parse(session).map_err(|_| RequestRejection::InvalidSessionId)?,
@@ -709,12 +746,17 @@ fn request_digest(
         durability,
         deadline_ms: deadline.map(RequestDeadline::as_millis),
         target: match target {
-            WorkTarget::Ingest { source, transcript } => CanonicalTarget::Ingest {
+            WorkTarget::Ingest {
+                source,
+                transcript,
+                recorded_at,
+            } => CanonicalTarget::Ingest {
                 source: source.as_str(),
                 transcript: transcript.as_ref().map(|transcript| CanonicalTranscript {
                     path: transcript.path.as_str(),
                     offset_us: transcript.offset.as_micros(),
                 }),
+                recorded_at: recorded_at.as_ref().map(|recorded| recorded.text.as_str()),
             },
             WorkTarget::Session(session) => CanonicalTarget::SessionId(session.as_str()),
         },
@@ -781,6 +823,8 @@ struct WireIngest {
     source: String,
     #[serde(deserialize_with = "required_nullable")]
     transcript: Option<WireTranscript>,
+    #[serde(default)]
+    recorded_at: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -850,6 +894,9 @@ enum CanonicalTarget<'a> {
     Ingest {
         source: &'a str,
         transcript: Option<CanonicalTranscript<'a>>,
+        // Absent when not given, so a request without it keeps its digest.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        recorded_at: Option<&'a str>,
     },
     SessionId(&'a str),
 }
