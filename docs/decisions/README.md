@@ -32,7 +32,7 @@ Architecture decision records explain decisions that constrain future implementa
 - [0026: Windows directories created with their security descriptor (the one `unsafe` crate)](0026-windows-directories-created-with-their-security-descriptor.md) (Accepted 2026-10-19, the maintainer's choice on #443)
 - [0027: The road to 1.0: a 0.3.0 that matches and goes beyond the existing tool, then 1.0.0](0027-the-road-to-1-0.md) (Accepted 2026-10-21, the maintainer's replan)
 - [0028: Online sources: direct HTTPS links and public video pages](0028-online-sources.md) (Proposed 2026-10-21, for `0.3.0`; #407 first)
-- [0029: Time anchoring (clock times on timestamped results), stage 1](0029-time-anchoring.md) (Proposed 2026-10-21, for `0.3.0`)
+- [0029: Time anchoring (clock times on timestamped results), stages 1 and 2](0029-time-anchoring.md) (Accepted, stage 1 on 2026-10-27 and stage 2, the amendment, on 2026-10-30, for `0.3.0`)
 - [0030: On-screen text (OCR)](0030-on-screen-text.md) (Accepted 2026-10-21: decisions 1-6 the maintainer's, 7-12 proposed in #499 and accepted by the maintainer as recommended)
 - [0032: Managed installs on Windows, macOS and Linux, optional components, and the engine release workflow](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) (Proposed 2026-10-21)
 - [0033: Progress during long transcriptions: published as it goes, started in the background, read while it runs](0033-progress-during-long-transcriptions.md) (Accepted 2026-10-21; built in five pull requests, the first with `settled_merge`)

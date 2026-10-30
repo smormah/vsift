@@ -1,10 +1,10 @@
 # ADR 0029: Time anchoring (clock times on timestamped results), stage 1
 
-- Status: **Proposed, 2026-10-21.** The design was sent to the supervisor on 2026-10-21 and
-  given the go the same day; the maintainer named the feature "time anchoring" and decided
-  stage 1's scope and its split from stage 2 (below). It becomes Accepted with the merge of
-  its pull request, after the `0.2.3` cut, for `0.3.0`. Stage 2 is the amendment of 2026-10-30
-  at the end of this record, Proposed.
+- Status: **Accepted.** Stage 1 on 2026-10-27, with the merge of its pull request (#501), and
+  stage 2, the amendment of 2026-10-30 at the end of this record, with the merge of its own
+  (#553), both for `0.3.0`. The design was sent to the supervisor on 2026-10-21 and given the go
+  the same day; the maintainer named the feature "time anchoring" and decided stage 1's scope
+  and its split from stage 2 (below).
 - Date: 2026-10-21
 - Scope: `ingest`, `session status`, and every timestamped item of the v1 JSON contract
   (additive); the session lifecycle record (an optional member).
@@ -203,10 +203,10 @@ The four questions this pull request left open were answered at the merge rebase
   workflow, makes an MP4, a MOV with the recorder tag, a Matroska file and a 1990 MP4 with
   the pinned FFmpeg and reads them through the binary.
 
-## Amendment of 2026-10-30: stage 2, clocks on screen (Proposed)
+## Amendment of 2026-10-30: stage 2, clocks on screen
 
-Status: **Proposed, 2026-10-30; reviewed by the planner the same day, with its rulings written in
-below.** Stage 1's decisions above stand, except where a decision below names what it changes.
+Status: **Accepted, 2026-10-30, by the planner, with its rulings written in below.** Stage 1's
+decisions above stand, except where a decision below names what it changes.
 Decision 9 binds everything here. The thresholds marked *tentative* are starting values, set by the
 tests and the hosted evidence.
 
