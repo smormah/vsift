@@ -165,13 +165,14 @@ jobs:
 
       # `vsift <video>` is what 0.3.0 leads with, and these tests need FFmpeg, so
       # they are left out of the pull-request gate. Ubuntu's own FFmpeg, with a
-      # stand-in recogniser (ADR 0037, the amendment of 2026-10-30).
+      # stand-in recogniser (ADR 0037, the amendment of 2026-10-30). A debug build,
+      # because this test crate's features are refused in a release build.
       - name: Run vsift <video> on real FFmpeg (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q --no-install-recommends ffmpeg
-          cargo test --release --locked -p vsift --test engine_watch -- --ignored
+          cargo test --locked -p vsift --test engine_watch -- --ignored
 
       # Saved from `main` only, once a night per system, for the pull requests
       # to restore. A run whose tests failed still saves what it compiled.
