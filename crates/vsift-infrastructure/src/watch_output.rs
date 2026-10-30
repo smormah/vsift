@@ -32,7 +32,7 @@ use vsift_domain::{
     CandidateReason, WatchOutputNames, readable_time, subrip_cue_text, subrip_time,
 };
 
-use crate::RandomIdentifierSource;
+use crate::{BundleDestinationRefusal, FilesystemSessionStore, RandomIdentifierSource};
 
 /// How long the final write of a file tries a file another program holds
 /// open before the run fails with `STORAGE_IO` (ADR 0037 section 7, known
@@ -466,6 +466,27 @@ impl WatchOutputs for FolderWatchOutputs {
         Ok(())
     }
 
+    fn prepare_keep(
+        &mut self,
+        folder: &Path,
+        names: &WatchOutputNames,
+    ) -> Result<PathBuf, WatchOutputError> {
+        let created = match fs::symlink_metadata(folder) {
+            Ok(metadata) if metadata.is_dir() => false,
+            Ok(_) => return Err(WatchOutputError::KeepFolderUnusable),
+            Err(_) => {
+                fs::create_dir(folder).map_err(|_| WatchOutputError::KeepFolderUnusable)?;
+                true
+            }
+        };
+        let target = keep_target(folder, names, &self.vsift_roots);
+        if created && target.is_err() {
+            // Only ever an empty folder: this run made it a moment ago.
+            let _empty_only = fs::remove_dir(folder);
+        }
+        target
+    }
+
     fn write_snapshot(&mut self, snapshot: &WatchSnapshot) -> Result<(), WatchOutputError> {
         let transcript_random = self.random(WatchOutputKind::Transcript)?;
         let subtitles_random = self.random(WatchOutputKind::Subtitles)?;
@@ -586,6 +607,29 @@ fn output_folder(
         return Err(WatchOutputError::InsideVsift);
     }
     Ok(folder)
+}
+
+/// Where the bundle goes under the `--keep` folder, canonicalised and never
+/// inside one of `vsift_roots`, proved writable by the store's own check.
+fn keep_target(
+    folder: &Path,
+    names: &WatchOutputNames,
+    vsift_roots: &[PathBuf],
+) -> Result<PathBuf, WatchOutputError> {
+    let folder = fs::canonicalize(folder).map_err(|_| WatchOutputError::KeepFolderUnusable)?;
+    if vsift_roots.iter().any(|root| folder.starts_with(root)) {
+        return Err(WatchOutputError::KeepInsideVsift);
+    }
+    let bundle = folder.join(names.bundle());
+    FilesystemSessionStore::check_bundle_destination(&bundle).map_err(|refusal| match refusal {
+        BundleDestinationRefusal::Taken => WatchOutputError::Exists(WatchOutputKind::Kept),
+        BundleDestinationRefusal::NameNotAllowed => WatchOutputError::KeepNameNotAllowed,
+        BundleDestinationRefusal::Unusable => WatchOutputError::KeepFolderUnusable,
+        BundleDestinationRefusal::Refused(error) => {
+            WatchOutputError::Refused(WatchOutputKind::Kept, error)
+        }
+    })?;
+    Ok(bundle)
 }
 
 /// The screen-change list's name inside the folder.

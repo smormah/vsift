@@ -784,3 +784,152 @@ What the pull request for sections 7 to 9 built, under the planner's two rulings
   as not transcribed in the transcript and in `watch-data`. It is neither of the two seams the planner named: it is
   longer than L-156's 0.5 s tolerance and it is stated, while L-156's stretches are silent; and L-188's RM03 case is
   chunk 3 (75 to 100 s). It went to the planner through the coordinator.
+
+## Amendment, 2026-10-30: `--keep <folder>`, keep a recording for later search (W6h)
+
+**Status: accepted by the planner, 2026-10-30,** at `2678920a` with one change, which this text includes (a final write
+that fails on a sealed job). The maintainer's word, 30 Oct: "Yes, add an option to the one-command action that
+keeps the recording for later search, as a small follow-up once search has merged." Search (ADR 0035) reads retained
+bundles only, and the action closes its session, so today nothing it did can be found later.
+
+```console
+vsift ./call.mp4 --keep ./kept-calls
+vsift ./second-call.mp4 --keep ./kept-calls
+vsift bundle search ./kept-calls --query "refund limit"
+```
+
+**What changes.** `vsift <video>` and `vsift watch <video>` take `--keep <folder>`. A run that finishes writes one
+retained bundle (ADR 0013) to `<folder>/<name>`, after its outputs are finished and before its session closes. Section
+11's "never keeps the session longer than the run needs" holds: the session still closes, and the bundle is the export
+the person asked for by typing the option. Without `--keep`, nothing changes. Section 3's steps become: 1 check, 2 claim,
+**2a check the keep target**, 3 to 6 as written, **6a write the bundle**, 7 close.
+
+**The name.** `<name>` is the action's stem (section 5) with each `:` replaced by `-`, from a new domain method,
+`WatchOutputNames::bundle()`. So `call.mp4` gives `kept-calls/call`, which is also what `bundle search` shows as the
+bundle's name. The `:` matters: Linux allows it in a file name, and a recording can carry a clock time in its name
+(`Screencast 10:30:00.webm`), but `session retain` and `bundle validate` refuse it in a bundle's folder name (the rule
+of #232, `root_name_is_allowed`), so a bare stem would be refused for such a recording. A stem that rule refuses for any
+other reason, a Windows device name such as `aux.v2`, is refused before any work with "Rename the video". The rule is
+not widened, because it is what makes a name mean the same folder on every system.
+
+**Refused before any work.** The keep target is checked after the output names are claimed and before the session is
+opened; a refusal releases the claim, so nothing is left behind and no session exists. It comes after the claim so that
+a run refused for a taken output never leaves a new keep folder. The check goes through a new port method,
+`WatchOutputs::prepare_keep`, and a store check beside `retain_bundle`:
+
+| What is wrong | Failure | Remediation says |
+| --- | --- | --- |
+| The name is taken under the folder, by anything, a link included | `INVALID_ARGUMENT` | A recording of that name is already kept there; VSift never replaces it. Keep this one in another folder, or rename the video. |
+| Not a folder, or a new folder whose parent is missing, or a network path, which bundles refuse | `INVALID_ARGUMENT` | `--keep` takes a folder: an existing one, or a new one whose parent exists, on a local drive. |
+| Inside VSift's session or managed root | `INVALID_ARGUMENT` | As `--output`'s. |
+| The stem cannot name a bundle (above) | `INVALID_ARGUMENT` | Rename the video. |
+| The folder refuses the write, or cannot hold an owner-private folder | `STORAGE_IO` | Choose a folder you can write to with `--keep <folder>`. |
+
+A missing folder is created, with its parent required to exist, and with the ordinary permissions a person's folder has;
+the bundle inside it is owner-private (ADR 0026), which is what `bundle search` checks. A folder created by a run the
+check then refuses is removed again, if still empty.
+
+**The name is checked, not held.** ADR 0013 has `retain_bundle` create its folder exclusively, so a folder claimed at
+the start could not be used at the end. The check creates the real name privately, confirms it is private, and removes
+it at once: that one step proves the name is free, the folder is writable, and it can hold a private folder, with no
+random probe name. Nothing stands at the name during the run, so another program, or a second run with the same name in
+the same folder, can take it meanwhile. Exclusive creation at the end then fails, nothing is replaced, and that run ends
+as a failed write (below). An interrupted run leaves nothing in the keep folder, so nothing is left to clean up there.
+
+**If the bundle cannot be written.** The outputs stand. The session is **left open**, not closed, so the work is not
+lost. `data.outcome` is `partial`, `session_closed` is false, `kept.state` is `not_kept` with the failure's code, and the
+envelope carries a fixed warning. The envelope's status stays `complete`, as the first pull request's implementation note
+has it for every other partial: `data.outcome` is where `watch` says partial. The exit status is 0. The warning and the
+finish screen give the command: `vsift session retain <session_id> --output <a new folder>`, with the real id in the
+finish screen. They say the session lasts about a day unused. `retain_bundle` may have left an incomplete folder at the
+name: ADR 0013 says VSift never deletes a caller-selected export, so it stays, `bundle validate` rejects it, `bundle
+search` counts it in `skipped_entries`, and the words say it can be removed.
+
+**A job that did not seal keeps nothing.** A run stopped by Ctrl-C, or failed before the job sealed its revision, writes
+no bundle, and a failed run closes its session as it does today. A `partial` run does seal, so it is kept: the bundle
+states its gaps, and search reports them. A Ctrl-C that arrives after the job has ended does not stop the bundle; the
+write has no cancellation point, and takes seconds, because the video is hashed but not copied.
+
+**With `--keep`, once the job has sealed, the session closes only after a bundle is committed (the planner's change,
+2026-10-30).** The transcript exists and the person asked to keep it, so a close then would destroy the only copy. An
+editor or viewer holding the growing `.txt` is an ordinary way to get here on Windows (L-237). So a failure after the
+seal, a final write refused or a frame that failed, does not stop the bundle, which does not need the outputs:
+
+- The bundle is written anyway. The failed output is reported as it is today, with its own code and remediation.
+- The failure's `data` is new and small, `session_id`, `session_closed` and `kept`
+  (`watch-failure-data.schema.json`), and the remediation's last words say what became of the bundle. Every other failed
+  `watch` has `data` null, as before.
+- The close follows the normal rule: closed when the bundle is committed; left open, with the `session retain` words,
+  when the bundle fails too.
+
+A failure before the seal stays as written above. Without `--keep`, nothing changes.
+
+**Interrupted, and run again (section 8): the option belongs to the command line, not to the job.** It is not recorded.
+`watch-outputs.json` keeps format `vsift.watch_claim` v1 with the same three names. The run that finishes is the one
+that keeps, and it does what its own command line says:
+
+| First run | Run again | What happens |
+| --- | --- | --- |
+| `--keep a`, stopped | `--keep a` | Continues the job, keeps in `a` |
+| `--keep a`, stopped | no `--keep` | Continues the job, keeps nothing, closes the session |
+| no `--keep`, stopped | `--keep a` | Continues the job, keeps in `a` |
+| `--keep a`, stopped | `--keep b` | Continues the job, keeps in `b` |
+
+The reason is the planner's condition of 2026-10-29: the job's record is untrusted session content, only a key to find
+the session and never a place to write. A keep folder read back from it would be a place to write. The same condition is
+why a rerun matches on the output names alone, so adding or dropping `--keep` never stops it finding its job. The
+stopped line's "run the same command again" already includes the option. A rerun checks its keep target as any run does,
+and a refusal then leaves the interrupted job and its session untouched.
+
+**What the bundle holds.** What `session retain` writes by default: the transcript, the visual index, the frames and
+their evidence records. The video is not copied in, and adding that is out of scope. On-screen text is not read, because
+the action does not run `ocr`; `bundle search` says so per recording, and the help and the guide say it plainly. When
+section 10's `--include on-screen-text` lands, its index is in the session, so the bundle carries it with no change here.
+
+**The result (additive; `watch-data` has not shipped: the planner checked that `v0.2.3` has none).** One new required
+member, null without `--keep`:
+
+```json
+"kept": {
+  "state": "kept",
+  "path": "/home/example/kept-calls/call",
+  "name": "call",
+  "failure_code": null
+}
+```
+
+`state` is `kept` or `not_kept`; `path` is where the bundle is, or where it was to go, in the path form of `watch`'s
+outputs; `failure_code` is the failure's public code when `not_kept`. The contract says it plainly: a script reads
+`data.outcome` and `kept.state`, not only `status`. No new failure code, no prompt, no new command, no job format change. The finish screen
+gains one line, `call/   kept for later search with vsift bundle search`, or, when `not_kept`, the words above.
+
+**Layering.** `vsift-domain`: `WatchOutputNames::bundle()`. `vsift-application`: `run_watch` takes the keep folder,
+calls `WatchOutputs::prepare_keep` and a new step `WatchSteps::keep_session`, one existing operation with no rule of its
+own, and `WatchOutcome` gains `kept`. `vsift-infrastructure`: the folder work, and the check beside `retain_bundle`.
+`vsift`: `WatchRequest::keep`, the step over `retain_session`, and `EngineError::WatchFailedAfterKeep`, which carries a
+failure after the seal with what became of the bundle and answers with the inner failure's code. `vsift-contract`: the data, schema and remediations.
+`vsift-cli`: the flag and the finish screen.
+
+**No skill text changes.** The skill class stays **never** for `vsift watch` (section 11), and `--keep` is an option of
+that command, so the skill does not mention it and the trial freeze does not move.
+
+**Left as it is.** The header of `<stem>.txt` says the session was "closed when this run finished", and is written before
+the bundle. In the rare `not_kept` case that is untrue for about a day; `session_closed` and the finish screen are right,
+the warning says the private copy of the video stays until the session ends, and L-244 records it.
+
+**Limit.** L-212 loses "a recording processed with `vsift <video>` leaves no bundle". L-244 records what `--keep` leaves:
+the video is not in the bundle, on-screen text is not read, two videos with one stem cannot share a folder, the name is
+not held during the run, what a failed write leaves, and the header's words after one.
+
+**Tests.** Domain: `bundle()` for a plain stem, a `:`, a shortened stem. Application, over fakes: the order (bundle after
+finalise and before close); close never called after a failed bundle, and the outcome `partial`; each refusal releases
+the claim and opens no session; a stop writes no bundle; a failure before the seal writes none; a final write that fails
+on a sealed job keeps, closes after the bundle, and reports the failed output; the same with the bundle failing too leaves
+the session open; without `--keep` that failure closes as before; a rerun with, without and with another `--keep`, each
+finding its job by the same names. Infrastructure: the keep check on real folders (taken by a folder, a
+file and a link; a new folder; a missing parent; inside a root; the name rule; nothing left after a pass or a refusal).
+Engine, opt-in and run by the `Nightly` workflow on Ubuntu from this change, which left `engine_watch` unguarded before
+it (the planner's ruling, 2026-10-30; FFmpeg and a stand-in recogniser): a name already kept, the rerun table through a real job, and a final
+write refused on a sealed job, whose bundle `bundle search` finds. CLI: the JSON contract with `kept`, the schema and
+example, the failure's data, the finish screen's forms. End to end: the action with `--keep` on the synthetic clip, a
+second recording into the same folder, then `bundle search` on the folder finds the words of both.

@@ -3,7 +3,8 @@
 //! the video, names the video's hash and every frame's hash, and closes its
 //! session; a second run is refused before anything is copied, and nothing the
 //! first wrote is replaced; an output folder inside `VSift`'s own session root
-//! is refused.
+//! is refused. With `--keep`, a finished run leaves a bundle that `bundle
+//! search` finds, even when its final write fails.
 //!
 //! The recogniser is a deterministic stand-in; the video is decoded and its
 //! frames taken by real `FFmpeg` from a fixture of the corpus, so these tests
@@ -11,7 +12,8 @@
 //!
 //! `cargo test -p vsift --locked --test engine_watch -- --ignored`
 //!
-//! with `ffmpeg` and `ffprobe` on `PATH`.
+//! with `ffmpeg` and `ffprobe` on `PATH`. The `Nightly` workflow runs them on
+//! Ubuntu; the pull-request gate does not.
 
 use std::{
     env,
@@ -27,14 +29,14 @@ use std::{
 
 use sha2::{Digest as _, Sha256};
 use vsift::{
-    AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild, Cancellation,
-    ChunkTime, Clock, ClockError, CueText, Engine, EngineConfig, EngineError, EnginePorts,
-    FailureCode, HostIsolation, IdentifierGenerationError, IdentifierSource, LanguageTag,
-    LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation, MediaToolVerification,
-    MediaToolVerifier, OperationId, PlannedChunk, ProgressObserver, ProviderChunkOutput,
-    ProviderSegment, RecognizerIdentity, SessionId, SessionPhase, SessionRootLocation, Sha256Hex,
-    SpeechPcm, SpeechRecognitionError, SpeechRecognizer, UserConfigurationLocation, WatchFailure,
-    WatchOutputKind, WatchRequest,
+    AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider, AsrProviderBuild,
+    BundleSearchRequest, Cancellation, ChunkTime, Clock, ClockError, CueText, Engine, EngineConfig,
+    EngineError, EnginePorts, FailureCode, HostIsolation, IdentifierGenerationError,
+    IdentifierSource, LanguageTag, LocalAsrVerification, LocalAsrVerifier, ManagedRootLocation,
+    MediaToolVerification, MediaToolVerifier, OperationId, PlannedChunk, ProgressObserver,
+    ProviderChunkOutput, ProviderSegment, RecognizerIdentity, SessionId, SessionPhase,
+    SessionRootLocation, Sha256Hex, SpeechPcm, SpeechRecognitionError, SpeechRecognizer,
+    UserConfigurationLocation, WatchFailure, WatchOutputKind, WatchRequest,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -193,6 +195,7 @@ fn request(source: &Path, output: Option<PathBuf>) -> WatchRequest {
     WatchRequest {
         source: source.to_path_buf(),
         output,
+        keep: None,
         cancellation: Cancellation::new(),
         progress: ProgressObserver::none(),
     }
@@ -296,6 +299,7 @@ async fn a_stopped_run_keeps_its_session_and_the_same_request_continues_it() -> 
         .watch(WatchRequest {
             source: video.clone(),
             output: None,
+            keep: None,
             cancellation,
             progress: ProgressObserver::new(move |progress| {
                 if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
@@ -358,6 +362,7 @@ async fn a_record_that_names_another_folder_is_refused() -> TestResult {
         .watch(WatchRequest {
             source: video.clone(),
             output: None,
+            keep: None,
             cancellation,
             progress: ProgressObserver::new(move |progress| {
                 if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
@@ -520,6 +525,193 @@ async fn more_changes_than_the_session_has_room_for_still_finish() -> TestResult
 /// The frame cap fits a fresh session's evidence room by design: each frame
 /// takes `EVIDENCE_ARTIFACTS_PER_FRAME` of the `MAX_EVIDENCE_ARTIFACTS` slots
 /// (known limit L-234). Raising either side breaks this, not a run on RM03.
+/// A second video, the same fixture under another name, in its own folder.
+fn second_video(root: &OwnedRoot) -> Built<PathBuf> {
+    let folder = root.path("more videos");
+    fs::create_dir(&folder)?;
+    let video = folder.join("second call.mp4");
+    fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/corpus/generated/F05-speech.mp4"),
+        &video,
+    )?;
+    Ok(video)
+}
+
+/// Every recording `bundle search` finds the words in, by its bundle's name.
+fn searched(engine: &Engine, folder: &Path) -> Built<Vec<String>> {
+    let results = engine.search_bundles(BundleSearchRequest {
+        paths: vec![folder.to_path_buf()],
+        query: "says hello".to_owned(),
+        limit: Some(100),
+        cursor: None,
+        cancellation: Cancellation::new(),
+    })?;
+    let mut bundles: Vec<String> = results
+        .outcome()
+        .hits
+        .iter()
+        .map(|hit| hit.bundle.clone())
+        .collect();
+    bundles.sort();
+    bundles.dedup();
+    Ok(bundles)
+}
+
+fn keeping(source: &Path, keep: &Path) -> WatchRequest {
+    WatchRequest {
+        keep: Some(keep.to_path_buf()),
+        ..request(source, None)
+    }
+}
+
+/// The story end to end: the action with `--keep` for two recordings into one
+/// folder, then `bundle search` on the folder finds the words of both.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn two_kept_recordings_are_found_by_a_search_of_their_folder() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let keep = root.path("kept calls");
+    let first = engine.watch(keeping(&video(&root)?, &keep)).await?;
+    let second = engine.watch(keeping(&second_video(&root)?, &keep)).await?;
+    for outcome in [&first, &second] {
+        assert!(outcome.session_closed, "the session still closes");
+        let kept = outcome.kept.as_ref().ok_or("nothing kept")?;
+        assert_eq!(kept.failure, None);
+        let bundle = engine.validate_bundle(&kept.path)?;
+        assert!(
+            matches!(
+                bundle.source_retention(),
+                vsift::SourceRetention::EvidenceOnly
+            ),
+            "the video is not copied in"
+        );
+    }
+    assert_eq!(
+        searched(&engine, &keep)?,
+        vec!["second call".to_owned(), "team meeting".to_owned()]
+    );
+    Ok(())
+}
+
+/// A name already kept is refused before any work: nothing is written beside
+/// the video, nothing kept is replaced, and no session is left.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_name_already_kept_is_refused_before_any_work() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let video = video(&root)?;
+    let keep = root.path("kept");
+    fs::create_dir(&keep)?;
+    fs::create_dir(keep.join("team meeting"))?;
+    let refused = engine.watch(keeping(&video, &keep)).await;
+    assert!(
+        matches!(
+            refused,
+            Err(EngineError::Watch(WatchFailure::OutputExists(
+                WatchOutputKind::Kept
+            )))
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(
+        fs::read_dir(video.parent().ok_or("no folder")?)?.count(),
+        1,
+        "only the video is there"
+    );
+    assert_eq!(engine.list_sessions(None)?.entries().len(), 0);
+    Ok(())
+}
+
+/// The planner's condition: with `--keep`, once the job has sealed the
+/// session closes only after a bundle is committed. The folder is moved away
+/// during the transcription, so the final write is refused on a sealed job.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_final_write_refused_on_a_sealed_job_still_gives_a_bundle() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let video = video(&root)?;
+    let keep = root.path("kept");
+    let output = root.path("notes");
+    let moved = root.path("notes moved");
+    let (from, to) = (output.clone(), moved.clone());
+    let failed = engine
+        .watch(WatchRequest {
+            output: Some(output),
+            progress: ProgressObserver::new(move |progress| {
+                if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
+                    let _first_only = fs::rename(&from, &to);
+                }
+            }),
+            ..keeping(&video, &keep)
+        })
+        .await;
+    let Err(EngineError::WatchFailedAfterKeep(failed)) = failed else {
+        return Err(format!("{failed:?}").into());
+    };
+    assert_eq!(failed.error.failure_code(), FailureCode::StorageIo);
+    assert_eq!(failed.kept.failure, None);
+    assert!(failed.session_closed, "the bundle is committed");
+    assert_eq!(
+        searched(&engine, &keep)?,
+        vec!["team meeting".to_owned()],
+        "the kept copy is not lost"
+    );
+    Ok(())
+}
+
+/// Two rows of the rerun table through a real job: the option is not
+/// recorded, so a stopped run with it, run again without it, keeps nothing,
+/// and a stopped run without it, run again with it, keeps.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn the_run_that_finishes_does_what_its_own_command_line_says() -> TestResult {
+    for (first, again) in [(true, false), (false, true)] {
+        let root = OwnedRoot::new()?;
+        let engine = engine(&root);
+        let video = video(&root)?;
+        let keep = root.path("kept");
+        let cancellation = Cancellation::new();
+        let stop = cancellation.clone();
+        let stopped = engine
+            .watch(WatchRequest {
+                keep: first.then(|| keep.clone()),
+                cancellation,
+                progress: ProgressObserver::new(move |progress| {
+                    if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
+                        stop.cancel();
+                    }
+                }),
+                ..request(&video, None)
+            })
+            .await;
+        assert!(
+            matches!(
+                stopped,
+                Err(EngineError::Watch(WatchFailure::Stopped { .. }))
+            ),
+            "{stopped:?}"
+        );
+        assert!(
+            !keep.join("team meeting").exists(),
+            "a stopped run keeps nothing"
+        );
+        let outcome = engine
+            .watch(WatchRequest {
+                keep: again.then(|| keep.clone()),
+                ..request(&video, None)
+            })
+            .await?;
+        assert!(outcome.session_closed);
+        assert_eq!(outcome.kept.is_some(), again);
+        assert_eq!(keep.join("team meeting").is_dir(), again);
+    }
+    Ok(())
+}
+
 #[test]
 fn the_frame_cap_fits_a_fresh_sessions_evidence_room() {
     // `frames_that_fit` never gives more than half the room, so the whole cap

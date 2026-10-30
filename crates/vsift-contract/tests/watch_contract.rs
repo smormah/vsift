@@ -9,7 +9,8 @@ use std::{fs, io, path::PathBuf};
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
-    CommandName, OperationResponse, WatchCompleteness, WatchData, WatchFrameData, WatchOutputData,
+    CommandName, OperationResponse, WATCH_NOT_KEPT_WARNING, WatchCompleteness, WatchData,
+    WatchFailureData, WatchFrameData, WatchKeptData, WatchKeptState, WatchOutputData,
     WatchOutputsData, WatchRangeData,
 };
 
@@ -148,6 +149,16 @@ fn meeting() -> WatchData {
                 "41c0a90123456789abcdef0123456789abcdef0123456789abcdef0123456789",
             ),
         ],
+        kept: Some(kept(WatchKeptState::Kept, None)),
+    }
+}
+
+fn kept(state: WatchKeptState, failure_code: Option<&str>) -> WatchKeptData {
+    WatchKeptData {
+        state,
+        path: "/home/example/kept-calls/meeting".to_owned(),
+        name: "meeting".to_owned(),
+        failure_code: failure_code.map(str::to_owned),
     }
 }
 
@@ -185,6 +196,83 @@ fn a_silent_video_has_no_subtitles_or_revision() -> TestResult {
     let response = response(&data)?;
     validate(SCHEMA, &response["data"])?;
     assert_eq!(response["data"]["outputs"]["subtitles"], Value::Null);
+    Ok(())
+}
+
+/// Without `--keep`, `kept` is null.
+#[test]
+fn without_the_option_nothing_is_kept() -> TestResult {
+    let mut data = meeting();
+    data.kept = None;
+    let response = response(&data)?;
+    validate(SCHEMA, &response["data"])?;
+    assert_eq!(response["data"]["kept"], Value::Null);
+    Ok(())
+}
+
+/// A bundle that could not be written: the envelope stays `complete`, so a
+/// script reads `data.outcome` and `kept.state`, and a warning gives the
+/// command that still exports the session.
+#[test]
+fn a_bundle_that_could_not_be_written_is_partial_with_a_warning() -> TestResult {
+    let mut data = meeting();
+    data.not_transcribed.clear();
+    data.session_closed = false;
+    data.kept = Some(kept(WatchKeptState::NotKept, Some("STORAGE_IO")));
+    let unmarked = response(&data)?;
+    assert!(
+        validate(SCHEMA, &unmarked["data"]).is_ok(),
+        "the example's outcome is already partial"
+    );
+    let warned = OperationResponse::<Value>::complete(CommandName::Watch.identifier(), &data)?
+        .with_warnings(&[WATCH_NOT_KEPT_WARNING]);
+    let warned = serde_json::to_value(warned)?;
+    validate("operation-response.schema.json", &warned)?;
+    assert_eq!(warned["status"], "complete");
+    assert_eq!(warned["data"]["kept"]["state"], "not_kept");
+    assert_eq!(warned["warnings"][0], WATCH_NOT_KEPT_WARNING);
+
+    // A failed bundle is never reported as a finished run, or a closed session.
+    let mut broken = unmarked["data"].clone();
+    broken["outcome"] = Value::from("complete");
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = unmarked["data"].clone();
+    broken["session_closed"] = Value::Bool(true);
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // The code goes with the state.
+    let mut broken = unmarked["data"].clone();
+    broken["kept"]["failure_code"] = Value::Null;
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = response(&meeting())?["data"].clone();
+    broken["kept"]["failure_code"] = Value::from("STORAGE_IO");
+    assert!(validate(SCHEMA, &broken).is_err());
+    Ok(())
+}
+
+/// A failure after the job sealed, with `--keep`, says what became of the
+/// bundle.
+#[test]
+fn a_failure_after_the_seal_says_what_became_of_the_bundle() -> TestResult {
+    const FAILURE: &str = "watch-failure-data.schema.json";
+    let written = serde_json::to_value(WatchFailureData {
+        session_id: "ses_51d2a70123456789abcdef0123456789".to_owned(),
+        session_closed: true,
+        kept: kept(WatchKeptState::Kept, None),
+    })?;
+    validate(FAILURE, &written)?;
+    let not_written = serde_json::to_value(WatchFailureData {
+        session_id: "ses_51d2a70123456789abcdef0123456789".to_owned(),
+        session_closed: false,
+        kept: kept(WatchKeptState::NotKept, Some("STORAGE_IO")),
+    })?;
+    validate(FAILURE, &not_written)?;
+    let mut broken = not_written;
+    broken["session_closed"] = Value::Bool(true);
+    assert!(
+        validate(FAILURE, &broken).is_err(),
+        "a session is never closed when its bundle failed"
+    );
     Ok(())
 }
 

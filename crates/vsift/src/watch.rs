@@ -30,19 +30,20 @@ use vsift_application::{
 };
 use vsift_contract::render_hidden_characters;
 use vsift_domain::{
-    JobId, JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime, ProgressStage, SearchCoverage,
-    SessionId, SessionPhase, SourceId, TimeRange, TranscriptRevisionId, VisualCandidateId,
+    FailureCode, JobId, JobMode, MAX_VISUAL_INDEX_DURATION_MICROS, MediaTime, ProgressStage,
+    SearchCoverage, SessionId, SessionPhase, SourceId, TimeRange, TranscriptRevisionId,
+    VisualCandidateId,
 };
 use vsift_infrastructure::{FolderWatchOutputs, ManagedArtifactStore, file_sha256};
 
-pub use vsift_application::{WatchFile, WatchFrame, WatchOutcome, WatchOutputKind};
+pub use vsift_application::{WatchFile, WatchFrame, WatchKept, WatchOutcome, WatchOutputKind};
 pub use vsift_domain::{OutputNameError, WatchOutputNames};
 
 use crate::{
     AdmissionWait, Cancellation, CandidateOmission, CandidatesRange, CandidatesRequest,
     DurabilityRequirement, FrameGetRequest, FrameTarget, IngestRequest, JobProgress,
     JobResumeRequest, JobStartRequest, ProgressObserver, RetranscribePublication, SessionListEntry,
-    TranscriptQuery,
+    SourceRetention, TranscriptQuery,
     engine::{Engine, ManagedRootLocation},
     error::EngineError,
 };
@@ -58,6 +59,9 @@ pub struct WatchRequest {
     pub source: PathBuf,
     /// The folder to write into; `None` writes beside the video.
     pub output: Option<PathBuf>,
+    /// The folder to keep the recording in for later search, as a retained
+    /// bundle in a subfolder of its own (ADR 0037, amendment of 2026-10-30).
+    pub keep: Option<PathBuf>,
     /// Stops the run at its next provider boundary. The files keep their
     /// last snapshot and the session is kept, so the same request continues
     /// the job ([`WatchFailure::Stopped`]).
@@ -82,6 +86,13 @@ pub enum WatchFailure {
     /// `--output` names a folder whose parent does not exist, or something
     /// that is not a folder.
     OutputFolderUnusable,
+    /// `--keep` names a folder whose parent does not exist, something that
+    /// is not a folder, or a place a bundle cannot be.
+    KeepFolderUnusable,
+    /// `--keep` names a folder inside `VSift`'s own session or managed root.
+    KeepInsideVsift,
+    /// The video's name cannot name a bundle's folder.
+    KeepNameNotAllowed,
     /// A frame copied out of the session does not have its recorded SHA-256.
     FrameMismatch,
     /// Another program held a file open for the final write's 30 s (known
@@ -106,7 +117,10 @@ impl WatchFailure {
             Self::UnusableName(_)
             | Self::OutputExists(_)
             | Self::OutputInsideVsift
-            | Self::OutputFolderUnusable => vsift_domain::FailureCode::InvalidArgument,
+            | Self::OutputFolderUnusable
+            | Self::KeepFolderUnusable
+            | Self::KeepInsideVsift
+            | Self::KeepNameNotAllowed => vsift_domain::FailureCode::InvalidArgument,
             Self::OutputRefused(_) | Self::OutputHeld(_) => vsift_domain::FailureCode::StorageIo,
             Self::FrameMismatch => vsift_domain::FailureCode::IntegrityFailure,
             Self::Stopped { .. } => vsift_domain::FailureCode::Cancelled,
@@ -124,6 +138,13 @@ impl fmt::Display for WatchFailure {
                 formatter.write_str("the output folder is inside VSift's own folders")
             }
             Self::OutputFolderUnusable => formatter.write_str("the output folder cannot be used"),
+            Self::KeepFolderUnusable => formatter.write_str("the keep folder cannot be used"),
+            Self::KeepInsideVsift => {
+                formatter.write_str("the keep folder is inside VSift's own folders")
+            }
+            Self::KeepNameNotAllowed => {
+                formatter.write_str("the video's name cannot name a bundle's folder")
+            }
             Self::FrameMismatch => formatter.write_str("a copied frame does not match its digest"),
             Self::OutputHeld(_) => formatter.write_str("another program held an output open"),
             Self::Stopped { .. } => {
@@ -144,6 +165,51 @@ impl From<WatchOutputError> for WatchFailure {
             WatchOutputError::Held(kind) => Self::OutputHeld(kind),
             WatchOutputError::FolderUnusable => Self::OutputFolderUnusable,
             WatchOutputError::InsideVsift => Self::OutputInsideVsift,
+            WatchOutputError::KeepFolderUnusable => Self::KeepFolderUnusable,
+            WatchOutputError::KeepInsideVsift => Self::KeepInsideVsift,
+            WatchOutputError::KeepNameNotAllowed => Self::KeepNameNotAllowed,
+        }
+    }
+}
+
+/// A `watch` run that failed after its job sealed, with `--keep`: what failed,
+/// and what became of the bundle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WatchFailedAfterKeep {
+    /// What failed.
+    pub error: EngineError,
+    /// What became of the bundle.
+    pub kept: WatchKept,
+    /// The session the run used.
+    pub session: SessionId,
+    /// Whether it was closed; never when the bundle was not written.
+    pub session_closed: bool,
+}
+
+impl From<WatchError<Self>> for EngineError {
+    fn from(error: WatchError<Self>) -> Self {
+        match error {
+            WatchError::Step(error) => error,
+            WatchError::UnusableName(error) => Self::Watch(WatchFailure::UnusableName(error)),
+            WatchError::Output(error) => Self::Watch(error.into()),
+            WatchError::Stopped {
+                transcribed_to,
+                duration,
+            } => Self::Watch(WatchFailure::Stopped {
+                transcribed_to_us: transcribed_to.as_micros(),
+                duration_us: duration.map(MediaTime::as_micros),
+            }),
+            WatchError::FailedAfterKeep {
+                error,
+                kept,
+                session,
+                session_closed,
+            } => Self::WatchFailedAfterKeep(Box::new(WatchFailedAfterKeep {
+                error: (*error).into(),
+                kept,
+                session,
+                session_closed,
+            })),
         }
     }
 }
@@ -158,39 +224,36 @@ impl Engine {
     /// interrupted run of the same video, which its job's record names and
     /// this run continues. A failure after the claim releases it (removing
     /// only what this run created and never a written file) and closes the
-    /// session; a cancellation keeps both.
+    /// session; a cancellation keeps both. With `request.keep`, a session
+    /// whose job has sealed closes only once its bundle is committed.
     ///
     /// # Errors
     ///
     /// [`EngineError::Watch`] for the outputs and for a run the caller
-    /// stopped ([`WatchFailure::Stopped`]), `MISSING_CAPABILITY` errors
+    /// stopped ([`WatchFailure::Stopped`]),
+    /// [`EngineError::WatchFailedAfterKeep`] for a failure after the job
+    /// sealed with `request.keep`, `MISSING_CAPABILITY` errors
     /// when video tools or speech recognition are not set up, and every error
     /// of ingest, the `prepare` job, the reads and `frame get`.
     pub async fn watch(&self, request: WatchRequest) -> Result<WatchOutcome, EngineError> {
         let video = absolute(&request.source)?;
         let output = request.output.as_deref().map(absolute).transpose()?;
+        let keep = request.keep.as_deref().map(absolute).transpose()?;
         let steps = EngineWatchSteps {
             engine: self,
             cancellation: &request.cancellation,
             progress: &request.progress,
         };
         let mut outputs = FolderWatchOutputs::new(self.vsift_roots());
-        Box::pin(run_watch(&steps, &mut outputs, &video, output.as_deref()))
-            .await
-            .map_err(|error| match error {
-                WatchError::Step(error) => error,
-                WatchError::UnusableName(error) => {
-                    EngineError::Watch(WatchFailure::UnusableName(error))
-                }
-                WatchError::Output(error) => EngineError::Watch(error.into()),
-                WatchError::Stopped {
-                    transcribed_to,
-                    duration,
-                } => EngineError::Watch(WatchFailure::Stopped {
-                    transcribed_to_us: transcribed_to.as_micros(),
-                    duration_us: duration.map(MediaTime::as_micros),
-                }),
-            })
+        Box::pin(run_watch(
+            &steps,
+            &mut outputs,
+            &video,
+            output.as_deref(),
+            keep.as_deref(),
+        ))
+        .await
+        .map_err(EngineError::from)
     }
 
     /// The canonical session and managed roots that exist.
@@ -724,6 +787,13 @@ impl WatchSteps for EngineWatchSteps<'_> {
         session: &SessionId,
     ) -> Result<WatchProvenance, EngineError> {
         self.engine.watch_provenance(video_name, source, session)
+    }
+
+    fn keep_session(&self, session: &SessionId, bundle: &Path) -> Result<(), FailureCode> {
+        self.engine
+            .retain_session(session, bundle, SourceRetention::EvidenceOnly)
+            .map(drop)
+            .map_err(|error| error.failure_code())
     }
 
     fn close_session(&self, session: &SessionId) -> bool {

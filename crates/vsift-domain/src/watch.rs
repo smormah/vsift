@@ -128,6 +128,15 @@ impl WatchOutputNames {
         format!("{}{FOLDER_SUFFIX}", self.stem)
     }
 
+    /// The folder name of the bundle `--keep` writes: the stem, each `:`
+    /// made `-`. Linux allows a `:` in a file name, but a bundle's folder
+    /// name may not hold one on any system (ADR 0037, amendment of
+    /// 2026-10-30), and a recording can carry a clock time in its name.
+    #[must_use]
+    pub fn bundle(&self) -> String {
+        self.stem.replace(':', "-")
+    }
+
     /// Whether the stem was shortened, so the subtitles no longer share the
     /// video's name and a player will not pick them up by itself.
     #[must_use]
@@ -266,6 +275,19 @@ mod tests {
     use std::ffi::OsStr;
 
     use super::*;
+
+    #[test]
+    fn a_bundle_is_named_after_the_stem_with_no_colon() -> Result<(), OutputNameError> {
+        let plain = WatchOutputNames::from_video_name(OsStr::new("call.mp4"))?;
+        assert_eq!(plain.bundle(), "call");
+        let clock = WatchOutputNames::from_video_name(OsStr::new("Screencast 10:30:00.webm"))?;
+        assert_eq!(clock.bundle(), "Screencast 10-30-00");
+        assert_eq!(clock.transcript(), "Screencast 10:30:00.txt");
+        let long = "a".repeat(400) + ".mp4";
+        let shortened = WatchOutputNames::from_video_name(OsStr::new(&long))?;
+        assert!(shortened.bundle().len() <= MAX_OUTPUT_NAME_BYTES);
+        Ok(())
+    }
 
     fn names(name: &str) -> Result<WatchOutputNames, OutputNameError> {
         WatchOutputNames::from_video_name(OsStr::new(name))

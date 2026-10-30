@@ -164,8 +164,8 @@ pub use watch::{
     PreparedTranscript, PublishedPart, SNAPSHOT_INTERVAL_SECONDS, ScreenChange, ScreenChangeEntry,
     ScreenChangeSummary, ScreenChanges, SessionFrame, SnapshotState, TranscriptEntry,
     TranscriptLine, UnfinishedWatch, WatchClaimLog, WatchDocuments, WatchError, WatchFile,
-    WatchFrame, WatchOutcome, WatchOutputError, WatchOutputKind, WatchOutputs, WatchProgress,
-    WatchProvenance, WatchSnapshot, WatchSteps, WrittenFrame, run_watch,
+    WatchFrame, WatchKept, WatchOutcome, WatchOutputError, WatchOutputKind, WatchOutputs,
+    WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps, WrittenFrame, run_watch,
 };
 
 /// Port used to inspect one specialist runtime dependency.

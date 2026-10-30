@@ -126,3 +126,11 @@ artifact list, be 128 KiB; `bundle validate` accepts bundles within the new boun
 every other rule of this record is unchanged. Recoverable jobs keep private files under
 `sessions/<ses>/jobs/` (records, locks and chunk checkpoints); they are never listed in
 a manifest, so `session retain` never exports them.
+
+## 2026-10-30 note: a bundle can come from the action (W6h)
+
+`vsift <video> --keep <folder>` ([ADR 0037](0037-vsift-video-the-action.md), amendment of 2026-10-30) writes a bundle
+through the same `retain_bundle` as `session retain`, into a new subfolder the action names. Everything above holds: the
+destination is created exclusively and owner-private, the manifest is written last, the bundle is revalidated, and VSift
+never deletes what an interrupted or failed export leaves. Typing `--keep` is the explicit intent. The source is not
+included.

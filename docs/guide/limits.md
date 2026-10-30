@@ -160,6 +160,12 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   While the run works, `<name>.txt` and `<name>.srt` are replaced by a fresh snapshot at most every 10 s; an editor
   that locks the file keeps that from happening until it lets go. At the end VSift tries for 30 s, then stops with
   `STORAGE_IO`, and the file keeps its last snapshot. A file that is not writable is reported the same way.
+- **`--keep` keeps the transcript and the frames, not the video or on-screen text**
+  ([L-244](../planning/known-limits.md#l-244)). `vsift <video>` does not run `ocr`, so `bundle search` finds spoken
+  words only in what it keeps, and says so for each recording. Two videos with one name cannot share a keep folder. If
+  the recording cannot be kept, your files stand and VSift leaves its session open, with its private copy of the video,
+  for about a day unused, and gives you the `session retain` command to run. Until then the transcript's header, which
+  says the session was closed, is not true.
 - **A hidden `.<name>.<random>.vsift-partial` file** can be left beside the outputs if the computer or the process
   stops hard in the middle of an update. It is VSift's and safe to delete.
 - **Stopping and starting again.** Ctrl-C keeps the files, each saying where it stopped (`STOPPED: ...`), and keeps VSift's private

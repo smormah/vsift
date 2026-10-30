@@ -1509,6 +1509,7 @@ pub(crate) struct WatchRange {
 /// `watch` data: what the finish screen needs of it.
 #[derive(Debug, Deserialize)]
 pub(crate) struct Watched {
+    pub(crate) session_id: String,
     pub(crate) duration_us: u64,
     pub(crate) not_transcribed: Vec<WatchRange>,
     pub(crate) screen_changes_beyond_bound: bool,
@@ -1518,4 +1519,12 @@ pub(crate) struct Watched {
     pub(crate) changes_found: u64,
     pub(crate) changes_listed: u64,
     pub(crate) frames: Vec<serde_json::Value>,
+    pub(crate) kept: Option<WatchKept>,
+}
+
+/// The bundle `--keep` asked for.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchKept {
+    pub(crate) name: String,
+    pub(crate) failure_code: Option<String>,
 }

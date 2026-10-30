@@ -16,7 +16,7 @@ use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, BundleManifest, BundleSourcePolicy, BundleStatus, ChainCheck,
     FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, SESSIONS_DIRECTORY,
-    StoredArtifact, StoredArtifactKind,
+    SessionStoreOpenError, StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest,
     copy_and_hash_bounded, create_regular_file, hash_bounded, map_open_error, map_storage_io,
     open_regular_file,
@@ -32,7 +32,64 @@ use super::{
 };
 use crate::private_user_root::create_private_child;
 
+/// Why a bundle could not be written at a destination.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BundleDestinationRefusal {
+    /// Something exists at the name, a link included.
+    Taken,
+    /// A bundle's folder may not have that name on any system.
+    NameNotAllowed,
+    /// The path is not one a bundle can be at (a network path).
+    Unusable,
+    /// The folder refused the private directory, or could not keep it
+    /// private.
+    Refused(io::ErrorKind),
+}
+
 impl FilesystemSessionStore {
+    /// Checks, before any work, that [`Self::retain_bundle`] could create a
+    /// bundle at `output_path`.
+    ///
+    /// The real name is created privately, proved private and removed again:
+    /// one step that proves the name free and the folder able to hold a
+    /// private directory, with no second name to clean up. The name is not
+    /// held afterwards; `retain_bundle` creates it exclusively, so whatever
+    /// takes it meanwhile is never replaced.
+    ///
+    /// # Errors
+    ///
+    /// A [`BundleDestinationRefusal`], with nothing left at the name.
+    pub fn check_bundle_destination(output_path: &Path) -> Result<(), BundleDestinationRefusal> {
+        validate_root_selection(output_path).map_err(|error| match error {
+            SessionStoreOpenError::RootNameNotAllowed => BundleDestinationRefusal::NameNotAllowed,
+            _ => BundleDestinationRefusal::Unusable,
+        })?;
+        let refused = |error: io::Error| BundleDestinationRefusal::Refused(error.kind());
+        let (Some(parent_path), Some(name)) = (output_path.parent(), output_path.file_name())
+        else {
+            return Err(BundleDestinationRefusal::Unusable);
+        };
+        let canonical_parent = fs::canonicalize(parent_path).map_err(refused)?;
+        let parent = Dir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
+            .map_err(refused)?;
+        create_private_child(&parent, &canonical_parent, Path::new(name)).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                BundleDestinationRefusal::Taken
+            } else {
+                refused(error)
+            }
+        })?;
+        let private = parent
+            .open_dir_nofollow(Path::new(name))
+            .map_err(refused)
+            .and_then(|bundle| {
+                validate_platform_root_permissions(output_path, &bundle)
+                    .map_err(|_| BundleDestinationRefusal::Refused(io::ErrorKind::PermissionDenied))
+            });
+        let removed = parent.remove_dir(Path::new(name)).map_err(refused);
+        private.and(removed)
+    }
+
     /// Explicitly exports one committed session to a new private data-only directory.
     ///
     /// The destination is created exclusively and is never selected for automatic

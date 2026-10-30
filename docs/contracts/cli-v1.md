@@ -3528,6 +3528,7 @@ come with their stories.
 vsift ./meeting.mp4
 vsift watch ./meeting.mp4 --output ./notes
 vsift ./meeting.mp4 --json
+vsift ./meeting.mp4 --keep ./kept-calls
 ```
 
 **One action for a person with a recording
@@ -3612,6 +3613,11 @@ remediation that names the kind of output, never a file name (L-071):
 | `--output` inside VSift's own folders | `INVALID_ARGUMENT` | `--output names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.` |
 | `--output` not usable as a folder | `INVALID_ARGUMENT` | `--output takes a folder: an existing one, or a new one whose parent folder exists.` |
 | The video's name is not Unicode, or has nothing before its extension | `INVALID_ARGUMENT` | `... so VSift cannot name its files after it. Rename the video, then run it again.` |
+| `--keep`: the name is taken in that folder | `INVALID_ARGUMENT` | `A recording of this name is already kept in that folder, and VSift never replaces it. Keep this one in another folder with --keep <folder>, or rename the video.` |
+| `--keep` not usable as a folder, or not on a local drive | `INVALID_ARGUMENT` | `--keep takes a folder on a local drive: an existing one, or a new one whose parent folder exists.` |
+| `--keep` inside VSift's own folders | `INVALID_ARGUMENT` | `--keep names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.` |
+| `--keep`: the video's name cannot name a kept recording's folder | `INVALID_ARGUMENT` | `... (a Windows device name). Rename the video, then run it again.` |
+| `--keep`: the folder refuses a private folder | `STORAGE_IO` | `VSift could not write a private folder into that folder (...). Choose a folder you can write to with --keep <folder>.` |
 | A copied frame differs from its SHA-256 | `INTEGRITY_FAILURE` | `... so the run kept nothing. Run it again; if it happens again, report it.` |
 
 Every other failure is the underlying command's, with its code and remediation (`ingest`'s source
@@ -3622,23 +3628,45 @@ this first pull request the run releases the names it claimed and closes the ses
 interrupted run, and files that grow while it runs, come with the second pull request (ADR 0037
 sections 7 and 8).
 
+**`--keep <folder>`: keep the recording for later search (ADR 0037, amendment of 2026-10-30).** A run whose job seals
+writes one retained bundle (ADR 0013) to `<folder>/<name>`, after the outputs and before its session closes, so `vsift
+bundle search <folder>` finds it. `<name>` is the stem, each `:` made `-`. The folder is an existing one or a new one whose
+parent exists, and the same folder takes every recording; the bundle is owner-private, and the video is not copied in. On-screen
+text is not read, because the action does not run `ocr`: `bundle search` says so per recording. The name is checked before any
+work and not held during the run; nothing is ever replaced (L-244).
+
+- **A bundle that cannot be written.** The outputs stand and the session is left open: `kept.state` is `not_kept` with
+  `kept.failure_code`, `session_closed` is false, `outcome` is `partial`, and a fixed warning gives the `session retain`
+  command. **The envelope's status stays `complete` and the exit status 0, as for every partial of `watch`, so a script
+  reads `data.outcome` and `kept.state`, not only `status`.**
+- **A job that did not seal keeps nothing.** A run stopped by Ctrl-C, or failed before the seal, writes no bundle.
+- **A failure after the seal** (a final write refused, a frame that failed) still writes the bundle, because it does not
+  need the outputs, and the session closes only once the bundle is committed. The failure keeps its own code and
+  remediation, the remediation's last words say what became of the bundle, and `data` holds `session_id`,
+  `session_closed` and `kept` ([`watch-failure-data.schema.json`](../../schemas/v1/watch-failure-data.schema.json)).
+  This is the only failure of `watch` that carries `data`; every other failed `watch` has `data` null.
+- **Run again.** The option is not recorded in the job: the run that finishes does what its own command line says, so
+  adding, dropping or changing `--keep` on a rerun continues the job and keeps as that line says.
+
 **The answer** ([`watch-data.schema.json`](../../schemas/v1/watch-data.schema.json), example
 [`watch.json`](../../schemas/v1/examples/watch.json)): command `watch` (also for `vsift <video>`),
 status `complete`, and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
 `duration_us`, `transcript_revision_id` (`null` with no sound track), `visual_index_revision_id`
-(`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range or
-`screen_changes_beyond_bound` or `frames_stopped_for_room` is true), `not_transcribed` (half-open
+(`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range,
+`screen_changes_beyond_bound` or `frames_stopped_for_room` is true, or `kept.state` is `not_kept`), `not_transcribed` (half-open
 ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
 `screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
 only for the folder), `changes_found` (every screen change the visual stream found), `changes_listed`
 (the settled screens `screen-changes.txt` lists, each with its reason: the first frame, each screen once
 motion settles, and a change at least 5 s after the one listed before it), and `frames` (each with
-`time_us`, `candidate_id`, `evidence_id`, `path` and `sha256`, at most 180, for listed changes only). With `--events jsonl` the stream carries the
+`time_us`, `candidate_id`, `evidence_id`, `path` and `sha256`, at most 180, for listed changes only), and `kept` (`null`
+without `--keep`; otherwise `state`, `path`, `name` and `failure_code`). With `--events jsonl` the stream carries the
 `prepare` job's progress events, then the terminal event with the same data.
 
 **The readable view** writes ADR 0033's live line on standard error while it works (terminal only),
 then on standard output the finish screen: `Done: HH:MM:SS of video`, one line per output, a line per
-range not transcribed, a line when screen changes stop at four hours or the names were shortened, that
+range not transcribed, a line when screen changes stop at four hours or the names were shortened, with
+`--keep` a line for the kept recording or the words of a failed one with the `session retain` command, that
 each file names the video's SHA-256, and last `More: vsift watch --help`. Like all readable text it is
 unstable and not for parsing.
 
