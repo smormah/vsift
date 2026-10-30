@@ -237,10 +237,10 @@ Refused: a line with two or more time tokens (`9:00 - 10:00`, `1:23 / 4:56`), a 
 letter, digit, `/` or a further `:` or `.` group (`16:9`, `10:30:00.0`, `1.2.3:45`), a one-digit hour
 without AM or PM (`1:23` is a duration far more often than a time), numeric dates with slashes or
 dots (`10/21/2026` is two different days), zone abbreviations (`IST` and `CST` each name several
-zones, so a dated face followed by one counts as having no stated zone), and lines under a score
-bound. ADR 0030 calls the engine's score uncalibrated, so that bound is set from the measured
-distribution (see "Evidence first"), not assumed. A fraction of a second is read and ignored: the
-unit stays 1 s.
+zones, so a dated face followed by one counts as having no stated zone), and lines scoring under
+0.80. That bound only trims junk and is **no defence against a misread**: on compressed clocks,
+wrong readings scored as high as right ones (decision 22), so the model has to catch them (decision
+13). A fraction of a second is read and ignored: the unit stays 1 s.
 
 *Step 2, the track.* Faces of one format class in one place (`TextRegion::same_place`) over
 consecutive read frames become a **clock** only with at least three reads and at least one advance,
@@ -308,6 +308,15 @@ itself an interval. What it means depends on its sign and shape:
 | `backward` | The offset falls | A stretch repeated or moved, or a clock set back | No: reported as a conflict |
 | `freeze` | A value holds past its unit, then the clock resumes | The screen stopped while the video ran, so video time is still right | No |
 | (another clock) | The jump is within its width of a multiple of 15 minutes, and at least 30 minutes | Most likely another machine's clock in the same place | No: two clocks |
+
+**A misread comes first.** OCR reads a plausible wrong digit (`14:17` as `14:13`) with a high score,
+and a minute clock's pixels hold for a minute, so one misread is likely to repeat on every read of
+that minute. Three reads therefore do not make a misread into a run of its own in any useful sense. So
+before any row below applies: a stretch with runs on both sides that share an offset interval is a
+**misread**, whatever its length. Its reads are dropped and counted in the report, and no jump is
+recorded. A misread of an hour digit lands on whole hours, so the last row below catches it. One at the
+very end of a recording, with nothing after it to return to, stays a detected gap, which changes no
+value (below).
 
 The last row is what decision 9 demands. Two presenters' taskbars in one place differ by whole hours,
 and that must never read as a cut. The cost is that a real pause of exactly an hour is reported as
@@ -494,12 +503,20 @@ only through `--accept-gap` or `--screen-zone`. Its operator and tag anchors sta
 
 ### 22. Evidence first, then slices in one pull request
 
-**Before slice 1:** one hosted dispatch, synthetic only, with the existing `ocr` and no new code in
-VSift. It covers taskbar-sized clocks at 1080p and at 1440p downscaled to 1080p, at a screen
-recording's usual H.264 quality, on light and dark bars, in 12-hour and 24-hour faces, and it reports
-the share of reads that parse exactly and the score distribution. That sets the score bound. If under
-two thirds of reads parse exactly at 1080p, three reads in a row will not hold and the story's value
-changes, so the work stops for a decision before building.
+**Before slice 1:** one hosted dispatch, synthetic only, with the existing runner and no new code in
+VSift, asked whether taskbar-sized clocks can be read at all; under two thirds parsing exactly at
+1080p would have stopped the work. Run 41069543181, 2026-10-30, drew 12 to 14 px clocks in stand-in
+fonts on light and dark bars, in 12-hour and 24-hour faces, with and without seconds:
+
+| Case (H.264, `veryfast`) | Frames | Exact | Wrong | Not found |
+| --- | --- | --- | --- | --- |
+| Native 1080p, CRF 23 | 960 | 100% | 0% | 0% |
+| 1440p scaled to 1080p, CRF 23 | 960 | 100% | 0% | 0% |
+| Native 1080p, CRF 32 | 960 | 93.65% | 3.33% | 3.02% |
+
+At CRF 32, right readings scored 0.9057 at the lowest and wrong ones 0.8993 to 0.9997, so the two
+overlap and no bound separates them. The desktop was nearly still and the fonts were stand-ins, so
+this shows that small text survives at this quality, not that a real taskbar reads well.
 
 1. Zoneless clocks as their own sources: grammar, tracks, intervals, rollover search, `clocks`, the
    registry, the anchors, the schema and the contract tests.
