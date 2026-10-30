@@ -3598,8 +3598,8 @@ that week.**
   `vsift-governance public-claims` reads the words each of them shows (the text, title and
   description elements, not the attributes), so a controlled word or a banned phrase in a graphic
   fails the Governance job like one in a document. What it cannot see is that the roadmap graphic
-  names where the project stands (since 2026-10-16: R0 done, `0.2.1` "now", `0.2.2` and `0.2.3`
-  next, R1 planned): after a release moves "now", its words are still allowed and no longer true.
+  names where the project stands (since 2026-10-30: R0 done, `0.2.3` "now", `0.2.4` next, `0.3.0`,
+  `1.0.0` and R1 planned): after a release moves "now", its words are still allowed and no longer true.
 - **Evidence:** [`docs/assets/readme/README.md`](../assets/readme/README.md) (when to redraw);
   `docs/planning/public-claims.json` (`documents`); the scan's tests in
   `tools/vsift-governance/src/public_claims/`.
