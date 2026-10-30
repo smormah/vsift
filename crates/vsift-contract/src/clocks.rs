@@ -121,6 +121,18 @@ struct ExcursionData {
     explanations: [&'static str; 2],
 }
 
+/// A rollover whose search an excursion or a freeze ended, at the width it has.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The names are the published JSON, and every time in it says its unit"
+)]
+struct BracketData {
+    from_us: u64,
+    to_us: u64,
+    width_us: u64,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct FreezeData {
     from_us: u64,
@@ -153,6 +165,7 @@ struct ClockData {
     first: Option<ReadData>,
     excursions: Vec<ExcursionData>,
     excursions_total: usize,
+    stopped_brackets: Vec<BracketData>,
     freezes: Vec<FreezeData>,
     jumps: Vec<JumpData>,
 }
@@ -285,6 +298,16 @@ fn clock_data(index: usize, clock: &ScreenClock, register: &ClockRegister) -> Cl
             .filter_map(excursion_data)
             .collect(),
         excursions_total: clock.excursions().len(),
+        stopped_brackets: clock
+            .stopped_brackets()
+            .into_iter()
+            .take(MAX_LISTED)
+            .map(|(from, to)| BracketData {
+                from_us: from.as_micros(),
+                to_us: to.as_micros(),
+                width_us: to.as_micros() - from.as_micros(),
+            })
+            .collect(),
         freezes: clock
             .freezes()
             .iter()

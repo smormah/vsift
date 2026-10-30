@@ -809,6 +809,10 @@ The data member of a clocks result (0.3.0, ADR 0029, stage 2): the clocks found 
 | `clocks[].excursions[].last.region.height` | integer | yes | at least 0 |
 | `clocks[].excursions[].explanations` | array of any | yes | Both are always offered; the cause is not known.; at least 2 items |
 | `clocks[].excursions_total` | integer | yes | at least 0 |
+| `clocks[].stopped_brackets` | array of object | yes | Rollovers whose search an excursion or a freeze ended, at the width they have. The search moves to the next rollover, so one misread costs one bracket, and this says which.; at most 64 items |
+| `clocks[].stopped_brackets[].from_us` | integer | yes | at least 0 |
+| `clocks[].stopped_brackets[].to_us` | integer | yes | at least 0 |
+| `clocks[].stopped_brackets[].width_us` | integer | yes | at least 0 |
 | `clocks[].freezes` | array of object | yes | at most 64 items |
 | `clocks[].freezes[].from_us` | integer | yes | at least 0 |
 | `clocks[].freezes[].to_us` | integer | yes | at least 0 |

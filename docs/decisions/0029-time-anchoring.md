@@ -296,8 +296,10 @@ between narrows the offset to the frame where it changed. **The search keeps no 
   the index's bounds hold, and a new engine build starts again, because its index is a new one.
 - A search stops at a bracket of 500 ms (*tentative*), which from a 10 s grid takes five reads. A
   midpoint that shows neither side's value becomes an excursion's read, so that bracket's search ends
-  at the width it has (decision 13). Each run searches its first and last rollover only, since one
-  fixes the offset and two prove the rate. A jump's position is narrowed the same way. A session
+  at the width it has (decision 13). The search moves to the next rollover, so one misread costs one
+  bracket, and `stopped_brackets` reports each with its width, so a clock whose every rollover was
+  stopped shows it. Each run searches its first and last usable rollover only, since one fixes the
+  offset and two prove the rate. A jump's position is narrowed the same way. A session
   spends at most 256 such frames (*tentative*).
 - One call reads in rounds, each seeing what the last read, and commits them all as **one** index
   revision, so a search does not spend the session's 64 revisions.

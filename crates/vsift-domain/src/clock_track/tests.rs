@@ -402,6 +402,50 @@ fn the_search_never_brackets_across_an_excursions_reads() -> TestResult {
     Ok(())
 }
 
+/// The planner's condition (ADR 0029 decision 12): a misread ends that bracket's
+/// search at the width it has, moves the search to the next rollover, and shows.
+#[test]
+fn a_misread_costs_one_rollover_and_the_report_shows_which() -> TestResult {
+    let place = region(1800, 1040)?;
+    let start = 14 * 3_600;
+    let mut reads = minute_reads(start, 0, 130, place)?;
+    for at in [130, 140, 150, 160, 170] {
+        reads.push(read(at, "14:08", place)?);
+    }
+    reads.extend(minute_reads(start, 180, 300, place)?);
+    let analysis = analyse(reads);
+    let clock = only_clock(&analysis)?;
+    let [bracket] = clock
+        .stopped_brackets()
+        .try_into()
+        .map_err(|_| "no single bracket")?;
+    assert_eq!(
+        bracket,
+        (
+            MediaTime::from_micros(120 * SECOND),
+            MediaTime::from_micros(180 * SECOND)
+        )
+    );
+    let next = analysis.next_reads();
+    assert_eq!(
+        next.first(),
+        Some(&MediaTime::from_micros(55 * SECOND)),
+        "the search stays with the first rollover it can use"
+    );
+    assert!(
+        next.iter().any(|time| time.as_micros() > 180 * SECOND),
+        "and the last rollover is still searched: {next:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_clock_with_no_excursion_has_no_stopped_bracket() -> TestResult {
+    let analysis = analyse(minute_reads(14 * 3_600, 0, 300, region(1800, 1040)?)?);
+    assert_eq!(only_clock(&analysis)?.stopped_brackets(), Vec::new());
+    Ok(())
+}
+
 #[test]
 fn a_rate_is_judged_across_runs_and_only_when_proved() -> TestResult {
     let place = region(900, 40)?;

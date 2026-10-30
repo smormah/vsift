@@ -64,6 +64,7 @@
           }
         ],
         "excursions_total": 1,
+        "stopped_brackets": [],
         "freezes": [],
         "jumps": [
           {

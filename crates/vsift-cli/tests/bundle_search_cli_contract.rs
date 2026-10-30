@@ -435,6 +435,22 @@ async fn a_damaged_bundle_is_listed_and_the_rest_are_searched() -> TestResult {
     Ok(())
 }
 
+/// Anchors changed in a manifest that still parses cost that bundle too: the
+/// checks `bundle validate` makes are the ones a search makes (ADR 0029).
+#[tokio::test]
+async fn a_manifest_with_changed_anchors_is_listed_and_the_rest_are_searched() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let folder = kept_folder(&root, &[&["refund"], &["refund"]]).await?;
+    let path = folder.join("call-1").join("bundle.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&path)?)?;
+    manifest["time_anchors"] = json!([{"source": "file_modified", "media_time_us": 0}]);
+    fs::write(&path, serde_json::to_vec(&manifest)?)?;
+    let value = parsed(&search(&root, &[&folder], "refund", &[])?)?;
+    assert_eq!(hit_texts(&value)?, ["call-2: refund"]);
+    assert_eq!(value["data"]["sessions"][0]["reason"], "integrity_failure");
+    Ok(())
+}
+
 /// A transcript record changed after retaining is caught by its digest.
 #[tokio::test]
 async fn a_changed_transcript_record_is_refused_by_its_digest() -> TestResult {

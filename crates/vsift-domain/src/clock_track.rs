@@ -376,6 +376,31 @@ impl ScreenClock {
         best
     }
 
+    /// The moments that do not belong to the clock: the reads of its excursions
+    /// and freezes. A bracket holding one cannot be searched.
+    fn outside_reads(&self) -> Vec<MediaTime> {
+        self.excursions
+            .iter()
+            .flat_map(|excursion| excursion.reads.iter())
+            .chain(self.freezes.iter().flat_map(|freeze| freeze.reads.iter()))
+            .map(|read| read.time)
+            .collect()
+    }
+
+    /// The rollovers whose search an excursion or a freeze ended, each still
+    /// wider than [`ROLLOVER_BRACKET_MICROS`]: what the clock's precision does
+    /// not gain from them, reported so that it is never hidden (ADR 0029
+    /// decision 12).
+    #[must_use]
+    pub fn stopped_brackets(&self) -> Vec<(MediaTime, MediaTime)> {
+        let outside = self.outside_reads();
+        self.runs
+            .iter()
+            .flat_map(|run| rollovers_of(run, self.unit))
+            .filter(|bracket| holds_any(*bracket, &outside) && is_wide(*bracket))
+            .collect()
+    }
+
     /// Whether a jump or a freeze lies between two runs, or no run follows: a
     /// rate is judged only across what ran on.
     fn breaks_between(&self, before: Option<&ClockRun>, after: Option<&ClockRun>) -> bool {
@@ -523,39 +548,26 @@ impl ClockAnalysis {
     pub fn next_reads(&self) -> Vec<MediaTime> {
         let mut times = Vec::new();
         for clock in &self.clocks {
-            let outside: Vec<MediaTime> = clock
-                .excursions
-                .iter()
-                .flat_map(|excursion| excursion.reads.iter())
-                .chain(clock.freezes.iter().flat_map(|freeze| freeze.reads.iter()))
-                .map(|read| read.time)
-                .collect();
+            let outside = clock.outside_reads();
             if clock.unit == ClockUnit::Minute {
                 for run in &clock.runs {
-                    let rollovers: Vec<(MediaTime, MediaTime)> = run
-                        .reads
-                        .windows(2)
-                        .filter(|pair| pair[1].value - pair[0].value == clock.unit.as_micros())
-                        .map(|pair| (pair[0].read.time, pair[1].read.time))
+                    // A bracket an excursion ended is passed over, so one misread
+                    // costs that rollover and not the run's whole search.
+                    let open: Vec<(MediaTime, MediaTime)> = rollovers_of(run, clock.unit)
+                        .into_iter()
+                        .filter(|bracket| !holds_any(*bracket, &outside))
                         .collect();
-                    times.extend(
-                        rollovers
-                            .first()
-                            .copied()
-                            .and_then(|pair| midpoint(pair, &outside)),
-                    );
-                    if rollovers.len() > 1 {
-                        times.extend(
-                            rollovers
-                                .last()
-                                .copied()
-                                .and_then(|pair| midpoint(pair, &outside)),
-                        );
+                    times.extend(open.first().copied().and_then(midpoint_of_wide));
+                    if open.len() > 1 {
+                        times.extend(open.last().copied().and_then(midpoint_of_wide));
                     }
                 }
             }
             for jump in &clock.jumps {
-                times.extend(midpoint((jump.before.time, jump.after.time), &outside));
+                let bracket = (jump.before.time, jump.after.time);
+                if !holds_any(bracket, &outside) {
+                    times.extend(midpoint_of_wide(bracket));
+                }
             }
         }
         times.sort();
@@ -564,14 +576,26 @@ impl ClockAnalysis {
     }
 }
 
-fn midpoint((before, after): (MediaTime, MediaTime), outside: &[MediaTime]) -> Option<MediaTime> {
-    let (from, to) = (before.as_micros(), after.as_micros());
-    if to.saturating_sub(from) <= ROLLOVER_BRACKET_MICROS
-        || outside.iter().any(|time| (before..=after).contains(time))
-    {
-        return None;
-    }
-    Some(MediaTime::from_micros(from + (to - from) / 2))
+/// The two reads either side of each change of a run's value by one unit.
+fn rollovers_of(run: &ClockRun, unit: ClockUnit) -> Vec<(MediaTime, MediaTime)> {
+    run.reads
+        .windows(2)
+        .filter(|pair| pair[1].value - pair[0].value == unit.as_micros())
+        .map(|pair| (pair[0].read.time, pair[1].read.time))
+        .collect()
+}
+
+fn holds_any((before, after): (MediaTime, MediaTime), times: &[MediaTime]) -> bool {
+    times.iter().any(|time| (before..=after).contains(time))
+}
+
+fn is_wide((before, after): (MediaTime, MediaTime)) -> bool {
+    after.as_micros().saturating_sub(before.as_micros()) > ROLLOVER_BRACKET_MICROS
+}
+
+fn midpoint_of_wide(bracket: (MediaTime, MediaTime)) -> Option<MediaTime> {
+    let (from, to) = (bracket.0.as_micros(), bracket.1.as_micros());
+    is_wide(bracket).then(|| MediaTime::from_micros(from + (to - from) / 2))
 }
 
 /// One place on the screen and the faces of one class read there.

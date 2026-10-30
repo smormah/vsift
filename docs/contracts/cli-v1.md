@@ -2361,6 +2361,8 @@ examples [`clocks.json`](../../schemas/v1/examples/clocks.json) and
 - `excursions`: reads whose offset left a clock and returned to the same interval. The cause is not
   known, so both `explanations` are offered, `misread` and `another_clock`. The reads leave the track,
   and nothing about them is a gap;
+- `stopped_brackets`: rollovers whose search an excursion or a freeze ended, with `width_us`. The search
+  moves to the next rollover, so one misread costs one bracket;
 - `freezes`: a value held past its unit, so the screen stopped while the video ran. The video's time is
   still right;
 - `jumps`: `gap` (the offset rose: time may be missing from the video, or the machine changed) and

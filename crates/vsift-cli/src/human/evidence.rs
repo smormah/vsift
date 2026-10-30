@@ -183,6 +183,15 @@ fn push_screen_clock(text: &mut TerminalText, clock: &ScreenClockView) {
         text.push_fixed("  More such stretches are in --json")
             .end_line();
     }
+    for bracket in &clock.stopped_brackets {
+        text.push_fixed("  A rollover between ");
+        push_clock(text, bracket.from_us);
+        text.push_fixed(" and ");
+        push_clock(text, bracket.to_us);
+        text.push_fixed(" was not narrowed: it stays ");
+        push_clock(text, bracket.width_us);
+        text.push_fixed(" wide").end_line();
+    }
     for freeze in &clock.freezes {
         text.push_fixed("  Stood still, ");
         push_clock(text, freeze.from_us);

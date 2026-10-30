@@ -442,6 +442,7 @@ pub(crate) struct ScreenClockView {
     pub(crate) rate: Option<ClockRateView>,
     pub(crate) excursions: Vec<ClockExcursionView>,
     pub(crate) excursions_total: u64,
+    pub(crate) stopped_brackets: Vec<ClockBracketView>,
     pub(crate) freezes: Vec<ClockFreezeView>,
     pub(crate) jumps: Vec<ClockJumpView>,
 }
@@ -465,6 +466,14 @@ pub(crate) struct ClockExcursionView {
     pub(crate) from_us: u64,
     pub(crate) to_us: u64,
     pub(crate) reads: u64,
+}
+
+/// A rollover whose search an excursion or a freeze ended.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockBracketView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) width_us: u64,
 }
 
 /// A stretch a clock stood still.

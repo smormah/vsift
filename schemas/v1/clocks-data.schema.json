@@ -202,6 +202,7 @@
         "first",
         "excursions",
         "excursions_total",
+        "stopped_brackets",
         "freezes",
         "jumps"
       ],
@@ -341,6 +342,34 @@
         "excursions_total": {
           "type": "integer",
           "minimum": 0
+        },
+        "stopped_brackets": {
+          "description": "Rollovers whose search an excursion or a freeze ended, at the width they have. The search moves to the next rollover, so one misread costs one bracket, and this says which.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from_us",
+              "to_us",
+              "width_us"
+            ],
+            "properties": {
+              "from_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "to_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "width_us": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
         },
         "freezes": {
           "type": "array",

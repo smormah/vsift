@@ -586,6 +586,33 @@ async fn a_rollover_to_read_needs_a_runner_and_says_so() -> TestResult {
     Ok(())
 }
 
+/// A misread across a rollover ends that bracket's search, and the report says
+/// so with its width (ADR 0029 decision 12).
+#[tokio::test]
+async fn a_rollover_a_misread_stopped_is_reported_with_its_width() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root, Some("2026-10-21T14:00:00Z")).await?;
+    let mut reads: Vec<(u64, String)> = (0..30)
+        .map(|step| {
+            let shown = 14 * 3_600 + step * 10;
+            (
+                step * 10,
+                format!("{:02}:{:02}", shown / 3_600, shown / 60 % 60),
+            )
+        })
+        .collect();
+    for read in reads.iter_mut().filter(|read| (130..180).contains(&read.0)) {
+        read.1 = "14:08".to_owned();
+    }
+    commit_reads(&seeded, &reads)?;
+    let value = clocks_json(&root, &[])?;
+    let clock = &value["data"]["clocks"][0];
+    assert_eq!(clock["excursions_total"], 1);
+    assert_eq!(clock["stopped_brackets"][0]["from_us"], 120 * SECOND);
+    assert_eq!(clock["stopped_brackets"][0]["width_us"], 60 * SECOND);
+    Ok(())
+}
+
 #[tokio::test]
 async fn a_session_that_never_ran_clocks_gains_no_member() -> TestResult {
     let root = OwnedRoot::new()?;
