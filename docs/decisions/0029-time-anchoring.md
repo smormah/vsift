@@ -319,11 +319,11 @@ itself an interval. What it means depends on its sign and shape:
 | `freeze` | A value holds past its unit, then the clock resumes | The screen stopped while the video ran, so video time is still right | No |
 | (another clock) | The jump is within its width of a multiple of 15 minutes, and at least 30 minutes | Most likely another machine's clock in the same place | No: two clocks |
 
-**An excursion comes first.** OCR reads a plausible wrong digit (`14:17` as `14:13`) with a high score,
-and a minute clock's pixels hold for a minute, so one misread may repeat on every read of that minute
-(an inference, to be measured by the second dispatch). So three reads cannot be trusted to mean a run
-of its own. But a stretch with matching runs either side is not always a misread: presenter A, then B
-with a clock 30 s apart, then A again gives the same shape. So the rule does not claim the cause.
+**An excursion comes first.** OCR can read a plausible wrong digit (`14:17` as `14:13`) with a high
+score, and a stretch with matching runs either side has more than one cause: presenter A, then B with a
+clock 30 s apart, then A again gives the same shape. So the rule does not claim the cause. It was first
+reasoned from a misread filling a whole held minute; that was not observed (decision 22), and the rule
+stands because a presenter's turn, and a misread of any length, still take this shape.
 
 - An **excursion** is a stretch of reads in one place whose offset departs and returns to the same
   interval, checked before any row below applies. It is reported in `clocks` with its span, its frames
@@ -546,10 +546,24 @@ this shows that small text survives at this quality, not that a real taskbar rea
 
 A slice that does not qualify at the cut leaves the earlier ones standing.
 
-**After slices 1 and 2:** the second and last dispatch, small and synthetic only. It holds each value
-for 60 s of real video at CRF 32, measures how often a misread persists across consecutive frames of
-one minute, which is the basis of the excursion rule, and exercises the tracks. Its numbers go in the
-run's artifact as well as the job summary, because a summary can be read only when signed in.
+**After slices 1 and 2:** the second and last dispatch, small and synthetic only, run 41111066004 at
+`9c95bff8` (so before the search learned to pass over a stopped bracket).
+
+*Held values.* 320 consecutive minutes, each held for 60 s of video at 12 px and CRF 32 and read four
+times from 5 s after it changed: **1,280 exact, none wrong, none missing.** So whether a misread persists
+across a held minute is **not answered**: there was no misread to follow. It bounds misreads of a held
+value at under about 1% (none in 320), against 3.33% of reads in the first run. The two runs differ in how
+soon they read after a change (1 s against 5 s or more), in how many digits changed, and in the frame rate
+(30 against 10), and these were not separated. One reading, unproved: misreads gather in the frames just
+after a change, which are the frames a rollover search reads.
+
+*End to end.* The commit's `vsift ocr` and `vsift clocks` over four recordings of known clocks, at 14 px
+and CRF 23: all four gave the clocks and gaps drawn, `complete` in one `clocks` call, each precise to
+250 ms. The cut of 420 s was measured as 419.8 s, ±0.45 s. A screen of static times set 92 reads aside and
+made no clock. **Not explained:** each scene reported excursions on a clock drawn without a fault (1, 2, 1
+and 1). The likely cause is the test, not the model: FFmpeg's `between()` includes both ends, so the frame
+at each exact minute shows both values drawn over each other, and `ocr`'s 10 s grid reads those frames.
+The report holds no read text, so this is not proved.
 
 ### Limits (L-213)
 
