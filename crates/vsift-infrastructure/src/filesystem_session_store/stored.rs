@@ -109,6 +109,7 @@ impl StoredLifecycle {
             artifact_count: self.artifacts.len(),
             artifact_bytes,
             time_anchors: super::time_anchors::decode_time_anchors(&self.time_anchors)?,
+            screen_clocks: super::time_anchors::decode_screen_clocks(&self.screen_clocks)?,
             origin: self
                 .origin
                 .as_ref()

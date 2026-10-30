@@ -28,6 +28,8 @@ pub const MIN_JUMP_MICROS: i64 = 2_000_000;
 pub const MIN_OTHER_CLOCK_JUMP_MICROS: i64 = 30 * 60 * 1_000_000;
 /// The bracket a rollover search stops at: enough for the second.
 pub const ROLLOVER_BRACKET_MICROS: u64 = 500_000;
+/// Most frames a session's rollover searches read, across its calls.
+pub const MAX_ROLLOVER_FRAMES: usize = 256;
 /// Most places on the screen one analysis follows; more are only counted.
 pub const MAX_CLOCK_PLACES: usize = 64;
 
@@ -407,20 +409,69 @@ impl ScreenClock {
         })
     }
 
-    /// The reading the clock gives as an anchor, and how precise it is: at the
-    /// first read of its tightest run. `None` for a counter, and for a clock
-    /// with no date, which cannot be written as a date and time.
+    /// Where the clock is best known: the first read of its tightest run, the
+    /// reading it gives there when it has a date, and its offset interval.
+    #[must_use]
+    pub fn position(&self) -> Option<(MediaTime, Option<ClockReading>, OffsetInterval)> {
+        let run = self.runs.iter().min_by_key(|run| run.offset.width())?;
+        let first = run.reads.first()?;
+        let time = first.read.time.as_micros().cast_signed();
+        let moved = run.offset.low + time - first.value;
+        let reading = match first.read.face.reading() {
+            Some(reading) => Some(reading.shifted(moved)?),
+            None => None,
+        };
+        Some((first.read.time, reading, run.offset))
+    }
+
+    /// The reading the clock gives as an anchor, and how precise it is. `None`
+    /// for a counter, and for a clock with no date, which cannot be written as
+    /// a date and time.
     #[must_use]
     pub fn anchor(&self) -> Option<(MediaTime, ClockReading, OffsetInterval)> {
         if self.kind == ClockKind::Counter {
             return None;
         }
-        let run = self.runs.iter().min_by_key(|run| run.offset.width())?;
-        let first = run.reads.first()?;
-        let reading = first.read.face.reading()?;
-        let time = first.read.time.as_micros().cast_signed();
-        let moved = run.offset.low + time - first.value;
-        Some((first.read.time, reading.shifted(moved)?, run.offset))
+        let (time, reading, offset) = self.position()?;
+        Some((time, reading?, offset))
+    }
+
+    /// The first read the track kept.
+    #[must_use]
+    pub fn first_read(&self) -> Option<&ClockRead> {
+        self.runs
+            .first()
+            .and_then(|run| run.reads.first())
+            .map(|tracked| &tracked.read)
+    }
+
+    /// Whether it was read on both sides of a moment and did not jump there:
+    /// the cross-check on another clock's jump.
+    #[must_use]
+    pub fn spans_without_a_jump(&self, before: MediaTime, after: MediaTime) -> bool {
+        let spans = self.first_time().is_some_and(|first| first <= before)
+            && self.last_time().is_some_and(|last| last >= after);
+        spans
+            && !self
+                .jumps
+                .iter()
+                .any(|jump| jump.before.time <= after && jump.after.time >= before)
+    }
+
+    /// Whether the two were read over a common stretch.
+    #[must_use]
+    pub fn overlaps(&self, other: &Self) -> bool {
+        match (
+            self.first_time(),
+            self.last_time(),
+            other.first_time(),
+            other.last_time(),
+        ) {
+            (Some(first), Some(last), Some(other_first), Some(other_last)) => {
+                first <= other_last && other_first <= last
+            }
+            _ => false,
+        }
     }
 
     fn adopt(&mut self, other: Self) {
@@ -562,6 +613,22 @@ pub fn clock_reads(index: &ScreenTextIndex) -> (Vec<ClockRead>, ClockRefusals) {
         }
     }
     (reads, refusals)
+}
+
+/// How many frames of `index` only a rollover search asked for: none of their
+/// targets is a candidate or lies on the index's period.
+#[must_use]
+pub fn rollover_frames(index: &ScreenTextIndex) -> usize {
+    let period = index.period_micros();
+    index
+        .frames()
+        .iter()
+        .filter(|frame| {
+            frame.targets.iter().all(|target| {
+                target.candidate.is_none() && !target.time.as_micros().is_multiple_of(period)
+            })
+        })
+        .count()
 }
 
 /// What the clocks of `index` do, over a video of `duration`.

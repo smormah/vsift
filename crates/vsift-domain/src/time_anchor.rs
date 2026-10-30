@@ -764,13 +764,131 @@ pub struct ClockTime {
     pub confidence: AnchorConfidence,
     /// The clock on the screen it came from, if one did.
     pub clock: Option<ClockId>,
+    /// Which segment of the timeline it lies in, from 0, when a gap divides the
+    /// timeline. After a `detected` gap this says the time may be off by it.
+    pub segment: Option<usize>,
+}
+
+/// Most gaps one session keeps.
+pub const MAX_CLOCK_GAPS: usize = 32;
+
+/// A gap a clock showed, in the order VSift first registered it: `g1`, `g2`.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GapId(u8);
+
+impl GapId {
+    /// The gap of this ordinal, from 1 to [`MAX_CLOCK_GAPS`].
+    #[must_use]
+    pub const fn new(ordinal: u8) -> Option<Self> {
+        if ordinal == 0 || ordinal as usize > MAX_CLOCK_GAPS {
+            None
+        } else {
+            Some(Self(ordinal))
+        }
+    }
+
+    /// The gap `g<ordinal>` names.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        let digits = text.strip_prefix('g')?;
+        if digits.is_empty() || digits.starts_with('0') {
+            return None;
+        }
+        Self::new(digits.parse().ok()?)
+    }
+
+    /// Its ordinal, from 1.
+    #[must_use]
+    pub const fn ordinal(self) -> u8 {
+        self.0
+    }
+}
+
+impl fmt::Display for GapId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "g{}", self.0)
+    }
+}
+
+/// Whether a person has said a gap is real.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GapState {
+    /// Found by `clocks`. It changes no value: this design cannot tell a cut
+    /// from a change of machine (ADR 0029 decision 13).
+    Detected,
+    /// A person accepted it, so clock times after it move by its length.
+    Accepted,
+}
+
+impl GapState {
+    /// Every state.
+    pub const ALL: [Self; 2] = [Self::Detected, Self::Accepted];
+
+    /// Stable public identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Detected => "detected",
+            Self::Accepted => "accepted",
+        }
+    }
+
+    /// The state named by `identifier`, if any.
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|state| state.identifier() == identifier)
+    }
+}
+
+/// Where a clock showed time may be missing from the video.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ClockGap {
+    /// Its id.
+    pub id: GapId,
+    /// The clock that showed it.
+    pub clock: ClockId,
+    /// The first moment after it: where the next segment starts.
+    pub at: MediaTime,
+    /// The clock's jump, in microseconds: the lower bound.
+    pub jump_low_micros: i64,
+    /// Just past the upper bound.
+    pub jump_high_micros: i64,
+    /// Whether a person accepted it.
+    pub state: GapState,
+}
+
+impl ClockGap {
+    /// The jump's middle, which is what an accepted gap moves clock times by.
+    #[must_use]
+    pub const fn jump_micros(&self) -> i64 {
+        self.jump_low_micros + (self.jump_high_micros - self.jump_low_micros) / 2
+    }
+
+    /// How far the middle can be from the true jump.
+    #[must_use]
+    pub const fn uncertainty_micros(&self) -> i64 {
+        (self.jump_high_micros - self.jump_low_micros) / 2
+    }
+
+    /// What it adds to the clock times after it: nothing until accepted.
+    #[must_use]
+    pub const fn adjustment_micros(&self) -> i64 {
+        match self.state {
+            GapState::Detected => 0,
+            GapState::Accepted => self.jump_micros(),
+        }
+    }
 }
 
 /// A session's anchors in ladder order: at most one per stage-1 source, and one
-/// per clock and moment for a clock on the screen.
+/// per clock and moment for a clock on the screen, with the gaps that divide
+/// its timeline into segments.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub struct TimeAnchors {
     anchors: Vec<TimeAnchor>,
+    gaps: Vec<ClockGap>,
 }
 
 impl TimeAnchors {
@@ -779,7 +897,46 @@ impl TimeAnchors {
     pub const fn none() -> Self {
         Self {
             anchors: Vec::new(),
+            gaps: Vec::new(),
         }
+    }
+
+    /// These anchors with `gaps`, in timeline order, at most [`MAX_CLOCK_GAPS`].
+    #[must_use]
+    pub fn with_gaps(&self, mut gaps: Vec<ClockGap>) -> Self {
+        gaps.sort_by_key(|gap| (gap.at, gap.id));
+        gaps.truncate(MAX_CLOCK_GAPS);
+        Self {
+            anchors: self.anchors.clone(),
+            gaps,
+        }
+    }
+
+    /// The gaps, in timeline order.
+    #[must_use]
+    pub fn gaps(&self) -> &[ClockGap] {
+        &self.gaps
+    }
+
+    /// How many gaps lie at or before `media_time`: the segment it is in.
+    fn segment_at(&self, media_time: MediaTime) -> usize {
+        self.gaps.iter().filter(|gap| gap.at <= media_time).count()
+    }
+
+    /// What accepted gaps add at `media_time`, counted from the start.
+    fn adjustment_at(&self, media_time: MediaTime) -> i64 {
+        self.gaps
+            .iter()
+            .filter(|gap| gap.at <= media_time)
+            .map(ClockGap::adjustment_micros)
+            .sum()
+    }
+
+    /// `anchor`'s reading at `media_time`, moved by the accepted gaps between
+    /// them. A detected gap moves nothing.
+    fn reading_of(&self, anchor: &TimeAnchor, media_time: MediaTime) -> Option<ClockReading> {
+        let moved = self.adjustment_at(media_time) - self.adjustment_at(anchor.media_time);
+        anchor.reading_at(media_time)?.shifted(moved)
     }
 
     /// Orders `anchors` by the ladder.
@@ -799,7 +956,10 @@ impl TimeAnchors {
         }) {
             return Err(TimeAnchorError::TooManyAnchors);
         }
-        Ok(Self { anchors })
+        Ok(Self {
+            anchors,
+            gaps: Vec::new(),
+        })
     }
 
     /// These anchors with their screen anchors replaced by `screen`, the most
@@ -818,7 +978,10 @@ impl TimeAnchors {
         anchors.extend(screen);
         anchors.sort_by_key(ladder_key);
         anchors.dedup_by_key(|anchor| ladder_key(anchor));
-        Self { anchors }
+        Self {
+            anchors,
+            gaps: self.gaps.clone(),
+        }
     }
 
     /// The anchors of a newly ingested source: the operator's statement, if
@@ -848,7 +1011,10 @@ impl TimeAnchors {
             }
         }
         anchors.sort_by_key(|anchor| anchor.source);
-        Self { anchors }
+        Self {
+            anchors,
+            gaps: Vec::new(),
+        }
     }
 
     /// Every anchor, in ladder order.
@@ -884,7 +1050,7 @@ impl TimeAnchors {
         let readings: Vec<(ClockReading, i64)> = self
             .anchors
             .iter()
-            .filter_map(|anchor| Some((anchor.reading_at(start)?, anchor.precision_micros())))
+            .filter_map(|anchor| Some((self.reading_of(anchor, start)?, anchor.precision_micros())))
             .collect();
         let mut compared = false;
         for (index, (first, first_precision)) in readings.iter().enumerate() {
@@ -912,10 +1078,11 @@ impl TimeAnchors {
     pub fn clock_time_at(&self, media_time: MediaTime) -> Option<ClockTime> {
         let anchor = self.selected()?;
         Some(ClockTime {
-            reading: anchor.reading_at(media_time)?,
+            reading: self.reading_of(anchor, media_time)?,
             source: anchor.source,
             confidence: anchor.confidence(),
             clock: anchor.screen.map(|detail| detail.clock),
+            segment: (!self.gaps.is_empty()).then(|| self.segment_at(media_time)),
         })
     }
 }
@@ -1320,6 +1487,128 @@ mod tests {
                 precision_micros,
             },
         ))
+    }
+
+    fn gap(
+        ordinal: u8,
+        at_seconds: u64,
+        jump_seconds: i64,
+        state: GapState,
+    ) -> Result<ClockGap, Box<dyn Error>> {
+        Ok(ClockGap {
+            id: GapId::new(ordinal).ok_or("no gap")?,
+            clock: ClockId::new(1).ok_or("no clock")?,
+            at: MediaTime::from_micros(at_seconds * 1_000_000),
+            jump_low_micros: jump_seconds * 1_000_000 - 1_000,
+            jump_high_micros: jump_seconds * 1_000_000 + 1_000,
+            state,
+        })
+    }
+
+    fn stated(text: &str) -> Result<TimeAnchors, Box<dyn Error>> {
+        Ok(TimeAnchors::from_ingest(
+            Some(ClockReading::parse(text)?),
+            &[],
+            0,
+        ))
+    }
+
+    /// The planner's ruling (ADR 0029 decision 13): a detected gap marks the
+    /// items after it and changes no value.
+    #[test]
+    fn a_detected_gap_changes_no_value_and_marks_the_segment() -> TestResult {
+        let plain = stated("2026-10-21T14:00:00Z")?;
+        let marked = plain.with_gaps(vec![gap(1, 300, 437, GapState::Detected)?]);
+        let after = MediaTime::from_micros(400_000_000);
+        let (before_gap, past_gap) = (
+            marked
+                .clock_time_at(MediaTime::from_micros(0))
+                .ok_or("no time")?,
+            marked.clock_time_at(after).ok_or("no time")?,
+        );
+        assert_eq!(before_gap.segment, Some(0));
+        assert_eq!(past_gap.segment, Some(1));
+        assert_eq!(
+            past_gap.reading,
+            plain.clock_time_at(after).ok_or("no time")?.reading,
+            "a detected gap moves nothing"
+        );
+        assert_eq!(
+            plain.clock_time_at(after).and_then(|clock| clock.segment),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_accepted_gap_moves_only_what_lies_after_it() -> TestResult {
+        let anchors =
+            stated("2026-10-21T14:00:00Z")?.with_gaps(vec![gap(1, 300, 437, GapState::Accepted)?]);
+        let at = |seconds: u64| {
+            anchors
+                .clock_time_at(MediaTime::from_micros(seconds * 1_000_000))
+                .and_then(|clock| clock.reading.utc_unix_micros())
+        };
+        let start = at(0).ok_or("no time")?;
+        assert_eq!(at(299), Some(start + 299_000_000));
+        assert_eq!(at(300), Some(start + (300 + 437) * 1_000_000));
+        Ok(())
+    }
+
+    #[test]
+    fn gaps_add_up_and_a_screen_anchor_past_one_is_measured_from_where_it_is() -> TestResult {
+        let local = ClockReading::parse("2026-10-21T14:10:00")?;
+        let anchors = TimeAnchors::none()
+            .with_screen_anchors(vec![screen_anchor(
+                AnchorSource::ScreenClock,
+                1,
+                400,
+                local,
+                1,
+            )?])
+            .with_gaps(vec![
+                gap(1, 300, 100, GapState::Accepted)?,
+                gap(2, 500, 50, GapState::Accepted)?,
+            ]);
+        let at = |seconds: u64| {
+            anchors
+                .clock_time_at(MediaTime::from_micros(seconds * 1_000_000))
+                .and_then(|clock| clock.reading.local())
+        };
+        assert_eq!(at(400), Some(civil("2026-10-21T14:10:00")?));
+        assert_eq!(at(0), Some(civil("2026-10-21T14:01:40")?));
+        assert_eq!(at(500), Some(civil("2026-10-21T14:12:30")?));
+        Ok(())
+    }
+
+    #[test]
+    fn an_anchor_past_a_detected_gap_disagrees_until_a_person_accepts_it() -> TestResult {
+        let base = stated("2026-10-21T14:00:00Z")?;
+        // 300 s in, but the clock says 437 s more than that.
+        let reading = ClockReading::parse("2026-10-21T14:12:17Z")?;
+        let anchors = base.with_screen_anchors(vec![screen_anchor(
+            AnchorSource::ScreenTimestamp,
+            1,
+            300,
+            reading,
+            1,
+        )?]);
+        let detected = anchors.with_gaps(vec![gap(1, 300, 437, GapState::Detected)?]);
+        assert_eq!(detected.consistency(), Some(AnchorConsistency::Conflicting));
+        let accepted = anchors.with_gaps(vec![gap(1, 300, 437, GapState::Accepted)?]);
+        assert_eq!(accepted.consistency(), Some(AnchorConsistency::Consistent));
+        Ok(())
+    }
+
+    #[test]
+    fn gap_ids_read_back_and_refuse_what_is_not_one() {
+        for ordinal in [1, 2, 32] {
+            let id = GapId::new(ordinal);
+            assert_eq!(id.and_then(|id| GapId::parse(&id.to_string())), id);
+        }
+        for text in ["g0", "g33", "g", "c1", "g01"] {
+            assert_eq!(GapId::parse(text), None, "{text}");
+        }
     }
 
     #[test]

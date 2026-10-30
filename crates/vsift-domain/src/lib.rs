@@ -63,12 +63,15 @@ pub use clock_face::{
     ClockFace, ClockFaceRefusal, ClockFormat, ClockUnit, MAX_CLOCK_LINE_BYTES,
     MIN_CLOCK_LINE_BASIS_POINTS, read_clock_face,
 };
-pub use clock_register::{ClockRegister, RegisteredClock};
+pub use clock_register::{
+    ClockConflict, ClockRegister, ClockStatementError, OffsetObservation, RegisteredClock,
+};
 pub use clock_track::{
     CLOCK_RULES_VERSION, ClockAnalysis, ClockExcursion, ClockFreeze, ClockJump, ClockJumpKind,
-    ClockKind, ClockRate, ClockRead, ClockRefusals, ClockRun, MAX_CLOCK_PLACES, MIN_JUMP_MICROS,
-    MIN_OTHER_CLOCK_JUMP_MICROS, MIN_RUN_READS, OffsetInterval, PAINT_SLACK_MICROS,
-    ROLLOVER_BRACKET_MICROS, ScreenClock, analyse_clocks, analyse_reads, clock_reads,
+    ClockKind, ClockRate, ClockRead, ClockRefusals, ClockRun, MAX_CLOCK_PLACES,
+    MAX_ROLLOVER_FRAMES, MIN_JUMP_MICROS, MIN_OTHER_CLOCK_JUMP_MICROS, MIN_RUN_READS,
+    OffsetInterval, PAINT_SLACK_MICROS, ROLLOVER_BRACKET_MICROS, ScreenClock, analyse_clocks,
+    analyse_reads, clock_reads, rollover_frames,
 };
 pub use evidence::{
     AUDIO_CLIP_SAMPLE_RATE, AudioRange, BurstCount, BurstExtent, BurstPlan, BurstRange, Confidence,
@@ -141,9 +144,10 @@ pub use storage::{
 };
 pub use time_anchor::{
     ANCHOR_AGREEMENT_MICROS, AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime,
-    ClockId, ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, MAX_CLOCK_TEXT_BYTES,
-    MAX_SCREEN_CLOCKS, MAX_TIME_ANCHORS, ScreenAnchor, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor,
-    TimeAnchorError, TimeAnchors, UtcOffset,
+    ClockGap, ClockId, ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, GapId,
+    GapState, MAX_CLOCK_GAPS, MAX_CLOCK_TEXT_BYTES, MAX_SCREEN_CLOCKS, MAX_TIME_ANCHORS,
+    ScreenAnchor, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor, TimeAnchorError, TimeAnchors,
+    UtcOffset,
 };
 pub use timeline::{
     CropParseError, CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,

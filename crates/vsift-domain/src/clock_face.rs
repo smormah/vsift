@@ -38,6 +38,26 @@ pub enum ClockUnit {
 }
 
 impl ClockUnit {
+    /// Every unit.
+    pub const ALL: [Self; 2] = [Self::Minute, Self::Second];
+
+    /// Stable public identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Minute => "minute",
+            Self::Second => "second",
+        }
+    }
+
+    /// The unit named by `identifier`, if any.
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|unit| unit.identifier() == identifier)
+    }
+
     /// How long one reading of this face holds, in microseconds.
     #[must_use]
     pub const fn as_micros(self) -> i64 {
@@ -79,6 +99,14 @@ impl ClockFormat {
             Self::Dated => "dated",
             Self::DatedWithZone => "dated_with_zone",
         }
+    }
+
+    /// The class named by `identifier`, if any.
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|format| format.identifier() == identifier)
     }
 }
 

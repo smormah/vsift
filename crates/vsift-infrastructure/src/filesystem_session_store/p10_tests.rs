@@ -899,6 +899,7 @@ fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
         verified_source_identity: None,
         workspace_retention_seconds: None,
         time_anchors: Vec::new(),
+        screen_clocks: Vec::new(),
         origin: None,
     };
     let add = |count: usize| {
@@ -910,8 +911,42 @@ fn a_session_holds_at_most_512_artifacts_in_a_bounded_manifest() -> TestResult {
             },
         )
     };
-    let full = add(super::MAX_SESSION_ARTIFACTS - 1)?.ok_or("no lifecycle")?;
+    let mut full = add(super::MAX_SESSION_ARTIFACTS - 1)?.ok_or("no lifecycle")?;
     assert_eq!(full.artifacts.len(), super::MAX_SESSION_ARTIFACTS);
+    // The largest clock members a session can hold (ADR 0029 decision 18).
+    let reading = vsift_domain::ClockReading::parse("2026-10-21T14:03:12.123456+13:45")?;
+    let clock = vsift_domain::ClockId::new(8).ok_or("no clock")?;
+    let anchors: Vec<vsift_domain::TimeAnchor> = (0..vsift_domain::MAX_TIME_ANCHORS)
+        .map(|index| {
+            vsift_domain::TimeAnchor::on_screen(
+                vsift_domain::AnchorSource::ScreenClockConfirmed,
+                vsift_domain::MediaTime::from_micros(
+                    14_400_000_000 + u64::try_from(index).unwrap_or(0),
+                ),
+                reading,
+                vsift_domain::ScreenAnchor {
+                    clock,
+                    precision_micros: 86_400_000_000,
+                },
+            )
+        })
+        .collect();
+    full.time_anchors =
+        super::time_anchors::encode_time_anchors(&vsift_domain::TimeAnchors::new(anchors)?);
+    let clocks: Vec<vsift_domain::RegisteredClock> = (1..=8_u8)
+        .filter_map(vsift_domain::ClockId::new)
+        .map(|id| {
+            Ok(vsift_domain::RegisteredClock {
+                id,
+                format: vsift_domain::ClockFormat::DatedWithZone,
+                unit: vsift_domain::ClockUnit::Second,
+                offset: vsift_domain::OffsetInterval::new(i64::MIN / 2, i64::MAX / 2)
+                    .ok_or("no interval")?,
+                confirmed_offset: Some(vsift_domain::UtcOffset::from_seconds(-50_400)?),
+            })
+        })
+        .collect::<Result<_, Box<dyn std::error::Error>>>()?;
+    full.screen_clocks = super::time_anchors::encode_screen_clocks(&clocks);
     assert_eq!(
         add(super::MAX_SESSION_ARTIFACTS).err(),
         Some(SessionStorageError::CapacityExhausted)

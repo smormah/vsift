@@ -249,6 +249,7 @@ pub(super) fn update_lifecycle(
                 artifacts,
                 verified_source_identity: None,
                 time_anchors,
+                screen_clocks: Vec::new(),
                 origin,
             }))
         }
@@ -271,6 +272,36 @@ pub(super) fn update_lifecycle(
                 return Err(SessionStorageError::StateConflict);
             }
             record.phase = StoredSessionPhase::Closed;
+            Ok(Some(record))
+        }
+        LifecycleUpdate::SetClocks {
+            time_anchors,
+            screen_clocks,
+            now,
+        } => {
+            let mut record = current.ok_or(SessionStorageError::StateConflict)?;
+            let lifetime = record.validated_lifetime()?;
+            if !matches!(record.phase, StoredSessionPhase::Open) || lifetime.expired(now) {
+                return Err(SessionStorageError::StateConflict);
+            }
+            // Only the screen's anchors may change: what the operator stated
+            // and what the file's tags said stay as the session opened.
+            let held = super::time_anchors::decode_time_anchors(&record.time_anchors)?;
+            let next = super::time_anchors::decode_time_anchors(&time_anchors)?;
+            let opened = |anchors: &vsift_domain::TimeAnchors| {
+                anchors
+                    .anchors()
+                    .iter()
+                    .filter(|anchor| !anchor.source().is_on_screen())
+                    .copied()
+                    .collect::<Vec<_>>()
+            };
+            if opened(&held) != opened(&next) {
+                return Err(SessionStorageError::IntegrityFailure);
+            }
+            super::time_anchors::decode_screen_clocks(&screen_clocks)?;
+            record.time_anchors = time_anchors;
+            record.screen_clocks = screen_clocks;
             Ok(Some(record))
         }
         LifecycleUpdate::SealTranscript { artifact, now } => {
