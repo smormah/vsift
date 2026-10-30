@@ -22,7 +22,7 @@ use vsift_application::{
     BundleScreenTextHit, BundleSearchCounts, BundleSearchError, BundleSearchOutcome,
     BundleSessionCoverage, BundleSessionEntry, BundleTranscript, BundleUnreadable,
 };
-use vsift_domain::SearchQuery;
+use vsift_domain::{ScreenTextCoverage, SearchQuery};
 
 use crate::{
     CommandName, CoverageResponse, LifecycleResponse, OperationResponse, ResultView,
@@ -244,13 +244,13 @@ impl ScreenTextData {
                 state,
                 reason: None,
                 index_id: None,
-                coverage: CoverageData::new(Default::default(), None, false),
+                coverage: CoverageData::new(ScreenTextCoverage::default(), None, false),
             },
             BundleScreenText::Unavailable(reason) => Self {
                 state,
                 reason: Some(unreadable_identifier(*reason)),
                 index_id: None,
-                coverage: CoverageData::new(Default::default(), None, false),
+                coverage: CoverageData::new(ScreenTextCoverage::default(), None, false),
             },
             BundleScreenText::Read {
                 index_id,
@@ -467,7 +467,8 @@ fn partial_reasons(outcome: &BundleSearchOutcome<TranscriptSegmentData>) -> Vec<
         ),
     ]
     .into_iter()
-    .filter_map(|(applies, reason)| applies.then(|| reason.to_owned()))
+    .filter(|(applies, _)| *applies)
+    .map(|(_, reason)| reason.to_owned())
     .collect()
 }
 

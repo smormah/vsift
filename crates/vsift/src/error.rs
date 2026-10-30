@@ -449,6 +449,9 @@ impl EngineError {
     pub const fn failure_code(&self) -> FailureCode {
         match self {
             Self::SessionRoot(error) => error.failure_code(),
+            Self::BundleSearch(vsift_application::BundleSearchError::Cancelled) => {
+                FailureCode::Cancelled
+            }
             Self::Storage(error) => storage_failure_code(*error),
             Self::OpenSession(error) => open_session_failure_code(*error),
             // The code the lookup answered before the typed error existed (L-127).
@@ -482,6 +485,7 @@ impl EngineError {
             | Self::TranscriptPending { .. }
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
+            | Self::BundleSearch(_)
             | Self::TranscriptQuery(_)
             | Self::NoAudioStream
             | Self::RangeOutsideSource
@@ -515,10 +519,6 @@ impl EngineError {
             Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::Ocr(error) => error.failure_code(),
-            Self::BundleSearch(vsift_application::BundleSearchError::Cancelled) => {
-                FailureCode::Cancelled
-            }
-            Self::BundleSearch(_) => FailureCode::InvalidArgument,
             Self::Watch(failure) => failure.failure_code(),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid

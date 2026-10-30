@@ -247,20 +247,17 @@ pub(super) fn bundle_search(envelope: &Envelope<BundleSearch>) -> Result<Rendere
     text.push_fixed("Recordings:").end_line();
     for session in &data.sessions {
         text.push_fixed("  ").push_value(&session.bundle);
-        match (&session.transcript, &session.screen_text) {
-            (Some(transcript), Some(screen_text)) => {
-                text.push_fixed(": hits ")
-                    .push_unsigned(session.hits)
-                    .push_fixed(", transcript ")
-                    .push_value(&transcript.state)
-                    .push_fixed(", on-screen text ")
-                    .push_value(&screen_text.state);
-            }
-            _ => {
-                text.push_fixed(": ").push_value(&session.state);
-                if let Some(reason) = &session.reason {
-                    text.push_fixed(" (").push_value(reason).push_fixed(")");
-                }
+        if let (Some(transcript), Some(screen_text)) = (&session.transcript, &session.screen_text) {
+            text.push_fixed(": hits ")
+                .push_unsigned(session.hits)
+                .push_fixed(", transcript ")
+                .push_value(&transcript.state)
+                .push_fixed(", on-screen text ")
+                .push_value(&screen_text.state);
+        } else {
+            text.push_fixed(": ").push_value(&session.state);
+            if let Some(reason) = &session.reason {
+                text.push_fixed(" (").push_value(reason).push_fixed(")");
             }
         }
         text.end_line();

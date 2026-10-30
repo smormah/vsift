@@ -622,7 +622,7 @@ async fn the_read_budget_stops_at_declared_sizes() -> TestResult {
         let bundle = folder.join(format!("call-{at:02}"));
         if at > 0 {
             fs::create_dir(&bundle)?;
-            restrict_like(&template, &bundle)?;
+            restrict(&bundle)?;
         }
         fs::write(bundle.join("bundle.json"), serde_json::to_vec(&manifest)?)?;
     }
@@ -640,22 +640,21 @@ async fn the_read_budget_stops_at_declared_sizes() -> TestResult {
 
 /// Gives `bundle` the private permissions a bundle has.
 #[cfg(unix)]
-fn restrict_like(_template: &Path, bundle: &Path) -> TestResult {
+fn restrict(bundle: &Path) -> TestResult {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(bundle, fs::Permissions::from_mode(0o700))?;
     Ok(())
 }
 
-/// Gives `bundle` the private permissions a bundle has: the only way a test can
-/// on Windows is `session retain` itself, which wrote `template`.
+/// Gives `bundle` the private permissions a bundle has.
 #[cfg(windows)]
-fn restrict_like(template: &Path, bundle: &Path) -> TestResult {
+fn restrict(bundle: &Path) -> TestResult {
     let copied = std::process::Command::new("icacls")
         .arg(bundle)
         .args(["/inheritance:r", "/grant:r"])
         .arg(format!("{}:(OI)(CI)F", env::var("USERNAME")?))
         .output()?;
-    assert!(copied.status.success(), "icacls failed for {template:?}");
+    assert!(copied.status.success(), "icacls failed");
     Ok(())
 }
 
