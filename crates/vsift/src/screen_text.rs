@@ -430,6 +430,10 @@ where
     total.ok_or(ScreenTextBuildError::Index(ScreenTextError::InvalidFrames))
 }
 
+#[cfg(test)]
+#[path = "screen_text/rounds_tests.rs"]
+mod rounds_tests;
+
 /// One round's extension added to the rounds before it. A target of a later
 /// round may join a frame an earlier one read, which the index does not hold yet.
 fn absorbed(mut earlier: ScreenTextExtension, later: ScreenTextExtension) -> ScreenTextExtension {
