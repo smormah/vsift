@@ -316,6 +316,10 @@ impl HandoffRule {
     /// The rule's fixed prose. A schema rule may carry more specific fixed
     /// prose for one pattern or combination instead (`messages`).
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One exhaustive match holds the fixed prose of every rule"
+    )]
     pub const fn message(self) -> &'static str {
         match self {
             Self::HandoffBlockMissing => {

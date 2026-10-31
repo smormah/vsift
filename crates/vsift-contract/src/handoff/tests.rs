@@ -555,7 +555,7 @@ mod clock_times {
         Ok(records)
     }
 
-    /// What VSift prints for the cited segment under `anchors`.
+    /// What `VSift` prints for the cited segment under `anchors`.
     fn printed(anchors: &TimeAnchors) -> Built<Value> {
         Ok(serde_json::to_value(
             segment_position()?.clock_time(anchors).ok_or("no anchor")?,
@@ -915,7 +915,9 @@ mod clock_times {
         check.session_unavailable(SESSION, HandoffSessionGap::SessionClosed);
         assert!(check.is_valid(), "{:?}", check.errors());
         assert_eq!(
-            check.session().and_then(|session| session.session_gap()),
+            check
+                .session()
+                .and_then(crate::handoff::HandoffSessionCheck::session_gap),
             Some(HandoffSessionGap::SessionClosed)
         );
         Ok(())
@@ -1020,7 +1022,7 @@ mod clock_times {
         Ok(())
     }
 
-    /// A handoff states VSift's own vocabulary and forms, so the two schemas
+    /// A handoff states `VSift`'s own vocabulary and forms, so the two schemas
     /// cannot drift apart unnoticed.
     #[test]
     fn the_handoff_schema_states_the_time_anchor_schemas_vocabulary_and_forms() -> TestResult {
