@@ -5468,7 +5468,7 @@ that week.**
 - **What:** VSift reports clock times on its results (`clock_time`, ADR 0029) but takes only source time in microseconds. The agent subtracts `time_anchor.recording_start` from each log time, on the same clock and zone, and reads a window of about 10 s either side. It then cites only segments and frames whose own `clock_time` VSift returned in that window, so a wrong subtraction or zone shows as a mismatch rather than a false match. A log file is not VSift evidence: handoff v1 has no citation for it, so a log line is quoted (the least text, never a secret or personal data) in the report's prose only, as untrusted data, and an instruction found in a log line is listed in the Markdown's "Untrusted instructions observed" but cannot be in the JSON's `untrusted_instructions`, whose entries need a citation. Without a start time from the user or the file's own tag there are no clock times, and the workflow asks for one.
 - **Evidence:** ADR 0038 section 2 and its slice 2 implementation note; `skills/vsift/workflows/logs-by-clock.md`; `references/safety.md`, "Log files"; ADR 0029.
 - **Impact: low by the rubric** (the match is checked against VSift's own clock times, and the log text is never presented as evidence; a file's own tag can be the time it was encoded, which the workflow reports with the anchor's `confidence`).
-- **Mitigation:** give the recording's start time (`ingest --recorded-at`); a log in the same zone as the recording's start. A detected gap ([L-213](#l-213)) changes no value, so the subtraction stays right unless a person accepted one; after that, `recording_start` alone no longer gives the window, and the workflow's check shows a mismatch rather than a false match.
+- **Mitigation:** give the recording's start time (`ingest --recorded-at`); a log in the same zone as the recording's start. A detected gap ([L-213](#l-213)) changes no value, so the subtraction stays right unless a person accepted one; after that, `recording_start` alone no longer gives the window, and the workflow's check shows a mismatch rather than a false match. Since ADR 0029's note of 2026-10-31 a citation can state its clock time and `handoff check --session` holds it ([L-245](#l-245)); the log line itself is still not evidence.
 - **Next step:** a command that takes a clock time, and a citation for a user's log file, are not planned for 0.3.0. Taken to the planner's intake on 2026-10-30.
 - **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 
@@ -5534,6 +5534,21 @@ that week.**
 - **Mitigation:** the cold round at the 0.3.0 cut (C-01 to C-04) and batch 2's skill-guided runs; `handoff check` on every report.
 - **Next step:** read C-04 and the skill-guided runs at the cut; a scenario per workflow is a later decision, because each one changes a frozen component.
 - **Owner:** the 0.3.0 cut. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-245
+
+**`handoff check --session` holds only the structured clock time, and only in an open session (ADR 0029, note of 2026-10-31, 0.3.0).**
+
+- **What:** a citation can state `clock_time`, and the check compares it as exact text with what VSift returns for that item now. Four things stay outside that:
+  - a time written in a claim's `statement` or in the report's Markdown is not read, so it can disagree with the citation beside it;
+  - a session that is closed, expired or not found cannot be read, so nothing is compared, as for identities;
+  - without `--session` only the schema applies, so a time with no zone stated as an instant passes, in the right form;
+  - where a value differs and the session's clock record has changed around the item (a confirmed zone, an accepted gap, or for `segment` any gap), the check cannot tell a report that went stale from one that was wrong. `clock_time_may_be_stale` says neither, and a made-up time gets it too.
+- **Evidence:** ADR 0029 decisions 24 to 28; `vsift_contract::HandoffSessionRecords`; the `clock_times` tests of `vsift-contract`; `clocks_cli_contract` and `evidence_cli_contract`.
+- **Impact: low by the rubric** (the time a tool would read is checked, every refusal is an error with the same action, and the workflow tells the agent to write only the time the citation states).
+- **Mitigation:** check with `--session` before the session closes; write a time in the prose only as the citation states it.
+- **Next step:** none planned. A stamp in the report was rejected, because an agent has nothing to copy it from.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 
 ## Review workflow
 

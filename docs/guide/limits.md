@@ -30,6 +30,7 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   `vsift clocks` can show such a gap when a clock is in view, and it changes nothing until you accept it. The
   file's own tags are read only after `vsift setup check` (or any command that looks at the picture or sound)
   has checked the media tools once ([how it works](evidence-and-citations.md#when-it-happened-by-the-clock)).
+  `handoff check --session` holds the clock time a citation states, not a time written in a sentence.
 
 ## The words: speech recognition
 

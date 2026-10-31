@@ -117,6 +117,44 @@ impl ClockTimeData {
     }
 }
 
+/// Where an item lies on the timeline, which is all its clock time depends on
+/// besides the session's anchors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClockItemPosition {
+    /// A frame or crop: the delivered frame's time.
+    Point(MediaTime),
+    /// A transcript segment.
+    Range(TimeRange),
+    /// An audio clip: its planned range and its first decoded sample.
+    RangeWithPoint(TimeRange, MediaTime),
+}
+
+impl ClockItemPosition {
+    /// The item's clock time, by the constructor its own result uses, so
+    /// `handoff check` cannot disagree with what was printed; `None` without
+    /// an anchor.
+    pub(crate) fn clock_time(self, anchors: &TimeAnchors) -> Option<ClockTimeData> {
+        match self {
+            Self::Point(at) => ClockTimeData::point(anchors, at),
+            Self::Range(range) => ClockTimeData::range(anchors, range),
+            Self::RangeWithPoint(range, at) => ClockTimeData::range_with_point(anchors, range, at),
+        }
+    }
+
+    /// Whether a person's word has changed the clock time of any end of the
+    /// item (ADR 0029 decision 25).
+    pub(crate) fn changed_around(self, anchors: &TimeAnchors) -> bool {
+        let changed = |at| anchors.moved_by_a_person_at(at);
+        match self {
+            Self::Point(at) => changed(at),
+            Self::Range(range) => changed(range.start()) || changed(range.end()),
+            Self::RangeWithPoint(range, at) => {
+                changed(range.start()) || changed(range.end()) || changed(at)
+            }
+        }
+    }
+}
+
 /// One anchor in the session's `time_anchor.anchors` list.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 struct AnchorData {

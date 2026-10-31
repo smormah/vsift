@@ -142,6 +142,8 @@ other word is accepted, even one that means the same (`image` is not a gap kind:
 | `claims[].category` | `bug`, `feature_request`, `question`, `decision`, `action_item`, `open_question`, `requirement`, `backlog_item` |
 | `claims[].priority` | `high`, `medium`, `low` |
 | `citations[].type` | `transcript_segment`, `frame`, `crop`, `audio` |
+| `citations[].clock_time.source` | `operator`, `quicktime_creationdate`, `screen_clock_confirmed`, `container_creation_time`, `screen_timestamp`, `screen_clock` |
+| `citations[].clock_time.confidence` | `exact`, `high`, `medium` |
 | `gaps[].kind` | `transcript`, `visual`, `audio`, `image_access`, `dependency`, `budget`, `lifecycle` |
 | `gaps[].reason` | `untranscribed_range`, `not_analyzed`, `deadline_exceeded`, `undecodable`, `no_decoded_frame`, `candidate_budget_exhausted`, `frame_budget`, `pixel_budget`, `byte_budget`, `session_evidence_budget`, `cancelled`, `transcript_unavailable`, `image_access_unavailable`, `image_unreadable`, `not_inspected`, `budget_exhausted`, `needs_user_authority`, `session_expired`, `not_audible_to_agent` |
 | `gaps[].code` | `INTERNAL`, `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `INVALID_SOURCE`, `BUSY`, `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT`, `CANCELLED`, `STORAGE_IO`, `INTEGRITY_FAILURE`, `IDEMPOTENCY_CONFLICT`, `DOWNLOAD_FAILED`, `SOURCE_FETCH_FAILED` |
@@ -205,6 +207,17 @@ an earlier revision still resolves in VSift and in a retained bundle, so nothing
 one, and one inside the replaced range can name text the run replaced. Read the range again with
 `transcript get` and cite the ids you read then, not any you cited from it before. The frames and
 crops you cited stay as they are.
+
+**A clock time (0.3.0).** A citation may add `clock_time` when the reader needs the real-world time,
+as when matching a log. Copy the item's whole `clock_time` member from the VSift result: `source`,
+`confidence`, any `clock_id` and `segment`, and its readings (`start` and `end` for a segment, `at`
+for a frame or crop, either or both for audio). You may leave `utc` or `local` out of a reading, but
+never change a value or add one VSift did not print: a reading with `utc` null has no zone and names
+no instant, and a `segment` is never dropped, because it is the reader's sign that the time may be
+off. When you state one, add `--session <session>` before `--json` in the check, which compares the
+text exactly with what VSift returns for that item now. Clock times can change after you read them,
+so a `clock_time_may_be_stale` finding means read the item again and cite what VSift returns now. In the statement and the prose, write only
+the time the citation states. A VSift before 0.3.0 refuses the member.
 
 `pixels_inspected` is yours alone: true only when you opened that image and read it.
 Times in the prose are written `mm:ss.mmm` from the microseconds VSift returned. When

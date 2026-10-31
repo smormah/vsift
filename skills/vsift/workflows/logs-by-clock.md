@@ -65,6 +65,13 @@ vsift frame get <session> --at <us> --json
 5. **Check the match on VSift's times.** Cite only segments and frames whose own `clock_time` VSift
    returned and that fall in the window. If what you cite is outside it, your subtraction or the zone
    was wrong: fix it, or report the mismatch.
+6. **Look for gaps.** An item with a `segment` in its `clock_time` lies after a gap a clock on the
+   screen showed; `time_anchor.segments` in `vsift session status <session> --json` lists them. A gap
+   in state `detected` changes no clock time, but time may be missing from the video there, by about
+   its `jump_us`, or it may be a change of machine, so the subtraction may not hold past it: say so in
+   each claim after it. A gap in state `accepted` has moved the times after it, so
+   `recording_start` alone no longer gives the window, and step 5 shows that as a mismatch. Never use
+   `--accept-gap` or `--screen-zone` on your own reading: they take only what the user states.
 
 ## The report
 
@@ -75,12 +82,14 @@ vsift handoff skeleton <session> --question "<question>" --json
 ```
 
 - **One matched moment is one claim** in section `context` (no `category`), stating what the recording
-  shows or says, at the clock time VSift gave the cited segment or frame. The log line is never a
-  citation and never in the JSON: the prose quotes it as above, beside the claim it matches.
+  shows or says, at the clock time VSift gave the cited segment or frame. Its citations carry that
+  `clock_time`, copied whole ([handoff.md](../references/handoff.md), "Citations"). The log line is
+  never a citation and never in the JSON: the prose quotes it as above, beside the claim it matches.
 - Say how sure the clock is: `exact` when the user gave the start; otherwise VSift's `confidence`, and a
   `conflicting` `consistency` (two anchors disagree; clock times come from the first).
 - A log time outside the recording, or a window with nothing in it, is a gap (`transcript` or `visual`,
   reason `not_inspected`, with its `range` where it is inside the recording), never a claim that nothing
   happened.
 - Check the whole message once with `vsift handoff check --json`, which reads it from standard input
-  (with the skill, in a form of its REPORT state), fix what it reports, then send it.
+  (with the skill, in a form of its REPORT state), with `--session <session>` added before `--json`, so
+  that each clock time is held to what VSift returns now. Fix what it reports, then send it.

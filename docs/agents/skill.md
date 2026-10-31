@@ -432,6 +432,24 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten again at the merge
   rebase (`v030` rules). **Untried:** no trial scenario runs the skeleton.
 
+## The change for 0.3.0: a citation states its clock time (ADR 0029, note of 2026-10-31; draft)
+
+- **Why.** An agent matching a recording to a log could read `clock_time` from the JSON, but its report could
+  not carry it, so the time that matters most to that reader was neither structured nor checked.
+- **`handoff.schema.json`** gives each citation an optional `clock_time`, the item's member copied whole, with
+  the exact forms pinned by patterns. `references/handoff.md` says how to copy it, lists its two closed values
+  and says what `clock_time_may_be_stale` asks for.
+- **`workflows/logs-by-clock.md`** carries `clock_time` on each matched moment's citations, checks with
+  `--session`, and says what `time_anchor.segments` means: a `detected` gap changes no value but the subtraction
+  may not hold past it, so the claim says so, and an agent never runs `--accept-gap` or `--screen-zone` on its
+  own reading.
+- **`references/commands.md`** allows `--session <session>` before `--json` in the two draft forms, when a report
+  states a clock time. Without it an agent's own check could never hold one.
+- `SKILL.md` and the fuzz seed copy are unchanged, and `plugins/vsift/` mirrors the four files.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten again at the merge
+  rebase (`v030` rules). W6c changes another part of the skill with no order between the two, so whichever merges
+  second rewrites it again. **Untried:** no trial scenario runs this until the cut.
+
 ## The change for 0.3.0: `vsift skill install`, `status` and `show` (ADR 0038 slice 3; draft, 2026-10-29)
 
 - **`references/commands.md`** classes `vsift skill install` `never` (it changes another client's configuration; the

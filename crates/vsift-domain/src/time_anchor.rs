@@ -1085,6 +1085,19 @@ impl TimeAnchors {
             segment: (!self.gaps.is_empty()).then(|| self.segment_at(media_time)),
         })
     }
+
+    /// Whether a person's word reaches the clock time of `media_time`: the
+    /// selected anchor is a clock whose zone they confirmed, or a gap they
+    /// accepted lies between it and `media_time`. These are the only two ways
+    /// an open session's clock times change once it has an anchor (ADR 0029
+    /// decision 17).
+    #[must_use]
+    pub fn moved_by_a_person_at(&self, media_time: MediaTime) -> bool {
+        self.selected().is_some_and(|anchor| {
+            anchor.source == AnchorSource::ScreenClockConfirmed
+                || self.adjustment_at(media_time) != self.adjustment_at(anchor.media_time)
+        })
+    }
 }
 
 /// The order of the ladder: by source, then by clock, then by position.
@@ -1663,6 +1676,50 @@ mod tests {
             Some(AnchorSource::ContainerCreationTime)
         );
         assert_eq!(with_clock.anchors().len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn a_persons_word_reaches_only_what_it_moved() -> TestResult {
+        let start = MediaTime::from_micros(0);
+        let (before, after) = (
+            MediaTime::from_micros(1_000_000),
+            MediaTime::from_micros(9_000_000),
+        );
+        let stated = TimeAnchors::new(vec![tag(
+            AnchorSource::Operator,
+            ClockReading::parse("2026-10-21T14:00:00Z")?,
+        )])?;
+        assert!(!stated.moved_by_a_person_at(after));
+        assert!(!TimeAnchors::none().moved_by_a_person_at(after));
+
+        let gap = ClockGap {
+            id: GapId::new(1).ok_or("no gap")?,
+            clock: ClockId::new(1).ok_or("no clock")?,
+            at: MediaTime::from_micros(6_000_000),
+            jump_low_micros: 30_000_000,
+            jump_high_micros: 31_000_000,
+            state: GapState::Detected,
+        };
+        let detected = stated.with_gaps(vec![gap]);
+        assert!(!detected.moved_by_a_person_at(after), "it changes no value");
+        let accepted = stated.with_gaps(vec![ClockGap {
+            state: GapState::Accepted,
+            ..gap
+        }]);
+        assert!(accepted.moved_by_a_person_at(after));
+        assert!(!accepted.moved_by_a_person_at(before));
+
+        let confirmed = TimeAnchors::new(vec![TimeAnchor::on_screen(
+            AnchorSource::ScreenClockConfirmed,
+            start,
+            ClockReading::parse("2026-10-21T15:00:00+01:00")?,
+            ScreenAnchor {
+                clock: ClockId::new(1).ok_or("no clock")?,
+                precision_micros: 500_000,
+            },
+        )])?;
+        assert!(confirmed.moved_by_a_person_at(before));
         Ok(())
     }
 
