@@ -18,12 +18,17 @@ the contract (see "Human-readable text").
 
 ## Command namespace
 
-Top-level help (`vsift -h` and `vsift --help`) ends with a worked example, "A typical
+Help comes in three lengths, a person's first. Plain `vsift` prints a few lines on where to start
+and runs no check. `-h` gives the commands in groups, or a command's usage, key options, examples
+and guide page. `--help` gives every option, and `vsift help [<command>...]` is the same. Top-level
+`vsift --help` then ends with what an assistant without the skill reads, the worked example "A typical
 investigation": the commands a first investigation runs in order (setup check, ingest with or
 without a supplied transcript, search and transcript reads, candidates, frames, handoff check,
-close), the `--limit` and `--max-frames` ranges, a note that `--session-root` and
-`--host-isolation` are operator options an agent leaves out, and how to read a failure. It is
-help text, not a JSON contract (P14 PR 7); a test parses every command it names.
+close), citing the id behind every fact, reading small numbers, the ready-made workflows, the
+`--limit` and `--max-frames` ranges, a note that `--session-root` and `--host-isolation` are
+operator options an agent leaves out, and how to read a failure. All of it is help text, not a JSON
+contract (P14 PR 7, #454); tests parse every command it names and hold each command to its examples
+and guide page.
 
 Global output options are `--json` for one terminal JSON document and
 `--events jsonl` for a JSON Lines stream. They are mutually exclusive.
@@ -2789,8 +2794,7 @@ Whisper is not needed; clips are decoded by FFmpeg.
 speech tool of their own; a coding agent cannot listen to it, and reading its bytes
 (`base64`, for example) gives the agent nothing. It reads speech through the transcript
 (`transcript get`, `search`). Two pieces of text say so, and neither is a JSON field:
-`audio --help` (the one-line summary the root help lists, and a longer paragraph in
-`--help`), and one sentence of the readable result, on the line under the clip's path:
+`audio --help` (and the assistant's part of the root `--help`), and one sentence of the readable result, on the line under the clip's path:
 "This clip is for a person or a speech tool to play; a coding agent cannot listen to it,
 so an agent reads what was said with vsift transcript get." A frame and a crop, which
 are images an agent opens, carry no such sentence. The `--json` result and the

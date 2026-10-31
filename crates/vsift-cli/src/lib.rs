@@ -12,6 +12,7 @@ mod config;
 mod door;
 mod evidence;
 mod handoff;
+mod help_text;
 mod human;
 mod job;
 mod json_input;
@@ -35,7 +36,7 @@ mod worker;
 
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::Duration};
 
-use clap::{CommandFactory, Parser, error::ErrorKind};
+use clap::{FromArgMatches, error::ErrorKind};
 use command::{
     BundleCommand, Cli, Command, EventFormat, ExecutionProfile, HandoffCommand, JobArguments,
     JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand, SkillCommand,
@@ -245,7 +246,10 @@ where
         watch::route_bare_video(arguments.into_iter().map(Into::into).collect());
     let requested_mode = detect_requested_mode(&arguments);
     let mut writer = OutputWriter::new(standard_output, standard_error);
-    let cli = match Cli::try_parse_from(&arguments) {
+    let parsed = command::parser(std::io::IsTerminal::is_terminal(&io::stdout()))
+        .try_get_matches_from(&arguments)
+        .and_then(|matches| Cli::from_arg_matches(&matches));
+    let cli = match parsed {
         Ok(cli) => cli,
         Err(error)
             if matches!(
@@ -283,7 +287,7 @@ where
     };
 
     let Some(command) = cli.command else {
-        return write_root_help(&mut writer);
+        return write_help_or_version(&mut writer, help_text::BARE_HELP);
     };
     // A strict boundary is attested before anything else runs: a host that
     // cannot provide it stops here with `ISOLATION_UNAVAILABLE` (exit 2).
@@ -1384,18 +1388,6 @@ where
     }
 }
 
-fn write_root_help<StandardOutput, StandardError>(
-    writer: &mut OutputWriter<StandardOutput, StandardError>,
-) -> ProcessExit
-where
-    StandardOutput: Write,
-    StandardError: Write,
-{
-    let mut help = Cli::command().render_long_help().to_string();
-    help.push('\n');
-    write_help_or_version(writer, &help)
-}
-
 /// Writes a failure that may carry a typed remediation.
 fn write_command_failure<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
@@ -1956,7 +1948,10 @@ mod tests {
     #[tokio::test]
     async fn root_and_setup_help_show_help_without_side_effects()
     -> Result<(), Box<dyn std::error::Error>> {
-        for arguments in [vec!["vsift"], vec!["vsift", "setup", "--help"]] {
+        for (arguments, expected) in [
+            (vec!["vsift"], "New here?"),
+            (vec!["vsift", "setup", "--help"], "Usage:"),
+        ] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
             let exit = execute_with(
@@ -1969,7 +1964,7 @@ mod tests {
             .await;
 
             assert_eq!(exit, ProcessExit::Success);
-            assert!(String::from_utf8(stdout)?.contains("Usage:"));
+            assert!(String::from_utf8(stdout)?.contains(expected));
             assert_eq!(stderr, [] as [u8; 0]);
         }
         Ok(())

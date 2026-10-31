@@ -75,9 +75,11 @@ fn first_operand(arguments: &[OsString]) -> Option<usize> {
 
 fn is_command_name(argument: &OsString) -> bool {
     argument.to_str().is_some_and(|text| {
-        Cli::command().get_subcommands().any(|command| {
-            command.get_name() == text || command.get_all_aliases().any(|alias| alias == text)
-        })
+        // `help` is clap's own subcommand, added when the parser is built.
+        text == "help"
+            || Cli::command().get_subcommands().any(|command| {
+                command.get_name() == text || command.get_all_aliases().any(|alias| alias == text)
+            })
     })
 }
 

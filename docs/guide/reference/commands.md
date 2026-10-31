@@ -7,7 +7,7 @@
 ## Contents
 
 - [vsift](#vsift): The root command, with the options every command takes
-- [vsift setup](#vsift-setup): Check what is installed and set up what is missing (run it any time)
+- [vsift setup](#vsift-setup): Check and set up what VSift needs (run it any time)
 - [vsift setup check](#vsift-setup-check): Inspect local dependencies without changing the machine
 - [vsift setup plan](#vsift-setup-plan): Create a reviewable installation plan without applying it
 - [vsift setup install](#vsift-setup-install): Apply an unchanged, explicitly accepted installation plan
@@ -17,8 +17,23 @@
 - [vsift setup rollback](#vsift-setup-rollback): Select a component's previous managed version, or a named installed one
 - [vsift setup configure](#vsift-setup-configure): Register explicitly supplied dependency configuration
 - [vsift setup configure-model](#vsift-setup-configure-model): Register an explicit user-managed local ASR model file
-- [vsift ingest](#vsift-ingest): Prepare a local video investigation session
-- [vsift session](#vsift-session): Inspect or change a session lifecycle
+- [vsift watch](#vsift-watch): Make a transcript, subtitles and screen changes beside a video
+- [vsift ingest](#vsift-ingest): Open a video as a private session
+- [vsift transcript](#vsift-transcript): Read or redo a session's transcript
+- [vsift transcript get](#vsift-transcript-get): Read timestamped text from a bounded range
+- [vsift transcript retranscribe](#vsift-transcript-retranscribe): Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
+- [vsift search](#vsift-search): Find words in what was said
+- [vsift candidates](#vsift-candidates): List the moments the screen changed
+- [vsift frame](#vsift-frame): Get the exact frame at a moment
+- [vsift frame get](#vsift-frame-get): Extract the frame a time or a visual candidate names
+- [vsift frame neighbours](#vsift-frame-neighbours): Extract consecutive frames on each side of an earlier frame
+- [vsift frame burst](#vsift-frame-burst): Extract distinct frames at evenly spaced times over a range
+- [vsift crop](#vsift-crop): Cut out part of a frame
+- [vsift audio](#vsift-audio): Save a short clip for a person or a speech tool to play
+- [vsift ocr](#vsift-ocr): Read on-screen text
+- [vsift ocr search](#vsift-ocr-search): Page the on-screen text ocr has read for a literal query
+- [vsift clocks](#vsift-clocks): Find the clocks on the screen and how they run
+- [vsift session](#vsift-session): List, keep or close sessions
 - [vsift session list](#vsift-session-list): List bounded session summaries
 - [vsift session status](#vsift-session-status): Read one session's status
 - [vsift session close](#vsift-session-close): Close one session after active work settles
@@ -26,65 +41,56 @@
 - [vsift session retain](#vsift-session-retain): Export one session as a validated portable bundle
 - [vsift session clean](#vsift-session-clean): Find or remove expired owned sessions
 - [vsift session init-workspace](#vsift-session-init-workspace): Create a worker workspace at an explicit --session-root with an immutable operator policy
-- [vsift transcript](#vsift-transcript): Read or revise timestamped transcript evidence
-- [vsift transcript get](#vsift-transcript-get): Read timestamped text from a bounded range
-- [vsift transcript retranscribe](#vsift-transcript-retranscribe): Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
-- [vsift search](#vsift-search): Search timestamped transcript evidence
-- [vsift candidates](#vsift-candidates): Page through visual evidence candidates
-- [vsift ocr](#vsift-ocr): Read on-screen text off a session's frames with the optional OCR runner
-- [vsift ocr search](#vsift-ocr-search): Page the on-screen text ocr has read for a literal query
-- [vsift clocks](#vsift-clocks): Find the clocks on a session's screen, in what ocr read
-- [vsift frame](#vsift-frame): Extract or navigate source-grounded frames
-- [vsift frame get](#vsift-frame-get): Extract the frame a time or a visual candidate names
-- [vsift frame neighbours](#vsift-frame-neighbours): Extract consecutive frames on each side of an earlier frame
-- [vsift frame burst](#vsift-frame-burst): Extract distinct frames at evenly spaced times over a range
-- [vsift audio](#vsift-audio): Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get
-- [vsift crop](#vsift-crop): Crop an orientation-correct evidence image
-- [vsift bundle](#vsift-bundle): Validate portable evidence bundles
-- [vsift bundle validate](#vsift-bundle-validate): Validate a bundle as bounded data without executing its contents
-- [vsift bundle search](#vsift-bundle-search): Search the transcript and on-screen text of retained bundles
-- [vsift job](#vsift-job): Execute or inspect recoverable worker jobs
+- [vsift job](#vsift-job): Run and follow long work on a session
 - [vsift job run](#vsift-job-run): Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id
 - [vsift job batch](#vsift-job-batch): Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently
 - [vsift job status](#vsift-job-status): Report one job: state, resumability, progress, result or failure
 - [vsift job resume](#vsift-job-resume): Continue one interrupted job from its checkpoints
 - [vsift job cancel](#vsift-job-cancel): Cancel one job, or ask the process running it to stop
 - [vsift job start](#vsift-job-start): Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
-- [vsift handoff](#vsift-handoff): Start an agent's handoff report from a valid skeleton, or check a draft before it is sent
+- [vsift bundle](#vsift-bundle): Check and search the recordings you kept
+- [vsift bundle validate](#vsift-bundle-validate): Validate a bundle as bounded data without executing its contents
+- [vsift bundle search](#vsift-bundle-search): Search the transcript and on-screen text of retained bundles
+- [vsift handoff](#vsift-handoff): Start or check a report that cites its evidence
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
 - [vsift handoff skeleton](#vsift-handoff-skeleton): Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
-- [vsift skill](#vsift-skill): Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files
+- [vsift skill](#vsift-skill): Add VSift's skill to your AI assistant, or print one of its files
 - [vsift skill install](#vsift-skill-install): Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
 - [vsift skill status](#vsift-skill-status): Show what is at each skill folder, read only, and the skill's files
 - [vsift skill show](#vsift-skill-show): Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md)
-- [vsift watch](#vsift-watch): Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
 
 ## vsift
 
 The root command, with the options every command takes.
 
 ```text
-Sift technical video into agent-ready evidence
+VSift: point it at a video; get back what was said, what changed on screen,
+and the frames.
 
-Usage: vsift [OPTIONS] [COMMAND]
+Usage: vsift <video> [--output <folder>] [--keep <folder>]
+       vsift <command> [options]
 
-Commands:
-  setup       Check what is installed and set up what is missing (run it any time)
-  ingest      Prepare a local video investigation session
-  session     Inspect or change a session lifecycle
-  transcript  Read or revise timestamped transcript evidence
-  search      Search timestamped transcript evidence
-  candidates  Page through visual evidence candidates
-  ocr         Read on-screen text off a session's frames with the optional OCR runner
-  clocks      Find the clocks on a session's screen, in what ocr read
-  frame       Extract or navigate source-grounded frames
-  audio       Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get
-  crop        Crop an orientation-correct evidence image
-  bundle      Validate portable evidence bundles
-  job         Execute or inspect recoverable worker jobs
-  handoff     Start an agent's handoff report from a valid skeleton, or check a draft before it is sent
-  skill       Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files
-  watch       Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>)
+Get started
+  setup       Check and set up what VSift needs (run it any time)
+  watch       Make a transcript, subtitles and screen changes beside a video
+
+Explore a video step by step (what AI assistants use; you can too)
+  ingest      Open a video as a private session
+  transcript  Read or redo a session's transcript
+  search      Find words in what was said
+  candidates  List the moments the screen changed
+  frame       Get the exact frame at a moment
+  crop        Cut out part of a frame
+  audio       Save a short clip for a person or a speech tool to play
+  ocr         Read on-screen text
+  clocks      Find the clocks on the screen and how they run
+  session     List, keep or close sessions
+
+Advanced
+  job         Run and follow long work on a session
+  bundle      Check and search the recordings you kept
+  handoff     Start or check a report that cites its evidence
+  skill       Add VSift's skill to your AI assistant, or print one of its files
 
 Options:
       --json
@@ -114,48 +120,80 @@ Options:
   -V, --version
           Print version
 
+Run  vsift <command> --help  or  vsift help <command>  for more on a command.
+Guides: https://github.com/smormah/vsift/tree/main/docs/guide
+
+For an AI assistant without the VSift skill, and for scripts:
+
 A typical investigation (every command takes --json):
   1. vsift setup check --json
-       What is installed. Report anything missing to the user; never install it yourself.
+       What is installed. Report anything missing to the user; never install
+       it yourself.
   2. vsift ingest <video> --json
-       Copies the video into a private session and prints its id (ses_...). The original
-       file is never changed. If the user gave you a transcript file (.srt or .vtt), add
-         --transcript <file>   (and --transcript-offset <microseconds> if its times are
-                                shifted from the video's)
-       For a direct https:// link to a video file, put --url <link> in place of <video>
-       (--url - reads the link from standard input). VSift fetches it once, with limits,
-       and nothing after that uses the network. A web page is not a video file.
-       Without one, speech is found only when local speech recognition is set up (setup
-       check says); then run:
+       Copies the video into a private session and prints its id (ses_...).
+       The original file is never changed. If the user gave you a transcript
+       file (.srt or .vtt), add
+         --transcript <file>   (and --transcript-offset <microseconds> if its
+                                times are shifted from the video's)
+       For a direct https:// link to a video file, put --url <link> in place of
+       <video> (--url - reads the link from standard input). VSift fetches it
+       once, with limits, and nothing after that uses the network. A web page
+       is not a video file.
+       Without one, speech is found only when local speech recognition is set
+       up (setup check says); then run:
          vsift job start <session> --json
-       A recording under 10 minutes is transcribed before it answers. A longer one is
-       transcribed in the background: follow it with vsift job status <job> --json, and
-       search and read the part already done meanwhile (answers say partial). If
-       recognition is not set up there is no speech evidence: say so; do not install
-       anything.
+       A recording under 10 minutes is transcribed before it answers. A longer
+       one is transcribed in the background: follow it with
+         vsift job status <job> --json
+       and search and read the part already done meanwhile (answers say
+       partial). If recognition is not set up there is no speech evidence: say
+       so; do not install anything.
   3. vsift search <session> --query <words> --limit 20 --json
      vsift transcript get <session> --from <us> --to <us> --limit 20 --json
-       What was said. Every time is microseconds from the start of the video.
+       What was said. Every time is microseconds from the start of the video
+       (1:30 is 90000000). Each result has an id (tsg_...) and its times: keep
+       them for what you report.
   4. vsift candidates <session> --from <us> --to <us> --limit 20 --json
        Moments where the picture changes.
   5. vsift frame get <session> --at <us> --json
      vsift frame burst <session> --from <us> --to <us> --max-frames 4 --json
-       Look at specific moments; each frame is an image file to open.
+       Look at specific moments; each frame is an image file to open, with an
+       id (evd_...) and the time you got.
   6. vsift handoff skeleton <session> --question <words> --json
      vsift handoff check --json
-       Only when you were asked for a vsift-handoff report. skeleton prints a valid one
-       with the session's ids filled in (data.handoff), to add your findings to; never
-       build the JSON by search and replace. check reads the draft from standard input and
-       lists what to fix before you send it. A plain-text report needs no check (a draft
-       without a vsift-handoff block is reported as missing one).
+       Only when you were asked for a vsift-handoff report. skeleton prints a
+       valid one with the session's ids filled in (data.handoff), to add your
+       findings to; never build the JSON by search and replace. check reads the
+       draft from standard input and lists what to fix before you send it. A
+       plain-text report needs no check (a draft without a vsift-handoff block
+       is reported as missing one).
   7. vsift session close <session> --json
        When you are done.
 
-Ready-made outcomes. When the user asks for one of these, follow its method: each is a
-short procedure with the commands above that ends in a vsift-handoff report the check
-accepts.
+Cite every fact. Each fact you report states the exact words, number or label
+(an error code, a button's name), gives its time, and names the id that says or
+shows it: a transcript segment (tsg_...) for what was said, a frame or crop
+(evd_...) for what the screen showed. A reader checks it against that id. If no
+id says or shows it, say you could not confirm it.
+
+Small numbers can be misread. In a compressed recording, a frame taken while
+the screen moves can turn a digit into a different one, and enlarging the
+picture does not bring it back. Read small text, and above all numbers, from a
+frame where the screen has settled: a candidate with stability settled, or a
+frame shortly after the change rather than during it. Compare a neighbouring
+frame (frame neighbours, frame burst):
+  vsift frame neighbours <session> <evidence> --json
+Treat a number read from text under about 10 px as uncertain unless a second
+frame or the transcript agrees.
+
+A clip from the audio command is for a person or a speech tool to play; a coding
+agent cannot listen to it and reads speech with transcript get.
+
+Ready-made outcomes. When the user asks for one of these, follow its method:
+each is a short procedure with the commands above that ends in a vsift-handoff
+report the check accepts.
   bug-report      a recording to an evidence-backed bug report, with times
-  findings        a narrated screencast to findings: bugs, requests and questions
+  findings        a narrated screencast to findings: bugs, requests, questions
   demo-backlog    a product demo to a prioritised backlog
   meeting-notes   a meeting to its actions, decisions and open questions
   workshop-spec   a workshop to a spec with quoted decisions and open questions
@@ -163,29 +201,30 @@ accepts.
 Each one's method (Markdown) is printed by:
   vsift skill show workflows/<name>.md
 
-Ask for small pages. --limit takes 1 to 100 (default 20) and --max-frames 1 to 100
-(default 12), more than an investigation needs: reading 20 results at a time and looking
-at a handful of frames keeps it cheap and inside any budget. Ask for more only when the
-user does.
+Ask for small pages. --limit takes 1 to 100 (default 20) and
+--max-frames 1 to 100 (default 12), more than an investigation needs: reading
+20 results at a time and looking at a handful of frames keeps it cheap and
+inside any budget. Ask for more only when the user does.
 
---session-root and --host-isolation are for operators who run VSift as a service for other
-people (a worker host). They are not part of an investigation: leave them out. The default
-private per-user location is the right one; an agent never needs to name, search for or
-create another folder. If the default location cannot be used (for example the drive has no
-room for the video), the error says why: report it to the user, who frees the space or asks
-an operator, instead of choosing a folder.
+--session-root and --host-isolation are for operators who run VSift as a
+service for other people (a worker host). They are not part of an
+investigation: leave them out. The default private per-user location is the
+right one; an agent never needs to name, search for or create another folder.
+If the default location cannot be used (for example the drive has no room for
+the video), the error says why: report it to the user, who frees the space or
+asks an operator, instead of choosing a folder.
 
-When a command fails, read its code and remediation (the "Fix:" and "Run:" lines, or
-error.remediation with --json) and do what they say. A missing tool is the user's to install;
-an installation plan is theirs to accept.
+When a command fails, read its code and remediation (the "Fix:" and "Run:"
+lines, or error.remediation with --json) and do what they say. A missing tool
+is the user's to install; an installation plan is theirs to accept.
 ```
 
 ## vsift setup
 
-Check what is installed and set up what is missing (run it any time).
+Check and set up what VSift needs (run it any time).
 
 ```text
-Check what is installed and set up what is missing (run it any time).
+Check and set up what VSift needs (run it any time).
 
 Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what can be installed here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
 
@@ -202,6 +241,7 @@ Commands:
   rollback         Select a component's previous managed version, or a named installed one
   configure        Register explicitly supplied dependency configuration
   configure-model  Register an explicit user-managed local ASR model file
+  help             Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -246,6 +286,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup
+    Shows what works and what is missing, and offers to install it
+  vsift setup check
+    The same view; it never installs anything
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup check
@@ -302,6 +350,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup check
+    What is installed, and the one next step
+  vsift setup check --json
+    The same for an AI assistant or a script
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup plan
@@ -350,6 +406,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup plan --profile desktop --json
+    What an install would download, with its sources, sizes and digest
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup install
@@ -394,6 +456,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup install --plan ./plan.json --accept-plan <digest>
+    Installs exactly the plan you saved, if it still has that digest
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup repair
@@ -429,6 +497,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup repair
+    What is wrong with the managed tools, and the plan to put it right
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup list
@@ -464,6 +538,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup list
+    Each managed tool's versions, and the one in use
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup remove
@@ -516,6 +596,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup remove whisper_model
+    Removes the managed speech model
+  vsift setup remove --stale-stages
+    Removes what interrupted installs left behind
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/clean-up-and-uninstall.md
 ```
 
 ## vsift setup rollback
@@ -565,6 +653,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup rollback whisper_cli
+    Goes back to the version of whisper.cpp selected before
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup configure
@@ -609,6 +703,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup configure whisper --executable /opt/whisper/whisper-cli
+    Uses a whisper.cpp you installed yourself
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
 ```
 
 ## vsift setup configure-model
@@ -647,14 +747,75 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift setup configure-model --file /models/ggml-base.bin
+    Uses a speech model you downloaded yourself
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
+```
+
+## vsift watch
+
+Make a transcript, subtitles and screen changes beside a video.
+
+```text
+Make a transcript, subtitles and screen changes beside a video.
+
+The same as  vsift <video> . Writes <name>.txt (a readable transcript), <name>.srt (subtitles most video players pick up) and <name>-vsift/ (the screen changes, with a frame for each and their list) beside the video, or into --output. It never replaces a file: a name that is taken is refused before any work. With --keep it also keeps the recording for  vsift bundle search : the bundle holds the transcript and the frames, not the video or any on-screen text. Each file names the video's SHA-256 and the ids of the run; every frame's SHA-256 is in the list. Video tools and speech recognition must be set up first (vsift setup check). Not for AI assistants: they use the session commands.
+
+Usage: vsift watch [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          The video
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --output <FOLDER>
+          The folder to write into, instead of beside the video: an existing folder, or a new one whose parent exists
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --keep <FOLDER>
+          Keep the recording for later search, in a private subfolder of this folder named after the video (an existing folder, or a new one whose parent exists). The same folder takes every recording you keep; find them with  vsift bundle search <FOLDER> . The video is not copied in, and on-screen text is not read
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift ./meeting.mp4
+    Writes meeting.txt, meeting.srt and meeting-vsift/ beside the video
+  vsift watch ./meeting.mp4 --output ./notes --keep ./kept
+    Writes them into ./notes and keeps the recording for bundle search
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md
 ```
 
 ## vsift ingest
 
-Prepare a local video investigation session.
+Open a video as a private session.
 
 ```text
-Prepare a local video investigation session
+Open a video as a private session
 
 Usage: vsift ingest [OPTIONS] <SOURCE|--url <LINK>>
 
@@ -667,7 +828,9 @@ Options:
           Emit one versioned JSON terminal result
 
       --url <LINK>
-          Instead of a local file, a direct https:// link to a video file (MP4, MOV, MKV or WebM): it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed
+          Instead of a local file, a direct https:// link to a video file.
+
+          MP4, MOV, MKV or WebM: it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed.
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -704,356 +867,29 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
-```
 
-## vsift session
+Examples:
+  vsift ingest ./meeting.mp4
+    Opens the video as a private session and prints its id
+  vsift ingest ./meeting.mp4 --transcript ./meeting.srt
+    The same, with a transcript you already have
 
-Inspect or change a session lifecycle.
-
-```text
-Inspect or change a session lifecycle
-
-Usage: vsift session [OPTIONS] <COMMAND>
-
-Commands:
-  list            List bounded session summaries
-  status          Read one session's status
-  close           Close one session after active work settles
-  renew           Renew one eligible ephemeral session
-  retain          Export one session as a validated portable bundle
-  clean           Find or remove expired owned sessions
-  init-workspace  Create a worker workspace at an explicit --session-root with an immutable operator policy
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session list
-
-List bounded session summaries.
-
-```text
-List bounded session summaries
-
-Usage: vsift session list [OPTIONS]
-
-Options:
-      --cursor <CURSOR>
-          Continuation bucket returned by the previous page, 0 through 255
-
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session status
-
-Read one session's status.
-
-```text
-Read one session's status
-
-Usage: vsift session status [OPTIONS] <SESSION>
-
-Arguments:
-  <SESSION>
-          Session to inspect or change
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session close
-
-Close one session after active work settles.
-
-```text
-Close one session after active work settles
-
-Usage: vsift session close [OPTIONS] <SESSION>
-
-Arguments:
-  <SESSION>
-          Session to inspect or change
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session renew
-
-Renew one eligible ephemeral session.
-
-```text
-Renew one eligible ephemeral session
-
-Usage: vsift session renew [OPTIONS] <SESSION>
-
-Arguments:
-  <SESSION>
-          Session to inspect or change
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session retain
-
-Export one session as a validated portable bundle.
-
-```text
-Export one session as a validated portable bundle
-
-Usage: vsift session retain [OPTIONS] --output <OUTPUT> <SESSION>
-
-Arguments:
-  <SESSION>
-          Session to retain
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --output <OUTPUT>
-          New destination directory
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --include-source
-          Include bound source bytes in the bundle
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session clean
-
-Find or remove expired owned sessions.
-
-```text
-Find or remove expired owned sessions
-
-Usage: vsift session clean [OPTIONS]
-
-Options:
-      --expired
-          Restrict the operation to sessions proven expired
-
-      --json
-          Emit one versioned JSON terminal result
-
-      --dry-run
-          Report eligible sessions without deleting them
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --cursor <CURSOR>
-          Continuation bucket returned by the previous cleanup page
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift session init-workspace
-
-Create a worker workspace at an explicit --session-root with an immutable operator policy.
-
-```text
-Create a worker workspace at an explicit --session-root with an immutable operator policy
-
-Usage: vsift session init-workspace [OPTIONS] --durability <DURABILITY> --admission-slots <ADMISSION_SLOTS>
-
-Options:
-      --durability <DURABILITY>
-          How the workspace's sessions publish
-
-          Possible values:
-          - durable:   Every acknowledged result survives an OS crash or power loss; only on Ubuntu 24.04 with local ext4
-          - ephemeral: Consistent across a process crash, on every platform (development and CI)
-
-      --json
-          Emit one versioned JSON terminal result
-
-      --admission-slots <ADMISSION_SLOTS>
-          Admission capacity in weight units, 1 through 64: the most work the workspace runs at once (a whisper.cpp run weighs its threads, a visual window 2, a copy or an evidence extraction 1)
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --retention-hours <RETENTION_HOURS>
-          How long a session lives after it opens or is renewed, 1 through 720 hours; defaults to 168
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/first-investigation.md
 ```
 
 ## vsift transcript
 
-Read or revise timestamped transcript evidence.
+Read or redo a session's transcript.
 
 ```text
-Read or revise timestamped transcript evidence
+Read or redo a session's transcript
 
 Usage: vsift transcript [OPTIONS] <COMMAND>
 
 Commands:
   get           Read timestamped text from a bounded range
   retranscribe  Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
+  help          Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -1079,6 +915,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift transcript get <session> --from 60000000 --to 120000000
+    What was said from 1:00 to 2:00 (times are microseconds)
+  vsift transcript retranscribe <session>
+    Turns the speech into text on this machine
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
 ```
 
 ## vsift transcript get
@@ -1147,6 +991,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift transcript get <session> --from 60000000 --to 120000000
+    What was said from 1:00 to 2:00 (times are microseconds)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
 ```
 
 ## vsift transcript retranscribe
@@ -1195,14 +1045,22 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift transcript retranscribe <session>
+    The whole video
+  vsift transcript retranscribe <session> --from 60000000 --to 120000000
+    Only 1:00 to 2:00 (times are microseconds)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
 ```
 
 ## vsift search
 
-Search timestamped transcript evidence.
+Find words in what was said.
 
 ```text
-Search timestamped transcript evidence.
+Find words in what was said.
 
 Over a part of the range that was not transcribed the answer is partial and names the part: a word said there cannot be found, and that is not evidence that none was said.
 
@@ -1266,14 +1124,20 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift search <session> --query refund
+    Where the word was said, with times
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
 ```
 
 ## vsift candidates
 
-Page through visual evidence candidates.
+List the moments the screen changed.
 
 ```text
-Page through visual evidence candidates
+List the moments the screen changed
 
 Usage: vsift candidates [OPTIONS] --from <FROM> --to <TO> <SESSION>
 
@@ -1335,22 +1199,350 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift candidates <session> --from 0 --to 300000000
+    Where the screen changed in the first 5:00 (times are microseconds)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift frame
+
+Get the exact frame at a moment.
+
+```text
+Get the exact frame at a moment
+
+Usage: vsift frame [OPTIONS] <COMMAND>
+
+Commands:
+  get         Extract the frame a time or a visual candidate names
+  neighbours  Extract consecutive frames on each side of an earlier frame
+  burst       Extract distinct frames at evenly spaced times over a range
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift frame get <session> --at 90000000
+    The frame at 1:30 (times are microseconds)
+  vsift frame burst <session> --from 90000000 --to 100000000 --max-frames 4
+    Four frames from 1:30 to 1:40
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift frame get
+
+Extract the frame a time or a visual candidate names.
+
+```text
+Extract the frame a time or a visual candidate names
+
+Usage: vsift frame get [OPTIONS] <--at <MICROSECONDS>|--candidate <CANDIDATE>> <SESSION>
+
+Arguments:
+  <SESSION>
+          Session containing the source
+
+Options:
+      --at <MICROSECONDS>
+          Requested source-timeline time in microseconds
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --candidate <CANDIDATE>
+          A visual candidate (a `vcd_` identity from candidates) whose own frame to extract, exactly at its representative time
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --select <SELECT>
+          Which frame the time names; defaults to at-or-after
+
+          Possible values:
+          - at-or-after:  The first frame at or after the time (the default), so evidence is never taken from before the moment named
+          - displayed-at: The frame on screen at the time: the last frame at or before it
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --tolerance-us <MICROSECONDS>
+          How far the frame may lie from the time, 0 through 10000000 microseconds; defaults to 1000000
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift frame get <session> --at 90000000
+    The frame at 1:30 (times are microseconds)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift frame neighbours
+
+Extract consecutive frames on each side of an earlier frame.
+
+```text
+Extract consecutive frames on each side of an earlier frame
+
+Usage: vsift frame neighbours [OPTIONS] <SESSION> <EVIDENCE>
+
+Arguments:
+  <SESSION>
+          Session containing the source
+
+  <EVIDENCE>
+          Frame evidence item (an `evd_` identity) around which to navigate
+
+Options:
+      --count <COUNT>
+          Frames on each side, 1 through 20; defaults to 1
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift frame neighbours <session> <evidence> --count 2
+    Two frames on each side of a frame you have (evd_...)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift frame burst
+
+Extract distinct frames at evenly spaced times over a range.
+
+```text
+Extract distinct frames at evenly spaced times over a range
+
+Usage: vsift frame burst [OPTIONS] --from <FROM> --to <TO> <SESSION>
+
+Arguments:
+  <SESSION>
+          Session containing the source
+
+Options:
+      --from <FROM>
+          Inclusive source-timeline start in microseconds
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --to <TO>
+          Exclusive source-timeline end in microseconds, at most 60 s after --from; a range past the end of the video is clipped to it
+
+      --max-frames <MAX_FRAMES>
+          Evenly spaced target times, 1 through 100; defaults to 12. Targets that name the same frame return it once
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift frame burst <session> --from 90000000 --to 100000000 --max-frames 4
+    Four frames from 1:30 to 1:40 (times are microseconds)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift crop
+
+Cut out part of a frame.
+
+```text
+Cut out part of a frame
+
+Usage: vsift crop [OPTIONS] --rect <X,Y,WIDTH,HEIGHT> <SESSION> <EVIDENCE>
+
+Arguments:
+  <SESSION>
+          Session containing the source
+
+  <EVIDENCE>
+          Frame or crop evidence item (an `evd_` identity) to cut from
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --rect <X,Y,WIDTH,HEIGHT>
+          Rectangle as `x,y,width,height` in the parent image's displayed pixels; containment in the parent is checked before any tool runs
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift crop <session> <evidence> --rect 100,200,400,80
+    400 by 80 pixels of a frame you have (evd_...), at its original size
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift audio
+
+Save a short clip for a person or a speech tool to play.
+
+```text
+Save a short clip for a person or a speech tool to play.
+
+The clip is a WAV file of at most 30 seconds, written into the session's private folder. A person plays it, or hands it to a speech tool of their own. A coding agent cannot listen to it, and reading the file's bytes (for example with base64) tells it nothing: what was said is in the transcript, which vsift transcript get reads.
+
+Usage: vsift audio [OPTIONS] --from <FROM> --to <TO> <SESSION>
+
+Arguments:
+  <SESSION>
+          Session containing the source
+
+Options:
+      --from <FROM>
+          Inclusive source-timeline start in microseconds
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --to <TO>
+          Exclusive source-timeline end in microseconds, at most 30 s after --from; a range past the end of the source is clipped to it
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift audio <session> --from 90000000 --to 100000000
+    A clip of 1:30 to 1:40 (times are microseconds) for a person or a speech
+    tool to play; a coding agent cannot listen to it and reads speech with
+    transcript get
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
 ```
 
 ## vsift ocr
 
-Read on-screen text off a session's frames with the optional OCR runner.
+Read on-screen text.
 
 ```text
-Read on-screen text off a session's frames with the optional OCR runner.
+Read on-screen text.
 
-Opt-in and bounded: each call reads at most --max-frames frames of the range's plan (every visual candidate's frame and one frame every --period-us), then stops; run it again to continue. The answer counts the frames read, failed and pending, and is partial until the plan is read. ocr search then pages the text it read, each hit citing its frame, time and region, with or without a transcript (search's first page shows it beside the transcript).
+With the optional OCR runner, opt-in and bounded: each call reads at most --max-frames frames of the range's plan (every visual candidate's frame and one frame every --period-us), then stops; run it again to continue. The answer counts the frames read, failed and pending, and is partial until the plan is read. ocr search then pages the text it read, each hit citing its frame, time and region, with or without a transcript (search's first page shows it beside the transcript).
 
 Usage: vsift ocr [OPTIONS] <SESSION>
        vsift ocr <COMMAND>
 
 Commands:
   search  Page the on-screen text ocr has read for a literal query
+  help    Print this message or the help of the given subcommand(s)
 
 Arguments:
   <SESSION>
@@ -1398,6 +1590,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift ocr <session>
+    Reads on-screen text off the next frames; run it again to go on
+  vsift ocr search <session> --query refund
+    Finds a word in what it read
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md
 ```
 
 ## vsift ocr search
@@ -1454,16 +1654,22 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift ocr search <session> --query refund
+    Finds a word in the on-screen text ocr read
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md
 ```
 
 ## vsift clocks
 
-Find the clocks on a session's screen, in what ocr read.
+Find the clocks on the screen and how they run.
 
 ```text
-Find the clocks on a session's screen, in what ocr read.
+Find the clocks on the screen and how they run.
 
-A time on a screen counts as a clock only if it moves with the video. Each clock is its own source and is never converted between zones. The answer says how each moves against the video: precision to the second, gaps, freezes and what disagrees, with the frames that prove it. Bounded and resumable like ocr: run ocr first, then this, then again to continue. A gap and an observed offset change no clock time: only --accept-gap and --screen-zone do, and only with what the user stated.
+It works from what ocr read. A time on a screen counts as a clock only if it moves with the video. Each clock is its own source and is never converted between zones. The answer says how each moves against the video: precision to the second, gaps, freezes and what disagrees, with the frames that prove it. Bounded and resumable like ocr: run ocr first, then this, then again to continue. A gap and an observed offset change no clock time: only --accept-gap and --screen-zone do, and only with what the user stated.
 
 Usage: vsift clocks [OPTIONS] <SESSION>
 
@@ -1510,21 +1716,32 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift clocks <session>
+    The clocks in what ocr read, and how they move against the video
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/evidence-and-citations.md#clocks-on-the-screen
 ```
 
-## vsift frame
+## vsift session
 
-Extract or navigate source-grounded frames.
+List, keep or close sessions.
 
 ```text
-Extract or navigate source-grounded frames
+List, keep or close sessions
 
-Usage: vsift frame [OPTIONS] <COMMAND>
+Usage: vsift session [OPTIONS] <COMMAND>
 
 Commands:
-  get         Extract the frame a time or a visual candidate names
-  neighbours  Extract consecutive frames on each side of an earlier frame
-  burst       Extract distinct frames at evenly spaced times over a range
+  list            List bounded session summaries
+  status          Read one session's status
+  close           Close one session after active work settles
+  renew           Renew one eligible ephemeral session
+  retain          Export one session as a validated portable bundle
+  clean           Find or remove expired owned sessions
+  init-workspace  Create a worker workspace at an explicit --session-root with an immutable operator policy
+  help            Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -1550,43 +1767,82 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift session list
+    The sessions you have open
+  vsift session close <session>
+    Closes one and removes its private copy of the video
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/concepts.md
 ```
 
-## vsift frame get
+## vsift session list
 
-Extract the frame a time or a visual candidate names.
+List bounded session summaries.
 
 ```text
-Extract the frame a time or a visual candidate names
+List bounded session summaries
 
-Usage: vsift frame get [OPTIONS] <--at <MICROSECONDS>|--candidate <CANDIDATE>> <SESSION>
+Usage: vsift session list [OPTIONS]
+
+Options:
+      --cursor <CURSOR>
+          Continuation bucket returned by the previous page, 0 through 255
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift session list
+    The sessions you have open
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/concepts.md
+```
+
+## vsift session status
+
+Read one session's status.
+
+```text
+Read one session's status
+
+Usage: vsift session status [OPTIONS] <SESSION>
 
 Arguments:
   <SESSION>
-          Session containing the source
+          Session to inspect or change
 
 Options:
-      --at <MICROSECONDS>
-          Requested source-timeline time in microseconds
-
       --json
           Emit one versioned JSON terminal result
-
-      --candidate <CANDIDATE>
-          A visual candidate (a `vcd_` identity from candidates) whose own frame to extract, exactly at its representative time
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
 
           Possible values:
           - jsonl: One bounded JSON object per line
-
-      --select <SELECT>
-          Which frame the time names; defaults to at-or-after
-
-          Possible values:
-          - at-or-after:  The first frame at or after the time (the default), so evidence is never taken from before the moment named
-          - displayed-at: The frame on screen at the time: the last frame at or before it
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1600,33 +1856,30 @@ Options:
 
           [default: process-only]
 
-      --tolerance-us <MICROSECONDS>
-          How far the frame may lie from the time, 0 through 10000000 microseconds; defaults to 1000000
-
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift session status <session>
+    What one session holds, and when it expires
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/concepts.md
 ```
 
-## vsift frame neighbours
+## vsift session close
 
-Extract consecutive frames on each side of an earlier frame.
+Close one session after active work settles.
 
 ```text
-Extract consecutive frames on each side of an earlier frame
+Close one session after active work settles
 
-Usage: vsift frame neighbours [OPTIONS] <SESSION> <EVIDENCE>
+Usage: vsift session close [OPTIONS] <SESSION>
 
 Arguments:
   <SESSION>
-          Session containing the source
-
-  <EVIDENCE>
-          Frame evidence item (an `evd_` identity) around which to navigate
+          Session to inspect or change
 
 Options:
-      --count <COUNT>
-          Frames on each side, 1 through 20; defaults to 1
-
       --json
           Emit one versioned JSON terminal result
 
@@ -1650,25 +1903,28 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift session close <session>
+    Closes it and removes its private copy of the video
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/concepts.md
 ```
 
-## vsift frame burst
+## vsift session renew
 
-Extract distinct frames at evenly spaced times over a range.
+Renew one eligible ephemeral session.
 
 ```text
-Extract distinct frames at evenly spaced times over a range
+Renew one eligible ephemeral session
 
-Usage: vsift frame burst [OPTIONS] --from <FROM> --to <TO> <SESSION>
+Usage: vsift session renew [OPTIONS] <SESSION>
 
 Arguments:
   <SESSION>
-          Session containing the source
+          Session to inspect or change
 
 Options:
-      --from <FROM>
-          Inclusive source-timeline start in microseconds
-
       --json
           Emit one versioned JSON terminal result
 
@@ -1677,12 +1933,6 @@ Options:
 
           Possible values:
           - jsonl: One bounded JSON object per line
-
-      --to <TO>
-          Exclusive source-timeline end in microseconds, at most 60 s after --from; a range past the end of the video is clipped to it
-
-      --max-frames <MAX_FRAMES>
-          Evenly spaced target times, 1 through 100; defaults to 12. Targets that name the same frame return it once
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1698,29 +1948,33 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift session renew <session>
+    Keeps it open for longer
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/keep-and-share-evidence.md
 ```
 
-## vsift audio
+## vsift session retain
 
-Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get.
+Export one session as a validated portable bundle.
 
 ```text
-Extract a bounded audio clip for a person or a speech tool to play; a coding agent cannot listen to it and reads speech with transcript get.
+Export one session as a validated portable bundle
 
-The clip is a WAV file of at most 30 seconds, written into the session's private folder. A person plays it, or hands it to a speech tool of their own. A coding agent cannot listen to it, and reading the file's bytes (for example with base64) tells it nothing: what was said is in the transcript, which vsift transcript get reads.
-
-Usage: vsift audio [OPTIONS] --from <FROM> --to <TO> <SESSION>
+Usage: vsift session retain [OPTIONS] --output <OUTPUT> <SESSION>
 
 Arguments:
   <SESSION>
-          Session containing the source
+          Session to retain
 
 Options:
-      --from <FROM>
-          Inclusive source-timeline start in microseconds
-
       --json
           Emit one versioned JSON terminal result
+
+      --output <OUTPUT>
+          New destination directory
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1728,8 +1982,8 @@ Options:
           Possible values:
           - jsonl: One bounded JSON object per line
 
-      --to <TO>
-          Exclusive source-timeline end in microseconds, at most 30 s after --from; a range past the end of the source is clipped to it
+      --include-source
+          Include bound source bytes in the bundle
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1745,36 +1999,467 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift session retain <session> --output ./kept/meeting
+    Keeps its evidence in a folder you choose, to search or share
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/keep-and-share-evidence.md
 ```
 
-## vsift crop
+## vsift session clean
 
-Crop an orientation-correct evidence image.
+Find or remove expired owned sessions.
 
 ```text
-Crop an orientation-correct evidence image
+Find or remove expired owned sessions
 
-Usage: vsift crop [OPTIONS] --rect <X,Y,WIDTH,HEIGHT> <SESSION> <EVIDENCE>
+Usage: vsift session clean [OPTIONS]
+
+Options:
+      --expired
+          Restrict the operation to sessions proven expired
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --dry-run
+          Report eligible sessions without deleting them
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --cursor <CURSOR>
+          Continuation bucket returned by the previous cleanup page
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift session clean --expired --dry-run
+    Lists the expired sessions it would remove
+  vsift session clean --expired
+    Removes them
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/clean-up-and-uninstall.md
+```
+
+## vsift session init-workspace
+
+Create a worker workspace at an explicit --session-root with an immutable operator policy.
+
+```text
+Create a worker workspace at an explicit --session-root with an immutable operator policy
+
+Usage: vsift session init-workspace [OPTIONS] --durability <DURABILITY> --admission-slots <ADMISSION_SLOTS>
+
+Options:
+      --durability <DURABILITY>
+          How the workspace's sessions publish
+
+          Possible values:
+          - durable:   Every acknowledged result survives an OS crash or power loss; only on Ubuntu 24.04 with local ext4
+          - ephemeral: Consistent across a process crash, on every platform (development and CI)
+
+      --json
+          Emit one versioned JSON terminal result
+
+      --admission-slots <ADMISSION_SLOTS>
+          Admission capacity in weight units, 1 through 64: the most work the workspace runs at once (a whisper.cpp run weighs its threads, a visual window 2, a copy or an evidence extraction 1)
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --retention-hours <RETENTION_HOURS>
+          How long a session lives after it opens or is renewed, 1 through 720 hours; defaults to 168
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift session init-workspace --durability durable --admission-slots 4
+    With --session-root <folder> first: a workspace for a worker host
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/worker-host.md
+```
+
+## vsift job
+
+Run and follow long work on a session.
+
+```text
+Run and follow long work on a session
+
+Usage: vsift job [OPTIONS] <COMMAND>
+
+Commands:
+  run     Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id
+  batch   Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently
+  status  Report one job: state, resumability, progress, result or failure
+  resume  Continue one interrupted job from its checkpoints
+  cancel  Cancel one job, or ask the process running it to stop
+  start   Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift job start <session>
+    Transcribes a session, in the background if it is long
+  vsift job status <job>
+    How far it has come, and the time left
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift job run
+
+Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id.
+
+```text
+Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id
+
+Usage: vsift job run [OPTIONS] --request <REQUEST> --input-root <INPUT_ROOT>
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --request <REQUEST>
+          Versioned JSON request file (job-request v1, at most 64 KiB)
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --input-root <INPUT_ROOT>
+          Absolute directory the request's source and transcript paths are relative to; nothing outside it is read, and no link is followed
+
+      --bundle-root <BUNDLE_ROOT>
+          Absolute, existing directory a retain step writes its bundle below
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --drain-timeout-ms <DRAIN_TIMEOUT_MS>
+          After a shutdown signal, how long the running step may finish before it is cancelled, 0 through 300000 milliseconds; defaults to 0 (stop at once)
+
+          [default: 0]
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --admission-wait-ms <ADMISSION_WAIT_MS>
+          How long a step waits (with jittered retries) for admission capacity before it answers BUSY, 0 through 60000 milliseconds; defaults to 60000
+
+          [default: 60000]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift job run --request ./request.json --input-root /srv/videos
+    With --session-root <folder> first: one request on a worker host
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/worker-host.md
+```
+
+## vsift job batch
+
+Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently.
+
+```text
+Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently
+
+Usage: vsift job batch [OPTIONS] --requests <REQUESTS> --input-root <INPUT_ROOT>
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --requests <REQUESTS>
+          Regular file of at most 1,000 lines, each one job-request v1 object of at most 64 KiB, or blank
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --input-root <INPUT_ROOT>
+          Absolute directory every request's source and transcript paths are relative to; nothing outside it is read, and no link is followed
+
+      --bundle-root <BUNDLE_ROOT>
+          Absolute, existing directory retain steps write their bundles below
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --concurrency <CONCURRENCY>
+          Requests run at once, 1 through 16 and at most the workspace's admission capacity; the next line is read only when one ends
+
+          [default: 1]
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+      --drain-timeout-ms <DRAIN_TIMEOUT_MS>
+          After a shutdown signal, how long running steps may finish before they are cancelled, 0 through 300000 milliseconds; defaults to 0
+
+          [default: 0]
+
+      --admission-wait-ms <ADMISSION_WAIT_MS>
+          How long a step waits (with jittered retries) for admission capacity before it answers BUSY, 0 through 60000 milliseconds; defaults to 60000
+
+          [default: 60000]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift job batch --requests ./requests.jsonl --input-root /srv/videos
+    With --session-root <folder> first: a file of requests on a worker host
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/operations/worker-host.md
+```
+
+## vsift job status
+
+Report one job: state, resumability, progress, result or failure.
+
+```text
+Report one job: state, resumability, progress, result or failure
+
+Usage: vsift job status [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          Job to inspect or change (a `job_` identity)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift job status <job>
+    How far it has come, and the time left
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift job resume
+
+Continue one interrupted job from its checkpoints.
+
+```text
+Continue one interrupted job from its checkpoints
+
+Usage: vsift job resume [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          Job to inspect or change (a `job_` identity)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift job resume <job>
+    Goes on from where it stopped
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift job cancel
+
+Cancel one job, or ask the process running it to stop.
+
+```text
+Cancel one job, or ask the process running it to stop
+
+Usage: vsift job cancel [OPTIONS] <JOB>
+
+Arguments:
+  <JOB>
+          Job to inspect or change (a `job_` identity)
+
+Options:
+      --json
+          Emit one versioned JSON terminal result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift job cancel <job>
+    Stops it; what it finished stays
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift job start
+
+Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
+
+```text
+Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
+
+A background job publishes the transcript as it goes: search and transcript get answer over the finished part, marked partial, while it runs. job status reports how far each step has come in seconds of the recording, its speed and an estimate of the time left. With --first, the range named is transcribed before everything else. job cancel or session close stops it, and what it published stays.
+
+Usage: vsift job start [OPTIONS] <SESSION>
 
 Arguments:
   <SESSION>
-          Session containing the source
-
-  <EVIDENCE>
-          Frame or crop evidence item (an `evd_` identity) to cut from
+          Session to prepare (a `ses_` identity)
 
 Options:
       --json
           Emit one versioned JSON terminal result
 
-      --rect <X,Y,WIDTH,HEIGHT>
-          Rectangle as `x,y,width,height` in the parent image's displayed pixels; containment in the parent is checked before any tool runs
+      --mode <MODE>
+          quick runs in the foreground and answers when done; watched runs in the background and answers at once; queued waits its turn in the root's queue in the background. Defaults by the recording's length: quick under ten minutes, watched from ten minutes on
+
+          Possible values:
+          - quick:   In the foreground: the command answers when the job is done
+          - watched: In the background: the command answers once a runner holds the job
+          - queued:  In the root's queue, after the jobs queued before it, one at a time at the whole capacity, giving way at every chunk to anyone who waits: for several recordings, or when there is no rush
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
 
           Possible values:
           - jsonl: One bounded JSON object per line
+
+      --first <FROM_US:TO_US>
+          The window to transcribe first: its start and end in microseconds of the recording joined by a colon (60000000:70000000), at most 30 minutes long. When the user named a moment, it is ready within about one window's recognition, before the rest
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -1790,20 +2475,29 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift job start <session>
+    Transcribes a session, in the background if it is long
+  vsift job start <session> --first 60000000:120000000
+    Does 1:00 to 2:00 before the rest (times are microseconds)
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
 ```
 
 ## vsift bundle
 
-Validate portable evidence bundles.
+Check and search the recordings you kept.
 
 ```text
-Validate portable evidence bundles
+Check and search the recordings you kept
 
 Usage: vsift bundle [OPTIONS] <COMMAND>
 
 Commands:
   validate  Validate a bundle as bounded data without executing its contents
   search    Search the transcript and on-screen text of retained bundles
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -1829,6 +2523,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift bundle search ./kept --query refund
+    Finds a word in every recording you kept in that folder
+  vsift bundle validate ./kept/meeting
+    Checks one kept recording before you share it
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/keep-and-share-evidence.md
 ```
 
 ## vsift bundle validate
@@ -1868,6 +2570,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift bundle validate ./kept/meeting
+    Checks one kept recording before you share it
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/keep-and-share-evidence.md
 ```
 
 ## vsift bundle search
@@ -1929,345 +2637,27 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
-```
 
-## vsift job
+Examples:
+  vsift bundle search ./kept --query refund
+    Finds a word in every recording you kept in that folder
 
-Execute or inspect recoverable worker jobs.
-
-```text
-Execute or inspect recoverable worker jobs
-
-Usage: vsift job [OPTIONS] <COMMAND>
-
-Commands:
-  run     Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id
-  batch   Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently
-  status  Report one job: state, resumability, progress, result or failure
-  resume  Continue one interrupted job from its checkpoints
-  cancel  Cancel one job, or ask the process running it to stop
-  start   Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift job run
-
-Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id.
-
-```text
-Execute one versioned job request in a worker workspace: ingest, retranscribe, candidates, retain and close, each once per operation id
-
-Usage: vsift job run [OPTIONS] --request <REQUEST> --input-root <INPUT_ROOT>
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --request <REQUEST>
-          Versioned JSON request file (job-request v1, at most 64 KiB)
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --input-root <INPUT_ROOT>
-          Absolute directory the request's source and transcript paths are relative to; nothing outside it is read, and no link is followed
-
-      --bundle-root <BUNDLE_ROOT>
-          Absolute, existing directory a retain step writes its bundle below
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --drain-timeout-ms <DRAIN_TIMEOUT_MS>
-          After a shutdown signal, how long the running step may finish before it is cancelled, 0 through 300000 milliseconds; defaults to 0 (stop at once)
-
-          [default: 0]
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-      --admission-wait-ms <ADMISSION_WAIT_MS>
-          How long a step waits (with jittered retries) for admission capacity before it answers BUSY, 0 through 60000 milliseconds; defaults to 60000
-
-          [default: 60000]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift job batch
-
-Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently.
-
-```text
-Execute a finite JSON Lines file of job requests in a worker workspace, a bounded number at a time, each line independently
-
-Usage: vsift job batch [OPTIONS] --requests <REQUESTS> --input-root <INPUT_ROOT>
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --requests <REQUESTS>
-          Regular file of at most 1,000 lines, each one job-request v1 object of at most 64 KiB, or blank
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --input-root <INPUT_ROOT>
-          Absolute directory every request's source and transcript paths are relative to; nothing outside it is read, and no link is followed
-
-      --bundle-root <BUNDLE_ROOT>
-          Absolute, existing directory retain steps write their bundles below
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --concurrency <CONCURRENCY>
-          Requests run at once, 1 through 16 and at most the workspace's admission capacity; the next line is read only when one ends
-
-          [default: 1]
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-      --drain-timeout-ms <DRAIN_TIMEOUT_MS>
-          After a shutdown signal, how long running steps may finish before they are cancelled, 0 through 300000 milliseconds; defaults to 0
-
-          [default: 0]
-
-      --admission-wait-ms <ADMISSION_WAIT_MS>
-          How long a step waits (with jittered retries) for admission capacity before it answers BUSY, 0 through 60000 milliseconds; defaults to 60000
-
-          [default: 60000]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift job status
-
-Report one job: state, resumability, progress, result or failure.
-
-```text
-Report one job: state, resumability, progress, result or failure
-
-Usage: vsift job status [OPTIONS] <JOB>
-
-Arguments:
-  <JOB>
-          Job to inspect or change (a `job_` identity)
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift job resume
-
-Continue one interrupted job from its checkpoints.
-
-```text
-Continue one interrupted job from its checkpoints
-
-Usage: vsift job resume [OPTIONS] <JOB>
-
-Arguments:
-  <JOB>
-          Job to inspect or change (a `job_` identity)
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift job cancel
-
-Cancel one job, or ask the process running it to stop.
-
-```text
-Cancel one job, or ask the process running it to stop
-
-Usage: vsift job cancel [OPTIONS] <JOB>
-
-Arguments:
-  <JOB>
-          Job to inspect or change (a `job_` identity)
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
-```
-
-## vsift job start
-
-Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
-
-```text
-Prepare a session as one job and follow it with job status: index its video for candidates, then transcribe it; in the background for a recording of ten minutes or more, in the foreground for a shorter one.
-
-A background job publishes the transcript as it goes: search and transcript get answer over the finished part, marked partial, while it runs. job status reports how far each step has come in seconds of the recording, its speed and an estimate of the time left. With --first, the range named is transcribed before everything else. job cancel or session close stops it, and what it published stays.
-
-Usage: vsift job start [OPTIONS] <SESSION>
-
-Arguments:
-  <SESSION>
-          Session to prepare (a `ses_` identity)
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --mode <MODE>
-          quick runs in the foreground and answers when done; watched runs in the background and answers at once; queued waits its turn in the root's queue in the background. Defaults by the recording's length: quick under ten minutes, watched from ten minutes on
-
-          Possible values:
-          - quick:   In the foreground: the command answers when the job is done
-          - watched: In the background: the command answers once a runner holds the job
-          - queued:  In the root's queue, after the jobs queued before it, one at a time at the whole capacity, giving way at every chunk to anyone who waits: for several recordings, or when there is no rush
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --first <FROM_US:TO_US>
-          The window to transcribe first: its start and end in microseconds of the recording joined by a colon (60000000:70000000), at most 30 minutes long. When the user named a moment, it is ready within about one window's recognition, before the rest
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/keep-and-share-evidence.md
 ```
 
 ## vsift handoff
 
-Start an agent's handoff report from a valid skeleton, or check a draft before it is sent.
+Start or check a report that cites its evidence.
 
 ```text
-Start an agent's handoff report from a valid skeleton, or check a draft before it is sent
+Start or check a report that cites its evidence
 
 Usage: vsift handoff [OPTIONS] <COMMAND>
 
 Commands:
   check     Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
   skeleton  Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -2293,6 +2683,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift handoff skeleton <session> --question <words>
+    Starts a report with the session's ids filled in
+  vsift handoff check --file /tmp/report.md --session <session>
+    Lists what to fix before you send it
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
 ## vsift handoff check
@@ -2334,6 +2732,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift handoff check --file /tmp/report.md --session <session>
+    Lists what to fix before you send the report
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
 ## vsift handoff skeleton
@@ -2376,14 +2780,20 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift handoff skeleton <session> --question <words>
+    Starts a report with the session's ids filled in
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
 ## vsift skill
 
-Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files.
+Add VSift's skill to your AI assistant, or print one of its files.
 
 ```text
-Install the agent skill into the folders AI coding clients read, see what is there, or print one of its files
+Add VSift's skill to your AI assistant, or print one of its files
 
 Usage: vsift skill [OPTIONS] <COMMAND>
 
@@ -2391,6 +2801,7 @@ Commands:
   install  Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
   status   Show what is at each skill folder, read only, and the skill's files
   show     Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md)
+  help     Print this message or the help of the given subcommand(s)
 
 Options:
       --json
@@ -2416,6 +2827,14 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift skill install --client claude-code
+    Adds the skill to the folder that client reads
+  vsift skill status
+    Shows what is at each skill folder
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
 ## vsift skill install
@@ -2470,6 +2889,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift skill install --client claude-code
+    Adds the skill to the folder that client reads
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
 ## vsift skill status
@@ -2508,6 +2933,12 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
+
+Examples:
+  vsift skill status
+    Shows what is at each skill folder
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
 ## vsift skill show
@@ -2547,52 +2978,11 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
-```
 
-## vsift watch
+Examples:
+  vsift skill show SKILL.md
+    Prints the skill's main file
 
-Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>).
-
-```text
-Make a transcript, subtitles and the screen changes of a video, beside it (the same as  vsift <video>).
-
-Writes <name>.txt (a readable transcript), <name>.srt (subtitles most video players pick up) and <name>-vsift/ (the screen changes, with a frame for each and their list) beside the video, or into --output. It never replaces a file: a name that is taken is refused before any work. With --keep it also keeps the recording for  vsift bundle search : the bundle holds the transcript and the frames, not the video or any on-screen text. Each file names the video's SHA-256 and the ids of the run; every frame's SHA-256 is in the list. Video tools and speech recognition must be set up first (vsift setup check). Not for AI assistants: they use the session commands.
-
-Usage: vsift watch [OPTIONS] <SOURCE>
-
-Arguments:
-  <SOURCE>
-          The video
-
-Options:
-      --json
-          Emit one versioned JSON terminal result
-
-      --output <FOLDER>
-          The folder to write into, instead of beside the video: an existing folder, or a new one whose parent exists
-
-      --events <EVENTS>
-          Emit versioned evidence, progress and terminal records as JSON Lines
-
-          Possible values:
-          - jsonl: One bounded JSON object per line
-
-      --keep <FOLDER>
-          Keep the recording for later search, in a private subfolder of this folder named after the video (an existing folder, or a new one whose parent exists). The same folder takes every recording you keep; find them with  vsift bundle search <FOLDER> . The video is not copied in, and on-screen text is not read
-
-      --session-root <SESSION_ROOT>
-          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
-
-      --host-isolation <HOST_ISOLATION>
-          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
-
-          Possible values:
-          - process-only: Per-process containment only; no strict boundary is claimed
-          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
-
-          [default: process-only]
-
-  -h, --help
-          Print help (see a summary with '-h')
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
 
