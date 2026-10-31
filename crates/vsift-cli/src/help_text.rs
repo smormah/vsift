@@ -25,7 +25,7 @@ macro_rules! command_help {
 /// What plain `vsift` prints: no tool check, so it is instant.
 pub(crate) const BARE_HELP: &str = "\
 VSift: point it at a video; get back what was said, what changed on screen,
-and the frames.
+and the proof.
 
   vsift setup            Check what's installed and set up what's missing
   vsift ./meeting.mp4    Transcript, subtitles and screen changes beside it
@@ -37,7 +37,7 @@ More:  vsift --help  or  https://github.com/smormah/vsift#readme
 /// The line above the usage in `-h` and `--help`.
 pub(crate) const ROOT_ABOUT: &str = "\
 VSift: point it at a video; get back what was said, what changed on screen,
-and the frames.";
+and the proof.";
 
 /// The usage of `-h` and `--help`, which is the two things a person types.
 pub(crate) const ROOT_USAGE: &str = "\
@@ -51,7 +51,7 @@ pub(crate) const ROOT_HELP_TEMPLATE: &str = "\
 {usage-heading} {usage}
 
 Get started
-  setup       Check and set up what VSift needs (run it any time)
+  setup       Check and set up what you need (run it any time)
   watch       Make a transcript, subtitles and screen changes beside a video
 
 Explore a video step by step (what AI assistants use; you can too)
@@ -70,7 +70,7 @@ Advanced
   job         Run and follow long work on a session
   bundle      Check and search the recordings you kept
   handoff     Start or check a report that cites its evidence
-  skill       Add VSift's skill to your AI assistant, or print one of its files
+  skill       Add the skill to your AI assistant, or print one of its files
 
 Options:
 {options}
@@ -87,6 +87,12 @@ An AI assistant without the VSift skill: read  vsift --help  to the end.";
 pub(crate) const TYPICAL_INVESTIGATION_HELP: &str = "\
 For an AI assistant without the VSift skill, and for scripts:
 
+Cite every fact. Each fact you report states the exact words, number or label
+(an error code, a button's name), gives its time, and names the id that says or
+shows it: a transcript segment (tsg_...) for what was said, a frame or crop
+(evd_...) for what the screen showed. A reader checks it against that id. If no
+id says or shows it, say you could not confirm it.
+
 A typical investigation (every command takes --json):
   1. vsift setup check --json
        What is installed. Report anything missing to the user; never install
@@ -101,8 +107,8 @@ A typical investigation (every command takes --json):
        <video> (--url - reads the link from standard input). VSift fetches it
        once, with limits, and nothing after that uses the network. A web page
        is not a video file.
-       Without one, speech is found only when local speech recognition is set
-       up (setup check says); then run:
+       Without a transcript file, speech is found only when local speech
+       recognition is set up (setup check says); then run:
          vsift job start <session> --json
        A recording under 10 minutes is transcribed before it answers. A longer
        one is transcribed in the background: follow it with
@@ -131,12 +137,6 @@ A typical investigation (every command takes --json):
        is reported as missing one).
   7. vsift session close <session> --json
        When you are done.
-
-Cite every fact. Each fact you report states the exact words, number or label
-(an error code, a button's name), gives its time, and names the id that says or
-shows it: a transcript segment (tsg_...) for what was said, a frame or crop
-(evd_...) for what the screen showed. A reader checks it against that id. If no
-id says or shows it, say you could not confirm it.
 
 Small numbers can be misread. In a compressed recording, a frame taken while
 the screen moves can turn a digit into a different one, and enlarging the
@@ -323,14 +323,14 @@ pub(crate) const CANDIDATES: &str = command_help!(
 );
 
 pub(crate) const OCR: &str = command_help!(
-    "guide/limits.md",
+    "guide/limits.md#the-pictures-screen-changes-and-frames",
     "vsift ocr <session>",
     "  Reads on-screen text off the next frames; run it again to go on",
     "vsift ocr search <session> --query refund",
     "  Finds a word in what it read",
 );
 pub(crate) const OCR_SEARCH: &str = command_help!(
-    "guide/limits.md",
+    "guide/limits.md#the-pictures-screen-changes-and-frames",
     "vsift ocr search <session> --query refund",
     "  Finds a word in the on-screen text ocr read",
 );
@@ -478,7 +478,7 @@ pub(crate) const SKILL_SHOW: &str = command_help!(
 );
 
 pub(crate) const WATCH: &str = command_help!(
-    "guide/limits.md",
+    "guide/limits.md#the-files-vsift-video-writes-new-in-030",
     "vsift ./meeting.mp4",
     "  Writes meeting.txt, meeting.srt and meeting-vsift/ beside the video",
     "vsift watch ./meeting.mp4 --output ./notes --keep ./kept",

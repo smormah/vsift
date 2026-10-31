@@ -18,7 +18,7 @@ const ROOT_HELP = [
   '  ingest  Prepare a local video investigation session',
   '',
   'Options:',
-  '      --json  Emit one versioned JSON terminal result',
+  '      --json  Machine-readable output: one versioned JSON result',
   '',
   'A typical investigation (every command takes --json):',
   '  1. vsift setup check --json',

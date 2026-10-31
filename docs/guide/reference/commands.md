@@ -7,7 +7,7 @@
 ## Contents
 
 - [vsift](#vsift): The root command, with the options every command takes
-- [vsift setup](#vsift-setup): Check and set up what VSift needs (run it any time)
+- [vsift setup](#vsift-setup): Check and set up what you need (run it any time)
 - [vsift setup check](#vsift-setup-check): Inspect local dependencies without changing the machine
 - [vsift setup plan](#vsift-setup-plan): Create a reviewable installation plan without applying it
 - [vsift setup install](#vsift-setup-install): Apply an unchanged, explicitly accepted installation plan
@@ -54,7 +54,7 @@
 - [vsift handoff](#vsift-handoff): Start or check a report that cites its evidence
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
 - [vsift handoff skeleton](#vsift-handoff-skeleton): Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
-- [vsift skill](#vsift-skill): Add VSift's skill to your AI assistant, or print one of its files
+- [vsift skill](#vsift-skill): Add the skill to your AI assistant, or print one of its files
 - [vsift skill install](#vsift-skill-install): Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
 - [vsift skill status](#vsift-skill-status): Show what is at each skill folder, read only, and the skill's files
 - [vsift skill show](#vsift-skill-show): Print one text file of this release's skill, by its name in the skill (for example SKILL.md or references/commands.md)
@@ -65,13 +65,13 @@ The root command, with the options every command takes.
 
 ```text
 VSift: point it at a video; get back what was said, what changed on screen,
-and the frames.
+and the proof.
 
 Usage: vsift <video> [--output <folder>] [--keep <folder>]
        vsift <command> [options]
 
 Get started
-  setup       Check and set up what VSift needs (run it any time)
+  setup       Check and set up what you need (run it any time)
   watch       Make a transcript, subtitles and screen changes beside a video
 
 Explore a video step by step (what AI assistants use; you can too)
@@ -90,11 +90,11 @@ Advanced
   job         Run and follow long work on a session
   bundle      Check and search the recordings you kept
   handoff     Start or check a report that cites its evidence
-  skill       Add VSift's skill to your AI assistant, or print one of its files
+  skill       Add the skill to your AI assistant, or print one of its files
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -125,6 +125,12 @@ Guides: https://github.com/smormah/vsift/tree/main/docs/guide
 
 For an AI assistant without the VSift skill, and for scripts:
 
+Cite every fact. Each fact you report states the exact words, number or label
+(an error code, a button's name), gives its time, and names the id that says or
+shows it: a transcript segment (tsg_...) for what was said, a frame or crop
+(evd_...) for what the screen showed. A reader checks it against that id. If no
+id says or shows it, say you could not confirm it.
+
 A typical investigation (every command takes --json):
   1. vsift setup check --json
        What is installed. Report anything missing to the user; never install
@@ -139,8 +145,8 @@ A typical investigation (every command takes --json):
        <video> (--url - reads the link from standard input). VSift fetches it
        once, with limits, and nothing after that uses the network. A web page
        is not a video file.
-       Without one, speech is found only when local speech recognition is set
-       up (setup check says); then run:
+       Without a transcript file, speech is found only when local speech
+       recognition is set up (setup check says); then run:
          vsift job start <session> --json
        A recording under 10 minutes is transcribed before it answers. A longer
        one is transcribed in the background: follow it with
@@ -169,12 +175,6 @@ A typical investigation (every command takes --json):
        is reported as missing one).
   7. vsift session close <session> --json
        When you are done.
-
-Cite every fact. Each fact you report states the exact words, number or label
-(an error code, a button's name), gives its time, and names the id that says or
-shows it: a transcript segment (tsg_...) for what was said, a frame or crop
-(evd_...) for what the screen showed. A reader checks it against that id. If no
-id says or shows it, say you could not confirm it.
 
 Small numbers can be misread. In a compressed recording, a frame taken while
 the screen moves can turn a digit into a different one, and enlarging the
@@ -221,10 +221,10 @@ is the user's to install; an installation plan is theirs to accept.
 
 ## vsift setup
 
-Check and set up what VSift needs (run it any time).
+Check and set up what you need (run it any time).
 
 ```text
-Check and set up what VSift needs (run it any time).
+Check and set up what you need (run it any time).
 
 Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what can be installed here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
 
@@ -245,7 +245,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -307,7 +307,7 @@ Usage: vsift setup check [OPTIONS]
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --timeout-seconds <TIMEOUT_SECONDS>
           Seconds allowed for all the dependency probes together, 1 to 60 (default 30).
@@ -371,7 +371,7 @@ Usage: vsift setup plan [OPTIONS] --profile <PROFILE>
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --profile <PROFILE>
           Capability profile whose dependencies should be planned
@@ -425,7 +425,7 @@ Usage: vsift setup install [OPTIONS] --plan <PLAN> --accept-plan <ACCEPT_PLAN>
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --plan <PLAN>
           Path to the saved `setup plan --json` result to apply
@@ -475,7 +475,7 @@ Usage: vsift setup repair [OPTIONS]
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -516,7 +516,7 @@ Usage: vsift setup list [OPTIONS]
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -568,7 +568,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --version <VERSION>
           Remove only this unselected version of the component
@@ -628,7 +628,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --version <VERSION>
           Select this installed version instead of the one selected before (see `setup list`)
@@ -681,7 +681,7 @@ Options:
           Explicit executable path; project-local configuration is never auto-loaded
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -725,7 +725,7 @@ Options:
           Absolute path to an existing model file; bytes are not parsed during registration
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -772,7 +772,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --output <FOLDER>
           The folder to write into, instead of beside the video: an existing folder, or a new one whose parent exists
@@ -807,7 +807,7 @@ Examples:
   vsift watch ./meeting.mp4 --output ./notes --keep ./kept
     Writes them into ./notes and keeps the recording for bundle search
 
-Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md#the-files-vsift-video-writes-new-in-030
 ```
 
 ## vsift ingest
@@ -825,12 +825,12 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --url <LINK>
           Instead of a local file, a direct https:// link to a video file.
 
-          MP4, MOV, MKV or WebM: it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed.
+          The link names one file (MP4, MOV, MKV or WebM): it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed.
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -893,7 +893,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -945,7 +945,7 @@ Options:
           Inclusive source-timeline start in microseconds; with --since it may be left out (from the start)
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1017,7 +1017,7 @@ Options:
           Inclusive source-timeline start in microseconds; requires --to. Omit both to transcribe the whole video
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1072,7 +1072,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --query <QUERY>
           Literal query text, at most 256 bytes; it is never interpreted as code or a regular expression
@@ -1150,7 +1150,7 @@ Options:
           Inclusive source-timeline start in microseconds
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1224,7 +1224,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1274,7 +1274,7 @@ Options:
           Requested source-timeline time in microseconds
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --candidate <CANDIDATE>
           A visual candidate (a `vcd_` identity from candidates) whose own frame to extract, exactly at its representative time
@@ -1338,7 +1338,7 @@ Options:
           Frames on each side, 1 through 20; defaults to 1
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1386,7 +1386,7 @@ Options:
           Inclusive source-timeline start in microseconds
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1440,7 +1440,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --rect <X,Y,WIDTH,HEIGHT>
           Rectangle as `x,y,width,height` in the parent image's displayed pixels; containment in the parent is checked before any tool runs
@@ -1493,7 +1493,7 @@ Options:
           Inclusive source-timeline start in microseconds
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1550,7 +1550,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1597,7 +1597,7 @@ Examples:
   vsift ocr search <session> --query refund
     Finds a word in what it read
 
-Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md#the-pictures-screen-changes-and-frames
 ```
 
 ## vsift ocr search
@@ -1617,7 +1617,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --query <QUERY>
           Literal query text, at most 256 bytes; it is never interpreted as code or a regular expression
@@ -1659,7 +1659,7 @@ Examples:
   vsift ocr search <session> --query refund
     Finds a word in the on-screen text ocr read
 
-Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/limits.md#the-pictures-screen-changes-and-frames
 ```
 
 ## vsift clocks
@@ -1679,7 +1679,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --max-frames <MAX_FRAMES>
           Most frames this call reads around rollovers, 0 through 200; defaults to 40. With 0 it reads nothing and needs no OCR runner
@@ -1745,7 +1745,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1791,7 +1791,7 @@ Options:
           Continuation bucket returned by the previous page, 0 through 255
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1836,7 +1836,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1881,7 +1881,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1926,7 +1926,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -1971,7 +1971,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --output <OUTPUT>
           New destination directory
@@ -2021,7 +2021,7 @@ Options:
           Restrict the operation to sessions proven expired
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --dry-run
           Report eligible sessions without deleting them
@@ -2077,7 +2077,7 @@ Options:
           - ephemeral: Consistent across a process crash, on every platform (development and CI)
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --admission-slots <ADMISSION_SLOTS>
           Admission capacity in weight units, 1 through 64: the most work the workspace runs at once (a whisper.cpp run weighs its threads, a visual window 2, a copy or an evidence extraction 1)
@@ -2133,7 +2133,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2176,7 +2176,7 @@ Usage: vsift job run [OPTIONS] --request <REQUEST> --input-root <INPUT_ROOT>
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --request <REQUEST>
           Versioned JSON request file (job-request v1, at most 64 KiB)
@@ -2236,7 +2236,7 @@ Usage: vsift job batch [OPTIONS] --requests <REQUESTS> --input-root <INPUT_ROOT>
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --requests <REQUESTS>
           Regular file of at most 1,000 lines, each one job-request v1 object of at most 64 KiB, or blank
@@ -2305,7 +2305,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2350,7 +2350,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2395,7 +2395,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2442,7 +2442,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --mode <MODE>
           quick runs in the foreground and answers when done; watched runs in the background and answers at once; queued waits its turn in the root's queue in the background. Defaults by the recording's length: quick under ten minutes, watched from ten minutes on
@@ -2501,7 +2501,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2548,7 +2548,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2597,7 +2597,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --query <QUERY>
           Literal query text, at most 256 bytes; it is never interpreted as code or a regular expression
@@ -2661,7 +2661,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2707,7 +2707,7 @@ Options:
           Absolute path of a file holding the whole draft report (at most 128 KiB of UTF-8); without it the draft is read from standard input
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2755,7 +2755,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --question <QUESTION>
           The user's question in your own words (1 to 500 characters, one line), written into the handoff's question member
@@ -2790,10 +2790,10 @@ Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-inve
 
 ## vsift skill
 
-Add VSift's skill to your AI assistant, or print one of its files.
+Add the skill to your AI assistant, or print one of its files.
 
 ```text
-Add VSift's skill to your AI assistant, or print one of its files
+Add the skill to your AI assistant, or print one of its files
 
 Usage: vsift skill [OPTIONS] <COMMAND>
 
@@ -2805,7 +2805,7 @@ Commands:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2861,7 +2861,7 @@ Options:
           - amp:         Amp (.agents/skills/)
 
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines
@@ -2908,7 +2908,7 @@ Usage: vsift skill status [OPTIONS]
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --project <FOLDER>
           Show one project's skill folders, below this existing folder, instead of yours
@@ -2956,7 +2956,7 @@ Arguments:
 
 Options:
       --json
-          Emit one versioned JSON terminal result
+          Machine-readable output: one versioned JSON result
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines

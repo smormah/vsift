@@ -44,7 +44,7 @@ pub(crate) fn parser(standard_output_is_terminal: bool) -> clap::Command {
     after_long_help = help_text::TYPICAL_INVESTIGATION_HELP
 )]
 pub(crate) struct Cli {
-    /// Emit one versioned JSON terminal result.
+    /// Machine-readable output: one versioned JSON result.
     #[arg(long, global = true)]
     pub json: bool,
 
@@ -82,7 +82,7 @@ pub(crate) enum EventFormat {
 /// Stable top-level R0 namespace.
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
-    /// Check and set up what VSift needs (run it any time).
+    /// Check and set up what you need (run it any time).
     ///
     /// Plain `vsift setup`, in a terminal, shows what works and what is
     /// missing, offers to install what can be installed here, with each
@@ -157,7 +157,7 @@ pub(crate) enum Command {
     /// Start or check a report that cites its evidence.
     #[command(after_help = help_text::HANDOFF)]
     Handoff(HandoffArguments),
-    /// Add VSift's skill to your AI assistant, or print one of its files.
+    /// Add the skill to your AI assistant, or print one of its files.
     #[command(after_help = help_text::SKILL)]
     Skill(SkillArguments),
     /// Make a transcript, subtitles and screen changes beside a video.
@@ -530,7 +530,8 @@ pub(crate) struct IngestArguments {
     pub source: Option<PathBuf>,
     /// Instead of a local file, a direct https:// link to a video file.
     ///
-    /// MP4, MOV, MKV or WebM: it is fetched once into the session (port 443, no
+    /// The link names one file (MP4, MOV, MKV or WebM): it is fetched once into
+    /// the session (port 443, no
     /// sign-in, public addresses only), then everything works offline as for
     /// a local file. `-` reads the link from standard input, which keeps a
     /// signed link out of the process list and the shell history. The link
@@ -1729,8 +1730,23 @@ mod tests {
         found
     }
 
+    /// The anchor GitHub gives a Markdown heading, as the guide tool writes it.
+    fn heading_anchor(line: &str) -> Option<String> {
+        let heading = line.trim_start_matches('#');
+        (heading.len() < line.len()).then(|| {
+            heading
+                .trim()
+                .to_lowercase()
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric() || *c == ' ' || *c == '-')
+                .map(|c| if c == ' ' { '-' } else { c })
+                .collect()
+        })
+    }
+
     /// Design note E3: each command's help gives examples that parse and name
-    /// that command, and ends with a link to a guide page that exists.
+    /// that command, and ends with a link to a guide page that exists, at a
+    /// section that exists.
     #[test]
     fn every_command_gives_examples_that_parse_and_ends_with_its_guide_page()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -1763,9 +1779,13 @@ mod tests {
                 .last()
                 .and_then(|line| line.strip_prefix(GUIDE))
                 .ok_or_else(|| format!("{path:?} does not end with its guide page"))?;
-            let file = page.split('#').next().unwrap_or(page);
+            let (file, anchor) = page.split_once('#').unwrap_or((page, ""));
             let docs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs");
-            assert!(docs.join(file).is_file(), "{path:?}: {file}");
+            let text = std::fs::read_to_string(docs.join(file))?;
+            assert!(
+                anchor.is_empty() || text.lines().filter_map(heading_anchor).any(|a| a == anchor),
+                "{path:?}: {page}"
+            );
         }
         Ok(())
     }

@@ -115,8 +115,9 @@ fn long_help_puts_the_person_first_and_keeps_the_assistants_guidance()
         assert!(text.contains(needle), "missing {needle}");
     }
     let person = text.find("Get started").ok_or("no Get started group")?;
-    let assistant = text.find("A typical investigation").ok_or("no guidance")?;
-    assert!(person < assistant, "{text}");
+    let citing = text.find("Cite every fact.").ok_or("no citing")?;
+    let example = text.find("A typical investigation").ok_or("no guidance")?;
+    assert!(person < citing && citing < example, "{text}");
     let ingest = String::from_utf8(run(&["ingest", "--help"])?.stdout)?;
     assert!(
         ingest.contains("--session-root") && ingest.contains("an agent leaves it out"),
