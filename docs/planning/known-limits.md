@@ -5355,7 +5355,7 @@ that week.**
   error is refused as `http_status` and never reaches yt-dlp, because only a `web_page` answer is routed there.
   Six refusal phrases are text a site or a proxy writes, so no check notices when one changes: the two for
   `bot_check`, the two for a channel's members, the one for a terminated account and the one for a proxy's `407`. Only
-  `bot_check` has a live check, and that one is optional. A site that rewords one falls to a broader reason.
+  `bot_check` has a live check, dispatched once for a change and at each re-pin. A site that rewords one falls to a broader reason.
 - **Evidence:** `crates/vsift-infrastructure/src/page_acquisition.rs`, `crates/vsift-infrastructure/tests/page_acquisition.rs`;
   `urllib.request.getproxies()` in yt-dlp's `YoutubeDL.py`, at the pinned tag `2026.08.19`.
 - **Plan:** a signed component manifest refreshed between releases is `1.0`'s (ADR 0028 section 4.1). The address
