@@ -245,11 +245,12 @@ Each entry has these fields:
 | [L-240](#l-240) | A Claude Code plugin added from the repository's `main` can carry a newer skill than the installed `vsift`; the docs say to add the marketplace at the release tag | contract/UX | low | unscheduled | none | open |
 | [L-241](#l-241) | `vsift skill install` knows only the eight clients whose skill folders were confirmed from their own documentation on 2026-10-28; a client that moves its folder needs a new release (the manual copy still works) | integration | low | unscheduled | none | open |
 | [L-244](#l-244) | `vsift <video> --keep` keeps the transcript and frames, not the video or on-screen text; two videos with one stem cannot share a folder; the name is checked, not held; a failed write leaves the session open and an incomplete folder | contract/UX | low | unscheduled | none | open |
+| [L-245](#l-245) | `handoff check --session` holds only the structured clock time, and only in an open session: a time written in a claim's statement or the report's Markdown is not read, a closed or expired session compares nothing, without `--session` only the schema applies, and where the session's clock record changed around the item a differing value is `clock_time_may_be_stale`, which cannot tell a stale report from a wrong one | contract/UX | low | unscheduled | none | open |
 | [L-247](#l-247) | A yt-dlp and a JavaScript runtime the user registers are not reviewed: `setup check` runs them as untrusted programs with a fixed version request and reports a version line and a digest, nothing more; the runtime is Deno only, and a check re-reads and hashes both each time | security/trust | low | unscheduled | none | open |
 | [L-248](#l-248) | Platform captions of a public video page are not fetched in `0.3.0`: a person who wants a platform's captions gives them as a transcript | scope | low | unscheduled | [#564](https://github.com/smormah/vsift/issues/564) | open |
 | [L-242](#l-242) | The six workflows, the Claude Code plugin, `vsift skill install` and the help's ready-made outcomes are untried by agents until the 0.3.0 cut: the text ships and its commands are held to the CLI by tests, but how agents follow it is unmeasured; C-04, the cold scenario that asks for a bug report, first runs in batch 3 at the cut and has no baseline | process/CI | low | 0.3.0 cut | none | open |
 
-Counts: 1 high, 57 medium, 144 low (202 entries), recounted on 2026-11-01 from the entries (the `### L-` sections); the table has 201 rows because L-245 has a section and no row.
+Counts: 1 high, 57 medium, 144 low (202 entries), recounted on 2026-11-01 from the entries (the `### L-` sections); the table, the sections and this line agree.
 
 ## Security
 
