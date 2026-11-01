@@ -3,7 +3,9 @@ name: Online links live
 # ADR 0028 (#407): `vsift ingest --url` against the internet, on a disposable
 # hosted runner, with public-domain NASA video only (the real-media set's RM09
 # on images-assets.nasa.gov and RM06 on the Internet Archive, pinned by size
-# and SHA-256, and RM09's NASA page, which must be refused as a web page).
+# and SHA-256, RM09's NASA page, which must be refused as a web page with no
+# yt-dlp set up, and RM06's Internet Archive page through a real managed yt-dlp
+# installed by the test into its own folder, ADR 0028 section 4.9).
 # The ordinary tests never reach the network; this manual workflow is the one
 # place the fetch meets real servers. It needs no secret and no token, and
 # keeps no credentials from the checkout.

@@ -81,6 +81,13 @@ class PhraseCheckTests(unittest.TestCase):
         self.assertEqual(review.both_checks(lambda: {"a": 1}, lambda: {"b": 2}),
                          ({"a": 1}, {"b": 2}))
 
+    def test_a_planted_configuration_is_where_ytdlp_would_look(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            review.plant_configuration(folder, folder / "marker")
+            self.assertTrue((folder / "yt-dlp.conf").is_file())
+            self.assertTrue(next((folder / "yt-dlp-plugins").rglob("planted.py")).is_file())
+
     def test_a_missing_phrase_is_named(self) -> None:
         self.assertEqual(review.missing_from(["a", "b"], "only a here"), ["b"])
 

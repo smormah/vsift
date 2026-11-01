@@ -5,8 +5,10 @@
 //! RM09 (`images-assets.nasa.gov`, direct) and RM06 (the Internet Archive,
 //! through its redirects to a storage node), each pinned by size and SHA-256
 //! in `tools/p14-campaigns/real-media/manifest.json`, so the session's source
-//! identity must be the pinned digest; and RM09's NASA page, which is a web
-//! page and must be refused as one.
+//! identity must be the pinned digest; RM09's NASA page, which is a web page
+//! and must be refused as one with no yt-dlp set up; and RM06's Internet Archive
+//! page, fetched through a real managed yt-dlp and Deno (ADR 0028 section 4.9,
+//! #409), which this test installs into its own folder.
 //!
 //! ```console
 //! cargo test --release --locked -p vsift-cli --test link_live -- --ignored --nocapture
@@ -56,6 +58,8 @@ const RM06: Pinned = Pinned {
 
 const RM09_PAGE: &str = "https://images.nasa.gov/details/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585";
 
+const RM06_PAGE: &str = "https://archive.org/details/jsc2023m000168_NTV_VF_Astronauts_Discuss_Record_Breaking_Mission_230912-MP4.mp4";
+
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
 struct OwnedRoot(PathBuf);
@@ -87,6 +91,14 @@ impl Drop for OwnedRoot {
 }
 
 fn vsift(root: &OwnedRoot, arguments: &[&str]) -> Result<(Option<i32>, Value), Box<dyn Error>> {
+    let (code, stdout) = vsift_bytes(root, arguments)?;
+    Ok((code, serde_json::from_slice(&stdout)?))
+}
+
+fn vsift_bytes(
+    root: &OwnedRoot,
+    arguments: &[&str],
+) -> Result<(Option<i32>, Vec<u8>), Box<dyn Error>> {
     let base = root.0.join("user");
     let output = Command::cargo_bin("vsift")?
         .env("LOCALAPPDATA", &base)
@@ -99,10 +111,43 @@ fn vsift(root: &OwnedRoot, arguments: &[&str]) -> Result<(Option<i32>, Value), B
         .arg("--json")
         .timeout(Duration::from_mins(20))
         .output()?;
-    Ok((
-        output.status.code(),
-        serde_json::from_slice(&output.stdout)?,
-    ))
+    Ok((output.status.code(), output.stdout))
+}
+
+/// Installs the core and the `online_links` group into this root's own
+/// folder, as a person does after saying yes.
+fn install_online_links(root: &OwnedRoot) -> TestResult {
+    let plan_path = root.0.join("plan.json");
+    let (code, plan) = vsift_bytes(
+        root,
+        &[
+            "setup",
+            "plan",
+            "--profile",
+            "desktop",
+            "--include",
+            "online_links",
+        ],
+    )?;
+    assert_eq!(code, Some(0), "setup plan failed");
+    let digest = serde_json::from_slice::<Value>(&plan)?["data"]["plan_digest"]
+        .as_str()
+        .ok_or("the plan has no digest")?
+        .to_owned();
+    fs::write(&plan_path, &plan)?;
+    let (code, installed) = vsift(
+        root,
+        &[
+            "setup",
+            "install",
+            "--plan",
+            plan_path.to_str().ok_or("plan path")?,
+            "--accept-plan",
+            &digest,
+        ],
+    )?;
+    assert_eq!(code, Some(0), "{installed}");
+    Ok(())
 }
 
 fn fetch_pinned(item: &Pinned) -> TestResult {
@@ -149,6 +194,37 @@ fn fetch_pinned(item: &Pinned) -> TestResult {
 fn pinned_public_domain_videos_are_fetched_into_sessions_as_their_pinned_bytes() -> TestResult {
     fetch_pinned(&RM09)?;
     fetch_pinned(&RM06)?;
+    Ok(())
+}
+
+/// The whole path against the real site: the web page answer, the managed
+/// pair, phase 1's checks, the download and the record.
+#[test]
+#[ignore = "opt-in live check; installs the real yt-dlp and reads a public Internet Archive page; the manual hosted workflow runs it"]
+fn a_public_page_is_fetched_through_the_managed_yt_dlp() -> TestResult {
+    let root = OwnedRoot::new()?;
+    install_online_links(&root)?;
+    let (code, opened) = vsift(&root, &["ingest", "--url", RM06_PAGE])?;
+    println!(
+        "RM06 page: {}",
+        opened["data"].get("origin").unwrap_or(&opened["error"])
+    );
+    assert_eq!(code, Some(0), "{opened}");
+    let origin = &opened["data"]["origin"];
+    assert_eq!(origin["kind"], "platform_page");
+    assert_eq!(origin["yt_dlp"]["source"], "managed");
+    assert_eq!(origin["js_runtime"]["source"], "managed");
+    assert!(origin.get("address_check").is_none());
+    let text = opened.to_string();
+    assert!(
+        !text.contains("/details/") && !text.contains("Astronauts"),
+        "the link or the title was printed"
+    );
+    let session = opened["data"]["session_id"]
+        .as_str()
+        .ok_or("no session id")?;
+    let (code, _) = vsift(&root, &["session", "close", session])?;
+    assert_eq!(code, Some(0));
     Ok(())
 }
 

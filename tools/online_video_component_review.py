@@ -30,7 +30,9 @@ to a developer machine:
   video from a local HTTPS server on this runner, so nothing leaves it. A comma
   selection with the bracket filters must select both streams, a pair must
   download as two files with the exact names and exit 0, and a second stream
-  that fails must end with a status that is neither 0 nor 101.
+  that fails must end with a status that is neither 0 nor 101. A `yt-dlp.conf`
+  and a plugin planted beside the executable, in its working folder and in
+  `HOME` must be ignored, and its temporary folder must be empty afterwards.
 
 The result is one JSON document on standard output and a table in the job
 summary.
@@ -489,7 +491,9 @@ def run_probe(executable: Path, folder: Path, info: dict, extra: list[str]
     """Runs the pinned executable on `info`, as phase 2 runs, with `extra` added."""
     info_path = folder / "info.json"
     info_path.write_text(json.dumps(info), encoding="utf-8")
-    environment = {"TMPDIR": str(folder), "HOME": str(folder), "YTDLP_NO_PLUGINS": "1"}
+    temporary = folder / "tmp"
+    temporary.mkdir(mode=0o700)
+    environment = {"TMPDIR": str(temporary), "HOME": str(folder), "YTDLP_NO_PLUGINS": "1"}
     command = [str(executable), "--ignore-config", "--no-plugin-dirs", "--no-update",
                "--no-remote-components", "--no-cookies", "--no-cookies-from-browser",
                "--no-playlist", "--no-batch-file", "--playlist-items", "1", "--abort-on-error",
@@ -500,6 +504,15 @@ def run_probe(executable: Path, folder: Path, info: dict, extra: list[str]
                "--no-check-certificates", "--load-info-json", str(info_path), *extra]
     return subprocess.run(command, env=environment, cwd=folder, capture_output=True,
                           timeout=PROBE_DEADLINE_SECONDS, check=False)
+
+
+def plant_configuration(folder: Path, marker: Path) -> None:
+    """A `yt-dlp.conf` that would change the names, and a plugin that would leave `marker`."""
+    (folder / "yt-dlp.conf").write_text("--output planted.%(ext)s\n", encoding="utf-8")
+    package = folder / "yt-dlp-plugins" / "planted" / "yt_dlp_plugins" / "postprocessor"
+    package.mkdir(parents=True)
+    (package / "planted.py").write_text(
+        f"open({str(marker)!r}, 'w').close()\n", encoding="utf-8")
 
 
 def review_pair_probe(work: Path, executable: Path) -> dict:
@@ -520,11 +533,19 @@ def review_pair_probe(work: Path, executable: Path) -> dict:
         good.mkdir(mode=0o700)
         output = good / "output"
         output.mkdir()
+        marker = work / "planted-plugin-ran"
+        plant_configuration(good, marker)
+        plant_configuration(executable.parent, marker)
         downloaded = run_probe(executable, good, probe_info(port, "/audio.m4a"),
                                ["--paths", str(output)])
         names = sorted(path.name for path in output.iterdir())
         if downloaded.returncode != 0 or names != ["vsift-page.137.mp4", "vsift-page.140.m4a"]:
             raise CandidateRejected(f"the pair wrote {names}, status {downloaded.returncode}")
+        if marker.exists():
+            raise CandidateRejected("a planted plugin ran")
+        left = sorted(path.name for path in (good / "tmp").iterdir())
+        if left:
+            raise CandidateRejected(f"the temporary folder kept {left}")
 
         bad = work / "probe-failed-stream"
         bad.mkdir(mode=0o700)
@@ -536,7 +557,8 @@ def review_pair_probe(work: Path, executable: Path) -> dict:
             raise CandidateRejected(f"a failed stream ended with status {failed.returncode}")
     finally:
         server.shutdown()
-    return {"selected": ids, "pair_files": names, "failed_stream_status": failed.returncode}
+    return {"selected": ids, "pair_files": names, "failed_stream_status": failed.returncode,
+            "planted_files_ignored": True, "temporary_folder_empty": True}
 
 
 def both_checks(first: Callable[[], dict], second: Callable[[], dict]) -> tuple[dict, dict]:
