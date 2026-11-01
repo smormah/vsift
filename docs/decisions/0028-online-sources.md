@@ -559,7 +559,7 @@ This pull request adds what was left, plus 4.6's registration (the acquisition h
   matter, and `setup check` says it is unused (`unused_components`, and a sentence in `next_step`) rather than
   reporting it in use.
 - **`setup check` runs the registered files as untrusted programs.** A yt-dlp gets the fixed `--ignore-config
-  --no-plugin-dirs --version`, an otherwise empty environment, `YTDLP_NO_PLUGINS=1` and a private temporary and home
+  --no-plugin-dirs --version`, an otherwise empty environment (on Windows with `SystemRoot`, below), `YTDLP_NO_PLUGINS=1` and a private temporary and home
   folder in the per-user verification area (removed afterwards); Deno gets `--version`, `DENO_NO_UPDATE_CHECK=1` and
   `NO_COLOR=1`. Nothing fetches a URL. The version line is bounded (64 printable ASCII bytes, the first line only) and
   must have the shape of what the tool prints: a date version for yt-dlp, `deno ` first for the runtime, so a runtime
