@@ -235,14 +235,10 @@ fn assert_checked(base: &Base, complete: bool) -> TestResult {
 /// and `setup plan` shows every component current with nothing to install,
 /// under the accepted digest.
 fn assert_installed(base: &Base, digest: &str, actions: usize, complete: bool) -> TestResult {
-    let human = base.vsift()?.args(["setup", "check"]).output()?;
-    let text = String::from_utf8(human.stdout)?;
-    println!("{text}");
-    // FFmpeg and FFprobe, and whisper.cpp when the plan installed it.
-    assert_eq!(
-        text.matches("[managed version]").count(),
-        if complete { 3 } else { 2 }
-    );
+    let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+    let check: Value = serde_json::from_slice(&check.stdout)?;
+    println!("{}", serde_json::to_string_pretty(&check)?);
+    assert_managed_lookups(&check, complete)?;
 
     let replanned = base
         .vsift()?
@@ -260,6 +256,32 @@ fn assert_installed(base: &Base, digest: &str, actions: usize, complete: bool) -
     assert_eq!(replanned_actions.len(), actions);
     for action in replanned_actions {
         assert_eq!(action["state"], "current", "{action}");
+    }
+    Ok(())
+}
+
+/// `ffmpeg` and `ffprobe`, and `whisper` when the plan installed it, each
+/// resolve to the managed version in a `setup check --json` response, which is
+/// a versioned contract. A tool found any other way (an explicit or
+/// configured path, or the filtered `PATH`) fails here, and so does a missing
+/// row. The readable table is not read: its wording is not a contract.
+fn assert_managed_lookups(check: &Value, complete: bool) -> TestResult {
+    let dependencies = check["dependencies"].as_array().ok_or("no dependencies")?;
+    let required: &[&str] = if complete {
+        &["ffmpeg", "ffprobe", "whisper"]
+    } else {
+        &["ffmpeg", "ffprobe"]
+    };
+    for name in required {
+        let dependency = dependencies
+            .iter()
+            .find(|dependency| dependency["dependency"] == *name)
+            .ok_or_else(|| format!("no {name} row in the check"))?;
+        if dependency["lookup"] != "managed_version" || dependency["status"] != "available" {
+            return Err(
+                format!("{name} is not the available managed version: {dependency}").into(),
+            );
+        }
     }
     Ok(())
 }
@@ -480,5 +502,36 @@ fn real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed() -> Tes
             .is_some_and(|step| step.contains("No JavaScript runtime is registered")),
         "{row}"
     );
+    Ok(())
+}
+
+/// The managed-version check is not satisfied by a tool found another way,
+/// by one that is not available, or by a missing row, and is by the managed
+/// version; it needs no network and no install.
+#[test]
+fn a_tool_found_another_way_does_not_pass_the_managed_check() -> TestResult {
+    let row = |name: &str, lookup: &str, status: &str| serde_json::json!({"dependency": name, "lookup": lookup, "status": status});
+    let managed = |names: &[&str]| {
+        serde_json::json!({"dependencies": names
+            .iter()
+            .map(|name| row(name, "managed_version", "available"))
+            .collect::<Vec<_>>()})
+    };
+    assert_managed_lookups(&managed(&["ffmpeg", "ffprobe"]), false)?;
+    assert_managed_lookups(&managed(&["ffmpeg", "ffprobe", "whisper"]), true)?;
+
+    let found_on_path = serde_json::json!({"dependencies": [
+        row("ffmpeg", "managed_version", "available"),
+        row("ffprobe", "filtered_path", "available"),
+    ]});
+    assert!(assert_managed_lookups(&found_on_path, false).is_err());
+    let unavailable = serde_json::json!({"dependencies": [
+        row("ffmpeg", "managed_version", "available"),
+        row("ffprobe", "managed_version", "missing"),
+    ]});
+    assert!(assert_managed_lookups(&unavailable, false).is_err());
+    assert!(assert_managed_lookups(&managed(&["ffmpeg"]), false).is_err());
+    // Whisper counts only when the plan installed it.
+    assert!(assert_managed_lookups(&managed(&["ffmpeg", "ffprobe"]), true).is_err());
     Ok(())
 }
