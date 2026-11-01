@@ -25,6 +25,12 @@
 //! checkpoint runs `--release`.
 //!
 //! The manual workflow `P13 managed smoke` runs it on a hosted runner.
+//!
+//! A second checkpoint does the same with `--include online_links` (ADR 0028
+//! section 4, ADR 0032): the real yt-dlp and Deno are downloaded, smoked
+//! (offline, no URL is fetched) and activated after the core, `setup check`
+//! reports them as managed, `setup list` shows them, and removing the
+//! runtime leaves the local-video readiness as it was.
 
 mod published_binary;
 
@@ -295,5 +301,102 @@ fn time_managed_use(base: &Base) -> TestResult {
             String::from_utf8_lossy(&frame.stdout)
         );
     }
+    Ok(())
+}
+
+/// The checkpoint with the optional online-links group. Ubuntu 24.04 only: the
+/// managed yt-dlp and Deno are offered nowhere else.
+#[test]
+#[ignore = "opt-in real managed installation with online_links; set VSIFT_P13_REAL_INSTALL=1 on Ubuntu 24.04 x86-64 and run --release"]
+fn real_managed_install_with_online_links_installs_reports_and_removes_the_pair() -> TestResult {
+    if env::var_os(OPT_IN).is_none() {
+        return Err(format!("set {OPT_IN}=1 to run the real managed installation").into());
+    }
+    if accepted_host_catalogue()?.is_none() {
+        return Err("the real managed installation runs only on a host with a catalogue".into());
+    }
+    println!("binary under test: {}", published_binary::report()?);
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let base = Base(env::temp_dir().join(format!("vsift-p13-real-online-links-{stamp}")));
+    fs::create_dir(&base.0)?;
+
+    let plan = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop"])
+        .args(["--include", "online_links", "--json"])
+        .output()?;
+    assert!(plan.status.success(), "setup plan failed");
+    let plan_value: Value = serde_json::from_slice(&plan.stdout)?;
+    let digest = plan_value["data"]["plan_digest"]
+        .as_str()
+        .ok_or("the plan has no digest")?
+        .to_owned();
+    let group = &plan_value["data"]["optional_components"][0];
+    assert_eq!(group["name"], "online_links");
+    assert_eq!(group["status"], "included", "{group}");
+    let optional_actions = group["actions"].as_array().map_or(0, Vec::len);
+    assert_eq!(optional_actions, 2, "yt-dlp and Deno: {group}");
+    let plan_path = base.0.join("plan.json");
+    fs::write(&plan_path, &plan.stdout)?;
+
+    let started = Instant::now();
+    let install = base
+        .vsift()?
+        .args(["setup", "install", "--plan", path_text(&plan_path)?])
+        .args(["--accept-plan", &digest, "--json"])
+        .output()?;
+    println!(
+        "install: exit {:?} in {:.1} s",
+        install.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    let installed: Value = serde_json::from_slice(&install.stdout)?;
+    println!("{}", serde_json::to_string_pretty(&installed["data"])?);
+    assert_eq!(install.status.code(), Some(0), "{}", installed["error"]);
+    assert_eq!(installed["status"], "complete", "no partial result");
+    assert_eq!(installed["data"]["core"], "ready");
+    let optional = installed["data"]["optional_components"]
+        .as_array()
+        .ok_or("no optional components")?;
+    assert_eq!(optional.len(), optional_actions);
+    for component in optional {
+        assert_eq!(component["status"], "activated", "{component}");
+    }
+
+    let managed_row = |base: &Base| -> Result<Value, Box<dyn Error>> {
+        let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+        assert_eq!(check.status.code(), Some(0));
+        let value: Value = serde_json::from_slice(&check.stdout)?;
+        assert_eq!(value["status"], "ready");
+        value["optional_components"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+            .cloned()
+            .ok_or_else(|| "no online_links row".into())
+    };
+    let row = managed_row(&base)?;
+    assert_eq!(row["status"], "installed", "{row}");
+    let components = row["components"].as_array().ok_or("no components")?;
+    let names: Vec<&str> = components
+        .iter()
+        .filter_map(|component| component["component"].as_str())
+        .collect();
+    assert_eq!(names, ["js_runtime_deno", "yt_dlp"]);
+    assert!(components.iter().all(|c| c["source"] == "managed"));
+
+    let list = base.vsift()?.args(["setup", "list", "--json"]).output()?;
+    assert_eq!(list.status.code(), Some(0));
+    let listed = String::from_utf8(list.stdout)?;
+    assert!(listed.contains("yt_dlp") && listed.contains("js_runtime_deno"));
+
+    // Removing the runtime takes only the runtime; local investigation is
+    // as ready as before.
+    let removed = base
+        .vsift()?
+        .args(["setup", "remove", "js_runtime_deno", "--json"])
+        .output()?;
+    assert_eq!(removed.status.code(), Some(0));
+    let row = managed_row(&base)?;
+    assert_eq!(row["status"], "not_installed", "{row}");
     Ok(())
 }

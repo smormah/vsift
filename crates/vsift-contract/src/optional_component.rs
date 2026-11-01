@@ -10,7 +10,9 @@
 //! else in the presentation.
 
 use serde::Serialize;
-use vsift_application::{OptionalCapability, OptionalComponent, SetupProfile};
+use vsift_application::{
+    OptionalCapability, OptionalComponent, SetupProfile, UserSuppliedKind, UserSuppliedTool,
+};
 
 /// The fixed prose of one optional component.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,7 +44,7 @@ pub const fn optional_component_text(component: OptionalComponent) -> OptionalCo
             purpose: "Fetches a video from a public web page (YouTube and other sites) when you give VSift a link with ingest --url, using yt-dlp and the JavaScript runtime it needs. Direct HTTPS video links work without it.",
             subject: "yt-dlp (GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms.",
             terms_notice: Some(SITE_TERMS_NOTICE),
-            unavailable: "A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only. Direct HTTPS video links (ingest --url) work without it, as does every local file.",
+            unavailable: "A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only; elsewhere, register a yt-dlp you supply with vsift setup configure yt-dlp --executable <absolute-path>. Direct HTTPS video links (ingest --url) work without it, as does every local file.",
             installed: "Online links can be fetched with ingest --url: yt-dlp and its JavaScript runtime are installed. Sites change and can break extraction; a newer reviewed yt-dlp comes with a VSift release, and managed_updates names it when one is known.",
             name_in_prose: "online links",
         },
@@ -73,6 +75,11 @@ pub(crate) struct OptionalCheckResponse {
     name: &'static str,
     status: &'static str,
     components: Vec<OptionalCheckComponentResponse>,
+    /// A JavaScript runtime the user registered that is not used because no
+    /// yt-dlp of theirs is registered (the runtime follows yt-dlp's source).
+    /// Absent when there is none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    unused_components: Vec<OptionalCheckComponentResponse>,
     next_step: String,
     add_command: Option<SuggestedVsiftCommand>,
 }
@@ -81,6 +88,13 @@ pub(crate) struct OptionalCheckResponse {
 struct OptionalCheckComponentResponse {
     component: &'static str,
     version: String,
+    /// `managed` (VSift installed and reviewed it) or `user_managed` (the
+    /// user supplied it; keeping it current is theirs).
+    source: &'static str,
+    /// The SHA-256 of a user-supplied file; absent for a managed one, whose
+    /// digest is pinned by the catalogue.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
 }
 
 /// A `vsift` command as an executable and an argument array.
@@ -88,6 +102,36 @@ struct OptionalCheckComponentResponse {
 struct SuggestedVsiftCommand {
     executable: &'static str,
     arguments: Vec<&'static str>,
+}
+
+/// What `setup check` says of tools the user supplied: they are used instead
+/// of a managed one, nothing here reviewed them, and keeping them current is
+/// the user's job (ADR 0028 section 4.6).
+fn user_supplied_step(tools: &[UserSuppliedTool]) -> String {
+    let runtime = tools
+        .iter()
+        .any(|tool| tool.kind == UserSuppliedKind::JsRuntime);
+    let mut step = String::from(
+        "Online links use the yt-dlp you supplied, not a reviewed one: keeping it current is up to you, and sites change.",
+    );
+    if !runtime {
+        step.push_str(" No JavaScript runtime is registered, so YouTube may refuse; register Deno with vsift setup configure js-runtime --executable <absolute-path>.");
+    }
+    step
+}
+
+/// Words for a fixed unusable-tool reason identifier.
+fn unusable_reason_words(reason: &str) -> &'static str {
+    match reason {
+        "unreadable" => "the file could not be read",
+        "could_not_start" => "it could not be started",
+        "failed" => "it reported a failure",
+        "deadline" => "it did not answer in time",
+        "output_over_bound" => "it printed too much",
+        "unexpected_output" => "it did not print the version line expected of it",
+        "cancelled" => "the check was cancelled",
+        _ => "it could not be checked",
+    }
 }
 
 /// The `next_step` of one `setup check` optional component, for the
@@ -102,6 +146,28 @@ pub fn optional_check_step(
 }
 
 impl OptionalCheckResponse {
+    /// Lists a registered JavaScript runtime that is not used and says why.
+    fn note_unused_runtime(&mut self, runtime: &Result<UserSuppliedTool, &'static str>) {
+        let note = match runtime {
+            Ok(tool) => {
+                self.unused_components.push(OptionalCheckComponentResponse {
+                    component: tool.kind.identifier(),
+                    version: tool.version_line.clone(),
+                    source: "user_managed",
+                    sha256: Some(tool.sha256.clone()),
+                });
+                String::from(
+                    "The JavaScript runtime you registered is not used: it runs only with a yt-dlp you registered, and none is. Register one with vsift setup configure yt-dlp --executable <absolute-path>.",
+                )
+            }
+            Err(reason) => format!(
+                "The JavaScript runtime you registered is not used (it runs only with a yt-dlp you registered, and none is) and could not be used either ({}). Only Deno is accepted in 0.3.0.",
+                unusable_reason_words(reason)
+            ),
+        };
+        self.next_step = format!("{} {note}", self.next_step);
+    }
+
     pub(crate) fn new(
         component: OptionalComponent,
         capability: &OptionalCapability,
@@ -116,9 +182,34 @@ impl OptionalCheckResponse {
                     .map(|(component, version)| OptionalCheckComponentResponse {
                         component: component.identifier(),
                         version: version.clone(),
+                        source: "managed",
+                        sha256: None,
                     })
                     .collect(),
                 String::from(text.installed),
+                None,
+            ),
+            OptionalCapability::UserSupplied(tools) => (
+                tools
+                    .iter()
+                    .map(|tool| OptionalCheckComponentResponse {
+                        component: tool.kind.identifier(),
+                        version: tool.version_line.clone(),
+                        source: "user_managed",
+                        sha256: Some(tool.sha256.clone()),
+                    })
+                    .collect(),
+                user_supplied_step(tools),
+                None,
+            ),
+            OptionalCapability::UserSuppliedUnusable { tool, reason } => (
+                Vec::new(),
+                format!(
+                    "The {} you registered could not be used ({}). Local investigation does not need it. Register a working one with vsift setup configure {} --executable <absolute-path>.",
+                    tool.setup_name(),
+                    unusable_reason_words(reason),
+                    tool.setup_name(),
+                ),
                 None,
             ),
             OptionalCapability::NotInstalled if profile == SetupProfile::Worker => (
@@ -142,13 +233,22 @@ impl OptionalCheckResponse {
                 }),
             ),
             OptionalCapability::Unavailable => (Vec::new(), String::from(text.unavailable), None),
+            OptionalCapability::WithUnusedRuntime { base, .. } => {
+                let inner = Self::new(component, base, profile);
+                (inner.components, inner.next_step, inner.add_command)
+            }
         };
-        Self {
+        let mut response = Self {
             name,
             status: capability.identifier(),
             components,
+            unused_components: Vec::new(),
             next_step,
             add_command,
+        };
+        if let OptionalCapability::WithUnusedRuntime { runtime, .. } = capability {
+            response.note_unused_runtime(runtime);
         }
+        response
     }
 }

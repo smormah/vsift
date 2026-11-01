@@ -377,9 +377,13 @@ fn push_table(
         let OptionalComponent::OnlineLinks = component;
         rows.push(Row {
             part: "Web videos",
-            status: match capability {
-                OptionalCapability::Installed(_) => ("added", Tone::Good),
-                OptionalCapability::NotInstalled => ("none added", Tone::Quiet),
+            status: match capability.base() {
+                OptionalCapability::Installed(_) | OptionalCapability::UserSupplied(_) => {
+                    ("added", Tone::Good)
+                }
+                OptionalCapability::NotInstalled
+                | OptionalCapability::UserSuppliedUnusable { .. }
+                | OptionalCapability::WithUnusedRuntime { .. } => ("none added", Tone::Quiet),
                 OptionalCapability::Unavailable => ("not available", Tone::Quiet),
             },
             uses: "yt-dlp",
@@ -627,7 +631,7 @@ pub(super) fn push_extras_line(
     }
     let addable = optional
         .iter()
-        .any(|(_, capability)| *capability == OptionalCapability::NotInstalled);
+        .any(|(_, capability)| *capability.base() == OptionalCapability::NotInstalled);
     if addable {
         // Web videos are the only extra a catalogue has so far; the others
         // join this line as their groups land (ADR 0036 section 7).

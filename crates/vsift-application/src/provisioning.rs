@@ -597,10 +597,34 @@ pub enum OptionalCapability {
     /// Every managed component of it is installed, selected and verified,
     /// at these versions, in install order.
     Installed(Vec<(ManagedComponent, String)>),
+    /// The user supplied the tool and registered it with `setup configure`
+    /// (ADR 0028 section 4.6), and it answered. It is used instead of a
+    /// managed one, and reported with the lower trust of a file nobody here
+    /// reviewed.
+    UserSupplied(Vec<UserSuppliedTool>),
+    /// The user registered a tool and it could not be used.
+    UserSuppliedUnusable {
+        /// Which tool.
+        tool: UserSuppliedKind,
+        /// Why, as a fixed identifier (never the tool's own text).
+        reason: &'static str,
+    },
     /// It is offered on this host and not every part of it is installed.
     NotInstalled,
     /// No managed version of it is offered on this host.
     Unavailable,
+    /// `base` is the state of the component, and the user also registered a
+    /// JavaScript runtime without registering a yt-dlp. The runtime follows
+    /// yt-dlp's source (a managed yt-dlp runs with the managed Deno only, a
+    /// user's with the user's runtime), so it is not used, and the check
+    /// says so (ADR 0028 section 4.6, ruling of 2026-10-31).
+    WithUnusedRuntime {
+        /// The state without the unused runtime.
+        base: Box<Self>,
+        /// What identifying the unused runtime found: its facts, or the
+        /// fixed reason it could not be used.
+        runtime: Result<UserSuppliedTool, &'static str>,
+    },
 }
 
 impl OptionalCapability {
@@ -608,11 +632,68 @@ impl OptionalCapability {
     #[must_use]
     pub const fn identifier(&self) -> &'static str {
         match self {
-            Self::Installed(_) => "installed",
-            Self::NotInstalled => "not_installed",
+            Self::Installed(_) | Self::UserSupplied(_) => "installed",
+            Self::NotInstalled | Self::UserSuppliedUnusable { .. } => "not_installed",
             Self::Unavailable => "unavailable",
+            Self::WithUnusedRuntime { base, .. } => base.identifier(),
         }
     }
+
+    /// The state apart from an unused runtime the user registered: what
+    /// decides whether the component can be offered or is used.
+    #[must_use]
+    pub fn base(&self) -> &Self {
+        match self {
+            Self::WithUnusedRuntime { base, .. } => base.base(),
+            other => other,
+        }
+    }
+
+    /// Whether the component can be used now, managed or user-supplied.
+    #[must_use]
+    pub fn is_usable(&self) -> bool {
+        matches!(self.base(), Self::Installed(_) | Self::UserSupplied(_))
+    }
+}
+
+/// A tool of an optional component that the user supplied.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UserSuppliedKind {
+    /// The user's yt-dlp.
+    YtDlp,
+    /// The user's JavaScript runtime for it (Deno only in `0.3.0`).
+    JsRuntime,
+}
+
+impl UserSuppliedKind {
+    /// Stable public identifier, as `setup configure` reports it.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::YtDlp => "yt_dlp",
+            Self::JsRuntime => "js_runtime",
+        }
+    }
+
+    /// How `setup configure` spells it on the command line.
+    #[must_use]
+    pub const fn setup_name(self) -> &'static str {
+        match self {
+            Self::YtDlp => "yt-dlp",
+            Self::JsRuntime => "js-runtime",
+        }
+    }
+}
+
+/// What `setup check` identified of one tool the user supplied.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserSuppliedTool {
+    /// Which tool.
+    pub kind: UserSuppliedKind,
+    /// The first line of its version output.
+    pub version_line: String,
+    /// The SHA-256 of the file as identified.
+    pub sha256: String,
 }
 
 /// What a plan does about one optional component.

@@ -265,9 +265,16 @@ fn response(
     for extra in include.iter() {
         let OptionalComponent::OnlineLinks = extra;
         let status = match extra_capability(after, extra) {
-            Some(OptionalCapability::Installed(_)) => SetupPartStatus::Added,
+            Some(OptionalCapability::Installed(_) | OptionalCapability::UserSupplied(_)) => {
+                SetupPartStatus::Added
+            }
             Some(OptionalCapability::Unavailable) => SetupPartStatus::NotAvailableHere,
-            Some(OptionalCapability::NotInstalled) | None => SetupPartStatus::NotAdded,
+            Some(
+                OptionalCapability::NotInstalled
+                | OptionalCapability::UserSuppliedUnusable { .. }
+                | OptionalCapability::WithUnusedRuntime { .. },
+            )
+            | None => SetupPartStatus::NotAdded,
         };
         results.push(SetupPartResult {
             part: SetupPartName::WebVideos,

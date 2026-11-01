@@ -145,6 +145,32 @@ jobs:
             echo "A failure here with an unchanged binary means a publisher's file or route moved (L-099): open an issue before rerunning."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ADR 0028 section 4 and ADR 0032: the same install with the optional
+  # `online_links` group (`setup plan --include online_links`), built from
+  # this ref (a dispatch only: the published binaries and the weekly schedule
+  # predate the group). It downloads the pinned yt-dlp and Deno, smokes them
+  # offline (no URL is fetched), and checks `setup check`, `setup list` and the
+  # removal of the runtime. No credentials and no personal details are sent.
+  managed-install-online-links:
+    name: Managed install with online links (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with online_links, install, check, list and remove the runtime
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_online_links_installs_reports_and_removes_the_pair
+          -- --ignored --exact --nocapture
+
   # ADR 0032: the same two checkpoints on Windows x64, built from this ref
   # (a dispatch only; the published mode and the weekly schedule stay on
   # Ubuntu). The Windows catalogue offers FFmpeg and the model, and the model

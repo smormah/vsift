@@ -10,12 +10,13 @@ use vsift_application::{
     CorePartSet, DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability,
     ManagedPlanObservation, ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability,
     OptionalComponent, OptionalComponentSet, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
-    plan_managed_setup_of_parts,
+    UserSuppliedKind, UserSuppliedTool, plan_managed_setup_of_parts,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::{ManagedComponent, RuntimeDependency};
 use vsift_infrastructure::{
-    ExplicitProbePaths, ProcessDependencyProbe, accepted_host_catalogue, detect_managed_target,
+    ExplicitProbePaths, ProcessCancellation, ProcessDependencyProbe, TrustedExecutable,
+    UserOnlineTool, accepted_host_catalogue, detect_managed_target, identify_user_online_tool,
 };
 
 use crate::{engine::Engine, error::EngineError};
@@ -344,7 +345,9 @@ impl Engine {
             vsift_infrastructure::accepted_ubuntu_catalogue()
                 .map_err(|_| EngineError::ReviewedPolicyInvalid)?,
         );
-        let optional = optional_capabilities(managed_install, catalogue.as_ref(), &mut lookup);
+        let mut optional = optional_capabilities(managed_install, catalogue.as_ref(), &mut lookup);
+        self.apply_user_supplied_tools(&store, &mut optional)
+            .await?;
         let managed_install_by_dependency = RuntimeDependency::ALL.map(|dependency| {
             let supplier = match dependency {
                 RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe => {
@@ -560,6 +563,82 @@ impl Engine {
             .map_err(EngineError::from)
     }
 
+    /// Reports what the user registered for the online-links row (ADR 0028
+    /// section 4.6): a yt-dlp of theirs is used instead of a managed one on
+    /// every host, with the JavaScript runtime they registered or none;
+    /// a runtime without a yt-dlp of theirs is unused (a managed yt-dlp
+    /// runs with the managed Deno only), and the row says so. Each
+    /// registered file is an untrusted program, identified with the fixed
+    /// version request; its first version line and its SHA-256 are all that
+    /// is reported.
+    async fn apply_user_supplied_tools(
+        &self,
+        store: &vsift_infrastructure::UserDependencyConfigStore,
+        optional: &mut [(OptionalComponent, OptionalCapability)],
+    ) -> Result<(), EngineError> {
+        let yt_dlp = store.read_yt_dlp()?;
+        let runtime = store.read_js_runtime()?;
+        if yt_dlp.is_none() && runtime.is_none() {
+            return Ok(());
+        }
+        let workspace_parent = store
+            .media_tool_verification_state()?
+            .workspace_parent()
+            .to_path_buf();
+        let isolation = self.config().host_isolation.into_infrastructure();
+        let identify = |kind: UserSuppliedKind, tool: UserOnlineTool, path: PathBuf| {
+            let workspace_parent = workspace_parent.clone();
+            async move {
+                let executable = TrustedExecutable::explicit(&path).map_err(|_| "unreadable")?;
+                let facts = identify_user_online_tool(
+                    tool,
+                    &executable,
+                    &workspace_parent,
+                    isolation,
+                    ProcessCancellation::new(),
+                )
+                .await
+                .map_err(vsift_infrastructure::UserOnlineToolFault::identifier)?;
+                Ok::<UserSuppliedTool, &'static str>(UserSuppliedTool {
+                    kind,
+                    version_line: facts.version_line,
+                    sha256: facts.sha256.as_str().to_owned(),
+                })
+            }
+        };
+        let Some(yt_dlp) = yt_dlp else {
+            if let Some(path) = runtime {
+                let identified =
+                    identify(UserSuppliedKind::JsRuntime, UserOnlineTool::JsRuntime, path).await;
+                wrap_unused_runtime(optional, identified);
+            }
+            return Ok(());
+        };
+        let mut tools = Vec::new();
+        for (kind, tool, path) in [
+            (UserSuppliedKind::YtDlp, UserOnlineTool::YtDlp, Some(yt_dlp)),
+            (
+                UserSuppliedKind::JsRuntime,
+                UserOnlineTool::JsRuntime,
+                runtime,
+            ),
+        ] {
+            let Some(path) = path else { continue };
+            match identify(kind, tool, path).await {
+                Ok(identified) => tools.push(identified),
+                Err(reason) => {
+                    set_online_links(
+                        optional,
+                        OptionalCapability::UserSuppliedUnusable { tool: kind, reason },
+                    );
+                    return Ok(());
+                }
+            }
+        }
+        set_online_links(optional, OptionalCapability::UserSupplied(tools));
+        Ok(())
+    }
+
     /// Saves one user-managed local ASR model path without reading its bytes.
     ///
     /// # Errors
@@ -570,6 +649,60 @@ impl Engine {
         self.user_configuration()?
             .configure_model(file)
             .map_err(EngineError::from)
+    }
+
+    /// Saves the user-supplied yt-dlp for public video pages without running
+    /// it (ADR 0028 section 4.6).
+    ///
+    /// # Errors
+    ///
+    /// Fails when the path is not an absolute regular file or the per-user
+    /// configuration cannot be written.
+    pub fn configure_yt_dlp(&self, executable: &Path) -> Result<(), EngineError> {
+        self.user_configuration()?
+            .configure_yt_dlp(executable)
+            .map_err(EngineError::from)
+    }
+
+    /// Saves the user-supplied JavaScript runtime that the user's yt-dlp
+    /// runs a page's player code with (Deno only in `0.3.0`), without
+    /// running it.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the path is not an absolute regular file or the per-user
+    /// configuration cannot be written.
+    pub fn configure_js_runtime(&self, executable: &Path) -> Result<(), EngineError> {
+        self.user_configuration()?
+            .configure_js_runtime(executable)
+            .map_err(EngineError::from)
+    }
+}
+
+/// Notes, on the online-links row as it stands, a registered JavaScript
+/// runtime that no registered yt-dlp uses.
+fn wrap_unused_runtime(
+    optional: &mut [(OptionalComponent, OptionalCapability)],
+    runtime: Result<UserSuppliedTool, &'static str>,
+) {
+    for (component, current) in optional.iter_mut() {
+        if *component == OptionalComponent::OnlineLinks {
+            *current = OptionalCapability::WithUnusedRuntime {
+                base: Box::new(current.clone()),
+                runtime: runtime.clone(),
+            };
+        }
+    }
+}
+
+fn set_online_links(
+    optional: &mut [(OptionalComponent, OptionalCapability)],
+    capability: OptionalCapability,
+) {
+    for (component, current) in optional.iter_mut() {
+        if *component == OptionalComponent::OnlineLinks {
+            *current = capability.clone();
+        }
     }
 }
 

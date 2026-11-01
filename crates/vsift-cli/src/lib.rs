@@ -39,8 +39,8 @@ use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::
 use clap::{FromArgMatches, error::ErrorKind};
 use command::{
     BundleCommand, Cli, Command, EventFormat, ExecutionProfile, HandoffCommand, JobArguments,
-    JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand, SkillCommand,
-    TranscriptCommand,
+    JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand, SetupDependency,
+    SkillCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
@@ -405,11 +405,20 @@ where
                 )
             }
             Some(SetupCommand::Configure(arguments)) => {
-                let result = match arguments.dependency.runtime_dependency() {
-                    Some(dependency) => engine
+                let result = match (
+                    arguments.dependency.runtime_dependency(),
+                    arguments.dependency,
+                ) {
+                    (Some(dependency), _) => engine
                         .configure_executable(dependency, &arguments.executable)
                         .map(|()| ConfiguredSelectionResponse::new(dependency)),
-                    None => engine
+                    (None, SetupDependency::YtDlp) => engine
+                        .configure_yt_dlp(&arguments.executable)
+                        .map(|()| ConfiguredSelectionResponse::yt_dlp()),
+                    (None, SetupDependency::JsRuntime) => engine
+                        .configure_js_runtime(&arguments.executable)
+                        .map(|()| ConfiguredSelectionResponse::js_runtime()),
+                    (None, _) => engine
                         .configure_ocr_runner(&arguments.executable)
                         .map(|()| ConfiguredSelectionResponse::ocr_runner()),
                 }
