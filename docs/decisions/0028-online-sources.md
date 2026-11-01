@@ -572,8 +572,8 @@ This pull request adds what was left, plus 4.6's registration (the acquisition h
   private folder (`TMPDIR`, `TEMP`, `TMP` and `HOME` alike) and the fixed variables above. On Windows the one extra
   variable is `SystemRoot`, copied from VSift's own environment: a one-file Python build there cannot start without
   it (Python's random-number start-up needs it), and it names the system folder, not a person. It was added before any
-  hosted run could show whether it is needed; the Windows job below runs with it, and W4b runs yt-dlp in the same
-  environment. If a hosted run ever shows it unnecessary, remove it here and in W4b together.
+  hosted run could show whether it is needed; the Windows job below runs with it, and the acquisition half runs yt-dlp in the same
+  environment. If a hosted run ever shows it unnecessary, remove it here and in the acquisition half together.
 - **Tests:** the two registration records; the CLI contract for registering, the hidden alias and the refused
   `js_runtime`; the unused runtime and a runtime that is not Deno (using the build's own binary as the stand-in, whose
   version line does not begin `deno `); a yt-dlp that fails its version request; the identification itself against
