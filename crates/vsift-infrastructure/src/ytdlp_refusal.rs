@@ -2,39 +2,36 @@
 //!
 //! yt-dlp reports most causes only as text on standard error, and its exit
 //! status does not tell them apart. [`classify_ytdlp_failure`] reads that text
-//! only to choose a typed reason: it is never echoed, stored or logged. The
-//! phrases are case-sensitive substrings of the pinned yt-dlp's own messages,
-//! and the hosted phrase check (`tools/online_video_component_review.py`) finds
-//! each in the pinned tag's source, so a re-pin that changes one fails there.
+//! only to choose a typed reason: it is never echoed, stored or logged. A
+//! phrase only chooses a reason and its remediation; it never accepts anything.
+//!
+//! [`YTDLP_PHRASES`] are case-sensitive substrings of the pinned yt-dlp's own
+//! messages: the hosted phrase check (`tools/online_video_component_review.py`)
+//! finds each in the pinned tag's source, so a re-pin that changes one fails
+//! there. [`SITE_PHRASES`] are text a site or a proxy writes, which yt-dlp only
+//! passes on, so no source holds them and no check notices when one changes:
+//! a site that rewords one falls to a broader reason. The list is closed: an
+//! addition needs an observed failure on record (ADR 0028's note of
+//! 2026-11-01), and the check fails if one turns up in the source.
 
 use vsift_domain::SourceFetchReason;
 
 /// The most of yt-dlp's standard error that is read: 64 KiB.
 pub const MAX_YTDLP_STDERR_BYTES: usize = 64 * 1024;
 
-/// Each reason's phrases, in the order they are tried: `age_restricted`
-/// comes before `login_required`, because yt-dlp's age message asks to sign in.
+/// Each reason's checked phrases, in the order the reasons are tried:
+/// `age_restricted` comes before `login_required`, because yt-dlp's age message
+/// asks to sign in. Within a reason these come before its [`SITE_PHRASES`].
 pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
-    (
-        SourceFetchReason::AgeRestricted,
-        &["Sign in to confirm your age", "age-restricted"],
-    ),
+    (SourceFetchReason::AgeRestricted, &["age-restricted"]),
     (
         SourceFetchReason::LoginRequired,
         &[
             "This video requires login",
             "--cookies-from-browser or --cookies for the authentication",
-            "Join this channel to get access",
-            "members-only content",
         ],
     ),
-    (
-        SourceFetchReason::BotCheck,
-        &[
-            "Sign in to confirm you\u{2019}re not a bot",
-            "confirm you're not a bot",
-        ],
-    ),
+    (SourceFetchReason::BotCheck, &[]),
     (
         SourceFetchReason::Drm,
         &["This video is DRM protected", "DRM protected"],
@@ -56,7 +53,6 @@ pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
         &[
             "Video unavailable",
             "This video has been removed",
-            "account associated with this video has been terminated",
         ],
     ),
     (SourceFetchReason::UnsupportedSite, &["Unsupported URL"]),
@@ -76,10 +72,7 @@ pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
             "JS runtime",
         ],
     ),
-    (
-        SourceFetchReason::ProxyAuth,
-        &["407 Proxy Authentication Required"],
-    ),
+    (SourceFetchReason::ProxyAuth, &[]),
     (
         SourceFetchReason::Network,
         &[
@@ -92,6 +85,41 @@ pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
     ),
 ];
 
+/// Text from a site or a proxy that yt-dlp passes on, by reason. Exactly
+/// these seven: see the module documentation.
+pub const SITE_PHRASES: [(SourceFetchReason, &[&str]); 5] = [
+    (
+        SourceFetchReason::AgeRestricted,
+        &["Sign in to confirm your age"],
+    ),
+    (
+        SourceFetchReason::LoginRequired,
+        &["Join this channel to get access", "members-only content"],
+    ),
+    (
+        SourceFetchReason::BotCheck,
+        &[
+            "Sign in to confirm you\u{2019}re not a bot",
+            "confirm you're not a bot",
+        ],
+    ),
+    (
+        SourceFetchReason::Removed,
+        &["account associated with this video has been terminated"],
+    ),
+    (
+        SourceFetchReason::ProxyAuth,
+        &["407 Proxy Authentication Required"],
+    ),
+];
+
+fn site_phrases(reason: SourceFetchReason) -> &'static [&'static str] {
+    SITE_PHRASES
+        .iter()
+        .find(|(listed, _)| *listed == reason)
+        .map_or(&[], |(_, phrases)| *phrases)
+}
+
 /// The typed reason yt-dlp's standard error names, or
 /// [`SourceFetchReason::OnlineStepFailed`] when it names none. Text that is
 /// not valid UTF-8 is read as far as it is.
@@ -101,7 +129,12 @@ pub fn classify_ytdlp_failure(stderr: &[u8]) -> SourceFetchReason {
     let text = String::from_utf8_lossy(bounded);
     YTDLP_PHRASES
         .iter()
-        .find(|(_, phrases)| phrases.iter().any(|phrase| text.contains(phrase)))
+        .find(|(reason, phrases)| {
+            phrases
+                .iter()
+                .chain(site_phrases(*reason))
+                .any(|phrase| text.contains(phrase))
+        })
         .map_or(SourceFetchReason::OnlineStepFailed, |(reason, _)| *reason)
 }
 
@@ -111,11 +144,26 @@ mod tests {
 
     #[test]
     fn every_phrase_chooses_its_reason() {
-        for (reason, phrases) in YTDLP_PHRASES {
+        for (reason, phrases) in YTDLP_PHRASES.into_iter().chain(SITE_PHRASES) {
             for phrase in phrases {
                 let text = format!("ERROR: [site] abc: {phrase} and more\n");
                 assert_eq!(classify_ytdlp_failure(text.as_bytes()), reason, "{phrase}");
             }
+        }
+    }
+
+    #[test]
+    fn the_site_list_is_closed_and_shares_nothing_with_the_checked_list() {
+        let site: Vec<&str> = SITE_PHRASES
+            .iter()
+            .flat_map(|(_, phrases)| phrases.iter().copied())
+            .collect();
+        assert_eq!(site.len(), 7);
+        for (_, phrases) in YTDLP_PHRASES {
+            assert!(!phrases.iter().any(|phrase| site.contains(phrase)));
+        }
+        for (reason, _) in SITE_PHRASES {
+            assert!(YTDLP_PHRASES.iter().any(|(listed, _)| *listed == reason));
         }
     }
 

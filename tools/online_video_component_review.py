@@ -18,11 +18,14 @@ to a developer machine:
 - Each executable is then run once with `--version`, in an empty environment
   whose temporary folder is a private directory of this run, and its first
   line is compared with the reviewed banner.
-- The phrase and flag check (ADR 0028 sections 4.7 and 4.8): every phrase in
-  `ytdlp_refusal.rs` must be found verbatim in the release's source archive
-  (its digest comes from the signed sums), every flag in `page_acquisition.rs`
-  in the pinned executable's `--help`, and every filter field in the archive's
-  README, so a re-pin that changes one fails here.
+- The phrase and flag check (ADR 0028 sections 4.7 and 4.8): every phrase of
+  `YTDLP_PHRASES` in `ytdlp_refusal.rs` must be found verbatim in the release's
+  source archive (its digest comes from the signed sums), every flag in
+  `page_acquisition.rs` in the pinned executable's `--help`, and every filter
+  field in the archive's README, so a re-pin that changes one fails here. The
+  seven `SITE_PHRASES` must not be in the archive, or in the checked list: one
+  that turns up there moves to the checked list. Where the archive handles
+  that text is printed, as the record of each one's origin.
 - The pair probe (the note of 2026-11-01): the pinned executable reads a made-up
   video from a local HTTPS server on this runner, so nothing leaves it. A comma
   selection with the bracket filters must select both streams, a pair must
@@ -35,6 +38,7 @@ summary.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import hashlib
 import http.server
 import json
@@ -109,6 +113,12 @@ MAX_HELP_BYTES = 1024 * 1024
 REPOSITORY = Path(__file__).resolve().parent.parent
 REFUSAL_SOURCE = REPOSITORY / "crates/vsift-infrastructure/src/ytdlp_refusal.rs"
 ACQUISITION_SOURCE = REPOSITORY / "crates/vsift-infrastructure/src/page_acquisition.rs"
+# What the archive is searched for, to show where a site's text passes through.
+ORIGIN_FRAGMENTS = ("not a bot", "confirm your age", "Sign in to confirm", "Join this channel",
+                    "members-only", "members only", "terminated", "407",
+                    "Proxy Authentication", "Tunnel connection")
+MAX_ORIGIN_LINES = 12
+MAX_ORIGIN_LINE_BYTES = 200
 # The fields VSift's filter and format selection name.
 FILTER_FIELDS = ("is_live", "was_live", "live_status", "protocol", "ext")
 PROBE_DEADLINE_SECONDS = 120
@@ -200,9 +210,12 @@ def review_yt_dlp(work: Path) -> dict:
     banner = run_banner(executable, work / "yt-dlp-temp")
     if banner != YT_DLP_BANNER:
         raise CandidateRejected("yt-dlp's banner differs from the reviewed version")
+    phrase_check, pair_probe = both_checks(
+        lambda: review_phrases(work, sums, executable),
+        lambda: review_pair_probe(work, executable))
     return {
-        "phrase_check": review_phrases(work, sums, executable),
-        "pair_probe": review_pair_probe(work, executable),
+        "phrase_check": phrase_check,
+        "pair_probe": pair_probe,
         "tag": YT_DLP_TAG,
         "signing_key_fingerprint": fingerprint,
         "signing_key_git_blob": YT_DLP_KEY_GIT_BLOB,
@@ -318,14 +331,15 @@ def code_before_tests(text: str) -> str:
     return text.partition("#[cfg(test)]\nmod tests")[0]
 
 
-def reviewed_phrases(source: str) -> list[str]:
-    """The phrases of `YTDLP_PHRASES` in `ytdlp_refusal.rs`."""
-    start = source.find("pub const YTDLP_PHRASES")
+def reviewed_phrases(source: str, table: str = "YTDLP_PHRASES") -> list[str]:
+    """The phrases of one table in `ytdlp_refusal.rs`."""
+    start = source.find(f"pub const {table}")
     end = source.find("];\n", start)
     if start < 0 or end < 0:
         raise CandidateRejected("the phrase table was not found")
     # The array's type names no string, so every literal here is a phrase.
-    phrases = rust_strings(source[start:end])
+    block = re.sub(r"^\s*//.*$", "", source[start:end], flags=re.MULTILINE)
+    phrases = rust_strings(block)
     if not phrases:
         raise CandidateRejected("the phrase table is empty")
     return phrases
@@ -340,9 +354,9 @@ def reviewed_flags(source: str) -> list[str]:
     return flags
 
 
-def source_archive_text(archive: Path) -> str:
+def source_archive_files(archive: Path) -> dict[str, str]:
     """The Python sources and README of the release's source archive, read in place."""
-    parts: list[str] = []
+    files: dict[str, str] = {}
     total = 0
     with tarfile.open(archive, "r:gz") as tar:
         for member in tar:
@@ -355,10 +369,32 @@ def source_archive_text(archive: Path) -> str:
                 raise CandidateRejected("the source archive is larger than expected")
             content = tar.extractfile(member)
             if content is not None:
-                parts.append(content.read().decode("utf-8", errors="replace"))
-    if not parts:
+                files[name] = content.read().decode("utf-8", errors="replace")
+    if not files:
         raise CandidateRejected("the source archive holds no sources")
-    return "\n".join(parts)
+    return files
+
+
+def fragment_origins(files: dict[str, str], fragments: tuple[str, ...]) -> dict[str, list[str]]:
+    """Where each fragment appears: `path:line: text`, bounded per fragment."""
+    origins: dict[str, list[str]] = {}
+    for fragment in fragments:
+        found: list[str] = []
+        for name, text in sorted(files.items()):
+            for number, line in enumerate(text.splitlines(), start=1):
+                if fragment in line and len(found) < MAX_ORIGIN_LINES:
+                    found.append(f"{name}:{number}: {line.strip()[:MAX_ORIGIN_LINE_BYTES]}")
+        origins[fragment] = found
+    return origins
+
+
+def phrase_failures(checked: list[str], site: list[str], source: str) -> dict[str, list[str]]:
+    """What breaks the phrase rules: empty when the two lists hold."""
+    return {
+        "phrases": missing_from(checked, source),
+        "in_both_lists": sorted(set(checked) & set(site)),
+        "site_phrases_in_source": [phrase for phrase in site if phrase in source],
+    }
 
 
 def missing_from(wanted: list[str], text: str) -> list[str]:
@@ -385,18 +421,23 @@ def review_phrases(work: Path, sums: dict[str, str], executable: Path) -> dict:
     archive = work / YT_DLP_SOURCE_ARCHIVE
     capped_fetch(f"{YT_DLP_RELEASE}/{YT_DLP_SOURCE_ARCHIVE}", archive,
                  MAX_SOURCE_ARCHIVE_BYTES, digest)
-    source = source_archive_text(archive)
-    phrases = reviewed_phrases(REFUSAL_SOURCE.read_text(encoding="utf-8"))
+    files = source_archive_files(archive)
+    source = "\n".join(files.values())
+    refusals = REFUSAL_SOURCE.read_text(encoding="utf-8")
+    phrases = reviewed_phrases(refusals)
+    site = reviewed_phrases(refusals, "SITE_PHRASES")
     flags = reviewed_flags(ACQUISITION_SOURCE.read_text(encoding="utf-8"))
     help_text = executable_help(executable, work / "help-temp")
-    missing = {
-        "phrases": missing_from(phrases, source),
+    failures = {
+        **phrase_failures(phrases, site, source),
         "flags": missing_from(flags, help_text),
         "filter_fields": missing_from(list(FILTER_FIELDS), source),
     }
-    if any(missing.values()):
-        raise CandidateRejected(f"not found in the pinned yt-dlp: {json.dumps(missing)}")
-    return {"phrases": len(phrases), "flags": len(flags), "filter_fields": len(FILTER_FIELDS)}
+    if any(failures.values()):
+        raise CandidateRejected(f"phrase and flag check: {json.dumps(failures)}")
+    return {"phrases": len(phrases), "site_phrases": len(site), "flags": len(flags),
+            "filter_fields": len(FILTER_FIELDS),
+            "origins": fragment_origins(files, ORIGIN_FRAGMENTS)}
 
 
 def probe_info(port: int, audio_path: str) -> dict:
@@ -496,6 +537,20 @@ def review_pair_probe(work: Path, executable: Path) -> dict:
     finally:
         server.shutdown()
     return {"selected": ids, "pair_files": names, "failed_stream_status": failed.returncode}
+
+
+def both_checks(first: Callable[[], dict], second: Callable[[], dict]) -> tuple[dict, dict]:
+    """Runs both, so one failing does not hide what the other would say."""
+    results: list[dict] = []
+    failures: list[str] = []
+    for check in (first, second):
+        try:
+            results.append(check())
+        except CandidateRejected as error:
+            failures.append(str(error))
+    if failures:
+        raise CandidateRejected("; ".join(failures))
+    return results[0], results[1]
 
 
 def run_banner(executable: Path, temporary: Path) -> str:

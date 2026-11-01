@@ -168,7 +168,9 @@ pub use page_source_store::{PageSourceStore, PageToolSource};
 pub use ytdlp_info::{
     MAX_YTDLP_INFO_BYTES, SelectedFormat, YtDlpVideo, is_safe_format_id, parse_ytdlp_info,
 };
-pub use ytdlp_refusal::{MAX_YTDLP_STDERR_BYTES, YTDLP_PHRASES, classify_ytdlp_failure};
+pub use ytdlp_refusal::{
+    MAX_YTDLP_STDERR_BYTES, SITE_PHRASES, YTDLP_PHRASES, classify_ytdlp_failure,
+};
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
     local_asr_fixture_sha256, run_within_budget,

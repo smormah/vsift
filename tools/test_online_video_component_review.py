@@ -30,6 +30,30 @@ class PhraseCheckTests(unittest.TestCase):
         self.assertEqual(review.reviewed_phrases(source),
                          ["DRM protected", "you\u2019re not a bot"])
 
+    def test_both_lists_are_read_and_comments_are_not_phrases(self) -> None:
+        source = (
+            'pub const SITE_PHRASES: [(SourceFetchReason, &[&str]); 1] = [\n'
+            '    // From the "site" itself.\n'
+            '    (SourceFetchReason::Drm, &["a site phrase"]),\n'
+            '];\n'
+        )
+        self.assertEqual(review.reviewed_phrases(source, "SITE_PHRASES"), ["a site phrase"])
+
+    def test_the_lists_are_held_to_their_rules(self) -> None:
+        self.assertFalse(any(review.phrase_failures(["ours"], ["theirs"], "ours").values()))
+        failures = review.phrase_failures(["gone", "both"], ["both", "here"], "here")
+        self.assertEqual(failures["phrases"], ["gone", "both"])
+        self.assertEqual(failures["in_both_lists"], ["both"])
+        self.assertEqual(failures["site_phrases_in_source"], ["here"])
+
+    def test_the_real_lists_hold_seven_site_phrases(self) -> None:
+        refusals = review.REFUSAL_SOURCE.read_text(encoding="utf-8")
+        self.assertEqual(len(review.reviewed_phrases(refusals, "SITE_PHRASES")), 7)
+
+    def test_origins_are_bounded_and_name_the_line(self) -> None:
+        origins = review.fragment_origins({"a.py": "x\nnot a bot here\n"}, ("not a bot", "none"))
+        self.assertEqual(origins, {"not a bot": ["a.py:2: not a bot here"], "none": []})
+
     def test_the_real_table_and_flags_are_read(self) -> None:
         phrases = review.reviewed_phrases(review.REFUSAL_SOURCE.read_text(encoding="utf-8"))
         flags = review.reviewed_flags(review.ACQUISITION_SOURCE.read_text(encoding="utf-8"))
@@ -45,6 +69,15 @@ class PhraseCheckTests(unittest.TestCase):
         self.assertTrue(all(item["url"].startswith("https://127.0.0.1:8443/")
                             for item in info["formats"]))
 
+    def test_one_check_failing_does_not_hide_the_other(self) -> None:
+        def failing(text: str) -> dict:
+            raise CandidateRejected(text)
+
+        with self.assertRaisesRegex(CandidateRejected, "first; second"):
+            review.both_checks(lambda: failing("first"), lambda: failing("second"))
+        self.assertEqual(review.both_checks(lambda: {"a": 1}, lambda: {"b": 2}),
+                         ({"a": 1}, {"b": 2}))
+
     def test_a_missing_phrase_is_named(self) -> None:
         self.assertEqual(review.missing_from(["a", "b"], "only a here"), ["b"])
 
@@ -57,9 +90,8 @@ class PhraseCheckTests(unittest.TestCase):
             with tarfile.open(archive, "w:gz") as tar:
                 tar.add(folder / "extractor.py", arcname="yt-dlp/yt_dlp/extractor.py")
                 tar.add(folder / "ignored.bin", arcname="yt-dlp/ignored.bin")
-            text = review.source_archive_text(archive)
-        self.assertIn("Private video", text)
-        self.assertNotIn("ignored", text)
+            files = review.source_archive_files(archive)
+        self.assertEqual(files, {"yt-dlp/yt_dlp/extractor.py": "Private video"})
 
 
 class SumsTests(unittest.TestCase):

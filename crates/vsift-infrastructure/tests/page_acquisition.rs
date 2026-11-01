@@ -36,8 +36,8 @@ use vsift_domain::{
 };
 use vsift_infrastructure::{
     FilesystemSessionStore, HostIsolation, LinkTestRoute, PageSourceStore, PageTool,
-    PageToolSource, PageTools, ProxyVariables, SourceError, SourceSnapshot, TestAnswers,
-    TrustedExecutable, YTDLP_PHRASES,
+    PageToolSource, PageTools, ProxyVariables, SITE_PHRASES, SourceError, SourceSnapshot,
+    TestAnswers, TrustedExecutable, YTDLP_PHRASES,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -726,7 +726,7 @@ async fn every_phrase_gives_its_typed_reason_and_is_not_echoed() -> TestResult {
         String::from("something new went wrong"),
         SourceFetchReason::OnlineStepFailed,
     )];
-    for (reason, phrases) in YTDLP_PHRASES {
+    for (reason, phrases) in YTDLP_PHRASES.into_iter().chain(SITE_PHRASES) {
         cases.extend(phrases.iter().map(|phrase| ((*phrase).to_owned(), reason)));
     }
     for (phrase, expected) in cases {
@@ -793,6 +793,36 @@ async fn a_good_looking_file_from_a_failed_run_is_refused() -> TestResult {
         );
         assert_eq!(root.session_files()?, Vec::<PathBuf>::new(), "{name}");
     }
+    Ok(())
+}
+
+/// A phrase chooses a reason and nothing else. A run that exited 0 is judged
+/// by the folder, whatever its text says: with nothing there it fails that
+/// check, and with the expected file it passes.
+#[tokio::test]
+async fn a_site_phrase_only_chooses_a_reason() -> TestResult {
+    let wall = "stderr ERROR: Sign in to confirm you\u{2019}re not a bot";
+    let root = OwnedRoot::new()?;
+    let store = root.store().await?;
+    let tools = user_tools(&root)?;
+    root.scenario(&single_info(), &[String::from(wall)])?;
+    assert_eq!(
+        refused(stage(&store, DownloadLimits::DEFAULT, &tools, &NeverCancelled).await)?,
+        SourceFetchReason::UnexpectedOutput
+    );
+
+    let root = OwnedRoot::new()?;
+    let store = root.store().await?;
+    let tools = user_tools(&root)?;
+    root.scenario(
+        &single_info(),
+        &[
+            String::from(wall),
+            format!("write vsift-page.18.mp4 {MP4} 4096"),
+        ],
+    )?;
+    let snapshot = stage(&store, DownloadLimits::DEFAULT, &tools, &NeverCancelled).await?;
+    assert_eq!(snapshot.bytes(), 4_096);
     Ok(())
 }
 
