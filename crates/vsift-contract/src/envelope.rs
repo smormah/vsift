@@ -331,6 +331,19 @@ impl OperationResponse<serde_json::Value> {
         self
     }
 
+    /// Marks the failure's remediation as the user's to approve before
+    /// anyone acts on it (`user_confirmation`): a step that adds something
+    /// to the user's machine, as the optional online component does.
+    #[must_use]
+    pub fn requiring_user_confirmation(mut self) -> Self {
+        if let Some(error) = self.error.as_mut() {
+            for item in &mut error.remediation {
+                item.required_authority = "user_confirmation";
+            }
+        }
+        self
+    }
+
     /// Creates a failure whose remediation also suggests one `vsift`
     /// command, as the executable `vsift` and an argument array a caller
     /// runs without a shell (for example `job resume <job>`).

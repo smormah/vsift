@@ -30,7 +30,8 @@ use vsift_contract::{
     decode_strict_json, decode_work_request, validate_steps,
 };
 use vsift_domain::{
-    AnchorSource, ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId,
+    AnchorSource, ArtifactId, CropRect, CursorToken, DownloadLimits, EvidenceId, FrameDimensions,
+    JobId,
     LanguageTag, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES,
     MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES,
     MAX_SCREEN_TEXT_LINES, MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES,
@@ -59,7 +60,8 @@ use vsift_infrastructure::{
     inspect_zip_selected_files, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
     parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
     parse_png_sequence, parse_proc_cgroup, parse_runner_description, parse_runner_output,
-    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    is_safe_format_id, parse_supplied_transcript, parse_visual_samples,
+    parse_whisper_full_json, parse_ytdlp_info,
 };
 #[cfg(unix)]
 use vsift_infrastructure::{BundleSourcePolicy, FilesystemSessionStore};
@@ -124,6 +126,8 @@ pub enum Target {
     TranscriptPart,
     /// `FFprobe` metadata through `parse_ffprobe_metadata`, for both containers.
     FfprobeMetadata,
+    /// yt-dlp's metadata through `parse_ytdlp_info`.
+    YtdlpInfoJson,
     /// The `transcript get --cursor` continuation token through `CursorToken::parse`.
     TranscriptCursor,
     /// One visual window's `FFmpeg` output through `parse_visual_samples`, then
@@ -246,12 +250,13 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
         Self::TranscriptRecord,
         Self::FfprobeMetadata,
+        Self::YtdlpInfoJson,
         Self::TranscriptCursor,
         Self::VisualSamples,
         Self::VisualIndexRecord,
@@ -295,6 +300,7 @@ impl Target {
             Self::WhisperFullJson => "whisper_full_json",
             Self::TranscriptRecord => "transcript_record",
             Self::FfprobeMetadata => "ffprobe_metadata",
+            Self::YtdlpInfoJson => "ytdlp_info_json",
             Self::TranscriptCursor => "transcript_cursor",
             Self::VisualSamples => "visual_samples",
             Self::VisualIndexRecord => "visual_index_record",
@@ -342,6 +348,7 @@ impl Target {
             Self::WhisperFullJson => check_whisper_full_json(data),
             Self::TranscriptRecord => check_transcript_record(data),
             Self::FfprobeMetadata => check_ffprobe_metadata(data),
+            Self::YtdlpInfoJson => check_ytdlp_info(data),
             Self::TranscriptCursor => check_transcript_cursor(data),
             Self::VisualSamples => check_visual_samples(data),
             Self::VisualIndexRecord => check_visual_index_record(data),
@@ -417,6 +424,9 @@ pub enum Violation {
     /// Accepted metadata reports more recording-time tags than the probe
     /// names, one twice, the operator's source, or one away from the start.
     ClockTagsInvalid,
+    /// Accepted yt-dlp metadata has no id, the wrong number of formats, or a
+    /// format id that could leave the output folder or change a selection.
+    YtdlpInfoInvalid,
     /// An accepted cursor did not decode to itself after encoding.
     CursorRoundTripChanged,
     /// Accepted visual samples do not match the decoded frames: another
@@ -539,6 +549,7 @@ impl fmt::Display for Violation {
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
             Self::ClockModelInvalid => "a clock face or the clock model broke its own bounds",
             Self::ClockTagsInvalid => "accepted metadata reports impossible recording-time tags",
+            Self::YtdlpInfoInvalid => "accepted yt-dlp metadata broke its own rules",
             Self::CursorRoundTripChanged => "an accepted cursor changed in a round trip",
             Self::VisualSamplesMismatch => "accepted visual samples do not match the frames",
             Self::VisualAnalysisInvalid => "the window analysis of accepted samples is invalid",
@@ -762,6 +773,24 @@ fn check_transcript_part(data: &[u8]) -> Result<(), Violation> {
         Ok(read) if read.revision == open.revision && read.job_id == open.job_id => Ok(()),
         _ => Err(Violation::RecordRoundTripChanged),
     }
+}
+
+/// An accepted video names one format or a pair, each with an id that can
+/// neither leave the output folder nor change phase 2's selection.
+fn check_ytdlp_info(data: &[u8]) -> Result<(), Violation> {
+    let Ok(video) = parse_ytdlp_info(data, DownloadLimits::DEFAULT) else {
+        return Ok(());
+    };
+    if !matches!(video.formats.len(), 1 | 2)
+        || video.video_id.is_empty()
+        || !video
+            .formats
+            .iter()
+            .all(|format| is_safe_format_id(&format.format_id))
+    {
+        return Err(Violation::YtdlpInfoInvalid);
+    }
+    Ok(())
 }
 
 fn check_ffprobe_metadata(data: &[u8]) -> Result<(), Violation> {

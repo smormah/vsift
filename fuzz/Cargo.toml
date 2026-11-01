@@ -112,6 +112,14 @@ bench = false
 required-features = ["libfuzzer"]
 
 [[bin]]
+name = "ytdlp_info_json"
+path = "fuzz_targets/ytdlp_info_json.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
 name = "ffprobe_metadata"
 path = "fuzz_targets/ffprobe_metadata.rs"
 test = false

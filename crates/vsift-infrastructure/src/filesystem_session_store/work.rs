@@ -50,7 +50,39 @@ impl FilesystemSessionStore {
         if status.phase() != SessionPhase::Open || status.lifetime().expired(now_unix_seconds) {
             return Err(SessionStorageError::StateConflict);
         }
-        match create_private_child_directory(&session, Path::new(WORK_DIRECTORY)) {
+        self.new_work_directory(&session, session_id, hold)
+    }
+
+    /// Creates a fresh private work directory for a session whose source is
+    /// still being staged, so it has no lifecycle yet: a page's fetch works
+    /// there before the session opens (ADR 0028 section 4.7). It goes when the
+    /// value is dropped, and with the session if the open fails.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::session_work_directory`].
+    pub(crate) fn staging_work_directory(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<SessionWorkDirectory, SessionStorageError> {
+        let hold = self.acquire_read(session_id)?;
+        let sessions = self
+            .root
+            .open_dir_nofollow(SESSIONS_DIRECTORY)
+            .map_err(map_storage_io)?;
+        let session = sessions
+            .open_dir_nofollow(session_id.as_str())
+            .map_err(map_committed_io)?;
+        self.new_work_directory(&session, session_id, hold)
+    }
+
+    fn new_work_directory(
+        &self,
+        session: &Dir,
+        session_id: &SessionId,
+        hold: SessionReadHold,
+    ) -> Result<SessionWorkDirectory, SessionStorageError> {
+        match create_private_child_directory(session, Path::new(WORK_DIRECTORY)) {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(map_storage_io(error)),

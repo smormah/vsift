@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 import stat
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -15,6 +16,50 @@ from p06_windows_candidate_smoke import CandidateRejected
 
 
 DIGEST = "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"
+
+
+class PhraseCheckTests(unittest.TestCase):
+    def test_phrases_come_from_the_table_with_their_escapes_read(self) -> None:
+        source = (
+            'pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 2] = [\n'
+            '    (SourceFetchReason::Drm, &["DRM protected"]),\n'
+            '    (SourceFetchReason::BotCheck, &["you\\u{2019}re not a bot"]),\n'
+            '];\n'
+            'const OTHER: &str = "not a phrase";\n'
+        )
+        self.assertEqual(review.reviewed_phrases(source),
+                         ["DRM protected", "you\u2019re not a bot"])
+
+    def test_the_real_table_and_flags_are_read(self) -> None:
+        phrases = review.reviewed_phrases(review.REFUSAL_SOURCE.read_text(encoding="utf-8"))
+        flags = review.reviewed_flags(review.ACQUISITION_SOURCE.read_text(encoding="utf-8"))
+        self.assertIn("Sign in to confirm you\u2019re not a bot", phrases)
+        self.assertIn("407 Proxy Authentication Required", phrases)
+        for flag in ("--ignore-config", "--no-js-runtimes", "--match-filters", "--simulate"):
+            self.assertIn(flag, flags)
+
+    def test_the_probe_video_has_the_streams_the_selection_names(self) -> None:
+        info = review.probe_info(8443, "/audio.m4a")
+        self.assertEqual([item["format_id"] for item in info["formats"]], ["137", "140"])
+        self.assertTrue(review.PROBE_BODY[4:8] == b"ftyp")
+        self.assertTrue(all(item["url"].startswith("https://127.0.0.1:8443/")
+                            for item in info["formats"]))
+
+    def test_a_missing_phrase_is_named(self) -> None:
+        self.assertEqual(review.missing_from(["a", "b"], "only a here"), ["b"])
+
+    def test_the_source_archive_is_read_in_place(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            (folder / "extractor.py").write_text("Private video", encoding="utf-8")
+            (folder / "ignored.bin").write_text("ignored", encoding="utf-8")
+            archive = folder / "source.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                tar.add(folder / "extractor.py", arcname="yt-dlp/yt_dlp/extractor.py")
+                tar.add(folder / "ignored.bin", arcname="yt-dlp/ignored.bin")
+            text = review.source_archive_text(archive)
+        self.assertIn("Private video", text)
+        self.assertNotIn("ignored", text)
 
 
 class SumsTests(unittest.TestCase):

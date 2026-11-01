@@ -77,7 +77,7 @@ use vsift_contract::{
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, bundle_search_remediation,
     local_asr_failure_summary, local_asr_verification_summary, managed_lifecycle_remediation,
     media_tool_verification_summary, non_private_folder_summary, search_query_rejection_summary,
-    source_fetch_remediation, transcript_rejection_summary,
+    source_fetch_command, source_fetch_remediation, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -860,6 +860,9 @@ pub(crate) struct CommandFailure {
     /// The typed reason of a code that has reasons, written as
     /// `error.reason` (`SOURCE_FETCH_FAILED`, ADR 0028).
     reason: Option<&'static str>,
+    /// The remediation is the user's to approve (`required_authority`):
+    /// adding the optional online component (ADR 0028 section 4.7).
+    needs_confirmation: bool,
 }
 
 impl CommandFailure {
@@ -873,6 +876,7 @@ impl CommandFailure {
             suggested_command: Vec::new(),
             data: None,
             reason: None,
+            needs_confirmation: false,
         }
     }
 
@@ -914,6 +918,7 @@ impl CommandFailure {
             suggested_command,
             data: None,
             reason: None,
+            needs_confirmation: false,
         }
     }
 
@@ -953,6 +958,7 @@ impl From<FailureCode> for CommandFailure {
             suggested_command: Vec::new(),
             data: None,
             reason: None,
+            needs_confirmation: false,
         }
     }
 }
@@ -1045,8 +1051,21 @@ impl From<EngineError> for CommandFailure {
                 .iter()
                 .map(|argument| (*argument).to_owned())
                 .collect(),
+            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
+                source_fetch_command(*reason)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|argument| (*argument).to_owned())
+                    .collect()
+            }
             _ => Vec::new(),
         };
+        let needs_confirmation = matches!(
+            &error,
+            EngineError::OpenSession(OpenSessionError::SourceFetch(
+                SourceFetchReason::WebPage
+            ))
+        );
         Self {
             code: error.failure_code(),
             remediation,
@@ -1055,6 +1074,7 @@ impl From<EngineError> for CommandFailure {
             suggested_command,
             data: None,
             reason,
+            needs_confirmation,
         }
     }
 }
@@ -1484,6 +1504,9 @@ fn failure_response(
     }
     if let Some(reason) = failure.reason {
         response = response.with_error_reason(reason);
+    }
+    if failure.needs_confirmation {
+        response = response.requiring_user_confirmation();
     }
     response
 }

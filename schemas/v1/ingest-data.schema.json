@@ -29,7 +29,58 @@
   },
   "$defs": {
     "origin": {
-      "description": "Where a source fetched with ingest --url came from (0.3.0, ADR 0028); absent for a local file's copy. It never holds the link, which may carry a signed token in its query or its path: link_sha256 is the SHA-256 of the link as given after parsing (query included), so the same link can be recognised but not recovered. requested_host is the link's host and final_host the host the bytes came from after redirects (at most three). address_check is direct when VSift resolved the name and connected only to public addresses it checked, and proxy_resolved when a proxy from the environment resolved it (VSift then refused only internal-looking names and addresses). retrieved_at is when the body was complete; bytes is the source's size. A provider's upload date is not a recording time and is never recorded.",
+      "description": "Where a source fetched with ingest --url came from (0.3.0, ADR 0028); absent for a local file's copy: direct_origin for a direct link, page_origin for a public video page fetched through yt-dlp.",
+      "oneOf": [
+        { "$ref": "#/$defs/direct_origin" },
+        { "$ref": "#/$defs/page_origin" }
+      ]
+    },
+    "page_origin": {
+      "description": "A public page fetched through yt-dlp. It never holds the link, a title, an uploader, a description, an upload date, a format's URL or a header. provider is yt-dlp's name for the site. video_id is present only when the site reports the video public; otherwise video_id_sha256 holds the id's digest, because an unlisted video's id is a capability token. yt_dlp and js_runtime say which tools ran: source managed with catalogue_version, or user_managed with the version line and SHA-256 of a file nobody here reviewed; js_runtime is absent when none ran. address_check is proxy_resolved when a proxy from the environment made yt-dlp's connections, and absent otherwise: VSift checks no address yt-dlp connects to. joined says whether the source was one file or separate audio and video joined by a stream copy.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "provider", "link_sha256", "yt_dlp", "retrieved_at", "bytes", "joined"],
+      "oneOf": [
+        { "required": ["video_id"], "not": { "required": ["video_id_sha256"] } },
+        { "required": ["video_id_sha256"], "not": { "required": ["video_id"] } }
+      ],
+      "properties": {
+        "kind": { "enum": ["platform_page"] },
+        "provider": { "type": "string", "pattern": "^[A-Za-z0-9]{1,64}$" },
+        "video_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$" },
+        "video_id_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "link_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "yt_dlp": { "$ref": "#/$defs/page_tool" },
+        "js_runtime": { "$ref": "#/$defs/page_tool" },
+        "address_check": { "enum": ["proxy_resolved"] },
+        "retrieved_at": { "type": "string", "format": "date-time" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 21474836480 },
+        "joined": { "enum": ["single_file", "audio_video"] }
+      }
+    },
+    "page_tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "oneOf": [
+        {
+          "properties": { "source": { "const": "managed" } },
+          "required": ["catalogue_version"]
+        },
+        {
+          "properties": { "source": { "const": "user_managed" } },
+          "required": ["version", "sha256"]
+        }
+      ],
+      "properties": {
+        "source": { "enum": ["managed", "user_managed"] },
+        "catalogue_version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "direct_origin": {
+      "description": "A direct link. It never holds the link, which may carry a signed token in its query or its path: link_sha256 is the SHA-256 of the link as given after parsing (query included), so the same link can be recognised but not recovered. requested_host is the link's host and final_host the host the bytes came from after redirects (at most three). address_check is direct when VSift resolved the name and connected only to public addresses it checked, and proxy_resolved when a proxy from the environment resolved it (VSift then refused only internal-looking names and addresses). retrieved_at is when the body was complete; bytes is the source's size. A provider's upload date is not a recording time and is never recorded.",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "link_sha256", "requested_host", "final_host", "redirects", "address_check", "retrieved_at", "bytes"],

@@ -8,14 +8,24 @@
 //! echoes the link, the server's text or proxy credentials.
 
 use serde::Serialize;
-use vsift_domain::{SourceFetchReason, SourceOrigin};
+use vsift_domain::{PageToolRecord, PageVideoId, SourceFetchReason, SourceOrigin};
 
 use crate::envelope::utc_seconds_rfc3339;
 
 /// The `origin` member of `ingest` and `session status` data for a source
 /// fetched from a link; absent for a local file's copy.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct OriginData {
+#[serde(untagged)]
+pub enum OriginData {
+    /// A direct link to a video file.
+    Direct(DirectOriginData),
+    /// A public video page, fetched through yt-dlp.
+    Page(PageOriginData),
+}
+
+/// The origin of a direct link.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DirectOriginData {
     kind: &'static str,
     link_sha256: String,
     requested_host: String,
@@ -26,13 +36,73 @@ pub struct OriginData {
     bytes: u64,
 }
 
+/// The origin of a page. It names no title, uploader, description, upload
+/// date, format URL or header.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PageOriginData {
+    kind: &'static str,
+    provider: String,
+    /// The video's id, only when the site reports the video public.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    video_id: Option<String>,
+    /// The SHA-256 of the id of any other video: an unlisted video's id is
+    /// a capability token.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    video_id_sha256: Option<String>,
+    link_sha256: String,
+    yt_dlp: PageToolData,
+    /// Absent when yt-dlp ran with no JavaScript runtime.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    js_runtime: Option<PageToolData>,
+    /// `proxy_resolved` when a proxy from the environment made yt-dlp's
+    /// connections; absent otherwise, because `VSift` checks no address
+    /// yt-dlp connects to (known limit L-209).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    address_check: Option<&'static str>,
+    retrieved_at: String,
+    bytes: u64,
+    joined: &'static str,
+}
+
+/// Which tool fetched a page: `managed` with its catalogue version, or
+/// `user_managed` with its version line and digest.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PageToolData {
+    source: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    catalogue_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
+}
+
+impl PageToolData {
+    fn new(tool: &PageToolRecord) -> Self {
+        match tool {
+            PageToolRecord::Managed { catalogue_version } => Self {
+                source: "managed",
+                catalogue_version: Some(catalogue_version.as_str().to_owned()),
+                version: None,
+                sha256: None,
+            },
+            PageToolRecord::UserManaged { version, sha256 } => Self {
+                source: "user_managed",
+                catalogue_version: None,
+                version: Some(version.as_str().to_owned()),
+                sha256: Some(sha256.as_str().to_owned()),
+            },
+        }
+    }
+}
+
 impl OriginData {
     /// Presents an origin; `None` when its time cannot be written (after
     /// the year 9999).
     #[must_use]
     pub fn new(origin: &SourceOrigin) -> Option<Self> {
         match origin {
-            SourceOrigin::DirectHttps(direct) => Some(Self {
+            SourceOrigin::DirectHttps(direct) => Some(Self::Direct(DirectOriginData {
                 kind: origin.kind(),
                 link_sha256: direct.link_sha256().as_str().to_owned(),
                 requested_host: direct.requested_host().as_str().to_owned(),
@@ -41,7 +111,26 @@ impl OriginData {
                 address_check: direct.address_check().identifier(),
                 retrieved_at: utc_seconds_rfc3339(direct.retrieved_at_unix_seconds())?,
                 bytes: direct.bytes(),
-            }),
+            })),
+            SourceOrigin::PlatformPage(page) => {
+                let (video_id, video_id_sha256) = match page.video_id() {
+                    PageVideoId::Public(id) => (Some(id.clone()), None),
+                    PageVideoId::Digest(digest) => (None, Some(digest.as_str().to_owned())),
+                };
+                Some(Self::Page(PageOriginData {
+                    kind: origin.kind(),
+                    provider: page.provider().as_str().to_owned(),
+                    video_id,
+                    video_id_sha256,
+                    link_sha256: page.link_sha256().as_str().to_owned(),
+                    yt_dlp: PageToolData::new(page.yt_dlp()),
+                    js_runtime: page.js_runtime().map(PageToolData::new),
+                    address_check: page.through_proxy().then_some("proxy_resolved"),
+                    retrieved_at: utc_seconds_rfc3339(page.retrieved_at_unix_seconds())?,
+                    bytes: page.bytes(),
+                    joined: page.joined().identifier(),
+                }))
+            }
         }
     }
 }
@@ -101,7 +190,7 @@ pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str
             "Fetching the video link failed; nothing was opened and local video files are not affected. The server sent the video compressed, which VSift does not accept (reason compressed). Ask the user for another link to the file, or for the file."
         }
         SourceFetchReason::WebPage => {
-            "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file (reason web_page). VSift fetches direct links to an MP4, MOV, MKV or WebM file. Ask the user for the video file's own link or for the file; do not fetch the page or the video yourself."
+            WEB_PAGE_REMEDIATION
         }
         SourceFetchReason::NotAVideo => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. What the link served is not an MP4, MOV, Matroska or WebM file (reason not_a_video). Ask the user for a link to the video file, or for the file."
@@ -112,6 +201,93 @@ pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str
         SourceFetchReason::StrictIsolation => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. This host runs with strict isolation, which allows no network (reason strict_isolation). Fetch the video on a host that may use the network, then give this host the file."
         }
+        SourceFetchReason::LoginRequired => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site asks for a sign-in to show this video, and VSift never signs in or uses cookies (reason login_required). Ask the user to download the video and give you the file."
+        }
+        SourceFetchReason::AgeRestricted => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site shows this video only after a sign-in that confirms age, and VSift never signs in (reason age_restricted). Ask the user to download the video and give you the file."
+        }
+        SourceFetchReason::BotCheck => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site asked for proof that a person is asking, which is common from shared and cloud addresses (reason bot_check). VSift does not get around such checks and neither should you. Ask the user to download the video and give you the file."
+        }
+        SourceFetchReason::Drm => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The video is protected against copying, and VSift does not get around that (reason drm). Ask the user for another copy they may use."
+        }
+        SourceFetchReason::RegionBlocked => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site does not offer this video in this region (reason region_blocked). Ask the user for the file; do not look for a way around the restriction."
+        }
+        SourceFetchReason::Private => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The video is private (reason private). Ask the user to download it, if they may, and give you the file."
+        }
+        SourceFetchReason::Removed => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site says the video was removed or is unavailable (reason removed). Ask the user to check the link, or for the file."
+        }
+        SourceFetchReason::UnsupportedSite => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. yt-dlp has no way to read this site (reason unsupported_site). Ask the user for the video file's own link, or for the file."
+        }
+        SourceFetchReason::ExtractorBroken => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. yt-dlp could not read this site as it is today, which happens when a site changes (reason extractor_broken). With a managed yt-dlp, run vsift setup plan again for a newer reviewed version; a yt-dlp the user supplied is theirs to update. This is not a VSift defect, so do not report it as one. Until then, ask the user for the file."
+        }
+        SourceFetchReason::JsRuntimeMissing => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site needs a JavaScript runtime that yt-dlp could not use (reason js_runtime_missing). With a yt-dlp the user supplied, they register Deno with vsift setup configure js-runtime --executable <absolute-path>; a yt-dlp installed by VSift uses its own, so run vsift setup check. Or ask the user for the file."
+        }
+        SourceFetchReason::Network => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. yt-dlp could not reach the site or was turned away (reason network). Check the network with the user and run the command again later, or ask for the file."
+        }
+        SourceFetchReason::Playlist => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a playlist or a channel, and VSift fetches one video (reason playlist). Ask the user for the link to the one video they mean."
+        }
+        SourceFetchReason::Live => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The video is a live stream, or the recording of one that is not finished, and VSift fetches finished videos only (reason live). Ask the user for a finished recording, or for the file."
+        }
+        SourceFetchReason::TooLong => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The video is over four hours long or the site states no length (reason too_long). Ask the user for the file or for a shorter part."
+        }
+        SourceFetchReason::NotHttpsFormat => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site offers this video only as a stream or by a means other than plain HTTPS, in a form VSift does not fetch (reason not_https_format). Ask the user to download the video and give you the file."
+        }
+        SourceFetchReason::UnexpectedOutput => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. yt-dlp did not produce what it was asked for, so everything it wrote was removed (reason unexpected_output). Tell the user; if it is a yt-dlp they supplied, it may be out of date. Or ask for the file."
+        }
+        SourceFetchReason::MediaToolsMissing => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. The site offers this video as separate audio and video, and joining them needs FFmpeg, which is not set up (reason media_tools_missing). Run vsift setup check, then run the command again."
+        }
+        SourceFetchReason::OnlineStepFailed => {
+            "Fetching the video link failed; nothing was opened and local video files are not affected. yt-dlp failed for a cause VSift cannot name (reason online_step_failed). Run the command again later, or ask the user for the file."
+        }
+    }
+}
+
+/// The remediation of a web page when no yt-dlp is available. On the target
+/// with a managed yt-dlp it names the optional group; elsewhere the user
+/// supplies the tool (ADR 0028 sections 4.1 and 4.7).
+const WEB_PAGE_REMEDIATION: &str = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file, and no yt-dlp is set up to read it (reason web_page). Tell the user what the optional online_links group does and that each site's terms apply, then ask before adding it: vsift setup plan --profile desktop --include online_links shows it. Or ask for the video file's own link or for the file; do not fetch the page or the video yourself."
+} else {
+    "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file, and no yt-dlp is set up to read it (reason web_page). On this system the user supplies yt-dlp and registers it with vsift setup configure yt-dlp --executable <absolute-path>, and each site's terms apply; ask them before doing that. Or ask for the video file's own link or for the file; do not fetch the page or the video yourself."
+};
+
+/// The `vsift` arguments a remediation offers for `reason`, and whether they
+/// need the user's confirmation. Only `web_page` offers any: adding the
+/// optional component is the user's decision. Elsewhere than the target with
+/// a managed yt-dlp the step needs a path only the user knows, so the prose
+/// carries it and no command is offered.
+#[must_use]
+pub const fn source_fetch_command(reason: SourceFetchReason) -> Option<&'static [&'static str]> {
+    match reason {
+        SourceFetchReason::WebPage
+            if cfg!(all(target_os = "linux", target_arch = "x86_64")) =>
+        {
+            Some(&[
+                "setup",
+                "plan",
+                "--profile",
+                "desktop",
+                "--include",
+                "online_links",
+            ])
+        }
+        _ => None,
     }
 }
 

@@ -106,7 +106,7 @@ A typical investigation (every command takes --json):
        For a direct https:// link to a video file, put --url <link> in place of
        <video> (--url - reads the link from standard input). VSift fetches it
        once, with limits, and nothing after that uses the network. A web page
-       is not a video file.
+       is read only through yt-dlp, if one is set up (setup check says).
        Without a transcript file, speech is found only when local speech
        recognition is set up (setup check says); then run:
          vsift job start <session> --json

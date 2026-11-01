@@ -18,6 +18,16 @@ to a developer machine:
 - Each executable is then run once with `--version`, in an empty environment
   whose temporary folder is a private directory of this run, and its first
   line is compared with the reviewed banner.
+- The phrase and flag check (ADR 0028 sections 4.7 and 4.8): every phrase in
+  `ytdlp_refusal.rs` must be found verbatim in the release's source archive
+  (its digest comes from the signed sums), every flag in `page_acquisition.rs`
+  in the pinned executable's `--help`, and every filter field in the archive's
+  README, so a re-pin that changes one fails here.
+- The pair probe (the note of 2026-11-01): the pinned executable reads a made-up
+  video from a local HTTPS server on this runner, so nothing leaves it. A comma
+  selection with the bracket filters must select both streams, a pair must
+  download as two files with the exact names and exit 0, and a second stream
+  that fails must end with a status that is neither 0 nor 101.
 
 The result is one JSON document on standard output and a table in the job
 summary.
@@ -26,13 +36,18 @@ summary.
 from __future__ import annotations
 
 import hashlib
+import http.server
 import json
 import os
 from pathlib import Path
+import re
+import ssl
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -86,6 +101,19 @@ DENO_MAX_EXPANDED_BYTES = 400_000_000
 
 BANNER_DEADLINE_SECONDS = 60
 MAX_BANNER_BYTES = 64 * 1024
+
+YT_DLP_SOURCE_ARCHIVE = "yt-dlp.tar.gz"
+MAX_SOURCE_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_SOURCE_TEXT_BYTES = 256 * 1024 * 1024
+MAX_HELP_BYTES = 1024 * 1024
+REPOSITORY = Path(__file__).resolve().parent.parent
+REFUSAL_SOURCE = REPOSITORY / "crates/vsift-infrastructure/src/ytdlp_refusal.rs"
+ACQUISITION_SOURCE = REPOSITORY / "crates/vsift-infrastructure/src/page_acquisition.rs"
+# The fields VSift's filter and format selection name.
+FILTER_FIELDS = ("is_live", "was_live", "live_status", "protocol", "ext")
+PROBE_DEADLINE_SECONDS = 120
+PROBE_SELECTION = "137[protocol=https],140[protocol=https]"
+PROBE_BODY = b"\0\0\0\x18ftypisom" + bytes(4096)
 
 
 def bounded_fetch(url: str, destination: Path, exact_size: int) -> None:
@@ -173,6 +201,8 @@ def review_yt_dlp(work: Path) -> dict:
     if banner != YT_DLP_BANNER:
         raise CandidateRejected("yt-dlp's banner differs from the reviewed version")
     return {
+        "phrase_check": review_phrases(work, sums, executable),
+        "pair_probe": review_pair_probe(work, executable),
         "tag": YT_DLP_TAG,
         "signing_key_fingerprint": fingerprint,
         "signing_key_git_blob": YT_DLP_KEY_GIT_BLOB,
@@ -249,6 +279,225 @@ def review_deno(work: Path) -> dict:
             **inventory, "banner": banner}
 
 
+def capped_fetch(url: str, destination: Path, limit: int, digest: str) -> None:
+    """Fetch a file of unpinned size, at most `limit` bytes, and check its digest."""
+    opener = urllib.request.build_opener(HttpsRedirectsOnly())
+    request = urllib.request.Request(url, headers={"User-Agent": "vsift-online-video-review/1"})
+    hasher = hashlib.sha256()
+    received = 0
+    try:
+        with opener.open(request, timeout=30) as response, destination.open("xb") as output:
+            if urllib.parse.urlparse(response.geturl()).scheme != "https":
+                raise CandidateRejected("download ended outside HTTPS")
+            while chunk := response.read(64 * 1024):
+                received += len(chunk)
+                if received > limit:
+                    raise CandidateRejected("download exceeds its limit")
+                hasher.update(chunk)
+                output.write(chunk)
+    except urllib.error.URLError as error:
+        raise CandidateRejected("HTTPS transfer failed") from error
+    if hasher.hexdigest() != digest:
+        raise CandidateRejected("download differs from the signed sums")
+
+
+def rust_strings(text: str) -> list[str]:
+    """The double-quoted string literals of Rust source, with their escapes read."""
+    def unescape(match: re.Match[str]) -> str:
+        escape = match.group(1)
+        if escape.startswith("u{"):
+            return chr(int(escape[2:-1], 16))
+        return escape
+    literal = re.compile(r'"((?:[^"\\]|\\.)*)"', re.DOTALL)
+    return [re.sub(r"\\(u\{[0-9a-fA-F]+\}|.)", unescape, found)
+            for found in literal.findall(text)]
+
+
+def code_before_tests(text: str) -> str:
+    """Rust source with its test module left out."""
+    return text.partition("#[cfg(test)]\nmod tests")[0]
+
+
+def reviewed_phrases(source: str) -> list[str]:
+    """The phrases of `YTDLP_PHRASES` in `ytdlp_refusal.rs`."""
+    start = source.find("pub const YTDLP_PHRASES")
+    end = source.find("];\n", start)
+    if start < 0 or end < 0:
+        raise CandidateRejected("the phrase table was not found")
+    # The array's type names no string, so every literal here is a phrase.
+    phrases = rust_strings(source[start:end])
+    if not phrases:
+        raise CandidateRejected("the phrase table is empty")
+    return phrases
+
+
+def reviewed_flags(source: str) -> list[str]:
+    """Every yt-dlp flag `page_acquisition.rs` passes."""
+    code = code_before_tests(source)
+    flags = sorted({text for text in rust_strings(code) if re.fullmatch(r"--[a-z][a-z-]+", text)})
+    if not flags:
+        raise CandidateRejected("no yt-dlp flags were found")
+    return flags
+
+
+def source_archive_text(archive: Path) -> str:
+    """The Python sources and README of the release's source archive, read in place."""
+    parts: list[str] = []
+    total = 0
+    with tarfile.open(archive, "r:gz") as tar:
+        for member in tar:
+            name = member.name
+            wanted = name.endswith(".py") or name.endswith("/README.md")
+            if not member.isfile() or not wanted:
+                continue
+            total += member.size
+            if total > MAX_SOURCE_TEXT_BYTES:
+                raise CandidateRejected("the source archive is larger than expected")
+            content = tar.extractfile(member)
+            if content is not None:
+                parts.append(content.read().decode("utf-8", errors="replace"))
+    if not parts:
+        raise CandidateRejected("the source archive holds no sources")
+    return "\n".join(parts)
+
+
+def missing_from(wanted: list[str], text: str) -> list[str]:
+    return [item for item in wanted if item not in text]
+
+
+def executable_help(executable: Path, temporary: Path) -> str:
+    """`--help` of the pinned executable, run as the banner is."""
+    temporary.mkdir(mode=0o700)
+    environment = {"TMPDIR": str(temporary), "HOME": str(temporary), "YTDLP_NO_PLUGINS": "1"}
+    result = subprocess.run([str(executable), "--ignore-config", "--help"], env=environment,
+                            cwd=temporary, capture_output=True,
+                            timeout=BANNER_DEADLINE_SECONDS, check=False)
+    if result.returncode != 0 or len(result.stdout) > MAX_HELP_BYTES:
+        raise CandidateRejected("the executable's help failed")
+    return result.stdout.decode("utf-8", errors="replace")
+
+
+def review_phrases(work: Path, sums: dict[str, str], executable: Path) -> dict:
+    """The phrase and flag check of ADR 0028 sections 4.7 and 4.8."""
+    digest = sums.get(YT_DLP_SOURCE_ARCHIVE)
+    if digest is None:
+        raise CandidateRejected("the signed sums do not list the source archive")
+    archive = work / YT_DLP_SOURCE_ARCHIVE
+    capped_fetch(f"{YT_DLP_RELEASE}/{YT_DLP_SOURCE_ARCHIVE}", archive,
+                 MAX_SOURCE_ARCHIVE_BYTES, digest)
+    source = source_archive_text(archive)
+    phrases = reviewed_phrases(REFUSAL_SOURCE.read_text(encoding="utf-8"))
+    flags = reviewed_flags(ACQUISITION_SOURCE.read_text(encoding="utf-8"))
+    help_text = executable_help(executable, work / "help-temp")
+    missing = {
+        "phrases": missing_from(phrases, source),
+        "flags": missing_from(flags, help_text),
+        "filter_fields": missing_from(list(FILTER_FIELDS), source),
+    }
+    if any(missing.values()):
+        raise CandidateRejected(f"not found in the pinned yt-dlp: {json.dumps(missing)}")
+    return {"phrases": len(phrases), "flags": len(flags), "filter_fields": len(FILTER_FIELDS)}
+
+
+def probe_info(port: int, audio_path: str) -> dict:
+    """A made-up video with separate streams, as `--load-info-json` reads one."""
+    base = f"https://127.0.0.1:{port}"
+    return {
+        "id": "probe", "title": "probe", "extractor": "generic", "extractor_key": "Generic",
+        "webpage_url": f"{base}/page", "duration": 1, "formats": [
+            {"format_id": "137", "url": f"{base}/video.mp4", "ext": "mp4",
+             "vcodec": "avc1", "acodec": "none", "protocol": "https"},
+            {"format_id": "140", "url": f"{base}{audio_path}", "ext": "m4a",
+             "vcodec": "none", "acodec": "mp4a", "protocol": "https"},
+        ],
+    }
+
+
+class ProbeHandler(http.server.BaseHTTPRequestHandler):
+    """Serves the two streams; any other path is a 404."""
+
+    def do_GET(self) -> None:  # noqa: N802 - the name http.server calls
+        if self.path not in ("/video.mp4", "/audio.m4a"):
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(PROBE_BODY)))
+        self.end_headers()
+        self.wfile.write(PROBE_BODY)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - base signature
+        return
+
+
+def start_probe_server(work: Path) -> http.server.ThreadingHTTPServer:
+    """An HTTPS server on loopback, with a certificate made for this run."""
+    key, certificate = work / "probe.key", work / "probe.crt"
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                    "-subj", "/CN=localhost", "-keyout", str(key), "-out", str(certificate)],
+                   check=True, capture_output=True, timeout=60)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), ProbeHandler)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certificate, key)
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def run_probe(executable: Path, folder: Path, info: dict, extra: list[str]
+              ) -> subprocess.CompletedProcess[bytes]:
+    """Runs the pinned executable on `info`, as phase 2 runs, with `extra` added."""
+    info_path = folder / "info.json"
+    info_path.write_text(json.dumps(info), encoding="utf-8")
+    environment = {"TMPDIR": str(folder), "HOME": str(folder), "YTDLP_NO_PLUGINS": "1"}
+    command = [str(executable), "--ignore-config", "--no-plugin-dirs", "--no-update",
+               "--no-remote-components", "--no-cookies", "--no-cookies-from-browser",
+               "--no-playlist", "--no-batch-file", "--playlist-items", "1", "--abort-on-error",
+               "--no-exec", "--restrict-filenames", "--no-mtime", "--no-part", "--no-continue",
+               "--downloader", "native", "--no-check-formats", "--socket-timeout", "30",
+               "--no-progress", "--fixup", "never", "--no-js-runtimes",
+               "--output", "vsift-page.%(format_id)s.%(ext)s", "--format", PROBE_SELECTION,
+               "--no-check-certificates", "--load-info-json", str(info_path), *extra]
+    return subprocess.run(command, env=environment, cwd=folder, capture_output=True,
+                          timeout=PROBE_DEADLINE_SECONDS, check=False)
+
+
+def review_pair_probe(work: Path, executable: Path) -> dict:
+    """What a comma selection does on the pinned version, on this runner only."""
+    server = start_probe_server(work)
+    port = server.server_address[1]
+    try:
+        selection = work / "probe-selection"
+        selection.mkdir(mode=0o700)
+        selected = run_probe(executable, selection, probe_info(port, "/audio.m4a"),
+                             ["--simulate", "--print", "format_id"])
+        ids = selected.stdout.decode("ascii", errors="replace").split()
+        if selected.returncode != 0 or ids != ["137", "140"]:
+            raise CandidateRejected(f"the comma selection chose {ids}, "
+                                    f"status {selected.returncode}")
+
+        good = work / "probe-pair"
+        good.mkdir(mode=0o700)
+        output = good / "output"
+        output.mkdir()
+        downloaded = run_probe(executable, good, probe_info(port, "/audio.m4a"),
+                               ["--paths", str(output)])
+        names = sorted(path.name for path in output.iterdir())
+        if downloaded.returncode != 0 or names != ["vsift-page.137.mp4", "vsift-page.140.m4a"]:
+            raise CandidateRejected(f"the pair wrote {names}, status {downloaded.returncode}")
+
+        bad = work / "probe-failed-stream"
+        bad.mkdir(mode=0o700)
+        output = bad / "output"
+        output.mkdir()
+        failed = run_probe(executable, bad, probe_info(port, "/missing.m4a"),
+                           ["--paths", str(output)])
+        if failed.returncode in (0, 101):
+            raise CandidateRejected(f"a failed stream ended with status {failed.returncode}")
+    finally:
+        server.shutdown()
+    return {"selected": ids, "pair_files": names, "failed_stream_status": failed.returncode}
+
+
 def run_banner(executable: Path, temporary: Path) -> str:
     """First line of `<executable> --version` in an empty environment with a private TMPDIR."""
     temporary.mkdir(mode=0o700)
@@ -269,7 +518,8 @@ def summary_table(document: dict) -> str:
         "### Optional online-video components",
         "",
         f"yt-dlp `{yt_dlp['tag']}`: signed sums verified with key "
-        f"`{yt_dlp['signing_key_fingerprint']}`; banner `{yt_dlp['banner']}`.",
+        f"`{yt_dlp['signing_key_fingerprint']}`; banner `{yt_dlp['banner']}`; "
+        f"phrase check: {yt_dlp['phrase_check']}; pair probe: {yt_dlp['pair_probe']}.",
         "",
         "| File | Signed SHA-256 |",
         "| --- | --- |",

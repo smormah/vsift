@@ -43,9 +43,13 @@ takes it as `<session>`.
 `vsift ingest --url <link>`. VSift downloads it once into the session, with a limit of 4 GiB and 30 minutes
 (`--max-download-bytes` and `--max-download-seconds` raise them), and everything after that works offline, as
 for a file. `--url -` reads the link from standard input, so a link with a private token stays out of your shell
-history. The link is never stored: the session keeps only the host and a fingerprint of it (`Fetched from:`). A
-web page, such as a video site's page, is not a video file and is refused; links that need a sign-in, and links to
-your own network, never work. If the download fails, the answer says why
+history. The link is never stored: the session keeps only the host and a fingerprint of it (`Fetched from:`).
+
+A public video page, such as a video site's page, works the same way once yt-dlp is set up: on Ubuntu x86-64 add
+the optional part with `vsift setup plan --profile desktop --include online_links`, and elsewhere register your own
+with `vsift setup configure yt-dlp --executable <absolute-path>`. Without it the page is refused. Each site's terms
+apply, and sites change, so a page that worked can stop working. Links that need a sign-in, and links to your own
+network, never work. If the download fails, the answer says why
 ([troubleshooting](troubleshooting.md#source_fetch_failed-a-video-link-could-not-be-fetched)), and your local files are not affected.
 
 ## 2. Check the video opens

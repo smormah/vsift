@@ -219,6 +219,7 @@ Each entry has these fields:
 | [L-203](#l-203) | A release before `0.3.0` refuses a session or retained bundle that holds a screen-text record | integrity/durability | low | unscheduled | none | accepted residual |
 | [L-204](#l-204) | The OCR runner is not yet shippable (no published build or managed install yet); on real recordings its text differs from the reference pipeline's on 7 to 11% of lines, which the hosted characterisation shows is the model's sensitivity to its input (the reference differs from itself by 5 to 7%) | platform/distribution | medium | 0.3.0 | none | open |
 | [L-208](#l-208) | `ingest --url` through a proxy from the environment cannot check the address the proxy connects to: only internal-looking names and addresses are refused, and the origin says `proxy_resolved` | security | low | unscheduled | [#407](https://github.com/smormah/vsift/issues/407) | open |
+| [L-209](#l-209) | A public page's fetch runs yt-dlp, whose connections are outside VSift's address policy and whose extraction can break between releases | security | medium | unscheduled | [#409](https://github.com/smormah/vsift/issues/409) | open |
 | [L-210](#l-210) | A clock time is only as true as its anchor: a container's creation time is often the encode or remux time, a recording made by a clock that was wrong is wrong, no file modification time is used, a session's anchors are fixed when it opens and a retained bundle does not carry them | contract/UX | low | unscheduled | none | open |
 | [L-212](#l-212) | `bundle search` reads only bundles a person names, a hit is a lead and not a citation, and one call reads at most 64 bundles and 1 GiB | contract/UX | low | unscheduled | none | open |
 | [L-215](#l-215) | Managed installation on Windows covers FFmpeg and the model only until VSift's whisper.cpp is pinned, macOS has no catalogue yet, and Windows managed installs are shown by hosted smoke alone, with no kill or power-loss campaign on NTFS; macOS x64, Linux arm64 and Linux other than Ubuntu 24.04 get none | platform/distribution | medium | `0.3.0` | none | open |
@@ -5327,6 +5328,23 @@ that week.**
 - **Mitigation:** an operator who knows the start states it with `--recorded-at`, which wins over the file's tags; `session status --json` lists every anchor so a reader can judge.
 - **Next step:** stage 2 (clocks visible on screen, built on OCR): anchors at other positions, cross-checks and cut detection. The maintainer decided on 2026-10-23 that anchors in bundles and worker requests come with stage 2, so this entry stays open until then.
 - **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+### L-209
+
+**A public page's fetch runs yt-dlp: its connections are its own, and sites break it (ADR 0028, #409; added 2026-11-01).**
+
+- **What:** VSift checks only the link's name before yt-dlp starts: section 3's rules, and no host written as an
+  address or internal name. yt-dlp's own connections (its resolving, its redirects, its media hosts) have no address
+  policy: a public name that later resolves inward is not stopped, and a page, a redirect or a format URL can send it
+  to any address VSift would have refused, unseen. Only formats that yt-dlp reports as
+  `https` are selected, and what it writes is checked, but its requests are not. A proxy from the environment is
+  handed to it; `HTTP_PROXY` is not, so anything it fetches over plain HTTP goes direct. Sites change, so a managed
+  yt-dlp can stop working between VSift releases until a re-pin (`extractor_broken`); a user's yt-dlp is the user's to
+  keep current, and is run though nobody here reviewed it. A site that answers VSift's first request with an HTTP
+  error is refused as `http_status` and never reaches yt-dlp, because only a `web_page` answer is routed there.
+- **Evidence:** `crates/vsift-infrastructure/src/page_acquisition.rs`, `crates/vsift-infrastructure/tests/page_acquisition.rs`.
+- **Plan:** a signed component manifest refreshed between releases is `1.0`'s (ADR 0028 section 4.1). The address
+  limit stays while yt-dlp is an external process.
+
 ### L-208
 
 **`ingest --url` through a proxy from the environment cannot check the address the proxy connects to (ADR 0028, #407; added 2026-10-21).**

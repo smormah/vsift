@@ -54,6 +54,8 @@ mod media_tool_verification;
 mod media_tool_verification_cache;
 mod ocr_runner;
 mod offline_artifact_import;
+mod page_acquisition;
+mod page_source_store;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -83,6 +85,8 @@ mod watch_output;
 mod whisper_build;
 mod whisper_cli;
 mod xz_tar_inventory;
+mod ytdlp_info;
+mod ytdlp_refusal;
 
 pub use archive_inventory::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, ArchiveInventoryError,
@@ -159,6 +163,12 @@ pub use input_root::{
 #[cfg(any(test, feature = "install-test-hooks"))]
 pub use link_acquisition::{LinkTestRoute, TestAnswers};
 pub use link_acquisition::{is_internal_name, is_public_address};
+pub use page_acquisition::{PageTool, PageTools, ProxyVariables};
+pub use page_source_store::{PageSourceStore, PageToolSource};
+pub use ytdlp_info::{
+    MAX_YTDLP_INFO_BYTES, SelectedFormat, YtDlpVideo, is_safe_format_id, parse_ytdlp_info,
+};
+pub use ytdlp_refusal::{MAX_YTDLP_STDERR_BYTES, YTDLP_PHRASES, classify_ytdlp_failure};
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
     local_asr_fixture_sha256, run_within_budget,

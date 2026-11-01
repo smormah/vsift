@@ -73,11 +73,49 @@ pub enum SourceFetchReason {
     Truncated,
     /// The host runs with strict isolation, which allows no network.
     StrictIsolation,
+    /// The page's video needs a sign-in, which `VSift` never does.
+    LoginRequired,
+    /// The page's video is age-restricted, which needs a sign-in.
+    AgeRestricted,
+    /// The site asked for proof that the caller is a person.
+    BotCheck,
+    /// The page's video is protected by digital rights management.
+    Drm,
+    /// The page's video is not offered in this region.
+    RegionBlocked,
+    /// The page's video is private.
+    Private,
+    /// The page's video was removed or is unavailable.
+    Removed,
+    /// yt-dlp has no way to read this site.
+    UnsupportedSite,
+    /// yt-dlp could not read this site as it is today.
+    ExtractorBroken,
+    /// The site needs a JavaScript runtime that is not available.
+    JsRuntimeMissing,
+    /// yt-dlp could not reach the site.
+    Network,
+    /// The link is a playlist or a channel, not one video.
+    Playlist,
+    /// The page's video is live, or a recording of a stream still being made.
+    Live,
+    /// The page's video is over four hours long, or states no length.
+    TooLong,
+    /// The page offers the video only by a means other than plain HTTPS.
+    NotHttpsFormat,
+    /// yt-dlp left something other than the files expected of it, or printed
+    /// something other than what was asked.
+    UnexpectedOutput,
+    /// The online step failed for a cause `VSift` cannot name.
+    OnlineStepFailed,
+    /// The page's video comes as separate audio and video, and no verified
+    /// `FFmpeg` is set up to join them.
+    MediaToolsMissing,
 }
 
 impl SourceFetchReason {
     /// Every reason, in declaration order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 37] = [
         Self::NotHttps,
         Self::CredentialsInLink,
         Self::PortNotAllowed,
@@ -97,6 +135,24 @@ impl SourceFetchReason {
         Self::NotAVideo,
         Self::Truncated,
         Self::StrictIsolation,
+        Self::LoginRequired,
+        Self::AgeRestricted,
+        Self::BotCheck,
+        Self::Drm,
+        Self::RegionBlocked,
+        Self::Private,
+        Self::Removed,
+        Self::UnsupportedSite,
+        Self::ExtractorBroken,
+        Self::JsRuntimeMissing,
+        Self::Network,
+        Self::Playlist,
+        Self::Live,
+        Self::TooLong,
+        Self::NotHttpsFormat,
+        Self::UnexpectedOutput,
+        Self::OnlineStepFailed,
+        Self::MediaToolsMissing,
     ];
 
     /// Stable public identifier.
@@ -122,6 +178,24 @@ impl SourceFetchReason {
             Self::NotAVideo => "not_a_video",
             Self::Truncated => "truncated",
             Self::StrictIsolation => "strict_isolation",
+            Self::LoginRequired => "login_required",
+            Self::AgeRestricted => "age_restricted",
+            Self::BotCheck => "bot_check",
+            Self::Drm => "drm",
+            Self::RegionBlocked => "region_blocked",
+            Self::Private => "private",
+            Self::Removed => "removed",
+            Self::UnsupportedSite => "unsupported_site",
+            Self::ExtractorBroken => "extractor_broken",
+            Self::JsRuntimeMissing => "js_runtime_missing",
+            Self::Network => "network",
+            Self::Playlist => "playlist",
+            Self::Live => "live",
+            Self::TooLong => "too_long",
+            Self::NotHttpsFormat => "not_https_format",
+            Self::UnexpectedOutput => "unexpected_output",
+            Self::OnlineStepFailed => "online_step_failed",
+            Self::MediaToolsMissing => "media_tools_missing",
         }
     }
 }
@@ -332,6 +406,8 @@ impl AddressCheck {
 pub enum SourceOrigin {
     /// A direct HTTPS link to a video file (#407).
     DirectHttps(DirectLinkOrigin),
+    /// A public video page, fetched through yt-dlp (#409).
+    PlatformPage(PageOrigin),
 }
 
 impl SourceOrigin {
@@ -340,6 +416,7 @@ impl SourceOrigin {
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::DirectHttps(_) => "direct_https",
+            Self::PlatformPage(_) => "platform_page",
         }
     }
 }
@@ -438,6 +515,256 @@ impl DirectLinkOrigin {
     #[must_use]
     pub const fn bytes(&self) -> u64 {
         self.bytes
+    }
+}
+
+/// Longest provider name a page's record keeps.
+pub const MAX_PAGE_PROVIDER_BYTES: usize = 64;
+/// Longest video id a page's record keeps in clear.
+pub const MAX_PAGE_VIDEO_ID_BYTES: usize = 128;
+/// Longest tool version a page's record keeps.
+pub const MAX_PAGE_TOOL_VERSION_BYTES: usize = 64;
+
+/// The name yt-dlp gives the site it read (its `extractor_key`): 1 to
+/// [`MAX_PAGE_PROVIDER_BYTES`] ASCII letters and digits.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PageProvider(String);
+
+impl PageProvider {
+    /// Accepts a provider name.
+    ///
+    /// # Errors
+    ///
+    /// [`SourceOriginError`] for any other text: it came from yt-dlp, so it
+    /// is untrusted.
+    pub fn parse(text: &str) -> Result<Self, SourceOriginError> {
+        if text.is_empty()
+            || text.len() > MAX_PAGE_PROVIDER_BYTES
+            || !text.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        {
+            return Err(SourceOriginError);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// The name's text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// How a page's video is named in its record. An unlisted video's id is a
+/// capability token, so the id is kept in clear only when the site reports
+/// the video public; otherwise only its SHA-256 is kept.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum PageVideoId {
+    /// The site reports the video public.
+    Public(String),
+    /// Anything else: only the digest of the id.
+    Digest(Sha256Hex),
+}
+
+impl PageVideoId {
+    /// The record of a video id: in clear only when `public` and it has the
+    /// shape of an id, otherwise `digest`, the SHA-256 of `id`.
+    #[must_use]
+    pub fn recorded(id: &str, digest: Sha256Hex, public: bool) -> Self {
+        if public && Self::is_id_shaped(id) {
+            Self::Public(id.to_owned())
+        } else {
+            Self::Digest(digest)
+        }
+    }
+
+    /// Whether `id` may be kept in clear: 1 to
+    /// [`MAX_PAGE_VIDEO_ID_BYTES`] ASCII letters, digits, `-`, `_` and `.`.
+    #[must_use]
+    pub fn is_id_shaped(id: &str) -> bool {
+        !id.is_empty()
+            && id.len() <= MAX_PAGE_VIDEO_ID_BYTES
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    }
+}
+
+/// A tool's version as a page's record keeps it: 1 to
+/// [`MAX_PAGE_TOOL_VERSION_BYTES`] printable ASCII characters.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PageToolVersion(String);
+
+impl PageToolVersion {
+    /// Accepts a version.
+    ///
+    /// # Errors
+    ///
+    /// [`SourceOriginError`] for any other text.
+    pub fn parse(text: &str) -> Result<Self, SourceOriginError> {
+        if text.is_empty()
+            || text.len() > MAX_PAGE_TOOL_VERSION_BYTES
+            || !text.bytes().all(|byte| (0x20..0x7f).contains(&byte))
+        {
+            return Err(SourceOriginError);
+        }
+        Ok(Self(text.to_owned()))
+    }
+
+    /// The version's text.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Which yt-dlp or JavaScript runtime fetched a page.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum PageToolRecord {
+    /// A version `VSift` installed from its reviewed catalogue.
+    Managed {
+        /// The catalogue's version key.
+        catalogue_version: PageToolVersion,
+    },
+    /// A file the user supplied: nobody here reviewed it.
+    UserManaged {
+        /// The first line of its version output.
+        version: PageToolVersion,
+        /// The SHA-256 of the file.
+        sha256: Sha256Hex,
+    },
+}
+
+/// Whether a page's video was one file or a joined pair of streams.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum PageJoin {
+    /// One file, moved into the session's source slot.
+    SingleFile,
+    /// Separate audio and video, joined by a stream copy.
+    AudioVideo,
+}
+
+impl PageJoin {
+    /// Stable public and stored identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::SingleFile => "single_file",
+            Self::AudioVideo => "audio_video",
+        }
+    }
+
+    /// The value named by `identifier`, if any.
+    #[must_use]
+    pub fn from_identifier(identifier: &str) -> Option<Self> {
+        [Self::SingleFile, Self::AudioVideo]
+            .into_iter()
+            .find(|join| join.identifier() == identifier)
+    }
+}
+
+/// The record of one page fetched through yt-dlp. It holds a digest of the
+/// link and never a title, uploader, description, upload date, format URL or
+/// header: those are untrusted text and other people's personal data, and an
+/// upload date is not a recording time (ADR 0028 section 5).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PageOrigin {
+    provider: PageProvider,
+    video_id: PageVideoId,
+    link_sha256: Sha256Hex,
+    yt_dlp: PageToolRecord,
+    js_runtime: Option<PageToolRecord>,
+    through_proxy: bool,
+    retrieved_at_unix_seconds: u64,
+    bytes: u64,
+    joined: PageJoin,
+}
+
+impl PageOrigin {
+    /// Records one fetched page. `tools` are the yt-dlp and the runtime it
+    /// ran with, if any; `through_proxy` says whether a proxy from the
+    /// environment was handed to it.
+    ///
+    /// # Errors
+    ///
+    /// [`SourceOriginError`] for no bytes or more than [`MAX_DOWNLOAD_BYTES`].
+    pub fn new(
+        (provider, video_id): (PageProvider, PageVideoId),
+        link_sha256: Sha256Hex,
+        tools: (PageToolRecord, Option<PageToolRecord>),
+        through_proxy: bool,
+        retrieved_at_unix_seconds: u64,
+        (bytes, joined): (u64, PageJoin),
+    ) -> Result<Self, SourceOriginError> {
+        if bytes == 0 || bytes > MAX_DOWNLOAD_BYTES {
+            return Err(SourceOriginError);
+        }
+        let (yt_dlp, js_runtime) = tools;
+        Ok(Self {
+            provider,
+            video_id,
+            link_sha256,
+            yt_dlp,
+            js_runtime,
+            through_proxy,
+            retrieved_at_unix_seconds,
+            bytes,
+            joined,
+        })
+    }
+
+    /// The site yt-dlp read.
+    #[must_use]
+    pub const fn provider(&self) -> &PageProvider {
+        &self.provider
+    }
+
+    /// The video's id, or its digest.
+    #[must_use]
+    pub const fn video_id(&self) -> &PageVideoId {
+        &self.video_id
+    }
+
+    /// SHA-256 of the link as given, after parsing and normalising it.
+    #[must_use]
+    pub const fn link_sha256(&self) -> &Sha256Hex {
+        &self.link_sha256
+    }
+
+    /// The yt-dlp that fetched the page.
+    #[must_use]
+    pub const fn yt_dlp(&self) -> &PageToolRecord {
+        &self.yt_dlp
+    }
+
+    /// The JavaScript runtime it ran with, if any.
+    #[must_use]
+    pub const fn js_runtime(&self) -> Option<&PageToolRecord> {
+        self.js_runtime.as_ref()
+    }
+
+    /// Whether a proxy from the environment made yt-dlp's connections, so
+    /// the proxy resolved the names (known limits L-208 and L-209).
+    #[must_use]
+    pub const fn through_proxy(&self) -> bool {
+        self.through_proxy
+    }
+
+    /// When the source was complete, in Unix seconds.
+    #[must_use]
+    pub const fn retrieved_at_unix_seconds(&self) -> u64 {
+        self.retrieved_at_unix_seconds
+    }
+
+    /// The size of the session's source.
+    #[must_use]
+    pub const fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Whether the source was one file or a joined pair.
+    #[must_use]
+    pub const fn joined(&self) -> PageJoin {
+        self.joined
     }
 }
 
@@ -540,6 +867,75 @@ mod tests {
                 AddressCheck::from_identifier(check.identifier()),
                 Some(check)
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_page_record_keeps_an_id_in_clear_only_when_public_and_id_shaped()
+    -> Result<(), Box<dyn Error>> {
+        let digest = Sha256Hex::parse("1".repeat(64)).map_err(|_| "digest")?;
+        assert_eq!(
+            PageVideoId::recorded("abc_DEF-1.2", digest.clone(), true),
+            PageVideoId::Public(String::from("abc_DEF-1.2"))
+        );
+        for (id, public) in [
+            ("abc", false),
+            ("", true),
+            ("a b", true),
+            ("a/b", true),
+            ("<script>", true),
+        ] {
+            assert_eq!(
+                PageVideoId::recorded(id, digest.clone(), public),
+                PageVideoId::Digest(digest.clone()),
+                "{id}"
+            );
+        }
+        let long = "a".repeat(MAX_PAGE_VIDEO_ID_BYTES + 1);
+        assert!(!PageVideoId::is_id_shaped(&long));
+        Ok(())
+    }
+
+    #[test]
+    fn untrusted_provider_and_version_text_is_refused() {
+        assert!(PageProvider::parse("Youtube1").is_ok());
+        for refused in ["", "You Tube", "generic:html", "\u{00e9}"] {
+            assert!(PageProvider::parse(refused).is_err(), "{refused}");
+        }
+        assert!(PageProvider::parse(&"a".repeat(MAX_PAGE_PROVIDER_BYTES + 1)).is_err());
+        assert!(PageToolVersion::parse("deno 2.9.7 (stable)").is_ok());
+        assert!(PageToolVersion::parse("").is_err());
+        assert!(PageToolVersion::parse("2026\n").is_err());
+        assert!(PageToolVersion::parse(&"1".repeat(MAX_PAGE_TOOL_VERSION_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn a_page_origin_is_bounded_like_a_download() -> Result<(), Box<dyn Error>> {
+        let digest = Sha256Hex::parse("2".repeat(64)).map_err(|_| "digest")?;
+        let tool = PageToolRecord::Managed {
+            catalogue_version: PageToolVersion::parse("yt-dlp-2026.08.19-linux-x86_64")?,
+        };
+        let build = |bytes| {
+            PageOrigin::new(
+                (
+                    PageProvider::parse("Generic")?,
+                    PageVideoId::Digest(digest.clone()),
+                ),
+                digest.clone(),
+                (tool.clone(), None),
+                false,
+                1_792_587_792,
+                (bytes, PageJoin::AudioVideo),
+            )
+        };
+        let origin = build(1_024)?;
+        assert_eq!(origin.joined().identifier(), "audio_video");
+        assert_eq!(SourceOrigin::PlatformPage(origin).kind(), "platform_page");
+        assert!(build(0).is_err());
+        assert!(build(MAX_DOWNLOAD_BYTES + 1).is_err());
+        for join in [PageJoin::SingleFile, PageJoin::AudioVideo] {
+            assert_eq!(PageJoin::from_identifier(join.identifier()), Some(join));
         }
         Ok(())
     }

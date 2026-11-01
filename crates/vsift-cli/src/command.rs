@@ -533,20 +533,21 @@ impl From<SetupProfile> for ExecutionProfile {
     }
 }
 
-/// Foreground ingestion request: a local file, or a direct link to fetch.
+/// Foreground ingestion request: a local file, or a link to fetch.
 #[derive(Args, Debug)]
 #[command(group(ArgGroup::new("input").required(true).args(["source", "url"])))]
 pub(crate) struct IngestArguments {
     /// Local source media path.
     pub source: Option<PathBuf>,
-    /// Instead of a local file, a direct https:// link to a video file.
+    /// Instead of a local file, an https:// link to a video file or page.
     ///
     /// The link names one file (MP4, MOV, MKV or WebM): it is fetched once into
     /// the session (port 443, no
     /// sign-in, public addresses only), then everything works offline as for
-    /// a local file. `-` reads the link from standard input, which keeps a
-    /// signed link out of the process list and the shell history. The link
-    /// itself is never stored or printed.
+    /// a local file. A public video page is read through yt-dlp when one is
+    /// set up (setup check says). `-` reads the link from standard input,
+    /// which keeps a signed link out of the process list and the shell
+    /// history. The link itself is never stored or printed.
     #[arg(long, value_name = "LINK")]
     pub url: Option<String>,
     /// Largest download for --url, in bytes (1 to 21474836480, 20 GiB);

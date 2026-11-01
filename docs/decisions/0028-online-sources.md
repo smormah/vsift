@@ -591,6 +591,50 @@ This pull request adds what was left, plus 4.6's registration (the acquisition h
   pinned Deno for Windows and macOS (this ADR pins none, and a pin needs its own review), so the Windows and macOS jobs
   register a yt-dlp only; `setup install --artifact-dir` for the optional files is the shared import path of the core
   and is not separately tested for them.
+*Implementation note, 2026-11-01 (#409's acquisition pull request, W4b; the planner's ruling of the same day):*
+reading the pinned yt-dlp's source showed section 4.7 could not work as written, so its arguments change. This was
+read in the source at tag `2026.08.19`, never run; the hosted check confirms it, and if real yt-dlp disagrees the
+evidence goes back to the planner.
+
+- **Why.** `--max-downloads 1` with `--simulate --dump-single-json` ends a run with exit 101 and no JSON, because the
+  limit is raised before the dump. Its exit 101 would also replace a failed download's exit 1. `--abort-on-error` stops
+  a merged pair before either stream downloads when no FFmpeg is visible, and VSift keeps FFmpeg from yt-dlp on
+  purpose. `live_status!=is_upcoming` is false for a site that reports no status. `--dump-single-json` implies
+  simulate, so phase 2 cannot keep it.
+- **Every run:** `--ignore-config --no-plugin-dirs --no-update --no-remote-components --no-cookies
+  --no-cookies-from-browser --no-playlist --no-batch-file --playlist-items 1 --abort-on-error --no-exec
+  --restrict-filenames --no-mtime --no-part --no-continue --downloader native --no-check-formats --socket-timeout 30
+  --no-progress --fixup never --match-filters "!is_live & !was_live & live_status!=?is_upcoming &
+  live_status!=?post_live" --output "vsift-page.%(format_id)s.%(ext)s" --no-js-runtimes [--js-runtimes
+  deno:<runtime path>] --paths <output folder>`.
+- **Phase 1** adds section 4.7's format selection, `--simulate --dump-single-json`, then `-- <link>`.
+- **Phase 2** adds `--format <selection>`, then `-- <link>`. The selection is exactly the ids phase 1 checked:
+  `<id>[protocol=https]` for one file, `<video id>[protocol=https],<audio id>[protocol=https]` for a pair. The comma
+  makes two separate downloads, so no merge is considered, and the filter holds HTTPS on the page as yt-dlp reads it
+  again. Ids come from `requested_formats`, or the top-level `format_id` for one file, and must match
+  `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, otherwise `unexpected_output`.
+- **`--max-downloads` is not used.** What bounds a run is the single entry, the exact ids, the byte caps and the
+  exact folder check. **Exit 0 is the only success in either phase:** with `--no-part` a failed download leaves a
+  good-looking file under its final name, so the folder's check cannot stand in for the status.
+- **Phase 1's rule for a missing field:** an absent `live_status` passes; any present value other than `not_live`
+  is refused. The filter's `!=?` says the same.
+- **`--fixup never`:** on Windows a user's `yt-dlp.exe` could find an unverified `ffmpeg.exe` beside it with `PATH`
+  empty, and no FFmpeg may touch these files but the verified one.
+- **The folder check** expects exactly `vsift-page.<id>.<ext>` for each format.
+- **Environment:** `DENO_NO_UPDATE_CHECK=1` and `NO_COLOR=1` when a runtime is passed, as `setup check` runs Deno; on
+  Windows `SystemRoot`, as W4a's identification does.
+- **The join:** `-protocol_whitelist file` on each input, because it is an input option and section 4.7's line covers
+  only the first; MOV inputs also get `-enable_drefs 0 -use_absolute_path 0`, as every other read does.
+- **A new reason, `media_tools_missing`:** a pair with no verified FFmpeg, refused before the download.
+- **The stall:** 120 s to the first byte, because phase 2 reads the page again, then 30 s without growth in the total
+  across both streams, with no second allowance.
+- **Links:** a host written as an address, and an internal name, are refused always, not only through a proxy,
+  because yt-dlp connects with no address policy.
+- **The page origin:** `catalogue_version` alone for a managed tool (the key names the exact version), `source_id`
+  not repeated (the session's result has it, as for a direct link), and `address_check: "proxy_resolved"` only when a
+  proxy was handed over: `direct` would claim a check yt-dlp's connections never had.
+- **The fake yt-dlp** keeps its record beside its executable, and the test's folder takes it away: its temporary
+  folder goes with the session, so a record there could not be read. It also plays `FFmpeg` for the join.
 
 ## Consequences
 

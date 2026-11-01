@@ -136,8 +136,10 @@ pub use session::{
 pub use source_origin::{
     AddressCheck, DEFAULT_DOWNLOAD_BYTES, DEFAULT_DOWNLOAD_SECONDS, DirectLinkOrigin,
     DownloadLimits, DownloadLimitsError, HostName, HostNameError, MAX_DOWNLOAD_BYTES,
-    MAX_DOWNLOAD_SECONDS, MAX_HOST_NAME_BYTES, MAX_SOURCE_LINK_BYTES, MAX_SOURCE_REDIRECTS,
-    SourceFetchReason, SourceLink, SourceOrigin, SourceOriginError,
+    MAX_DOWNLOAD_SECONDS, MAX_HOST_NAME_BYTES, MAX_PAGE_PROVIDER_BYTES,
+    MAX_PAGE_TOOL_VERSION_BYTES, MAX_PAGE_VIDEO_ID_BYTES, MAX_SOURCE_LINK_BYTES,
+    MAX_SOURCE_REDIRECTS, PageJoin, PageOrigin, PageProvider, PageToolRecord, PageToolVersion,
+    PageVideoId, SourceFetchReason, SourceLink, SourceOrigin, SourceOriginError,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
