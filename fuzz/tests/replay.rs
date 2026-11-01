@@ -840,7 +840,11 @@ const SEEDS: &[Seed] = &[
     seed(Target::YtdlpInfoJson, "single.json", Origin::Written),
     seed(Target::YtdlpInfoJson, "pair.json", Origin::Written),
     seed(Target::YtdlpInfoJson, "playlist.json", Origin::Written),
-    seed(Target::YtdlpInfoJson, "live-no-format.json", Origin::Written),
+    seed(
+        Target::YtdlpInfoJson,
+        "live-no-format.json",
+        Origin::Written,
+    ),
 ];
 
 /// The part records the infrastructure crate's open-revision test pins to the
