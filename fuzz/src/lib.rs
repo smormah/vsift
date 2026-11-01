@@ -31,8 +31,7 @@ use vsift_contract::{
 };
 use vsift_domain::{
     AnchorSource, ArtifactId, CropRect, CursorToken, DownloadLimits, EvidenceId, FrameDimensions,
-    JobId,
-    LanguageTag, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES,
+    JobId, LanguageTag, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES,
     MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES,
     MAX_SCREEN_TEXT_LINES, MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES,
     MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, ManagedVersionKey,
