@@ -805,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_name_that_is_not_internal_reaches_ytdlp() -> Result<(), reqwest::Error> {
+    fn only_a_name_that_is_not_internal_reaches_ytdlp() {
         let url = |text: &str| reqwest::Url::parse(text);
         let parse = |text| url(text).map_err(|_| SourceFetchReason::NotHttps);
         assert_eq!(
@@ -826,7 +826,6 @@ mod tests {
                 "{refused}"
             );
         }
-        Ok(())
     }
 
     #[test]

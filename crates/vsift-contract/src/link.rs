@@ -20,7 +20,7 @@ pub enum OriginData {
     /// A direct link to a video file.
     Direct(DirectOriginData),
     /// A public video page, fetched through yt-dlp.
-    Page(PageOriginData),
+    Page(Box<PageOriginData>),
 }
 
 /// The origin of a direct link.
@@ -117,7 +117,7 @@ impl OriginData {
                     PageVideoId::Public(id) => (Some(id.clone()), None),
                     PageVideoId::Digest(digest) => (None, Some(digest.as_str().to_owned())),
                 };
-                Some(Self::Page(PageOriginData {
+                Some(Self::Page(Box::new(PageOriginData {
                     kind: origin.kind(),
                     provider: page.provider().as_str().to_owned(),
                     video_id,
@@ -129,7 +129,7 @@ impl OriginData {
                     retrieved_at: utc_seconds_rfc3339(page.retrieved_at_unix_seconds())?,
                     bytes: page.bytes(),
                     joined: page.joined().identifier(),
-                }))
+                })))
             }
         }
     }
@@ -142,6 +142,10 @@ const ONLINE_STEP: &str =
 
 /// Fixed-prose remediation of a link that could not be fetched, by reason.
 #[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm of fixed prose for each published reason"
+)]
 pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str {
     match reason {
         SourceFetchReason::NotHttps => {

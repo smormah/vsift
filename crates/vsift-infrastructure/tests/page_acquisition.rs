@@ -307,7 +307,7 @@ async fn stage(
 
 fn page_origin(snapshot: &SourceSnapshot) -> TestResult<&PageOrigin> {
     match snapshot.origin() {
-        Some(SourceOrigin::PlatformPage(page)) => Ok(page),
+        Some(SourceOrigin::PlatformPage(page)) => Ok(page.as_ref()),
         _ => Err("not a page's origin".into()),
     }
 }
@@ -382,6 +382,10 @@ fn allowed_variable(name: &str) -> bool {
 /// becomes the session's source, the record holds no untrusted text, and
 /// nothing else stays behind.
 #[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one fetch and everything it must have passed and kept"
+)]
 async fn one_file_is_fetched_with_the_exact_invocation_and_recorded() -> TestResult {
     let root = OwnedRoot::new()?;
     let store = root.store().await?;
@@ -985,8 +989,8 @@ const VIDEO_REPLY: &[u8] = b"HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nConte
 struct Fixed(Option<PageTools>);
 
 impl PageToolSource for Fixed {
-    async fn page_tools(&self) -> Option<PageTools> {
-        self.0.clone()
+    fn page_tools(&self) -> impl Future<Output = Option<PageTools>> + Send {
+        std::future::ready(self.0.clone())
     }
 }
 

@@ -895,7 +895,7 @@ fn page_origin(
         retrieved_at,
         (bytes, acquired.join),
     )
-    .map(SourceOrigin::PlatformPage)
+    .map(|page| SourceOrigin::PlatformPage(Box::new(page)))
     .map_err(|_| SourceError::Fetch(SourceFetchReason::Size))
 }
 

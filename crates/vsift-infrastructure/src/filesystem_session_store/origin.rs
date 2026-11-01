@@ -23,7 +23,7 @@ pub(super) enum StoredOrigin {
     /// A direct link (#407).
     Direct(StoredDirectOrigin),
     /// A page fetched through yt-dlp (#409).
-    Page(StoredPageOrigin),
+    Page(Box<StoredPageOrigin>),
 }
 
 /// The stored form of a direct link's origin.
@@ -139,7 +139,7 @@ fn decode_page_origin(
         (stored.bytes, joined),
     )
     .map_err(integrity)?;
-    Ok(SourceOrigin::PlatformPage(page))
+    Ok(SourceOrigin::PlatformPage(Box::new(page)))
 }
 
 /// The stored form of `origin`.
@@ -160,7 +160,7 @@ pub(super) fn encode_origin(origin: &SourceOrigin) -> StoredOrigin {
                 PageVideoId::Public(id) => (Some(id.clone()), None),
                 PageVideoId::Digest(digest) => (None, Some(digest.as_str().to_owned())),
             };
-            StoredOrigin::Page(StoredPageOrigin {
+            StoredOrigin::Page(Box::new(StoredPageOrigin {
                 kind: origin.kind().to_owned(),
                 provider: page.provider().as_str().to_owned(),
                 video_id,
@@ -172,7 +172,7 @@ pub(super) fn encode_origin(origin: &SourceOrigin) -> StoredOrigin {
                 retrieved_at_unix_seconds: page.retrieved_at_unix_seconds(),
                 bytes: page.bytes(),
                 joined: page.joined().identifier().to_owned(),
-            })
+            }))
         }
     }
 }
@@ -266,7 +266,7 @@ mod tests {
 
     fn page_origin(public: bool) -> Result<SourceOrigin, Box<dyn Error>> {
         let digest = Sha256Hex::parse("b".repeat(64)).map_err(|_| "digest")?;
-        Ok(SourceOrigin::PlatformPage(PageOrigin::new(
+        Ok(SourceOrigin::PlatformPage(Box::new(PageOrigin::new(
             (
                 PageProvider::parse("Generic")?,
                 PageVideoId::recorded("abc-1", digest.clone(), public),
@@ -284,7 +284,7 @@ mod tests {
             true,
             1_792_587_792,
             (4_096, PageJoin::AudioVideo),
-        )?))
+        )?)))
     }
 
     #[test]

@@ -64,7 +64,8 @@ type TestResult = Result<(), Box<dyn Error>>;
 
 /// Where a committed seed came from.
 enum Origin {
-    /// Clock lines written for this target: no fixture holds a clock on a screen.
+    /// Written for this target: no fixture holds a clock on a screen, and
+    /// yt-dlp's metadata is not pinned in the repository.
     Written,
     /// A byte-for-byte copy of this repository file.
     Copy(&'static str),
@@ -836,6 +837,10 @@ const SEEDS: &[Seed] = &[
         "two-parts.bin",
         Origin::Copy(TRANSCRIPT_PART_EXAMPLES),
     ),
+    seed(Target::YtdlpInfoJson, "single.json", Origin::Written),
+    seed(Target::YtdlpInfoJson, "pair.json", Origin::Written),
+    seed(Target::YtdlpInfoJson, "playlist.json", Origin::Written),
+    seed(Target::YtdlpInfoJson, "live-no-format.json", Origin::Written),
 ];
 
 /// The part records the infrastructure crate's open-revision test pins to the
@@ -943,6 +948,8 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::TranscriptRecord, "F01-words-no-segment-holds.json"),
         (Target::TranscriptPart, "one-part.json"),
         (Target::TranscriptPart, "two-parts.bin"),
+        (Target::YtdlpInfoJson, "single.json"),
+        (Target::YtdlpInfoJson, "pair.json"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
         (Target::FfprobeMetadata, "recorder-tags.json"),
@@ -1091,6 +1098,10 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         )
         .is_ok(),
         Target::FfprobeMetadata => parse_ffprobe_metadata(data, SourceContainer::IsoMedia).is_ok(),
+        Target::YtdlpInfoJson => {
+            vsift_infrastructure::parse_ytdlp_info(data, vsift_domain::DownloadLimits::DEFAULT)
+                .is_ok()
+        }
         Target::TranscriptCursor => CursorToken::parse(std::str::from_utf8(data)?).is_ok(),
         Target::VisualSamples => match data {
             [count, _, stderr @ ..] => parse_visual_samples(

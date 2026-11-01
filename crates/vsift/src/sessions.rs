@@ -633,6 +633,10 @@ impl Engine {
 
     /// [`Self::ingest`] of a resolved request: a worker request's step
     /// passes its contained source and its recorded session id here.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one auditable path from the request to the opened session"
+    )]
     pub(crate) async fn ingest_prepared(
         &self,
         request: PreparedIngest,

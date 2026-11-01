@@ -51,7 +51,8 @@ use vsift::{
     HostIsolation, IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError,
     OptionalComponentSet, PendingTranscription, PlanAcceptanceError, ProgressObserver,
     ScreenTextStop, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
-    SourcePathFault, TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    SourceFetchReason, SourcePathFault, TranscriptSourceError, UserConfigurationLocation,
+    attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -995,10 +996,8 @@ impl From<EngineError> for CommandFailure {
                 EngineError::Watch(failure) => Some(watch::remediation(*failure)),
                 _ => None,
             });
-        let reason = match &error {
-            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
-                Some(reason.identifier())
-            }
+        let fetch_reason = match &error {
+            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => Some(*reason),
             _ => None,
         };
         // The session first, then the job: the order an agent resolves them.
@@ -1051,21 +1050,13 @@ impl From<EngineError> for CommandFailure {
                 .iter()
                 .map(|argument| (*argument).to_owned())
                 .collect(),
-            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
-                source_fetch_command(*reason)
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|argument| (*argument).to_owned())
-                    .collect()
-            }
-            _ => Vec::new(),
+            _ => fetch_reason
+                .and_then(source_fetch_command)
+                .unwrap_or_default()
+                .iter()
+                .map(|argument| (*argument).to_owned())
+                .collect(),
         };
-        let needs_confirmation = matches!(
-            &error,
-            EngineError::OpenSession(OpenSessionError::SourceFetch(
-                vsift::SourceFetchReason::WebPage
-            ))
-        );
         Self {
             code: error.failure_code(),
             remediation,
@@ -1073,8 +1064,8 @@ impl From<EngineError> for CommandFailure {
             affected_ids,
             suggested_command,
             data: None,
-            reason,
-            needs_confirmation,
+            reason: fetch_reason.map(SourceFetchReason::identifier),
+            needs_confirmation: fetch_reason == Some(SourceFetchReason::WebPage),
         }
     }
 }

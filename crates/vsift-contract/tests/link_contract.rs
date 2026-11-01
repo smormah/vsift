@@ -90,7 +90,7 @@ fn page_origin() -> Result<SourceOrigin, Box<dyn Error>> {
     let digest = |character: char| {
         Sha256Hex::parse(character.to_string().repeat(64)).map_err(|_| "digest".to_owned())
     };
-    Ok(SourceOrigin::PlatformPage(PageOrigin::new(
+    Ok(SourceOrigin::PlatformPage(Box::new(PageOrigin::new(
         (
             PageProvider::parse("Generic")?,
             PageVideoId::Digest(digest('b')?),
@@ -107,7 +107,7 @@ fn page_origin() -> Result<SourceOrigin, Box<dyn Error>> {
         true,
         1_790_208_000,
         (72_873_726, PageJoin::AudioVideo),
-    )?))
+    )?)))
 }
 
 #[test]

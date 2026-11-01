@@ -407,7 +407,7 @@ pub enum SourceOrigin {
     /// A direct HTTPS link to a video file (#407).
     DirectHttps(DirectLinkOrigin),
     /// A public video page, fetched through yt-dlp (#409).
-    PlatformPage(PageOrigin),
+    PlatformPage(Box<PageOrigin>),
 }
 
 impl SourceOrigin {
@@ -931,7 +931,10 @@ mod tests {
         };
         let origin = build(1_024)?;
         assert_eq!(origin.joined().identifier(), "audio_video");
-        assert_eq!(SourceOrigin::PlatformPage(origin).kind(), "platform_page");
+        assert_eq!(
+            SourceOrigin::PlatformPage(Box::new(origin)).kind(),
+            "platform_page"
+        );
         assert!(build(0).is_err());
         assert!(build(MAX_DOWNLOAD_BYTES + 1).is_err());
         for join in [PageJoin::SingleFile, PageJoin::AudioVideo] {
