@@ -57,8 +57,11 @@ class PhraseCheckTests(unittest.TestCase):
     def test_the_real_table_and_flags_are_read(self) -> None:
         phrases = review.reviewed_phrases(review.REFUSAL_SOURCE.read_text(encoding="utf-8"))
         flags = review.reviewed_flags(review.ACQUISITION_SOURCE.read_text(encoding="utf-8"))
-        self.assertIn("Sign in to confirm you\u2019re not a bot", phrases)
-        self.assertIn("407 Proxy Authentication Required", phrases)
+        site = review.reviewed_phrases(review.REFUSAL_SOURCE.read_text(encoding="utf-8"),
+                                       "SITE_PHRASES")
+        self.assertIn("Sign in to confirm you\u2019re not a bot", site)
+        self.assertIn("407 Proxy Authentication Required", site)
+        self.assertIn("HTTP Error 403", phrases)
         for flag in ("--ignore-config", "--no-js-runtimes", "--match-filters", "--simulate"):
             self.assertIn(flag, flags)
 
