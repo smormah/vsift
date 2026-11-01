@@ -190,6 +190,12 @@ phases passed. Both mechanical A-02 misses bind a true statement to evidence out
 the first occurrence's window; whether the grader should accept that is for the
 maintainer (#219). It is still the weakest scenario.
 
+*Later position (2026-11-01):* the grader reading was settled on 2026-09-30 (a looped clip's
+truth windows repeat with the clip's measured period, and the skill asks for each claim to
+state its subject and value in full; [ADR 0022](../decisions/0022-agent-skill-and-named-client-qualification.md),
+note of 2026-09-30). The "previous value" reading stays strict. The statement above describes
+the final round on `56f1e1f`.
+
 **Usage per phase (median, range):**
 
 | Model | Tool calls | Images viewed | Wall time | Input tokens (incl. cache) | Output tokens |

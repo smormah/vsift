@@ -3,6 +3,9 @@
 Date: 2026-09-13. Target for investigation: Ubuntu 24.04 x64 on a disposable
 hosted runner. This is a read-only source and archive-inventory review, not an
 accepted managed-install catalogue, compatibility result or P06 E2E checkpoint.
+(Later position, 2026-11-01: P06 closed on the scope ADR 0015 narrowed it to and is
+complete in the [delivery ledger](delivery-ledger.json); this record keeps its dated
+position.)
 No downloaded executable was run on the maintainer desktop.
 On 2026-09-21 the exact set below was accepted into reviewed source for
 **read-only Ubuntu 24.04 x86-64 plans**. That later decision does not turn the
