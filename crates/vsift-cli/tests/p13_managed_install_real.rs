@@ -25,6 +25,19 @@
 //! checkpoint runs `--release`.
 //!
 //! The manual workflow `P13 managed smoke` runs it on a hosted runner.
+//!
+//! A second checkpoint does the same with `--include online_links` (ADR 0028
+//! section 4, ADR 0032): the real yt-dlp and Deno are downloaded, smoked
+//! (offline, no URL is fetched) and activated after the core, `setup check`
+//! reports them as managed, `setup list` shows them, and removing the
+//! runtime leaves the local-video readiness as it was.
+//!
+//! A third checkpoint is for Windows and macOS, where no managed yt-dlp is
+//! offered (ADR 0028 section 4.6): the publisher's pinned `yt-dlp.exe` or
+//! `yt-dlp_macos` (2026.08.19), fetched by the workflow, is registered with
+//! `setup configure yt-dlp`, and `setup check` must run it under `VSift`'s
+//! restricted environment and report it as user-managed with that version
+//! and the pinned digest. No page is fetched.
 
 mod published_binary;
 
@@ -295,5 +308,177 @@ fn time_managed_use(base: &Base) -> TestResult {
             String::from_utf8_lossy(&frame.stdout)
         );
     }
+    Ok(())
+}
+
+/// The checkpoint with the optional online-links group. Ubuntu 24.04 only: the
+/// managed yt-dlp and Deno are offered nowhere else.
+#[test]
+#[ignore = "opt-in real managed installation with online_links; set VSIFT_P13_REAL_INSTALL=1 on Ubuntu 24.04 x86-64 and run --release"]
+fn real_managed_install_with_online_links_installs_reports_and_removes_the_pair() -> TestResult {
+    if env::var_os(OPT_IN).is_none() {
+        return Err(format!("set {OPT_IN}=1 to run the real managed installation").into());
+    }
+    if accepted_host_catalogue()?.is_none() {
+        return Err("the real managed installation runs only on a host with a catalogue".into());
+    }
+    println!("binary under test: {}", published_binary::report()?);
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let base = Base(env::temp_dir().join(format!("vsift-p13-real-online-links-{stamp}")));
+    fs::create_dir(&base.0)?;
+
+    let plan = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop"])
+        .args(["--include", "online_links", "--json"])
+        .output()?;
+    assert!(plan.status.success(), "setup plan failed");
+    let plan_value: Value = serde_json::from_slice(&plan.stdout)?;
+    let digest = plan_value["data"]["plan_digest"]
+        .as_str()
+        .ok_or("the plan has no digest")?
+        .to_owned();
+    let group = &plan_value["data"]["optional_components"][0];
+    assert_eq!(group["name"], "online_links");
+    assert_eq!(group["status"], "included", "{group}");
+    let optional_actions = group["actions"].as_array().map_or(0, Vec::len);
+    assert_eq!(optional_actions, 2, "yt-dlp and Deno: {group}");
+    let plan_path = base.0.join("plan.json");
+    fs::write(&plan_path, &plan.stdout)?;
+
+    let started = Instant::now();
+    let install = base
+        .vsift()?
+        .args(["setup", "install", "--plan", path_text(&plan_path)?])
+        .args(["--accept-plan", &digest, "--json"])
+        .output()?;
+    println!(
+        "install: exit {:?} in {:.1} s",
+        install.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    let installed: Value = serde_json::from_slice(&install.stdout)?;
+    println!("{}", serde_json::to_string_pretty(&installed["data"])?);
+    assert_eq!(install.status.code(), Some(0), "{}", installed["error"]);
+    assert_eq!(installed["status"], "complete", "no partial result");
+    assert_eq!(installed["data"]["core"], "ready");
+    let optional = installed["data"]["optional_components"]
+        .as_array()
+        .ok_or("no optional components")?;
+    assert_eq!(optional.len(), optional_actions);
+    for component in optional {
+        assert_eq!(component["status"], "activated", "{component}");
+    }
+
+    let managed_row = |base: &Base| -> Result<Value, Box<dyn Error>> {
+        let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+        assert_eq!(check.status.code(), Some(0));
+        let value: Value = serde_json::from_slice(&check.stdout)?;
+        assert_eq!(value["status"], "ready");
+        value["optional_components"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+            .cloned()
+            .ok_or_else(|| "no online_links row".into())
+    };
+    let row = managed_row(&base)?;
+    assert_eq!(row["status"], "installed", "{row}");
+    let components = row["components"].as_array().ok_or("no components")?;
+    let names: Vec<&str> = components
+        .iter()
+        .filter_map(|component| component["component"].as_str())
+        .collect();
+    assert_eq!(names, ["js_runtime_deno", "yt_dlp"]);
+    assert!(components.iter().all(|c| c["source"] == "managed"));
+
+    let list = base.vsift()?.args(["setup", "list", "--json"]).output()?;
+    assert_eq!(list.status.code(), Some(0));
+    let listed = String::from_utf8(list.stdout)?;
+    assert!(listed.contains("yt_dlp") && listed.contains("js_runtime_deno"));
+
+    // Removing the runtime takes only the runtime; local investigation is
+    // as ready as before.
+    let removed = base
+        .vsift()?
+        .args(["setup", "remove", "js_runtime_deno", "--json"])
+        .output()?;
+    assert_eq!(removed.status.code(), Some(0));
+    let row = managed_row(&base)?;
+    assert_eq!(row["status"], "not_installed", "{row}");
+    Ok(())
+}
+
+/// The pinned publisher file for this system (ADR 0028 section 4.1): its
+/// name, size and SHA-256, from the release's signed sums.
+#[cfg(windows)]
+const PINNED_USER_YT_DLP: (u64, &str) = (
+    17_840_399,
+    "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+);
+#[cfg(target_os = "macos")]
+const PINNED_USER_YT_DLP: (u64, &str) = (
+    37_146_048,
+    "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202",
+);
+
+/// A yt-dlp the user supplies, as on Windows and macOS. The workflow fetches
+/// the pinned file and checks its size; the digest `setup check` reports is
+/// the proof of its bytes.
+#[cfg(any(windows, target_os = "macos"))]
+#[test]
+#[ignore = "opt-in: set VSIFT_P13_REAL_USER_YT_DLP=1 and VSIFT_P13_USER_YT_DLP to the pinned yt-dlp.exe or yt-dlp_macos of 2026.08.19, on Windows or macOS"]
+fn real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed() -> TestResult {
+    if env::var_os("VSIFT_P13_REAL_USER_YT_DLP").is_none() {
+        return Err(
+            "set VSIFT_P13_REAL_USER_YT_DLP=1 to run the user-supplied yt-dlp check".into(),
+        );
+    }
+    let supplied = PathBuf::from(
+        env::var_os("VSIFT_P13_USER_YT_DLP").ok_or("set VSIFT_P13_USER_YT_DLP to the file")?,
+    );
+    let (bytes, digest) = PINNED_USER_YT_DLP;
+    assert_eq!(fs::metadata(&supplied)?.len(), bytes, "not the pinned file");
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let base = Base(env::temp_dir().join(format!("vsift-p13-real-user-ytdlp-{stamp}")));
+    fs::create_dir(&base.0)?;
+
+    let configured = base
+        .vsift()?
+        .args(["setup", "configure", "yt-dlp", "--executable"])
+        .arg(&supplied)
+        .arg("--json")
+        .output()?;
+    assert_eq!(configured.status.code(), Some(0));
+    let configured: Value = serde_json::from_slice(&configured.stdout)?;
+    assert_eq!(configured["data"]["dependency"], "yt_dlp");
+
+    let started = Instant::now();
+    let check = base
+        .vsift()?
+        .args(["setup", "check", "--json", "--timeout-seconds", "60"])
+        .output()?;
+    println!(
+        "setup check: exit {:?} in {:.1} s",
+        check.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    let value: Value = serde_json::from_slice(&check.stdout)?;
+    let row = value["optional_components"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+        .ok_or("no online_links row")?;
+    println!("{}", serde_json::to_string_pretty(row)?);
+    assert_eq!(row["status"], "installed", "{row}");
+    let component = &row["components"][0];
+    assert_eq!(component["component"], "yt_dlp");
+    assert_eq!(component["source"], "user_managed");
+    assert_eq!(component["version"], "2026.08.19");
+    assert_eq!(component["sha256"], digest);
+    assert!(
+        row["next_step"]
+            .as_str()
+            .is_some_and(|step| step.contains("No JavaScript runtime is registered")),
+        "{row}"
+    );
     Ok(())
 }

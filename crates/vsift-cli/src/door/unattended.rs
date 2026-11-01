@@ -264,10 +264,12 @@ fn response(
     }
     for extra in include.iter() {
         let OptionalComponent::OnlineLinks = extra;
+        // `extra_capability` looks through a registered runtime that nothing
+        // uses, so the state is the component's own.
         let status = match extra_capability(after, extra) {
-            Some(OptionalCapability::Installed(_)) => SetupPartStatus::Added,
+            Some(capability) if capability.is_usable() => SetupPartStatus::Added,
             Some(OptionalCapability::Unavailable) => SetupPartStatus::NotAvailableHere,
-            Some(OptionalCapability::NotInstalled) | None => SetupPartStatus::NotAdded,
+            Some(_) | None => SetupPartStatus::NotAdded,
         };
         results.push(SetupPartResult {
             part: SetupPartName::WebVideos,

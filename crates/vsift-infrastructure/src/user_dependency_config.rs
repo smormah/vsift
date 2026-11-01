@@ -26,6 +26,10 @@ const CONFIG_FILE: &str = "dependencies-v1.json";
 /// dependencies record rejects unknown members, so a member added there would
 /// make the whole file unreadable to an earlier release.
 const OCR_RUNNER_FILE: &str = "ocr-runner-v1.json";
+/// The user's yt-dlp and JavaScript runtime for public video pages (ADR 0028
+/// section 4.6), each in a file of its own for the same reason.
+const YT_DLP_FILE: &str = "yt-dlp-v1.json";
+const JS_RUNTIME_FILE: &str = "js-runtime-v1.json";
 const LOCK_FILE: &str = "dependencies.lock";
 const MAX_CONFIG_BYTES: u64 = 4096;
 
@@ -200,10 +204,7 @@ impl UserDependencyConfigStore {
     ///
     /// Fails closed on an unsafe root, malformed record or storage failure.
     pub fn read_ocr_runner(&self) -> Result<Option<PathBuf>, UserDependencyConfigError> {
-        let Some(root) = self.open_root(false)? else {
-            return Ok(None);
-        };
-        Ok(read_ocr_record(&root)?.executable)
+        self.read_tool(OCR_RUNNER_FILE)
     }
 
     /// Atomically records the canonical path of a user-selected OCR runner.
@@ -215,6 +216,60 @@ impl UserDependencyConfigStore {
     ///
     /// Returns a typed validation, storage, integrity or contention failure.
     pub fn configure_ocr_runner(&self, executable: &Path) -> Result<(), UserDependencyConfigError> {
+        self.configure_tool(OCR_RUNNER_FILE, executable)
+    }
+
+    /// Reads the user-supplied yt-dlp (ADR 0028 section 4.6), if any, without running it.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on an unsafe root, malformed record or storage failure.
+    pub fn read_yt_dlp(&self) -> Result<Option<PathBuf>, UserDependencyConfigError> {
+        self.read_tool(YT_DLP_FILE)
+    }
+
+    /// Atomically records the canonical path of a user-supplied yt-dlp. Only
+    /// the file's present identity is validated; each use runs it with the
+    /// fixed invocation and checks its output.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, storage, integrity or contention failure.
+    pub fn configure_yt_dlp(&self, executable: &Path) -> Result<(), UserDependencyConfigError> {
+        self.configure_tool(YT_DLP_FILE, executable)
+    }
+
+    /// Reads the user-supplied JavaScript runtime for yt-dlp (Deno only in
+    /// `0.3.0`), if any, without running it.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on an unsafe root, malformed record or storage failure.
+    pub fn read_js_runtime(&self) -> Result<Option<PathBuf>, UserDependencyConfigError> {
+        self.read_tool(JS_RUNTIME_FILE)
+    }
+
+    /// Atomically records the canonical path of a user-supplied JavaScript runtime.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed validation, storage, integrity or contention failure.
+    pub fn configure_js_runtime(&self, executable: &Path) -> Result<(), UserDependencyConfigError> {
+        self.configure_tool(JS_RUNTIME_FILE, executable)
+    }
+
+    fn read_tool(&self, file: &str) -> Result<Option<PathBuf>, UserDependencyConfigError> {
+        let Some(root) = self.open_root(false)? else {
+            return Ok(None);
+        };
+        Ok(read_tool_record(&root, file)?.executable)
+    }
+
+    fn configure_tool(
+        &self,
+        file: &str,
+        executable: &Path,
+    ) -> Result<(), UserDependencyConfigError> {
         let selected = TrustedExecutable::explicit(executable)
             .map_err(|_| UserDependencyConfigError::InvalidExecutable)?;
         if selected.path().to_str().is_none() {
@@ -224,13 +279,13 @@ impl UserDependencyConfigStore {
             .open_root(true)?
             .ok_or(UserDependencyConfigError::Unavailable)?;
         let _lock = lock_configuration(&root)?;
-        let record = StoredOcrRunner {
+        let record = StoredTool {
             schema_version: 1,
             executable: Some(selected.path().to_path_buf()),
         };
         let bytes =
             serde_json::to_vec(&record).map_err(|_| UserDependencyConfigError::InvalidRecord)?;
-        replace_record(&root, OCR_RUNNER_FILE, &bytes)
+        replace_record(&root, file, &bytes)
     }
 
     /// Opens the private media-tool verification state kept beside the
@@ -356,19 +411,19 @@ fn replace_record(root: &Dir, name: &str, bytes: &[u8]) -> Result<(), UserDepend
 
 #[derive(Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct StoredOcrRunner {
+struct StoredTool {
     schema_version: u8,
     executable: Option<PathBuf>,
 }
 
-fn read_ocr_record(root: &Dir) -> Result<StoredOcrRunner, UserDependencyConfigError> {
-    let Some(bytes) = read_bounded(root, OCR_RUNNER_FILE)? else {
-        return Ok(StoredOcrRunner {
+fn read_tool_record(root: &Dir, file: &str) -> Result<StoredTool, UserDependencyConfigError> {
+    let Some(bytes) = read_bounded(root, file)? else {
+        return Ok(StoredTool {
             schema_version: 1,
             executable: None,
         });
     };
-    let record: StoredOcrRunner =
+    let record: StoredTool =
         serde_json::from_slice(&bytes).map_err(|_| UserDependencyConfigError::InvalidRecord)?;
     if record.schema_version != 1
         || record
@@ -557,6 +612,48 @@ mod tests {
             config.read_ocr_runner(),
             Err(UserDependencyConfigError::InvalidRecord)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn yt_dlp_and_its_runtime_are_recorded_apart_from_each_other_and_the_other_records()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = fixture_root()?;
+        let config = UserDependencyConfigStore::at(parent.join("config"))?;
+        assert_eq!(config.read_yt_dlp()?, None);
+        assert_eq!(config.read_js_runtime()?, None);
+        let yt_dlp = parent.join("yt-dlp");
+        let deno = parent.join("deno");
+        let runner = parent.join("vsift-ocr-runner");
+        fs::write(&yt_dlp, b"not executed")?;
+        fs::write(&deno, b"not executed either")?;
+        fs::write(&runner, b"nor this")?;
+        config.configure_ocr_runner(&runner)?;
+        config.configure_yt_dlp(&yt_dlp)?;
+        assert_eq!(config.read_yt_dlp()?, Some(fs::canonicalize(&yt_dlp)?));
+        assert_eq!(config.read_js_runtime()?, None);
+        config.configure_js_runtime(&deno)?;
+        assert_eq!(config.read_js_runtime()?, Some(fs::canonicalize(&deno)?));
+        assert_eq!(config.read_yt_dlp()?, Some(fs::canonicalize(&yt_dlp)?));
+        assert_eq!(config.read_ocr_runner()?, Some(fs::canonicalize(&runner)?));
+        assert_eq!(
+            config.configure_yt_dlp(Path::new("relative")),
+            Err(UserDependencyConfigError::InvalidExecutable)
+        );
+        assert_eq!(
+            config.configure_js_runtime(&parent.join("missing")),
+            Err(UserDependencyConfigError::InvalidExecutable)
+        );
+        fs::write(
+            parent.join("config").join("yt-dlp-v1.json"),
+            br#"{"schema_version":1,"executable":"relative"}"#,
+        )?;
+        assert_eq!(
+            config.read_yt_dlp(),
+            Err(UserDependencyConfigError::InvalidRecord)
+        );
+        // The failed record of one tool does not make the other unreadable.
+        assert_eq!(config.read_js_runtime()?, Some(fs::canonicalize(&deno)?));
         Ok(())
     }
 

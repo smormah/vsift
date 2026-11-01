@@ -132,7 +132,9 @@ jobs:
           VSIFT_P13_REAL_INSTALL: "1"
         run: >-
           cargo test --release --locked -p vsift-cli
-          --test p13_managed_install_real -- --ignored --exact --nocapture
+          --test p13_managed_install_real
+          real_managed_install_selects_every_tool_and_a_rerun_is_current
+          -- --ignored --exact --nocapture
 
       - name: Say what ran
         if: always() && steps.mode.outputs.published == 'true'
@@ -144,6 +146,91 @@ jobs:
             echo
             echo "A failure here with an unchanged binary means a publisher's file or route moved (L-099): open an issue before rerunning."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ADR 0028 section 4 and ADR 0032: the same install with the optional
+  # `online_links` group (`setup plan --include online_links`), built from
+  # this ref (a dispatch only: the published binaries and the weekly schedule
+  # predate the group). It downloads the pinned yt-dlp and Deno, smokes them
+  # offline (no URL is fetched), and checks `setup check`, `setup list` and the
+  # removal of the runtime. No credentials and no personal details are sent.
+  managed-install-online-links:
+    name: Managed install with online links (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with online_links, install, check, list and remove the runtime
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_online_links_installs_reports_and_removes_the_pair
+          -- --ignored --exact --nocapture
+
+  # ADR 0028 section 4.6: the only way to use public pages on Windows and
+  # macOS is a yt-dlp the user supplies, so the pinned publisher files
+  # (`yt-dlp.exe` and `yt-dlp_macos`, 2026.08.19, with the sizes and SHA-256
+  # of ADR 0028 section 4.1) are fetched by the runner, size-checked here and
+  # digest-checked by the test, registered with `setup configure yt-dlp`, and
+  # `setup check` must report them as user_managed with that version and
+  # digest. VSift's restricted environment is the one under test. No page is
+  # fetched, and the requests carry no credentials or personal details.
+  user-yt-dlp-windows:
+    name: A user-supplied yt-dlp (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp.exe and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --output "$RUNNER_TEMP/yt-dlp.exe"             "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp.exe")" -eq 17840399
+
+      - name: Register it and check that setup check reports it as user-managed
+        env:
+          VSIFT_P13_REAL_USER_YT_DLP: "1"
+        run: |
+          VSIFT_P13_USER_YT_DLP="$(cygpath -w "$RUNNER_TEMP/yt-dlp.exe")"
+          export VSIFT_P13_USER_YT_DLP
+          cargo test --release --locked -p vsift-cli             --test p13_managed_install_real             real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed             -- --ignored --exact --nocapture
+
+  user-yt-dlp-macos:
+    name: A user-supplied yt-dlp (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp_macos and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --output "$RUNNER_TEMP/yt-dlp_macos"             "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp_macos" | tr -d ' ')" -eq 37146048
+          chmod 755 "$RUNNER_TEMP/yt-dlp_macos"
+
+      - name: Register it and check that setup check reports it as user-managed
+        env:
+          VSIFT_P13_REAL_USER_YT_DLP: "1"
+        run: |
+          export VSIFT_P13_USER_YT_DLP="$RUNNER_TEMP/yt-dlp_macos"
+          cargo test --release --locked -p vsift-cli             --test p13_managed_install_real             real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed             -- --ignored --exact --nocapture
 
   # ADR 0032: the same two checkpoints on Windows x64, built from this ref
   # (a dispatch only; the published mode and the weekly schedule stay on
@@ -190,7 +277,9 @@ jobs:
           VSIFT_P13_REAL_INSTALL: "1"
         run: >-
           cargo test --release --locked -p vsift-cli
-          --test p13_managed_install_real -- --ignored --exact --nocapture
+          --test p13_managed_install_real
+          real_managed_install_selects_every_tool_and_a_rerun_is_current
+          -- --ignored --exact --nocapture
 
   # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
   # base with an empty PATH it kills the accepted install (SIGKILL) during a

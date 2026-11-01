@@ -454,7 +454,24 @@ vsift setup install --plan plan.json --accept-plan <the plan digest>
   say), the core stays installed, the result is `partial` (exit 0) with a warning, and its line says what failed and
   what to try; run the same command again to retry it.
 - **`setup check`** lists each optional component as `installed`, `not_installed` or `unavailable` on this machine,
-  apart from the status of local investigation.
+  apart from the status of local investigation. A component row says where it came from (`source`: `managed`, or
+  `user_managed` for a tool you supplied, shown with the first line of its own version output and its SHA-256).
+- **Your own yt-dlp (any system).** A managed yt-dlp is offered on Ubuntu 24.04 x64 only. On Windows and macOS, or
+  to use a yt-dlp of your own anywhere, install one yourself and register it once, with absolute paths, as with the
+  other tools in section 5.2. Also register the JavaScript runtime it needs (Deno); without one, YouTube may
+  refuse:
+
+  ```console
+  vsift setup configure yt-dlp --executable /absolute/path/to/yt-dlp
+  vsift setup configure js-runtime --executable /absolute/path/to/deno
+  vsift setup check
+  ```
+
+  Registering only records the paths; `setup check` runs each file once, with a fixed version request and a private
+  temporary folder, and reports it as user-managed. A yt-dlp you register is used instead of a managed one, and
+  your runtime only with your yt-dlp, never with the managed one (the pinned pair is only ever run together).
+  Nothing reviews a file you supply: keeping it current is yours, sites change, and yt-dlp's own builds are
+  GPL-3.0-or-later. Downloading from a site is subject to that site's terms.
 
 ### 5.2 Windows, macOS and other machines: bring your own
 

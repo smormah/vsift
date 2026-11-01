@@ -659,7 +659,7 @@ pub(crate) fn extra_capability(
         .optional
         .iter()
         .find(|(component, _)| *component == extra)
-        .map(|(_, capability)| capability)
+        .map(|(_, capability)| capability.base())
 }
 
 pub(crate) mod unattended;

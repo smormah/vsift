@@ -20,7 +20,7 @@ use vsift_application::{
     ManagedSetupPlan, OptionalCapability, OptionalComponent, OptionalComponentSet,
     ReviewedArchiveLimits, ReviewedArchiveSelection, ReviewedBanner, ReviewedCompatibilityPolicy,
     ReviewedManagedFile, RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal,
-    plan_managed_setup_including,
+    UserSuppliedKind, UserSuppliedTool, plan_managed_setup_including,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, InstallSource, OPERATOR_DECISION_INSTRUCTION,
@@ -645,5 +645,130 @@ fn setup_check_reports_optional_components_apart_from_local_readiness() -> TestR
         ManagedPlanAvailability::TargetUnavailable,
     )?;
     assert_eq!(elsewhere["optional_components"][0]["status"], "unavailable");
+    Ok(())
+}
+
+const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+fn user_tool(kind: UserSuppliedKind, line: &str) -> UserSuppliedTool {
+    UserSuppliedTool {
+        kind,
+        version_line: String::from(line),
+        sha256: String::from(DIGEST),
+    }
+}
+
+/// A yt-dlp and a runtime the user registered are reported as user-managed,
+/// with the version line and the digest; a registered yt-dlp with no runtime
+/// says so; one that could not be used makes the group not installed and
+/// carries only a fixed reason in words.
+#[test]
+fn setup_check_reports_user_supplied_tools_with_their_lower_trust() -> TestResult {
+    let check = |capability: &OptionalCapability| -> Result<Value, Box<dyn std::error::Error>> {
+        let value = serde_json::to_value(
+            SetupCheckResponse::new(
+                &every_tool_available(),
+                SetupProfile::Desktop,
+                |_| DependencyLookup::ManagedVersion,
+                ManagedPlanAvailability::TargetUnavailable,
+                &NOTHING_REGISTERED,
+            )
+            .with_optional_components(
+                &[(OptionalComponent::OnlineLinks, capability.clone())],
+                SetupProfile::Desktop,
+            ),
+        )?;
+        validate("setup-check-response.schema.json", &value)?;
+        Ok(value["optional_components"][0].clone())
+    };
+    let both = check(&OptionalCapability::UserSupplied(vec![
+        user_tool(UserSuppliedKind::YtDlp, "2026.08.19"),
+        user_tool(UserSuppliedKind::JsRuntime, "deno 2.9.7 (stable, release)"),
+    ]))?;
+    assert_eq!(both["status"], "installed");
+    assert_eq!(both["components"][0]["component"], "yt_dlp");
+    assert_eq!(both["components"][0]["source"], "user_managed");
+    assert_eq!(both["components"][0]["sha256"], DIGEST);
+    assert_eq!(both["components"][1]["component"], "js_runtime");
+    assert_eq!(both["add_command"], Value::Null);
+    assert!(both.get("unused_components").is_none());
+    let no_runtime = check(&OptionalCapability::UserSupplied(vec![user_tool(
+        UserSuppliedKind::YtDlp,
+        "2026.08.19",
+    )]))?;
+    let step = no_runtime["next_step"].as_str().ok_or("no step")?;
+    assert!(
+        step.contains("No JavaScript runtime is registered"),
+        "{step}"
+    );
+    assert!(step.contains("setup configure js-runtime"), "{step}");
+
+    let unusable = check(&OptionalCapability::UserSuppliedUnusable {
+        tool: UserSuppliedKind::JsRuntime,
+        reason: "unexpected_output",
+    })?;
+    assert_eq!(unusable["status"], "not_installed");
+    assert_eq!(unusable["components"], serde_json::json!([]));
+    assert_eq!(unusable["add_command"], Value::Null);
+    let step = unusable["next_step"].as_str().ok_or("no step")?;
+    assert!(step.contains("setup configure js-runtime"), "{step}");
+    assert!(step.contains("version line expected"), "{step}");
+    Ok(())
+}
+
+/// A runtime registered without a yt-dlp is reported as unused, beside the
+/// state the component is in without it, and never as in use; a Deno that
+/// answered is listed apart from `components`, one that did not is named in
+/// words only.
+#[test]
+fn setup_check_reports_a_registered_runtime_with_no_ytdlp_as_unused() -> TestResult {
+    let check = |capability: &OptionalCapability| -> Result<Value, Box<dyn std::error::Error>> {
+        let value = serde_json::to_value(
+            SetupCheckResponse::new(
+                &every_tool_available(),
+                SetupProfile::Desktop,
+                |_| DependencyLookup::ManagedVersion,
+                ManagedPlanAvailability::Qualified,
+                &NOTHING_REGISTERED,
+            )
+            .with_optional_components(
+                &[(OptionalComponent::OnlineLinks, capability.clone())],
+                SetupProfile::Desktop,
+            ),
+        )?;
+        validate("setup-check-response.schema.json", &value)?;
+        Ok(value["optional_components"][0].clone())
+    };
+    let managed = OptionalCapability::Installed(vec![
+        (DENO, String::from("deno-2.9.7-x86_64-linux-gnu")),
+        (YT_DLP, String::from("yt-dlp-2026.08.19-linux-x86_64")),
+    ]);
+    let healthy = check(&OptionalCapability::WithUnusedRuntime {
+        base: Box::new(managed.clone()),
+        runtime: Ok(user_tool(
+            UserSuppliedKind::JsRuntime,
+            "deno 2.9.7 (stable)",
+        )),
+    })?;
+    // The managed pair is what is in use; the user's runtime is not.
+    assert_eq!(healthy["status"], "installed");
+    assert_eq!(healthy["components"][0]["source"], "managed");
+    assert_eq!(healthy["components"][1]["source"], "managed");
+    assert_eq!(healthy["unused_components"][0]["component"], "js_runtime");
+    assert_eq!(healthy["unused_components"][0]["sha256"], DIGEST);
+    let step = healthy["next_step"].as_str().ok_or("no step")?;
+    assert!(step.contains("is not used"), "{step}");
+    assert!(step.contains("setup configure yt-dlp"), "{step}");
+
+    let not_deno = check(&OptionalCapability::WithUnusedRuntime {
+        base: Box::new(OptionalCapability::NotInstalled),
+        runtime: Err("unexpected_output"),
+    })?;
+    assert_eq!(not_deno["status"], "not_installed");
+    assert!(not_deno.get("unused_components").is_none());
+    assert_eq!(not_deno["add_command"]["arguments"][5], "online_links");
+    let step = not_deno["next_step"].as_str().ok_or("no step")?;
+    assert!(step.contains("is not used"), "{step}");
+    assert!(step.contains("Only Deno is accepted"), "{step}");
     Ok(())
 }

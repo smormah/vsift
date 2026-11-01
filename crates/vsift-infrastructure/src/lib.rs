@@ -75,6 +75,7 @@ mod transcript_record;
 mod transcript_sidecar;
 mod transient_rename;
 mod user_dependency_config;
+mod user_online_tool;
 mod verified_artifact_transfer;
 mod visual_index_record;
 mod visual_sampler;
@@ -245,6 +246,9 @@ pub use transcript_sidecar::{
     read_supplied_transcript_contained,
 };
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
+pub use user_online_tool::{
+    UserOnlineTool, UserOnlineToolFacts, UserOnlineToolFault, identify_user_online_tool,
+};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use visual_index_record::{
     MAX_VISUAL_INDEX_RECORD_BYTES, MAX_VISUAL_INDEX_RECORDS, decode_visual_index_record,

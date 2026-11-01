@@ -128,8 +128,9 @@ pub use provisioning::{
     ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile, ReviewedRuntimeCopy,
     SetupDependencyDisposition, SetupModelDisposition, SetupProfile, SetupSelectionState,
     SmokeStageOutcome, StageDisposal, StageRetentionReason, StagedManagedComponent,
-    SupersededManagedVersion, SupersessionReason, plan_managed_setup, plan_managed_setup_including,
-    plan_managed_setup_of_parts, smoke_before_activation,
+    SupersededManagedVersion, SupersessionReason, UserSuppliedKind, UserSuppliedTool,
+    plan_managed_setup, plan_managed_setup_including, plan_managed_setup_of_parts,
+    smoke_before_activation,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

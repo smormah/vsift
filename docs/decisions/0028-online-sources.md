@@ -532,6 +532,66 @@ five low findings; the pull request changes these before it merges, and this ADR
 - **The machine-wide `--url` switch comes in `1.0`.** `disabled_by_policy` is already left out of `0.3.0`
   (review RV-3, above) and is added, additively, with that switch.
 
+*Implementation note, 2026-11-01 (#409's setup half, draft pull request on `v030/409-setup`):* sections 4.1 to 4.5 were
+in place from the managed-install work (#504) before this pull request, and this one checked them against the code
+rather than rebuilding them. What #504 built: the `online_links` group with the pins of 4.1, `setup plan --include`
+and the plan's `optional_components` and `operator_decision_required` (4.2), the split transaction (4.3), the smoke
+with the fixed banners, environment and the folder that must stay empty (4.4), and `setup check`, `setup list`,
+`setup remove`, `setup rollback` and `setup repair` for the two components (4.5). Two differences from the text above
+stand. The members 4.3 names (`online_video`, `online_video_not_installed`) are the group-generic `optional_groups`
+and the warning `optional_component_not_installed` of ADR 0032, and the partial result exits 0 as recommended. And
+`setup check`'s `online_video` of 4.5 is the `online_links` entry of `optional_components`.
+
+This pull request adds what was left, plus 4.6's registration (the acquisition half runs what is registered):
+
+- **The spelling in 4.6 and 4.7 is `yt-dlp` and `js-runtime`** (the planner, 2026-10-31): `vsift setup configure
+  yt-dlp --executable <absolute-path>` and `vsift setup configure js-runtime --executable <absolute-path>`, beside
+  `ocr-runner` in one list of values. All help and remediation text uses these spellings, including the
+  `web_page` remediation on Windows and macOS. `yt_dlp` is accepted as a hidden alias, because `--include
+  online_links` and the JSON results use the underscore; the runtime has no alias, since an alias on a stable command
+  line stays for good. The JSON identifiers are `yt_dlp` and `js_runtime`. Each is stored in a file of its own
+  (`yt-dlp-v1.json`, `js-runtime-v1.json`), as the OCR runner is, so an earlier release reads its own configuration
+  unchanged. `configure` records a canonical path and runs nothing, like the others.
+- **Resolution is by pair, not by tool.** "Configured first, then managed" applies to yt-dlp, and the runtime follows
+  yt-dlp's source: a managed yt-dlp runs with the managed Deno only, a user's with the user's runtime or with none
+  (it then passes `--no-js-runtimes` alone, and `js_runtime_missing` is the honest outcome), never the managed Deno. So
+  a registered runtime without a registered yt-dlp is unused. `configure` still accepts it, because the order must not
+  matter, and `setup check` says it is unused (`unused_components`, and a sentence in `next_step`) rather than
+  reporting it in use.
+- **`setup check` runs the registered files as untrusted programs.** A yt-dlp gets the fixed `--ignore-config
+  --no-plugin-dirs --version`, an otherwise empty environment (on Windows with `SystemRoot`, below), `YTDLP_NO_PLUGINS=1` and a private temporary and home
+  folder in the per-user verification area (removed afterwards); Deno gets `--version`, `DENO_NO_UPDATE_CHECK=1` and
+  `NO_COLOR=1`. Nothing fetches a URL. The version line is bounded (64 printable ASCII bytes, the first line only) and
+  must have the shape of what the tool prints: a date version for yt-dlp, `deno ` first for the runtime, so a runtime
+  that is not Deno is not healthy (Deno only in `0.3.0`). The SHA-256 read is bounded at 512 MiB. Output is bounded at
+  4 KiB, and the run at 30 s at most: the files are identified one after the other within what is left of the deadline all tool checks share (`probe_timeout`, 30 s by default and 60 s at most with `--timeout-seconds`), spent once by the dependency probes first, and with nothing left a file is not read or started and the reason is `deadline`. What is reported is `source: "user_managed"`, the line and the digest, with the lower trust:
+  nothing reviewed the file, and keeping it current is the user's job. A file that cannot be identified makes the
+  group `not_installed` with the reason in words and no `add_command`.
+- **The plan's `unavailable` sentence** on Windows and macOS names `setup configure yt-dlp`.
+- **The environment of a registered tool.** The process supervisor starts it with an empty environment plus the
+  private folder (`TMPDIR`, `TEMP`, `TMP` and `HOME` alike) and the fixed variables above. On Windows the one extra
+  variable is `SystemRoot`, copied from VSift's own environment: a one-file Python build there cannot start without
+  it (Python's random-number start-up needs it), and it names the system folder, not a person. It was added before any
+  hosted run could show whether it is needed; the Windows job below runs with it, and the acquisition half runs yt-dlp in the same
+  environment. If a hosted run ever shows it unnecessary, remove it here and in the acquisition half together.
+- **Tests:** the two registration records; the CLI contract for registering, the hidden alias and the refused
+  `js_runtime`; the unused runtime and a runtime that is not Deno (using the build's own binary as the stand-in, whose
+  version line does not begin `deno `); a yt-dlp that fails its version request; the identification itself against
+  the smoke's stand-in (a good answer, a wrong shape, a failure, a flood, and a hang that ends at the time it was
+  given, with nothing started when none is left); the door, which looks through an unused runtime in the interactive
+  and unattended paths; the contract rows and their schema; the lifecycle commands on the two components; and three
+  opt-in hosted jobs in `P13 managed smoke`, dispatched together once: `managed-install-online-links` (Ubuntu: the real
+  yt-dlp and Deno are installed with `--include online_links`, smoked, listed and one removed),
+  `user-yt-dlp-windows` and `user-yt-dlp-macos` (the publisher's pinned `yt-dlp.exe` and `yt-dlp_macos` of 2026.08.19 are
+  fetched by the runner, size-checked, registered with `setup configure yt-dlp`, and `setup check` must report them as
+  `user_managed` with that version and the pinned digest; no page is fetched). The jobs are dispatch-only and
+  skip the published mode and the weekly schedule, and the two older install commands now name their test, because an
+  unnamed `--ignored --exact` run would run every ignored test in the file.
+- **Not in this pull request:** the acquisition (`ingest --url` of a page), which uses what is registered; a managed or
+  pinned Deno for Windows and macOS (this ADR pins none, and a pin needs its own review), so the Windows and macOS jobs
+  register a yt-dlp only; `setup install --artifact-dir` for the optional files is the shared import path of the core
+  and is not separately tested for them.
+
 ## Consequences
 
 - VSift makes network requests for the first time outside `setup install`, only on

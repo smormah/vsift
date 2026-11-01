@@ -114,6 +114,17 @@ fn publish(
     guard: &ManagedInstallGuard,
     version: &str,
 ) -> Result<PublishedManagedRuntime, Box<dyn Error>> {
+    publish_component(store, guard, CLI, version)
+}
+
+/// Publishes and selects `version` of `component`, whose `tool` holds the
+/// version's own bytes.
+fn publish_component(
+    store: &ManagedArtifactStore,
+    guard: &ManagedInstallGuard,
+    component: ManagedComponent,
+    version: &str,
+) -> Result<PublishedManagedRuntime, Box<dyn Error>> {
     let contents = format!("tool {version}");
     let archive = tool_archive(contents.as_bytes())?;
     let artifact = store.import_verified(&archive[..], integrity_of(&archive)?)?;
@@ -135,7 +146,10 @@ fn publish(
         executables: &["tool"],
     })?;
     let published = runtime
-        .publish_and_select(guard, &ManagedRuntimeIdentity::new("whisper_cli", version)?)
+        .publish_and_select(
+            guard,
+            &ManagedRuntimeIdentity::new(component.identifier(), version)?,
+        )
         .map_err(|error| std::io::Error::other(format!("publish {version}: {error:?}")))?;
     runtime.discard()?;
     payload.discard()?;
@@ -256,6 +270,75 @@ fn the_inventory_reports_the_selection_its_previous_version_and_verification() -
     }
     assert_eq!(inventory.stale_stages, 0);
     assert_eq!(inventory.unexpected_entries, 0);
+    Ok(())
+}
+
+/// The optional components of online links (ADR 0028 section 4.5) are
+/// recognised by every lifecycle command like the core ones: listed after
+/// them with their versions, rolled back, removed alone and repaired, and
+/// removing one never touches another component.
+#[test]
+fn the_online_links_components_are_listed_rolled_back_and_removed_like_the_core() -> TestResult {
+    const YT_DLP: ManagedComponent = ManagedComponent::YtDlp;
+    const DENO: ManagedComponent = ManagedComponent::JsRuntimeDeno;
+    let fixture = Fixture::new()?;
+    let store = fixture.store()?;
+    let guard = store.try_install_guard()?;
+    drop(publish(&store, &guard, "1.0.0")?);
+    let core_only = store.inspect()?.ok_or("no root")?;
+    assert_eq!(core_only.components.len(), 3, "no optional component yet");
+    drop(publish_component(&store, &guard, DENO, "2.9.6")?);
+    drop(publish_component(&store, &guard, YT_DLP, "2026.08.01")?);
+    drop(publish_component(&store, &guard, YT_DLP, "2026.08.19")?);
+    let maintainer = GuardedManagedStore::new(&store, &guard);
+
+    let inventory = maintainer.inventory()?.ok_or("no root")?;
+    let order: Vec<ManagedComponent> = inventory
+        .components
+        .iter()
+        .map(|component| component.component)
+        .collect();
+    assert_eq!(
+        order,
+        ManagedComponent::ALL,
+        "optional ones follow the core"
+    );
+    let yt_dlp = inventory.component(YT_DLP).ok_or("no yt-dlp")?;
+    assert_eq!(yt_dlp.selected_version(), Some("2026.08.19"));
+    assert_eq!(yt_dlp.previous_version(), Some("2026.08.01"));
+    assert_eq!(yt_dlp.selection_status(), SelectionStatus::Verified);
+    assert_eq!(
+        inventory
+            .component(DENO)
+            .ok_or("no deno")?
+            .selected_version(),
+        Some("2.9.6")
+    );
+    assert_eq!(inventory.unexpected_entries, 0);
+
+    let back = roll_back_component(&maintainer, YT_DLP, None)?;
+    assert_eq!(back.selected, "2026.08.01");
+    assert_eq!(back.replaced.as_deref(), Some("2026.08.19"));
+
+    // Removing the runtime leaves yt-dlp and the core as they were.
+    let report = remove_managed(&maintainer, &ManagedRemovalTarget::Component(DENO))?;
+    assert_eq!(report.deselected, Some(DENO));
+    assert_eq!(report.failure_code(), None);
+    let after = maintainer.inventory()?.ok_or("no root")?;
+    // An optional component is listed only while the store holds something of it.
+    assert!(after.component(DENO).is_none());
+    assert_eq!(
+        after
+            .component(YT_DLP)
+            .ok_or("no yt-dlp")?
+            .selected_version(),
+        Some("2026.08.01")
+    );
+    assert_eq!(selected(&store)?.as_deref(), Some("1.0.0"));
+    assert_eq!(
+        diagnose_managed_store(Some(&after)).findings,
+        [] as [vsift_application::RepairFinding; 0]
+    );
     Ok(())
 }
 

@@ -1253,6 +1253,29 @@ impl ConfiguredSelectionResponse {
             next_step: "Run ocr on a session to use it; the runner is identified (describe) when it runs, and its runtime and models must sit beside it.",
         }
     }
+
+    /// Describes a newly saved yt-dlp selection (ADR 0028 section 4.6).
+    #[must_use]
+    pub const fn yt_dlp() -> Self {
+        Self {
+            dependency: "yt_dlp",
+            source: "configured_user_path",
+            validation: "canonical_file_only",
+            next_step: "Register its JavaScript runtime too with setup configure js-runtime --executable <absolute-path> (Deno); without one some sites refuse. Run setup check to see both. Keeping a yt-dlp you supply current is your job; sites change.",
+        }
+    }
+
+    /// Describes a newly saved JavaScript runtime selection for the user's
+    /// yt-dlp (ADR 0028 section 4.6).
+    #[must_use]
+    pub const fn js_runtime() -> Self {
+        Self {
+            dependency: "js_runtime",
+            source: "configured_user_path",
+            validation: "canonical_file_only",
+            next_step: "Run setup check to see it with the yt-dlp you registered. It is used only with a yt-dlp you supplied, never with a managed one.",
+        }
+    }
 }
 
 /// Data of a successful `setup configure-model` result.

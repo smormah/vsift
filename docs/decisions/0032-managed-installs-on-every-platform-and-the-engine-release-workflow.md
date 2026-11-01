@@ -168,6 +168,14 @@ and Deno 2.9.7 pins on Ubuntu (catalogue revision `ubuntu-24.04-x86_64-2026-10-2
 hosted review; replaced: its one-entry zip reader (by the general one) and its online-video-only members (by the
 group-generic `optional_groups` and `optional_components`).
 
+## Implementation note, 2026-11-01 (the online links group, #409's setup half)
+
+`setup check`'s `optional_components` entries gain `source` (`managed`, or `user_managed` for a yt-dlp or JavaScript
+runtime the user registered with `setup configure yt-dlp|js-runtime`, ADR 0028 section 4.6) and, for a user-managed
+file, `sha256`; the entry gains `unused_components` when a registered runtime has no registered yt-dlp to run with.
+The group's `unavailable` sentence names the registration for Windows and macOS. The lifecycle commands were checked
+on the two components, and a hosted install with `--include online_links` was added to `P13 managed smoke`.
+
 ## Implementation note, 2026-10-21 (slice 2: the engine release workflow)
 
 - **D2 measured.** The hosted inventory of `b5454/whisper-bin-x64.zip` (run 39604340709, `tools/p06_archive_inventory.py`,

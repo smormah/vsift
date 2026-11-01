@@ -773,6 +773,45 @@ async fn an_included_extra_is_offered_on_its_own() -> TestResult {
     Ok(())
 }
 
+/// A registered JavaScript runtime that no registered yt-dlp uses changes
+/// nothing at the door: with nothing installed, the extra is still offered.
+#[tokio::test]
+async fn an_unused_registered_runtime_does_not_hide_the_offer_of_an_extra() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "online_links",
+        "status": "included",
+        "summary": "yt-dlp fetches videos from web pages when you give VSift a link. Downloading is subject to each site's terms.",
+        "add_command": null,
+        "actions": [
+            action("js_runtime_deno", "2.5.0", "denoland", 41_000_000),
+            action("yt_dlp", "2026.09.01", "yt-dlp", 3_100_000),
+        ],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let stray = OptionalCapability::WithUnusedRuntime {
+        base: Box::new(OptionalCapability::NotInstalled),
+        runtime: Err("unexpected_output"),
+    };
+    let steps = ScriptedSteps::new(vec![checked(
+        [found(), found(), found()],
+        SPEECH_WORKS,
+        ManagedPlanAvailability::Qualified,
+        stray,
+    )])
+    .with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::WebVideos]).await?;
+
+    assert_eq!(steps.planned.get(), 1, "{stdout}");
+    assert!(
+        stdout.contains("VSift can add web videos for you:"),
+        "{stdout}"
+    );
+    Ok(())
+}
+
 /// The colour fallback: on a terminal that takes colour, each status has a
 /// symbol and a colour; plain, the same words and nothing else.
 #[tokio::test]
@@ -819,6 +858,17 @@ async fn unattended(
     accept_plan: Option<&str>,
     mode: OutputMode,
 ) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
+    unattended_including(steps, parts, OptionalComponentSet::EMPTY, accept_plan, mode).await
+}
+
+/// The same with the extras the caller named.
+async fn unattended_including(
+    steps: &ScriptedSteps,
+    parts: CorePartSet,
+    include: OptionalComponentSet,
+    accept_plan: Option<&str>,
+    mode: OutputMode,
+) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let cancellation = Cancellation::new();
@@ -828,7 +878,7 @@ async fn unattended(
             super::unattended::UnattendedRun {
                 steps,
                 parts,
-                include: OptionalComponentSet::EMPTY,
+                include,
                 accept_plan: accept_plan.map(str::to_owned),
                 version: VERSION,
                 cancellation: &cancellation,
@@ -940,6 +990,45 @@ async fn unattended_json_reports_a_fail_with_each_parts_next_step() -> TestResul
         "offline"
     );
     assert_eq!(exit, ProcessExit::from(FailureCode::DownloadFailed.class()));
+    Ok(())
+}
+
+/// A managed pair is installed and a stray registered runtime is beside
+/// it: the extra the caller named is added, not "not added".
+#[tokio::test]
+async fn unattended_reports_an_installed_extra_added_beside_an_unused_runtime() -> TestResult {
+    let managed = OptionalCapability::Installed(vec![
+        (ManagedComponent::JsRuntimeDeno, String::from("deno-2.9.7")),
+        (ManagedComponent::YtDlp, String::from("yt-dlp-2026.08.19")),
+    ]);
+    let stray = OptionalCapability::WithUnusedRuntime {
+        base: Box::new(managed),
+        runtime: Err("unexpected_output"),
+    };
+    let steps = ScriptedSteps::new(vec![checked(
+        [found(), found(), found()],
+        SPEECH_WORKS,
+        ManagedPlanAvailability::Qualified,
+        stray,
+    )]);
+
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::OnlineLinks),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    let part = result["data"]["parts"]
+        .as_array()
+        .and_then(|parts| parts.iter().find(|part| part["part"] == "web_videos"))
+        .ok_or("no web_videos part")?;
+    assert_eq!(part["status"], "added", "{result}");
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
     Ok(())
 }
 

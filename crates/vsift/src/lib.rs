@@ -222,7 +222,7 @@ pub use vsift_application::{
     CorePartSet, DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
     ManagedPlanAvailability, ManagedUpdate, OptionalCapability, OptionalComponent,
     OptionalComponentSet, PieceProgress, PieceStage, StageDisposal, StageRetentionReason,
-    SupersessionReason,
+    SupersessionReason, UserSuppliedKind, UserSuppliedTool,
 };
 /// Managed-lifecycle values that appear in this API (P13 PR 6).
 pub use vsift_application::{

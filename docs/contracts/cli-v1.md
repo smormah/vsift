@@ -71,7 +71,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | --- | --- | --- |
 | `setup` (plain) | The setup door for a person at a terminal: the check, one offer and one question, and an install only on a typed yes (ADR 0036). With `--unattended --install <parts>` it installs the named parts without asking and reports pass, fail or error; `--json` gives the `setup` result ([`setup.schema.json`](../../schemas/v1/setup.schema.json)). Attended, `--json` and `--events` answer `INVALID_ARGUMENT`; unattended, `--events` does | Since 0.3.0 (ADR 0036; the unattended form with the second pull request) |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner` since 0.3.0) | Implemented in P06 (scope narrowed by ADR 0015) |
+| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner`, `yt-dlp` and `js-runtime` since 0.3.0) | Implemented in P06 (scope narrowed by ADR 0015) |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Implemented in P06 (scope narrowed by ADR 0015) |
 | `setup plan` | Read-only diagnosis plus exact reviewed catalogue actions and digest (Ubuntu 24.04 x86-64 and Windows x86-64, see "Catalogues per target"); manual guidance on unaccepted targets | Implemented in P06 (read-only plans); a Windows catalogue since 0.3.0 (ADR 0032) |
 | `setup install` | Apply an accepted plan (Ubuntu 24.04 x86-64 or Windows x86-64): download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
@@ -3535,7 +3535,24 @@ come with their stories.
 - **`setup check`** carries the additive `optional_components` array: every optional component of the release
   with `name`, `status` (`installed` with `components` and their versions, `not_installed` when it is offered here
   and not every part is installed, `unavailable`), `next_step` and `add_command` (on the desktop profile, when not
-  installed). It never changes `status`, the local-video readiness.
+  installed). It never changes `status`, the local-video readiness. Each entry of `components` has `component`,
+  `version` and, since 0.3.0 (ADR 0028 section 4.6), `source`: `managed` (installed from the reviewed catalogue;
+  `version` is its catalogue version key) or `user_managed` (a yt-dlp or JavaScript runtime the user registered with
+  `setup configure yt-dlp` or `js-runtime`; `component` is then `yt_dlp` or `js_runtime`, `version` is the first line
+  of the file's own version output and `sha256` is the file's digest). A registered yt-dlp is used instead of a
+  managed one and is what the check reports; a file that cannot be identified (it does not start, fails, times out
+  or prints no version line) makes the group `not_installed` with a `next_step` that gives the reason in words and
+  no `add_command`. A user-managed tool is not pinned or reviewed, and the check never echoes anything it printed
+  but the version line. The registered files are identified within what is left of the deadline all tool checks
+  share (30 seconds, up to 60 with `--timeout-seconds`), after the other tools; with nothing left a file is not
+  started and the reason is `deadline`. A registered JavaScript runtime with no registered yt-dlp is listed apart, in
+  `unused_components`, with a sentence in `next_step`: it runs only with a yt-dlp the user registered.
+- **`setup configure yt-dlp|js-runtime --executable <path>`** (since 0.3.0) records the user's yt-dlp and the
+  JavaScript runtime it runs (Deno only in 0.3.0) in a file of their own each, apart from the other selections, so
+  an earlier release's configuration is untouched. `yt_dlp` is accepted as a hidden spelling, because `--include online_links` and the JSON results use the underscore; `js_runtime` is not accepted. Like every
+  `setup configure`, it validates only that the path is an absolute regular file and runs nothing; the response
+  names the dependency (`yt_dlp` or `js_runtime`) and what to do next. On Windows and macOS, where no managed yt-dlp
+  is offered, this is the way to use public video pages. `ingest --url` of a page uses it (a later pull request).
 - **Catalogues per target (ADR 0032):** Windows x86-64 has a catalogue (FFmpeg and FFprobe, and the model) beside
   Ubuntu 24.04 x86-64's; a target's catalogue may offer only some core components. A dependency whose component
   it does not offer is `manual_selection_required` in the plan, and its `setup check` remediation's

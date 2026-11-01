@@ -480,17 +480,28 @@ pub(crate) enum SetupDependency {
     // from the other dependencies. A plain comment: a doc comment would become
     // this value's help and change how every value of the list is shown.
     OcrRunner,
+    // The user's yt-dlp for public video pages (ADR 0028 section 4.6), and the
+    // JavaScript runtime it runs (Deno only in 0.3.0). Plain comments for the
+    // reason above. Spelled with a hyphen like the OCR runner; `yt_dlp` is a
+    // hidden alias because `--include online_links` and the JSON results use
+    // the underscore. The runtime has no alias: an alias on a stable
+    // command line stays for good.
+    #[value(name = "yt-dlp", alias = "yt_dlp")]
+    YtDlp,
+    #[value(name = "js-runtime")]
+    JsRuntime,
 }
 
 impl SetupDependency {
-    /// The runtime dependency this names; `None` for the OCR runner, which is
-    /// an optional engine outside the runtime dependencies.
+    /// The runtime dependency this names; `None` for the optional tools
+    /// (the OCR runner, yt-dlp and its runtime), which are outside the
+    /// runtime dependencies.
     pub(crate) const fn runtime_dependency(self) -> Option<RuntimeDependency> {
         match self {
             Self::Ffmpeg => Some(RuntimeDependency::Ffmpeg),
             Self::Ffprobe => Some(RuntimeDependency::Ffprobe),
             Self::Whisper => Some(RuntimeDependency::Whisper),
-            Self::OcrRunner => None,
+            Self::OcrRunner | Self::YtDlp | Self::JsRuntime => None,
         }
     }
 }
