@@ -6,6 +6,9 @@ name: Online links live
 # and SHA-256, RM09's NASA page, which must be refused as a web page with no
 # yt-dlp set up, and RM06's Internet Archive page through a real managed yt-dlp
 # installed by the test into its own folder, ADR 0028 section 4.9).
+# A dispatch also sends that page through the pinned yt-dlp a user would supply
+# on Windows and macOS, and, when asked with `youtube`, tries one NASA video on
+# YouTube after everything else has passed. Neither runs on a pull request.
 # The ordinary tests never reach the network; this manual workflow is the one
 # place the fetch meets real servers. It needs no secret and no token, and
 # keeps no credentials from the checkout.
@@ -20,6 +23,11 @@ on:
       - .github/workflows/online-links-live.yml
       - crates/vsift-cli/tests/link_live.rs
   workflow_dispatch:
+    inputs:
+      youtube:
+        description: Also try one NASA video on YouTube (once for a change to page fetching, and at each re-pin).
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -45,5 +53,96 @@ jobs:
           rustup show active-toolchain
           python3 -c "import platform, os; print(platform.platform(), os.cpu_count())"
 
-      - name: Fetch the pinned files and refuse the page (release build)
-        run: cargo test --release --locked -p vsift-cli --test link_live -- --ignored --nocapture
+      - name: Fetch the pinned files, refuse a page, fetch a page (release build)
+        run: >-
+          cargo test --release --locked -p vsift-cli --test link_live --
+          --ignored --skip a_nasa_youtube_page --nocapture
+
+  # ADR 0028 section 4.6: a yt-dlp the user supplies is the only way to use
+  # public pages on Windows and macOS. The pinned publisher files (2026.08.19,
+  # the sizes and SHA-256 of ADR 0028 section 4.1) are fetched by the runner and
+  # size-checked here; the test registers them and checks the recorded digest.
+  # No runtime is registered, and this page needs none. The requests carry no
+  # credentials or personal details.
+  page-windows:
+    name: A public page through a user-supplied yt-dlp (Windows x64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp.exe and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/yt-dlp.exe" \
+            "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp.exe")" -eq 17840399
+
+      - name: Fetch the page through it (release build)
+        run: |
+          VSIFT_LIVE_USER_YT_DLP="$(cygpath -w "$RUNNER_TEMP/yt-dlp.exe")"
+          export VSIFT_LIVE_USER_YT_DLP
+          cargo test --release --locked -p vsift-cli --test link_live \
+            a_public_page_is_fetched_through_a_registered_yt_dlp \
+            -- --ignored --exact --nocapture
+
+  page-macos:
+    name: A public page through a user-supplied yt-dlp (macOS arm64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp_macos and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/yt-dlp_macos" \
+            "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp_macos" | tr -d ' ')" -eq 37146048
+          chmod 755 "$RUNNER_TEMP/yt-dlp_macos"
+
+      - name: Fetch the page through it (release build)
+        run: |
+          export VSIFT_LIVE_USER_YT_DLP="$RUNNER_TEMP/yt-dlp_macos"
+          cargo test --release --locked -p vsift-cli --test link_live \
+            a_public_page_is_fetched_through_a_registered_yt_dlp \
+            -- --ignored --exact --nocapture
+
+  # ADR 0028 section 4.9, the planner's ruling on #561: dispatch-only, after the
+  # Generic and Internet Archive runs. A bot wall is expected from a hosted
+  # runner: the typed `bot_check` passes, and so does a real pair of streams
+  # joined. Anything else fails and goes to the planner with the evidence.
+  youtube:
+    name: One NASA video on YouTube (Ubuntu 24.04)
+    needs: [live, page-windows, page-macos]
+    if: github.event_name == 'workflow_dispatch' && inputs.youtube
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the page or meet the typed refusal (release build)
+        run: >-
+          cargo test --release --locked -p vsift-cli --test link_live
+          a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check
+          -- --ignored --exact --nocapture

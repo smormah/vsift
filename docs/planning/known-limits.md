@@ -5337,16 +5337,27 @@ that week.**
   policy: a public name that later resolves inward is not stopped, and a page, a redirect or a format URL can send it
   to any address VSift would have refused, unseen. Only formats that yt-dlp reports as
   `https` are selected, and what it writes is checked, but its requests are not. A proxy from the environment is
-  handed to it; `HTTP_PROXY` is not, so anything it fetches over plain HTTP goes direct. Sites change, so a managed
+  handed to it; `HTTP_PROXY` is not, so anything it fetches over plain HTTP goes direct.
+  **A system proxy is not seen.** With no proxy option, yt-dlp asks Python for the proxies; Python reads the
+  environment and, only if that holds none, the Windows registry or the macOS system settings. So a user-supplied
+  yt-dlp on Windows or macOS (the only way pages work there) can use a system proxy when no proxy variable is set,
+  though VSift's own first request does not. `through_proxy` is then false: the origin has no
+  `address_check: "proxy_resolved"` although a proxy carried the fetch. An origin without `address_check` means only
+  that no proxy variable was handed over, never that the connection was direct. This was read in yt-dlp's source
+  and Python's, and has not been run. On Linux, Python reads only the environment.
+  **The link is on yt-dlp's command line,** in both phases: other local users can read it in the process list while
+  yt-dlp runs, and it can hold a signed token or an unlisted video's id. Section 5's "never stored, printed or logged"
+  is about VSift's own output, and `--url -` keeps the link off VSift's command line only. Sites change, so a managed
   yt-dlp can stop working between VSift releases until a re-pin (`extractor_broken`); a user's yt-dlp is the user's to
   keep current, and is run though nobody here reviewed it. A site that answers VSift's first request with an HTTP
   error is refused as `http_status` and never reaches yt-dlp, because only a `web_page` answer is routed there.
   Six refusal phrases are text a site or a proxy writes, so no check notices when one changes: the two for
   `bot_check`, the two for a channel's members, the one for a terminated account and the one for a proxy's `407`. Only
   `bot_check` has a live check, and that one is optional. A site that rewords one falls to a broader reason.
-- **Evidence:** `crates/vsift-infrastructure/src/page_acquisition.rs`, `crates/vsift-infrastructure/tests/page_acquisition.rs`.
+- **Evidence:** `crates/vsift-infrastructure/src/page_acquisition.rs`, `crates/vsift-infrastructure/tests/page_acquisition.rs`;
+  `urllib.request.getproxies()` in yt-dlp's `YoutubeDL.py`, at the pinned tag `2026.08.19`.
 - **Plan:** a signed component manifest refreshed between releases is `1.0`'s (ADR 0028 section 4.1). The address
-  limit stays while yt-dlp is an external process.
+  limit and the link on the command line stay while yt-dlp is an external process.
 
 ### L-208
 

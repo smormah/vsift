@@ -220,7 +220,9 @@ on disk, and no growth for 30 seconds after the first byte stops it. Separate au
 verified FFmpeg as a stream copy. The `origin` has `kind` `platform_page`, `provider`, `video_id` only when the site
 reports the video public and `video_id_sha256` otherwise, `link_sha256`, `yt_dlp` and `js_runtime` (`source`
 `managed` with `catalogue_version`, or `user_managed` with `version` and `sha256`; `js_runtime` absent when none
-ran), `address_check` only as `proxy_resolved`, `retrieved_at`, `bytes` and `joined` (`single_file` or
+ran), `address_check` only as `proxy_resolved` (a proxy variable was handed to yt-dlp; its absence does not mean the
+connection was direct, because a user's yt-dlp on Windows or macOS can use a system proxy, L-209), `retrieved_at`,
+`bytes` and `joined` (`single_file` or
 `audio_video`); example [`ingest.page.json`](../../schemas/v1/examples/ingest.page.json). It never holds a title, an
 uploader, a description, an upload date, a format's URL or a header. Further `error.reason` values for a page:
 `login_required`, `age_restricted`, `bot_check`, `drm`, `region_blocked`, `private`, `removed`, `unsupported_site`,

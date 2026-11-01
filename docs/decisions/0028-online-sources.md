@@ -633,6 +633,17 @@ evidence goes back to the planner.
 - **The page origin:** `catalogue_version` alone for a managed tool (the key names the exact version), `source_id`
   not repeated (the session's result has it, as for a direct link), and `address_check: "proxy_resolved"` only when a
   proxy was handed over: `direct` would claim a check yt-dlp's connections never had.
+- **What the record cannot see (the planner's review of #561).** With no `--proxy`, yt-dlp calls
+  `urllib.request.getproxies()` (`YoutubeDL.py:4215`), which falls back to the Windows registry or the macOS system
+  settings when the environment has none, so `through_proxy` can be false for a proxied fetch by a user's yt-dlp. The
+  link is on yt-dlp's command line, where other local users can read it while it runs; section 5's "never stored,
+  printed or logged" is about VSift's own output. Both are stated in L-209 and the threat model's table.
+- **The live checks (the planner's review of #561).** `Online links live` gains two dispatch-only parts, which never
+  run on a pull request. RM06's page goes through the pinned user-supplied yt-dlp on Windows and macOS, with no
+  runtime, which is also the only test of the engine's path through a registered yt-dlp. With the `youtube` input, and
+  after those pass, one NASA video on YouTube runs through the managed pair, once for this pull request and at each
+  re-pin: the typed `bot_check` passes, and so does a success with `joined: audio_video`; anything else fails and goes
+  to the planner with the evidence.
 - **The fake yt-dlp** keeps its record beside its executable, and the test's folder takes it away: its temporary
   folder goes with the session, so a record there could not be read. It also plays `FFmpeg` for the join.
 - **The phrase table (section 4.8) is split.** Hosted run 41269645907 found seven candidates missing from the source
