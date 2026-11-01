@@ -2850,7 +2850,8 @@ is weekly.**
 - **Impact:** readers and agents can be misled about what works.
 - **Why:** per-packet updates missed these files.
 - **Mitigation:** this list.
-- **Next step:** one documentation sweep PR; tick #40's met checkpoints.
+- **Next step:** done in the documentation sweep of 2026-11-01 (every item above is corrected
+  or marked with its later position; #40 is closed). Delete this entry when #177 is closed.
 - **Owner:** unscheduled. **Issue:** [#177](https://github.com/smormah/vsift/issues/177). **Status:** open. **Review:** pending.
 
 ### L-046

@@ -1,6 +1,10 @@
 # Security threat model and control plan
 
-Status: proposed release requirements. Date: 2026-09-09.
+Status: the control plan for the release requirements, written 2026-09-09 and amended
+since (P13 notes, the R1 threats, the 0.3.0 notes on OCR and online sources). Read each
+control as a requirement; the sections that say "implemented" or name a packet and a
+release record what ships, and [the CLI contract](../contracts/cli-v1.md) and the
+[known-limits register](known-limits.md) are the authority on the current behaviour.
 Applies to the CLI, local state, runtime provisioning, native providers, agent handoff
 and R0 worker deployment. Read [baseline findings](baseline-review.md) separately:
 prospective controls below are not claims about current implementation.
