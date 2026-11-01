@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "commit": "e77606355e912adc7246696ab9371767348ec9f4",
+  "commit": "4b2e4b1e05cb28dcec7336dd3b29fad8b5d1137a",
   "components": {
     "cold": "853d8da3c543753814395667d897aabf145608e7f36dfd45566a60303937b724",
     "grader": "da1b01be0280125c84f353fb3c5d1cbba15170658db0fedce8b3280773c78cff",

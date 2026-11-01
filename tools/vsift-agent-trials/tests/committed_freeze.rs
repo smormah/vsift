@@ -60,8 +60,8 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 draft freeze, rewritten for W6c's draft; written again at its merge rebase, and again by whichever of W6c
-/// and W10 merges second** (#454, 2026-10-31): `SKILL.md` gains the small-number advice, so the `skill` component moved
+/// **0.3.0 development freeze, rewritten at W6c's merge rebase; W10 writes it again when it merges second; the final
+/// freeze is recorded at the 0.3.0 cut** (#454, 2026-11-01): `SKILL.md` gains the small-number advice, so the `skill` component moved
 /// `80c3933f...` to `930fabf1...` and this digest `ba60a2fb...` to the value below; the other six components are
 /// unchanged.
 ///
