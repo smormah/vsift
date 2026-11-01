@@ -429,7 +429,9 @@ const PINNED_USER_YT_DLP: (u64, &str) = (
 #[ignore = "opt-in: set VSIFT_P13_REAL_USER_YT_DLP=1 and VSIFT_P13_USER_YT_DLP to the pinned yt-dlp.exe or yt-dlp_macos of 2026.08.19, on Windows or macOS"]
 fn real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed() -> TestResult {
     if env::var_os("VSIFT_P13_REAL_USER_YT_DLP").is_none() {
-        return Err("set VSIFT_P13_REAL_USER_YT_DLP=1 to run the user-supplied yt-dlp check".into());
+        return Err(
+            "set VSIFT_P13_REAL_USER_YT_DLP=1 to run the user-supplied yt-dlp check".into(),
+        );
     }
     let supplied = PathBuf::from(
         env::var_os("VSIFT_P13_USER_YT_DLP").ok_or("set VSIFT_P13_USER_YT_DLP to the file")?,

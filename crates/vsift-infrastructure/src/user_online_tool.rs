@@ -8,7 +8,13 @@
 //! its version output and the SHA-256 of the file, so a later change to it
 //! is visible. Nothing here fetches anything.
 
-use std::{ffi::OsString, fmt, num::NonZeroUsize, path::Path, time::{Duration, Instant}};
+use std::{
+    ffi::OsString,
+    fmt,
+    num::NonZeroUsize,
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use vsift_domain::Sha256Hex;
 
@@ -178,9 +184,10 @@ pub async fn identify_user_online_tool(
         .map_err(|_| UserOnlineToolFault::Workspace)?;
     let working = ProcessWorkingDirectory::new(workspace.path())
         .map_err(|_| UserOnlineToolFault::Workspace)?;
-    let mut request = ProcessRequest::new(executable.clone(), working, time_left.min(VERSION_DEADLINE))
-        .map_err(|_| UserOnlineToolFault::CouldNotStart)?
-        .with_arguments(tool.version_arguments().iter().map(OsString::from));
+    let mut request =
+        ProcessRequest::new(executable.clone(), working, time_left.min(VERSION_DEADLINE))
+            .map_err(|_| UserOnlineToolFault::CouldNotStart)?
+            .with_arguments(tool.version_arguments().iter().map(OsString::from));
     for name in ["TMPDIR", "TEMP", "TMP", "HOME"] {
         request = request
             .with_environment(name, workspace.path().as_os_str())

@@ -40,9 +40,7 @@ impl Folder {
 
     /// The stand-in staged as `<name>`, which selects its behaviour.
     fn stage(&self, name: &str) -> Result<TrustedExecutable, Box<dyn Error>> {
-        let path = self
-            .0
-            .join(format!("{name}{}", env::consts::EXE_SUFFIX));
+        let path = self.0.join(format!("{name}{}", env::consts::EXE_SUFFIX));
         fs::copy(FIXTURE_TOOL, &path)?;
         Ok(TrustedExecutable::explicit(path)?)
     }
@@ -77,7 +75,10 @@ async fn identify(
 }
 
 fn is_hex_digest(text: &str) -> bool {
-    text.len() == 64 && text.bytes().all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+    text.len() == 64
+        && text
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// A runtime that answers with a line beginning `deno ` is identified, with
@@ -190,13 +191,7 @@ async fn a_hanging_program_stays_inside_the_time_it_is_given() -> TestResult {
     assert!(folder.workspaces_are_empty()?);
 
     let started = Instant::now();
-    let none_left = identify(
-        &folder,
-        UserOnlineTool::JsRuntime,
-        &hanging,
-        Duration::ZERO,
-    )
-    .await;
+    let none_left = identify(&folder, UserOnlineTool::JsRuntime, &hanging, Duration::ZERO).await;
     assert!(matches!(none_left, Err(UserOnlineToolFault::Deadline)));
     assert!(started.elapsed() < Duration::from_secs(2));
     // Nothing was started, so no private folder was made.

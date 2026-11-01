@@ -858,14 +858,7 @@ async fn unattended(
     accept_plan: Option<&str>,
     mode: OutputMode,
 ) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
-    unattended_including(
-        steps,
-        parts,
-        OptionalComponentSet::EMPTY,
-        accept_plan,
-        mode,
-    )
-    .await
+    unattended_including(steps, parts, OptionalComponentSet::EMPTY, accept_plan, mode).await
 }
 
 /// The same with the extras the caller named.
