@@ -38,9 +38,10 @@ use vsift_application::{
     ComponentInstallOutcome, DownloadFailureReason, InstallFailureReason, InstallStep,
     LocalAsrVerification, LocalAsrVerifier, ManagedInstallReport, ManagedSetupAction,
     MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, NoProgress,
-    ProgressSink, ReviewedArchiveLimits, ReviewedArchiveSelection, ReviewedCompatibilityPolicy,
-    ReviewedManagedFile, RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal,
-    install_managed_components, plan_managed_setup,
+    OptionalComponent, OptionalComponentSet, ProgressSink, ReviewedArchiveLimits,
+    ReviewedArchiveSelection, ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+    RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal, install_managed_plan,
+    plan_managed_setup, plan_managed_setup_including,
 };
 use vsift_domain::{
     ArtifactIntegrity, DependencyState, DependencyStatus, FailureCode, ManagedArtifactFormat,
@@ -413,6 +414,8 @@ struct Fixture {
 const MEDIA_FILE: &str = "fixture-media.tar.gz";
 const WHISPER_FILE: &str = "fixture-whisper.tar.gz";
 const MODEL_FILE: &str = "fixture-model.bin";
+const DENO_FILE: &str = "fixture-deno.tar.gz";
+const YT_DLP_FILE: &str = "fixture-yt-dlp.tar.gz";
 
 impl Fixture {
     /// The fixture catalogue; `media_version` names the media tools'
@@ -492,6 +495,93 @@ impl Fixture {
         Ok(Self { catalogue, files })
     }
 
+    /// The diagnosis of a host with none of the tools.
+    fn nothing_installed() -> RuntimeDiagnosis {
+        RuntimeDiagnosis {
+            readiness: RuntimeReadiness::Blocked,
+            dependencies: RuntimeDependency::ALL
+                .into_iter()
+                .map(|dependency| DependencyStatus {
+                    dependency,
+                    state: DependencyState::Missing,
+                })
+                .collect(),
+        }
+    }
+
+    /// The fixture catalogue with the optional online-links group (#409):
+    /// the smoke fixture tool packed as Deno and as yt-dlp under their
+    /// reviewed executable names, and the banners it prints for them.
+    fn with_online_links(mut self) -> TestResult<Self> {
+        let tool = fs::read(FIXTURE_TOOL)?;
+        self.catalogue.compatibility.optional_banners.clear();
+        for (component, role, version, file_name, folder) in [
+            (
+                ManagedComponent::JsRuntimeDeno,
+                ManagedRuntimeRole::Deno,
+                "fixture-deno-1",
+                DENO_FILE,
+                "deno",
+            ),
+            (
+                ManagedComponent::YtDlp,
+                ManagedRuntimeRole::YtDlp,
+                "fixture-yt-dlp-1",
+                YT_DLP_FILE,
+                "yt-dlp",
+            ),
+        ] {
+            let (artifact, bytes) = archive_artifact(
+                component,
+                version,
+                file_name,
+                folder,
+                &[ArchiveFile {
+                    name: role_name(role)?,
+                    bytes: tool.clone(),
+                    executable: true,
+                }],
+            )?;
+            self.catalogue.optional_artifacts.push(artifact);
+            self.catalogue
+                .compatibility
+                .optional_banners
+                .push(ReviewedBanner {
+                    component,
+                    first_line_prefix: format!("{folder} version {FIXTURE_BUILD}"),
+                });
+            self.files.insert(file_name.to_owned(), bytes);
+        }
+        Ok(self)
+    }
+
+    /// The accepted plan's core and optional actions for a host with none
+    /// of the tools, with the online-links group included.
+    fn actions_with_online_links(
+        &self,
+    ) -> TestResult<(Vec<ManagedSetupAction>, Vec<ManagedSetupAction>)> {
+        let plan = plan_managed_setup_including(
+            SetupProfile::Desktop,
+            Self::nothing_installed(),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            OptionalComponentSet::EMPTY.with(OptionalComponent::OnlineLinks),
+            1_000,
+            Some(self.catalogue.clone()),
+        );
+        let digest = plan
+            .digest
+            .clone()
+            .ok_or("the fixture plan has no digest")?;
+        plan.validate_acceptance(&digest)
+            .map_err(|error| format!("{error:?}"))?;
+        let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
+        if plan.actions.len() != 3 || optional.len() != 2 {
+            return Err("the fixture plan does not install three core and two optional".into());
+        }
+        Ok((plan.actions, optional))
+    }
+
     fn bytes(&self, file: &str) -> TestResult<Vec<u8>> {
         self.files
             .get(file)
@@ -503,16 +593,7 @@ impl Fixture {
     fn actions(&self) -> TestResult<Vec<ManagedSetupAction>> {
         let plan = plan_managed_setup(
             SetupProfile::Desktop,
-            RuntimeDiagnosis {
-                readiness: RuntimeReadiness::Blocked,
-                dependencies: RuntimeDependency::ALL
-                    .into_iter()
-                    .map(|dependency| DependencyStatus {
-                        dependency,
-                        state: DependencyState::Missing,
-                    })
-                    .collect(),
-            },
+            Self::nothing_installed(),
             ManagedTarget::Ubuntu2404X86_64,
             SetupSelectionState::default(),
             1_000,
@@ -701,6 +782,9 @@ struct Run<'a> {
     verifiers: FixedVerifiers,
     cancellation: ProcessCancellation,
     progress: &'a dyn ProgressSink,
+    /// The compatibility policy of the install; the fixture's unless a test
+    /// gives its own (the optional tools' banners, say).
+    policy: Option<ReviewedCompatibilityPolicy>,
 }
 
 impl Run<'_> {
@@ -711,10 +795,19 @@ impl Run<'_> {
             verifiers: FixedVerifiers::passing(),
             cancellation: ProcessCancellation::new(),
             progress: &NoProgress,
+            policy: None,
         }
     }
 
     async fn install(self, actions: &[ManagedSetupAction]) -> TestResult<ManagedInstallReport> {
+        self.install_with_optional(actions, &[]).await
+    }
+
+    async fn install_with_optional(
+        self,
+        actions: &[ManagedSetupAction],
+        optional: &[ManagedSetupAction],
+    ) -> TestResult<ManagedInstallReport> {
         let (source, authority) = match self.via {
             Via::Server { base, proxy } => (
                 ManagedArtifactSource::Publisher,
@@ -737,7 +830,10 @@ impl Run<'_> {
                 store: self.store.clone(),
                 source,
                 authority,
-                policy: policy()?,
+                policy: match self.policy {
+                    Some(policy) => policy,
+                    None => policy()?,
+                },
                 host_isolation: HostIsolation::ProcessOnly,
                 verifiers: self.verifiers,
                 companions: StoreCompanions {
@@ -747,7 +843,7 @@ impl Run<'_> {
             },
             &guard,
         );
-        Ok(install_managed_components(&installer, actions, self.progress).await)
+        Ok(install_managed_plan(&installer, actions, optional, self.progress).await)
     }
 }
 
@@ -1380,5 +1476,77 @@ async fn an_offline_import_refuses_a_link() -> TestResult {
             InstallFailureReason::ArtifactNotRegularFile
         )
     );
+    Ok(())
+}
+
+/// #409, D-07: `--artifact-dir` installs the optional online-links group
+/// from local files with no request at all, verified like a download and
+/// smoked with the group's reviewed banners; a rerun needs no file; and a
+/// folder that holds the core's files but not the group's leaves the core
+/// installed, the group failed at its import and no stage behind.
+#[tokio::test]
+async fn an_offline_import_installs_the_optional_online_links_group() -> TestResult {
+    let fixture = Fixture::new("fixture-media-1")?.with_online_links()?;
+    let (core, optional) = fixture.actions_with_online_links()?;
+    let deno = ManagedComponent::JsRuntimeDeno.identifier();
+    let yt_dlp = ManagedComponent::YtDlp.identifier();
+    let optional_statuses = |report: &ManagedInstallReport| -> Vec<&'static str> {
+        report
+            .optional
+            .iter()
+            .map(|component| component.outcome.identifier())
+            .collect()
+    };
+
+    let folder = TestRoot::new()?;
+    for (name, bytes) in &fixture.files {
+        fs::write(folder.parent.join(name), bytes)?;
+    }
+    let root = TestRoot::new()?;
+    let mut run = Run::new(root.store()?, Via::Directory(folder.parent.clone()));
+    run.policy = Some(fixture.catalogue.compatibility.clone());
+    let report = run.install_with_optional(&core, &optional).await?;
+    assert_eq!(statuses(&report), ["activated"; 3], "{report:?}");
+    assert_eq!(optional_statuses(&report), ["activated"; 2], "{report:?}");
+    assert_eq!(report.failure_code(), None);
+    assert!(report.optional_installed());
+    assert_eq!(root.selected(deno)?.as_deref(), Some("fixture-deno-1"));
+    assert_eq!(root.selected(yt_dlp)?.as_deref(), Some("fixture-yt-dlp-1"));
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
+
+    // The same accepted plan again, with an empty folder: everything is
+    // current, so no file is needed.
+    let empty = TestRoot::new()?;
+    let mut rerun = Run::new(root.store()?, Via::Directory(empty.parent.clone()));
+    rerun.policy = Some(fixture.catalogue.compatibility.clone());
+    let report = rerun.install_with_optional(&core, &optional).await?;
+    assert_eq!(statuses(&report), ["already_current"; 3], "{report:?}");
+    assert_eq!(
+        optional_statuses(&report),
+        ["already_current"; 2],
+        "{report:?}"
+    );
+
+    let core_only = TestRoot::new()?;
+    for file in [MEDIA_FILE, WHISPER_FILE, MODEL_FILE] {
+        fs::write(core_only.parent.join(file), fixture.bytes(file)?)?;
+    }
+    let fresh = TestRoot::new()?;
+    let mut run = Run::new(fresh.store()?, Via::Directory(core_only.parent.clone()));
+    run.policy = Some(fixture.catalogue.compatibility.clone());
+    let report = run.install_with_optional(&core, &optional).await?;
+    assert_eq!(statuses(&report), ["activated"; 3], "{report:?}");
+    assert_eq!(report.failure_code(), None);
+    assert!(!report.optional_installed());
+    assert_eq!(
+        report.optional_failure(),
+        Some((
+            ManagedComponent::JsRuntimeDeno,
+            ComponentInstallFailure::at(InstallStep::Import, InstallFailureReason::ArtifactMissing)
+        ))
+    );
+    assert_eq!(fresh.selected(deno)?, None);
+    assert_eq!(fresh.selected(yt_dlp)?, None);
+    assert_eq!(fresh.stages()?, [] as [std::path::PathBuf; 0]);
     Ok(())
 }
