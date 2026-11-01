@@ -676,6 +676,28 @@ evidence goes back to the planner.
   server on the runner. The comma selection took both streams, the pair wrote `vsift-page.137.mp4` and
   `vsift-page.140.m4a` with exit 0, and a failed second stream exited 1. All 28 flags and 5 filter fields were found.
 
+*Implementation note, 2026-11-01 (#409's fault tests and records, W4c Part 1; the planner's rulings of the same day):*
+
+- **Platform captions are not in `0.3.0`.** This ADR has no design for them, and a person can already give a
+  transcript with `ingest --url <link> --transcript <file>`. #409's captions paragraph and its open decision (whether
+  automatically generated captions are offered) are carried by [#564](https://github.com/smormah/vsift/issues/564),
+  and [L-248](../planning/known-limits.md#l-248) records the limit. The platform qualification has no captions line.
+- **Section 4.9's four fault tests are in** `crates/vsift-cli/tests/p13_setup_install_cli.rs`, on the managed target
+  (Ubuntu 24.04 x86-64; they print a skip elsewhere, where no managed `online_links` exists). Each publishes core
+  stand-ins under the plan's versions, includes `online_links`, and sends the real binary's optional download, through
+  the real transfer client, to a local proxy that:
+  - answers `407` (reason `proxy_auth`);
+  - refuses the tunnel with `403` (a blocked host);
+  - has a name that cannot be resolved (the issue's "DNS failure"; `.invalid` never resolves);
+  - is a closed port (the issue's "offline machine").
+
+  In each: exit 0, `status: "partial"`, `core: "ready"`, the group `not_installed` with the typed reason and
+  `DOWNLOAD_FAILED`, the second component `blocked`, the credential in no output (JSON or readable), no stage left,
+  and `setup check --profile desktop` identical before and after.
+- **The import path has its own test** in `crates/vsift-infrastructure/tests/p13_install_transaction.rs`: an
+  `--artifact-dir` install of the group from local files, with no request, smoked with fixture banners; a rerun that
+  needs no file; and a folder without the group's files, which leaves the core installed.
+
 ## Consequences
 
 - VSift makes network requests for the first time outside `setup install`, only on

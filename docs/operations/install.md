@@ -605,7 +605,8 @@ deleting them left no trace; the evidence bundle, the registered tools and the s
 
 1. **Managed tools first, if you used them** (you need the `vsift` command for this):
    `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup
-   remove whisper_model`, then `vsift setup remove --stale-stages`. Content VSift cannot
+   remove whisper_model`, then, if you added web videos, `vsift setup remove yt_dlp` and
+   `vsift setup remove js_runtime_deno`, then `vsift setup remove --stale-stages`. Content VSift cannot
    prove is its own (a link, an unknown file) is kept and `vsift setup repair` names it; delete
    the managed folder by hand in that case ([L-090](../planning/known-limits.md#l-090)).
 2. **The package:**

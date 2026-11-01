@@ -74,12 +74,15 @@ VSift works without these. Each adds one thing, and `vsift setup` lists them on 
 
 - **On-screen text:** read and search the text shown in a recording.
 - **Speakers:** label who said what.
-- **Web videos:** open a public video page. Linux only for now.
+- **Web videos:** open a public video page, as far as the site's terms allow ([how](docs/guide/online-videos.md)). Linux only for now.
 
-Add one with `vsift setup --include on-screen-text`.
+Add one with `vsift setup --include web-videos`.
 ````
 
-List only the extras the release has, with the names `vsift setup --include` really takes.
+List only the extras the release has, with the names `vsift setup --include` really takes. Checked against the
+CLI on 2026-11-01: `web-videos` is the only value so far (`DoorExtra` in `crates/vsift-cli/src/command.rs`). The
+`online_links` name belongs to `setup plan --include` and the JSON results, not to `vsift setup --include`. The
+bullets for on-screen text and speakers wait for their own values; until then they stay out of the pasted text.
 
 ## Speakers
 
