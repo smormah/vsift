@@ -23,7 +23,7 @@ to a developer machine:
   source archive (its digest comes from the signed sums), every flag in
   `page_acquisition.rs` in the pinned executable's `--help`, and every filter
   field in the archive's README, so a re-pin that changes one fails here. The
-  seven `SITE_PHRASES` must not be in the archive, or in the checked list: one
+  six `SITE_PHRASES` must not be in the archive, or in the checked list: one
   that turns up there moves to the checked list. Where the archive handles
   that text is printed, as the record of each one's origin.
 - The pair probe (the note of 2026-11-01): the pinned executable reads a made-up

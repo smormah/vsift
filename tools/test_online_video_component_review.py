@@ -46,9 +46,9 @@ class PhraseCheckTests(unittest.TestCase):
         self.assertEqual(failures["in_both_lists"], ["both"])
         self.assertEqual(failures["site_phrases_in_source"], ["here"])
 
-    def test_the_real_lists_hold_seven_site_phrases(self) -> None:
+    def test_the_real_lists_hold_six_site_phrases(self) -> None:
         refusals = review.REFUSAL_SOURCE.read_text(encoding="utf-8")
-        self.assertEqual(len(review.reviewed_phrases(refusals, "SITE_PHRASES")), 7)
+        self.assertEqual(len(review.reviewed_phrases(refusals, "SITE_PHRASES")), 6)
 
     def test_origins_are_bounded_and_name_the_line(self) -> None:
         origins = review.fragment_origins({"a.py": "x\nnot a bot here\n"}, ("not a bot", "none"))

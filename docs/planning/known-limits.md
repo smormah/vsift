@@ -5341,6 +5341,9 @@ that week.**
   yt-dlp can stop working between VSift releases until a re-pin (`extractor_broken`); a user's yt-dlp is the user's to
   keep current, and is run though nobody here reviewed it. A site that answers VSift's first request with an HTTP
   error is refused as `http_status` and never reaches yt-dlp, because only a `web_page` answer is routed there.
+  Six refusal phrases are text a site or a proxy writes, so no check notices when one changes: the two for
+  `bot_check`, the two for a channel's members, the one for a terminated account and the one for a proxy's `407`. Only
+  `bot_check` has a live check, and that one is optional. A site that rewords one falls to a broader reason.
 - **Evidence:** `crates/vsift-infrastructure/src/page_acquisition.rs`, `crates/vsift-infrastructure/tests/page_acquisition.rs`.
 - **Plan:** a signed component manifest refreshed between releases is `1.0`'s (ADR 0028 section 4.1). The address
   limit stays while yt-dlp is an external process.

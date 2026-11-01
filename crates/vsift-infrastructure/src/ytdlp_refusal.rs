@@ -20,10 +20,15 @@ use vsift_domain::SourceFetchReason;
 pub const MAX_YTDLP_STDERR_BYTES: usize = 64 * 1024;
 
 /// Each reason's checked phrases, in the order the reasons are tried:
-/// `age_restricted` comes before `login_required`, because yt-dlp's age message
-/// asks to sign in. Within a reason these come before its [`SITE_PHRASES`].
+/// `age_restricted` and `bot_check` come before `login_required`, because
+/// yt-dlp adds its sign-in hint to any site message that says "sign in".
+/// Within a reason these come before its [`SITE_PHRASES`].
 pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
-    (SourceFetchReason::AgeRestricted, &["age-restricted"]),
+    (
+        SourceFetchReason::AgeRestricted,
+        &["confirm your age", "age-restricted"],
+    ),
+    (SourceFetchReason::BotCheck, &[]),
     (
         SourceFetchReason::LoginRequired,
         &[
@@ -31,7 +36,6 @@ pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
             "--cookies-from-browser or --cookies for the authentication",
         ],
     ),
-    (SourceFetchReason::BotCheck, &[]),
     (
         SourceFetchReason::Drm,
         &["This video is DRM protected", "DRM protected"],
@@ -86,18 +90,16 @@ pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
 ];
 
 /// Text from a site or a proxy that yt-dlp passes on, by reason. Exactly
-/// these seven: see the module documentation.
-pub const SITE_PHRASES: [(SourceFetchReason, &[&str]); 5] = [
-    (
-        SourceFetchReason::AgeRestricted,
-        &["Sign in to confirm your age"],
-    ),
+/// these six: see the module documentation. Line numbers are the pinned tag's.
+pub const SITE_PHRASES: [(SourceFetchReason, &[&str]); 4] = [
     (
         SourceFetchReason::LoginRequired,
+        // YouTube's `reason`, passed on at extractor/youtube/_video.py:4053-4076.
         &["Join this channel to get access", "members-only content"],
     ),
     (
         SourceFetchReason::BotCheck,
+        // YouTube's `reason`, passed on at extractor/youtube/_video.py:4053-4076.
         &[
             "Sign in to confirm you\u{2019}re not a bot",
             "confirm you're not a bot",
@@ -105,10 +107,13 @@ pub const SITE_PHRASES: [(SourceFetchReason, &[&str]); 5] = [
     ),
     (
         SourceFetchReason::Removed,
+        // YouTube's `reason` or `subreason`, as above.
         &["account associated with this video has been terminated"],
     ),
     (
         SourceFetchReason::ProxyAuth,
+        // The proxy's status line, in the HTTP library's error, which
+        // networking/_requests.py:344-345 and _urllib.py:434 wrap as the cause.
         &["407 Proxy Authentication Required"],
     ),
 ];
@@ -158,7 +163,7 @@ mod tests {
             .iter()
             .flat_map(|(_, phrases)| phrases.iter().copied())
             .collect();
-        assert_eq!(site.len(), 7);
+        assert_eq!(site.len(), 6);
         for (_, phrases) in YTDLP_PHRASES {
             assert!(!phrases.iter().any(|phrase| site.contains(phrase)));
         }
@@ -167,13 +172,25 @@ mod tests {
         }
     }
 
+    /// yt-dlp adds its sign-in hint to a site's message, so the hint alone
+    /// must not decide when the message names something more exact.
     #[test]
-    fn age_comes_before_login() {
-        let text = "ERROR: Sign in to confirm your age. Use --cookies-from-browser or --cookies for the authentication.";
-        assert_eq!(
-            classify_ytdlp_failure(text.as_bytes()),
-            SourceFetchReason::AgeRestricted
-        );
+    fn age_and_a_bot_check_come_before_login() {
+        let hint = "Use --cookies-from-browser or --cookies for the authentication.";
+        for (message, reason) in [
+            (
+                "Sign in to confirm your age",
+                SourceFetchReason::AgeRestricted,
+            ),
+            (
+                "Sign in to confirm you\u{2019}re not a bot",
+                SourceFetchReason::BotCheck,
+            ),
+            ("Sign in to view this", SourceFetchReason::LoginRequired),
+        ] {
+            let text = format!("ERROR: [youtube] abc: {message}. {hint}");
+            assert_eq!(classify_ytdlp_failure(text.as_bytes()), reason, "{message}");
+        }
     }
 
     #[test]
