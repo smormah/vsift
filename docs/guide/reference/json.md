@@ -1851,8 +1851,15 @@ The data member of the complete or partial terminal result that ends a search --
 | `optional_components[].name` | "online_links" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
 | `optional_components[].status` | "installed" \| "not_installed" \| "unavailable" | yes |  |
 | `optional_components[].components` | array of object | yes | at most 8 items |
-| `optional_components[].components[].component` | "js_runtime_deno" \| "yt_dlp" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
+| `optional_components[].components[].component` | "js_runtime_deno" \| "yt_dlp" \| "js_runtime" | yes | This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know. |
 | `optional_components[].components[].version` | string | yes | 1 to 64 characters |
+| `optional_components[].components[].source` | "managed" \| "user_managed" | yes | Added in 0.3.0 (ADR 0028 section 4.6). managed: VSift installed and reviewed it, and version is its catalogue version key. user_managed: the user supplied it with setup configure (yt_dlp, js_runtime) and it is used instead of a managed one; version is the first line of its own version output and sha256 the file's digest. Nothing reviewed a user-managed file, and keeping it current is the user's job. |
+| `optional_components[].components[].sha256` | string | no | Present when source is user_managed: the SHA-256 of the file as it was identified.; pattern `^[0-9a-f]{64}$` |
+| `optional_components[].unused_components` | array of object | no | Added in 0.3.0 (ADR 0028 section 4.6), present only when non-empty: a JavaScript runtime the user registered that is not used, because it runs only with a yt-dlp the user registered and none is (a managed yt-dlp runs with the managed Deno only). Same shape as components, always user_managed.; at most 8 items |
+| `optional_components[].unused_components[].component` | "js_runtime" | yes |  |
+| `optional_components[].unused_components[].version` | string | yes | 1 to 64 characters |
+| `optional_components[].unused_components[].source` | "user_managed" | yes |  |
+| `optional_components[].unused_components[].sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `optional_components[].next_step` | string | yes | 1 to 512 characters |
 | `optional_components[].add_command` | object or null | yes |  |
 | `optional_components[].add_command.executable` | constant "vsift" | yes |  |

@@ -674,7 +674,7 @@ Arguments:
   <DEPENDENCY>
           Stable dependency identifier
 
-          [possible values: ffmpeg, ffprobe, whisper, ocr-runner]
+          [possible values: ffmpeg, ffprobe, whisper, ocr-runner, yt-dlp, js-runtime]
 
 Options:
       --executable <EXECUTABLE>
