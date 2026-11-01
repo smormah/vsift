@@ -57,6 +57,17 @@ test = false
 doc = false
 bench = false
 
+# A standard-library-only stand-in for yt-dlp and FFmpeg that the page tests
+# (tests/page_acquisition.rs, through CARGO_BIN_EXE_vsift-yt-dlp-stand-in) stage
+# under a name and drive through a file beside them, so no test reaches the
+# network. It is never packaged or shipped.
+[[bin]]
+name = "vsift-yt-dlp-stand-in"
+path = "testbin/yt_dlp_stand_in.rs"
+test = false
+doc = false
+bench = false
+
 # The P13 transaction tests drive the real transport through the
 # development-only loopback route (install-test-hooks). They build whenever a
 # workspace test run enables the feature (the engine crate's development
@@ -71,6 +82,12 @@ required-features = ["install-test-hooks"]
 # development-only link test route (install-test-hooks), as above.
 [[test]]
 name = "link_transfer"
+required-features = ["install-test-hooks"]
+
+# ADR 0028 (#409): a page's fetch through the stand-in, and the routing of a
+# link that answers with a web page, through the same test route.
+[[test]]
+name = "page_acquisition"
 required-features = ["install-test-hooks"]
 
 [dependencies]

@@ -736,7 +736,7 @@ node --test "tools/p14-campaigns/test/*.test.cjs"
 | Load ladder, 100-request batch, cancel, warm page and soak (RQ-09) | `P14 load` | `gh workflow run p14-load.yml --ref <branch>`; inputs `phases`, `ladder_requests` (24), `batch_requests` (100), `soak_requests` (1000) and `soak_minutes` (270) |
 | Malicious media (RQ-10) | `P14 malicious media` | `gh workflow run p14-malicious-media.yml --ref <branch>` (the pull request's run is already the full set) |
 | The worker runbook walk (RQ-12) | `P14 runbook walk` | `gh workflow run p14-runbook-walk.yml --ref <branch>` |
-| The hosted part of the scan reading (RQ-13) | `P14 scan reading` | `gh workflow run p14-scan-reading.yml --ref <branch>`, then the read-only `gh api` calls listed in the reading |
+| The hosted part of the scan reading (RQ-13) | `P14 scan reading` | `gh workflow run p14-scan-reading.yml --ref <branch>`, then the read-only `gh api` calls listed in the reading; FFmpeg's scope includes the `mp4` and `matroska` muxers (ADR 0028 section 4.7) |
 
 Each workflow is read-only (`contents: read`), uses no secret, installs the **published** `vsift-cli`
 from the real registry (an empty `version` means the one on `next`) and keeps its record for 90 days as an

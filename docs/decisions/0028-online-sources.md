@@ -591,6 +591,87 @@ This pull request adds what was left, plus 4.6's registration (the acquisition h
   pinned Deno for Windows and macOS (this ADR pins none, and a pin needs its own review), so the Windows and macOS jobs
   register a yt-dlp only; `setup install --artifact-dir` for the optional files is the shared import path of the core
   and is not separately tested for them.
+*Implementation note, 2026-11-01 (#409's acquisition pull request, W4b; the planner's ruling of the same day):*
+reading the pinned yt-dlp's source showed section 4.7 could not work as written, so its arguments change. This was
+read in the source at tag `2026.08.19`, never run; the hosted check confirms it, and if real yt-dlp disagrees the
+evidence goes back to the planner.
+
+- **Why.** `--max-downloads 1` with `--simulate --dump-single-json` ends a run with exit 101 and no JSON, because the
+  limit is raised before the dump. Its exit 101 would also replace a failed download's exit 1. `--abort-on-error` stops
+  a merged pair before either stream downloads when no FFmpeg is visible, and VSift keeps FFmpeg from yt-dlp on
+  purpose. `live_status!=is_upcoming` is false for a site that reports no status. `--dump-single-json` implies
+  simulate, so phase 2 cannot keep it.
+- **Every run:** `--ignore-config --no-plugin-dirs --no-update --no-remote-components --no-cookies
+  --no-cookies-from-browser --no-playlist --no-batch-file --playlist-items 1 --abort-on-error --no-exec
+  --restrict-filenames --no-mtime --no-part --no-continue --downloader native --no-check-formats --socket-timeout 30
+  --no-progress --fixup never --match-filters "!is_live & !was_live & live_status!=?is_upcoming &
+  live_status!=?post_live" --output "vsift-page.%(format_id)s.%(ext)s" --no-js-runtimes [--js-runtimes
+  deno:<runtime path>] --paths <output folder>`.
+- **Phase 1** adds section 4.7's format selection, `--simulate --dump-single-json`, then `-- <link>`.
+- **Phase 2** adds `--format <selection>`, then `-- <link>`. The selection is exactly the ids phase 1 checked:
+  `<id>[protocol=https]` for one file, `<video id>[protocol=https],<audio id>[protocol=https]` for a pair. The comma
+  makes two separate downloads, so no merge is considered, and the filter holds HTTPS on the page as yt-dlp reads it
+  again. Ids come from `requested_formats`, or the top-level `format_id` for one file, and must match
+  `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, otherwise `unexpected_output`.
+- **`--max-downloads` is not used.** What bounds a run is the single entry, the exact ids, the byte caps and the
+  exact folder check. **Exit 0 is the only success in either phase:** with `--no-part` a failed download leaves a
+  good-looking file under its final name, so the folder's check cannot stand in for the status.
+- **Phase 1's rule for a missing field:** an absent `live_status` passes; any present value other than `not_live`
+  is refused. The filter's `!=?` says the same.
+- **`--fixup never`:** on Windows a user's `yt-dlp.exe` could find an unverified `ffmpeg.exe` beside it with `PATH`
+  empty, and no FFmpeg may touch these files but the verified one.
+- **The folder check** expects exactly `vsift-page.<id>.<ext>` for each format.
+- **Environment:** `DENO_NO_UPDATE_CHECK=1` and `NO_COLOR=1` when a runtime is passed, as `setup check` runs Deno; on
+  Windows `SystemRoot`, as W4a's identification does.
+- **The join:** `-protocol_whitelist file` on each input, because it is an input option and section 4.7's line covers
+  only the first; MOV inputs also get `-enable_drefs 0 -use_absolute_path 0`, as every other read does.
+- **A new reason, `media_tools_missing`:** a pair with no verified FFmpeg, refused before the download.
+- **The stall:** 120 s to the first byte, because phase 2 reads the page again, then 30 s without growth in the total
+  across both streams, with no second allowance.
+- **Links:** a host written as an address, and an internal name, are refused always, not only through a proxy,
+  because yt-dlp connects with no address policy.
+- **The page origin:** `catalogue_version` alone for a managed tool (the key names the exact version), `source_id`
+  not repeated (the session's result has it, as for a direct link), and `address_check: "proxy_resolved"` only when a
+  proxy was handed over: `direct` would claim a check yt-dlp's connections never had.
+- **What the record cannot see (the planner's review of #561).** With no `--proxy`, yt-dlp calls
+  `urllib.request.getproxies()` (`YoutubeDL.py:4215`), which falls back to the Windows registry or the macOS system
+  settings when the environment has none, so `through_proxy` can be false for a proxied fetch by a user's yt-dlp. The
+  link is on yt-dlp's command line, where other local users can read it while it runs; section 5's "never stored,
+  printed or logged" is about VSift's own output. Both are stated in L-209 and the threat model's table.
+- **A registered tool is not pinned by digest (the planner's decision on #561).** A person updates their own yt-dlp
+  as a matter of course, so a pin would report every ordinary update as a change. Each fetch identifies the file
+  again, and each origin records the digest read when it was identified for that fetch; nothing holds the file
+  between that read and the run, and it is the user's own file. L-247 stays open.
+- **The live checks (the planner's review of #561).** `Online links live` gains two dispatch-only parts, which never
+  run on a pull request. RM06's page goes through the pinned user-supplied yt-dlp on Windows and macOS, with no
+  runtime, which is also the only test of the engine's path through a registered yt-dlp. With the `youtube` input, and
+  after those pass, one NASA video on YouTube runs through the managed pair, once for this pull request and at each
+  re-pin: the typed `bot_check` passes, and so does a success with `joined: audio_video`; anything else fails and goes
+  to the planner with the evidence.
+- **The fake yt-dlp** keeps its record beside its executable, and the test's folder takes it away: its temporary
+  folder goes with the session, so a record there could not be read. It also plays `FFmpeg` for the join.
+- **The phrase table (section 4.8) is split.** Hosted run 41269645907 found seven candidates missing from the source
+  archive, so "each must be found verbatim" could not hold for them. This amends that rule for six phrases only,
+  and every other phrase stays under it. A phrase only chooses a reason and its remediation; it never accepts anything,
+  and a site that rewords one falls to a broader reason. `YTDLP_PHRASES` are checked as section 4.8 says.
+  `SITE_PHRASES` are exactly these six, with where they come from (line numbers at the pinned tag, read in the source):
+  - `Sign in to confirm you’re not a bot`, `confirm you're not a bot`, `Join this channel to get access`,
+    `members-only content` and `account associated with this video has been terminated`: YouTube's own `reason` or
+    `subreason`, read from the player response and passed on at `extractor/youtube/_video.py:4053-4076`;
+  - `407 Proxy Authentication Required`: the proxy's status line in the HTTP library's error, wrapped as the cause at
+    `networking/_requests.py:344-345` and `networking/_urllib.py:434`.
+
+  Hosted run 41269900460 found none of the fragments `not a bot`, `Join this channel`, `terminated`,
+  `Proxy Authentication` or `Tunnel connection` anywhere in the archive. An addition to the list needs an observed
+  failure on record. The review fails if a phrase is in both lists, or if a site phrase turns up in the archive, which
+  moves it to the checked list. **One candidate moved:** `Sign in to confirm your age` is replaced by `confirm your
+  age`, the wording yt-dlp itself matches (`extractor/youtube/_video.py:2901`), in the checked list.
+- **The order of reasons:** `bot_check` joins `age_restricted` before `login_required`, because yt-dlp adds its
+  sign-in hint to any site message that says "sign in" (`extractor/youtube/_video.py:4064-4066`), and the hint is a
+  `login_required` phrase. Checked phrases come first within a reason.
+- **The hosted proof of these arguments:** run 41269900460 ran the pinned yt-dlp on a made-up video from a local HTTPS
+  server on the runner. The comma selection took both streams, the pair wrote `vsift-page.137.mp4` and
+  `vsift-page.140.m4a` with exit 0, and a failed second stream exited 1. All 28 flags and 5 filter fields were found.
 
 ## Consequences
 

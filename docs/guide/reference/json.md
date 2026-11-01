@@ -1097,7 +1097,7 @@ The data member of a complete ingest result. transcript is present only when a s
 | `expires_at` | string | yes | format date-time |
 | `transcript` | object, see [transcript-revision.schema.json](#transcript-revisionschemajson) | no |  |
 | `time_anchor` | object, see [time-anchor.schema.json](#time-anchorschemajson) | no | When the recording happened by the real-world clock, and on what authority (time anchoring, 0.3.0): from ingest --recorded-at, else the container's recording-time tags, which a plain ingest reads with one FFprobe run when the media tools are set up and verified. Absent when no clock time is known. |
-| `origin` | object | no | Where a source fetched with ingest --url came from (0.3.0, ADR 0028); absent for a local file's copy. It never holds the link, which may carry a signed token in its query or its path: link_sha256 is the SHA-256 of the link as given after parsing (query included), so the same link can be recognised but not recovered. requested_host is the link's host and final_host the host the bytes came from after redirects (at most three). address_check is direct when VSift resolved the name and connected only to public addresses it checked, and proxy_resolved when a proxy from the environment resolved it (VSift then refused only internal-looking names and addresses). retrieved_at is when the body was complete; bytes is the source's size. A provider's upload date is not a recording time and is never recorded. |
+| `origin` | object or any or any | no | Where a source fetched with ingest --url came from (0.3.0, ADR 0028); absent for a local file's copy: direct_origin for a direct link, page_origin for a public video page fetched through yt-dlp. |
 | `origin.kind` | "direct_https" | yes |  |
 | `origin.link_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
 | `origin.requested_host` | string | yes | pattern `^([a-z0-9.-]{1,253}\|\[[0-9a-f:.]{2,45}\])$` |
@@ -1106,6 +1106,25 @@ The data member of a complete ingest result. transcript is present only when a s
 | `origin.address_check` | "direct" \| "proxy_resolved" | yes |  |
 | `origin.retrieved_at` | string | yes | format date-time |
 | `origin.bytes` | integer | yes | 1 to 21474836480 |
+| `origin.kind` | "platform_page" | yes |  |
+| `origin.provider` | string | yes | pattern `^[A-Za-z0-9]{1,64}$` |
+| `origin.video_id` | string | no | pattern `^[A-Za-z0-9._-]{1,128}$` |
+| `origin.video_id_sha256` | string | no | pattern `^[0-9a-f]{64}$` |
+| `origin.link_sha256` | string | yes | pattern `^[0-9a-f]{64}$` |
+| `origin.yt_dlp` | object or object | yes |  |
+| `origin.yt_dlp.source` | "managed" \| "user_managed" | yes |  |
+| `origin.yt_dlp.catalogue_version` | string | no | 1 to 64 characters |
+| `origin.yt_dlp.version` | string | no | 1 to 64 characters |
+| `origin.yt_dlp.sha256` | string | no | pattern `^[0-9a-f]{64}$` |
+| `origin.js_runtime` | object or object | no |  |
+| `origin.js_runtime.source` | "managed" \| "user_managed" | yes |  |
+| `origin.js_runtime.catalogue_version` | string | no | 1 to 64 characters |
+| `origin.js_runtime.version` | string | no | 1 to 64 characters |
+| `origin.js_runtime.sha256` | string | no | pattern `^[0-9a-f]{64}$` |
+| `origin.address_check` | "proxy_resolved" | no |  |
+| `origin.retrieved_at` | string | yes | format date-time |
+| `origin.bytes` | integer | yes | 1 to 21474836480 |
+| `origin.joined` | "single_file" \| "audio_video" | yes |  |
 
 ### job-batch-data.schema.json
 
@@ -1414,7 +1433,7 @@ The data member of a complete or partial ocr.search result (0.3.0, ADR 0030 deci
 | `error.remediation[].command` | object or null | yes |  |
 | `error.remediation[].command.executable` | string | yes | 1 to 4096 characters |
 | `error.remediation[].command.arguments` | array of string | yes | at most 64 items; each: at most 4096 characters |
-| `error.reason` | string | no | The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, proxy_unusable, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated or strict_isolation. A later release may add reasons; a reader treats an unknown one as the code alone.; pattern `^[a-z][a-z0-9_]{0,63}$` |
+| `error.reason` | string | no | The typed reason of a code that has reasons; absent for every other code. SOURCE_FETCH_FAILED (0.3.0, ADR 0028): not_https, credentials_in_link, port_not_allowed, address_refused, tls, redirect_policy, http_status, proxy_auth, proxy_unusable, offline, stalled, deadline, size, partial, compressed, web_page, not_a_video, truncated, strict_isolation, login_required, age_restricted, bot_check, drm, region_blocked, private, removed, unsupported_site, extractor_broken, js_runtime_missing, network, playlist, live, too_long, not_https_format, unexpected_output, online_step_failed or media_tools_missing. A later release may add reasons; a reader treats an unknown one as the code alone.; pattern `^[a-z][a-z0-9_]{0,63}$` |
 | `coverage` | object or null | yes |  |
 | `coverage.truncated` | boolean | yes |  |
 | `coverage.gaps` | array of string | yes | at most 100 items; each: at most 256 characters |

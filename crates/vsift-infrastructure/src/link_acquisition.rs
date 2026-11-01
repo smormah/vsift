@@ -669,6 +669,25 @@ fn client(
     builder.build().map_err(|_| SourceFetchReason::Tls)
 }
 
+/// Parses a page's link and applies the link rules of section 3 again, with
+/// the page's own rule on its host, before yt-dlp is started. Returns the
+/// link and its digest, the same digest a direct link's record holds.
+///
+/// # Errors
+///
+/// The typed reason of the first rule broken.
+pub(crate) fn check_page_link(
+    link: &SourceLink,
+    route: &LinkRoute,
+) -> Result<(Url, Sha256Hex), SourceFetchReason> {
+    let url = Url::parse(link.expose()).map_err(|_| SourceFetchReason::NotHttps)?;
+    check_link(&url, route.allowance())?;
+    crate::page_acquisition::check_page_host(&url)?;
+    let digest =
+        crate::page_acquisition::sha256_of(url.as_str()).ok_or(SourceFetchReason::NotHttps)?;
+    Ok((url, digest))
+}
+
 /// The proxy a fetch uses: the test route's, or the environment's, each read
 /// by [`parse_proxy`].
 ///

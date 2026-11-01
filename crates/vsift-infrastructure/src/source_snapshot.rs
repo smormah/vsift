@@ -16,15 +16,17 @@ use vsift_application::{
     SpecialFileKind, StageCancellation, StagedSessionSource,
 };
 use vsift_domain::{
-    DirectLinkOrigin, DownloadLimits, OperationId, SessionId, SourceFetchReason, SourceId,
-    SourceLink, SourceOrigin,
+    DirectLinkOrigin, DownloadLimits, OperationId, PageOrigin, PageVideoId, SessionId,
+    SourceFetchReason, SourceId, SourceLink, SourceOrigin,
 };
 
 use crate::{
-    FilesystemSessionStore, SessionReadHold, SessionRegistration,
+    FilesystemSessionStore, PageTools, SessionReadHold, SessionRegistration,
     link_acquisition::{
-        LinkFetchError, LinkRoute, LinkSink, LinkSinkError, MAGIC_BYTES, fetch_link,
+        LinkFetchError, LinkRoute, LinkSink, LinkSinkError, MAGIC_BYTES, check_page_link,
+        fetch_link,
     },
+    page_acquisition::{PageFailure, PageFolders, PageRoom, acquire_page, sha256_of},
     source_binding::FileIdentity,
 };
 
@@ -727,7 +729,7 @@ impl SourceSnapshot {
         .await
     }
 
-    async fn stage_link_through(
+    pub(crate) async fn stage_link_through(
         store: &FilesystemSessionStore,
         session_id: &SessionId,
         operation_id: &OperationId,
@@ -760,6 +762,153 @@ impl SourceSnapshot {
         )
         .map_err(|_| SourceError::Fetch(SourceFetchReason::Size))?;
         slot.finish(SourceOrigin::DirectHttps(origin))
+    }
+
+    /// Fetches the video of a public page through yt-dlp into the session's
+    /// source slot (ADR 0028 section 4.7, #409) and makes it the session's
+    /// snapshot. Everything yt-dlp wrote is in a private work folder removed
+    /// here, whatever the outcome; the slot is removed unless this succeeds.
+    ///
+    /// # Errors
+    ///
+    /// [`SourceError::Fetch`] with the typed reason, [`SourceError::Cancelled`],
+    /// [`SourceError::NoRoom`], or a storage or I/O failure.
+    pub async fn stage_page(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        tools: &PageTools,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        Self::stage_page_through(
+            store,
+            session_id,
+            operation_id,
+            (link, limits),
+            (tools, &LinkRoute::production()),
+            cancellation,
+        )
+        .await
+    }
+
+    pub(crate) async fn stage_page_through(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        (tools, route): (&PageTools, &LinkRoute),
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        let (url, link_sha256) = check_page_link(link, route).map_err(SourceError::Fetch)?;
+        let _admission = store.try_admit(1).map_err(SourceError::Storage)?;
+        let (directory, directory_path, hold) = store
+            .source_artifact_directory(session_id)
+            .map_err(SourceError::Storage)?;
+        let work = store
+            .staging_work_directory(session_id)
+            .map_err(SourceError::Storage)?;
+        let (home, output) = (work.path().join("home"), work.path().join("output"));
+        std::fs::create_dir(&home).map_err(SourceError::Io)?;
+        std::fs::create_dir(&output).map_err(SourceError::Io)?;
+        let file_name = format!("source-{}.media", operation_id.as_str());
+        let slot = directory_path.join(&file_name);
+        let folders = PageFolders {
+            home: &home,
+            output: &output,
+            slot: &slot,
+        };
+        let acquired = acquire_page(
+            &url,
+            limits,
+            tools,
+            folders,
+            (&StoreRoom(store), cancellation),
+        )
+        .await
+        .map_err(|failure| match failure {
+            PageFailure::Refused(reason) => SourceError::Fetch(reason),
+            PageFailure::Cancelled => SourceError::Cancelled,
+            PageFailure::NoRoom => SourceError::NoRoom,
+        });
+        let staged = acquired.and_then(|acquired| {
+            let mut options = OpenOptions::new();
+            options.read(true).follow(FollowSymlinks::No);
+            let mut file = directory
+                .open_with(&file_name, &options)
+                .map_err(SourceError::Io)?;
+            let (id, bytes, container) =
+                copy_bounded(&mut file, &mut std::io::sink(), cancellation).map_err(|error| {
+                    match error {
+                        SourceError::UnsupportedContainer => {
+                            SourceError::Fetch(SourceFetchReason::NotAVideo)
+                        }
+                        other => other,
+                    }
+                })?;
+            let origin = page_origin(acquired, link_sha256, tools, bytes)?;
+            Ok((id, bytes, container, origin))
+        });
+        let (id, bytes, container, origin) = match staged {
+            Ok(staged) => staged,
+            Err(error) => {
+                let _ = directory.remove_file(&file_name);
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            session_id: session_id.clone(),
+            id,
+            bytes,
+            container,
+            file_name,
+            directory,
+            directory_path,
+            _hold: hold,
+            origin: Some(origin),
+            #[cfg(test)]
+            full_hashes: std::sync::atomic::AtomicU32::new(0),
+        })
+    }
+}
+
+/// The record of a fetched page.
+fn page_origin(
+    acquired: crate::page_acquisition::AcquiredPage,
+    link_sha256: vsift_domain::Sha256Hex,
+    tools: &PageTools,
+    bytes: u64,
+) -> Result<SourceOrigin, SourceError> {
+    let retrieved_at = vsift_application::Clock::now_unix_seconds(&crate::SystemClock)
+        .map_err(|_| SourceError::IdentityFailure)?;
+    let video = acquired.video;
+    let digest = sha256_of(&video.video_id).ok_or(SourceError::IdentityFailure)?;
+    let video_id = PageVideoId::recorded(&video.video_id, digest, video.public);
+    PageOrigin::new(
+        (video.provider, video_id),
+        link_sha256,
+        (
+            tools.yt_dlp.record.clone(),
+            tools.js_runtime.as_ref().map(|tool| tool.record.clone()),
+        ),
+        acquired.through_proxy,
+        retrieved_at,
+        (bytes, acquired.join),
+    )
+    .map(|page| SourceOrigin::PlatformPage(Box::new(page)))
+    .map_err(|_| SourceError::Fetch(SourceFetchReason::Size))
+}
+
+/// The store's free-space rule, for a page's fetch: best effort, as for a
+/// copy; only a read that shows the space is short refuses.
+struct StoreRoom<'store>(&'store FilesystemSessionStore);
+
+impl PageRoom for StoreRoom<'_> {
+    fn has_room_for(&self, bytes: u64) -> bool {
+        !matches!(
+            self.0.ensure_room_for_copy(bytes),
+            Err(SessionStorageError::CapacityExhausted)
+        )
     }
 }
 
@@ -1140,7 +1289,7 @@ fn read_identified(
 }
 
 /// The admitted container family a file's first bytes announce.
-fn container_of(header: &[u8]) -> Option<SourceContainer> {
+pub(crate) fn container_of(header: &[u8]) -> Option<SourceContainer> {
     if header.get(4..8) == Some(b"ftyp".as_slice()) {
         Some(SourceContainer::IsoMedia)
     } else if header.get(..4) == Some([0x1a, 0x45, 0xdf, 0xa3].as_slice()) {

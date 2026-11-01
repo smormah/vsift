@@ -51,7 +51,8 @@ use vsift::{
     HostIsolation, IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError,
     OptionalComponentSet, PendingTranscription, PlanAcceptanceError, ProgressObserver,
     ScreenTextStop, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
-    SourcePathFault, TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    SourceFetchReason, SourcePathFault, TranscriptSourceError, UserConfigurationLocation,
+    attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
@@ -77,7 +78,7 @@ use vsift_contract::{
     WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, bundle_search_remediation,
     local_asr_failure_summary, local_asr_verification_summary, managed_lifecycle_remediation,
     media_tool_verification_summary, non_private_folder_summary, search_query_rejection_summary,
-    source_fetch_remediation, transcript_rejection_summary,
+    source_fetch_command, source_fetch_remediation, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -860,6 +861,9 @@ pub(crate) struct CommandFailure {
     /// The typed reason of a code that has reasons, written as
     /// `error.reason` (`SOURCE_FETCH_FAILED`, ADR 0028).
     reason: Option<&'static str>,
+    /// The remediation is the user's to approve (`required_authority`):
+    /// adding the optional online component (ADR 0028 section 4.7).
+    needs_confirmation: bool,
 }
 
 impl CommandFailure {
@@ -873,6 +877,7 @@ impl CommandFailure {
             suggested_command: Vec::new(),
             data: None,
             reason: None,
+            needs_confirmation: false,
         }
     }
 
@@ -914,6 +919,7 @@ impl CommandFailure {
             suggested_command,
             data: None,
             reason: None,
+            needs_confirmation: false,
         }
     }
 
@@ -953,6 +959,7 @@ impl From<FailureCode> for CommandFailure {
             suggested_command: Vec::new(),
             data: None,
             reason: None,
+            needs_confirmation: false,
         }
     }
 }
@@ -989,10 +996,8 @@ impl From<EngineError> for CommandFailure {
                 EngineError::Watch(failure) => Some(watch::remediation(*failure)),
                 _ => None,
             });
-        let reason = match &error {
-            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
-                Some(reason.identifier())
-            }
+        let fetch_reason = match &error {
+            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => Some(*reason),
             _ => None,
         };
         // The session first, then the job: the order an agent resolves them.
@@ -1045,7 +1050,12 @@ impl From<EngineError> for CommandFailure {
                 .iter()
                 .map(|argument| (*argument).to_owned())
                 .collect(),
-            _ => Vec::new(),
+            _ => fetch_reason
+                .and_then(source_fetch_command)
+                .unwrap_or_default()
+                .iter()
+                .map(|argument| (*argument).to_owned())
+                .collect(),
         };
         Self {
             code: error.failure_code(),
@@ -1054,7 +1064,8 @@ impl From<EngineError> for CommandFailure {
             affected_ids,
             suggested_command,
             data: None,
-            reason,
+            reason: fetch_reason.map(SourceFetchReason::identifier),
+            needs_confirmation: fetch_reason == Some(SourceFetchReason::WebPage),
         }
     }
 }
@@ -1484,6 +1495,9 @@ fn failure_response(
     }
     if let Some(reason) = failure.reason {
         response = response.with_error_reason(reason);
+    }
+    if failure.needs_confirmation {
+        response = response.requiring_user_confirmation();
     }
     response
 }
@@ -2032,6 +2046,61 @@ mod tests {
         assert_eq!(value["command"], "setup.install");
         assert_eq!(value["error"]["code"], "STORAGE_IO");
         assert_eq!(stderr, [] as [u8; 0]);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod web_page_failure {
+    use vsift::{EngineError, OpenSessionError, SourceFetchReason};
+    use vsift_contract::CommandName;
+
+    use super::{CommandFailure, failure_response};
+
+    fn answer(reason: SourceFetchReason) -> Result<serde_json::Value, serde_json::Error> {
+        let failure = CommandFailure::from(EngineError::OpenSession(
+            OpenSessionError::SourceFetch(reason),
+        ));
+        serde_json::to_value(failure_response(CommandName::Ingest, failure))
+    }
+
+    /// Adding the optional component is the user's decision (ADR 0028
+    /// section 4.7), wherever the remediation sends them.
+    #[test]
+    fn a_web_page_asks_the_user_and_no_other_reason_does() -> Result<(), serde_json::Error> {
+        let refused = answer(SourceFetchReason::WebPage)?;
+        let remediation = &refused["error"]["remediation"][0];
+        assert_eq!(refused["error"]["reason"], "web_page");
+        assert_eq!(remediation["required_authority"], "user_confirmation");
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            assert_eq!(
+                remediation["command"]["arguments"],
+                serde_json::json!([
+                    "setup",
+                    "plan",
+                    "--profile",
+                    "desktop",
+                    "--include",
+                    "online_links"
+                ])
+            );
+        } else {
+            assert!(remediation["command"].is_null());
+            assert!(
+                remediation["summary"]
+                    .as_str()
+                    .is_some_and(|summary| summary.contains("setup configure yt-dlp"))
+            );
+        }
+        for reason in SourceFetchReason::ALL {
+            if reason != SourceFetchReason::WebPage {
+                let refused = answer(reason)?;
+                assert_eq!(
+                    refused["error"]["remediation"][0]["required_authority"], "none",
+                    "{reason:?}"
+                );
+            }
+        }
         Ok(())
     }
 }

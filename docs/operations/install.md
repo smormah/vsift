@@ -447,7 +447,7 @@ vsift setup install --plan plan.json --accept-plan <the plan digest>
 ```
 
 - **`online_links`** is what fetching a video from a public web page (YouTube and other sites) needs: yt-dlp and
-  the Deno runtime it runs (the fetching itself, `ingest --url`, comes with its own change, #409), about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
+  the Deno runtime it runs, so `ingest --url` can read a public video page, about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
   Deno is MIT, and downloading from a site is subject to that site's terms. Direct HTTPS video links do not need it.
 - **Installed after the core.** `setup install` installs FFmpeg, whisper.cpp and the model first, then each
   optional component on its own. If an optional component cannot be installed (a proxy that blocks its download,

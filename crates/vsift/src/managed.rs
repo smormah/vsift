@@ -93,6 +93,11 @@ impl ManagedLookup<'_> {
         }
     }
 
+    /// The selected version of `component`, verified and held.
+    pub(crate) fn held(&mut self, component: ManagedComponent) -> Option<ManagedRuntimeHold> {
+        self.hold(component)
+    }
+
     /// The managed executable for `dependency`, carrying its version's hold.
     pub(crate) fn executable(
         &mut self,

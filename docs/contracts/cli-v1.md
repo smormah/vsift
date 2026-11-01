@@ -205,6 +205,30 @@ link that cannot be fetched answers the new code `SOURCE_FETCH_FAILED` (exit 3) 
 `not_a_video`, `truncated`, `strict_isolation`) and a fixed remediation that names the online step and says local
 files are not affected; it never echoes the link, the server's text or proxy credentials (example
 [`ingest-url-address-refused.json`](../../schemas/v1/examples/ingest-url-address-refused.json)).
+**A public video page (`0.3.0`, ADR 0028 sections 4.6 to 4.8, #409).** A link that answers with a web page goes
+to yt-dlp when one is set up; with none, the refusal stays `web_page`, whose remediation has `required_authority:
+"user_confirmation"` and names the optional `online_links` group (with `vsift setup plan --profile desktop
+--include online_links` as its command on Ubuntu x86-64) or, elsewhere, `vsift setup configure yt-dlp
+--executable <absolute-path>`, with no command because only the user knows the path. VSift keeps no list of sites.
+Resolution is by pair: a registered yt-dlp comes first and runs with the registered runtime or with none, never the
+managed Deno; a managed yt-dlp runs with the managed Deno only. A host written as an address, or an internal
+name, never reaches yt-dlp (`address_refused`), because yt-dlp connects with no address policy (known limit L-209).
+yt-dlp runs with an explicit argument array and an environment that holds only its private temporary folder, `HOME`
+set to the same folder, the proxy variables VSift honours, and what stops plugins and update checks. The video must
+be one finished video of at most 4 hours, offered over HTTPS as MP4 or WebM; the download limits above hold, counted
+on disk, and no growth for 30 seconds after the first byte stops it. Separate audio and video are joined by the
+verified FFmpeg as a stream copy. The `origin` has `kind` `platform_page`, `provider`, `video_id` only when the site
+reports the video public and `video_id_sha256` otherwise, `link_sha256`, `yt_dlp` and `js_runtime` (`source`
+`managed` with `catalogue_version`, or `user_managed` with `version` and `sha256`; `js_runtime` absent when none
+ran), `address_check` only as `proxy_resolved` (a proxy variable was handed to yt-dlp; its absence does not mean the
+connection was direct, because a user's yt-dlp on Windows or macOS can use a system proxy, L-209), `retrieved_at`,
+`bytes` and `joined` (`single_file` or
+`audio_video`); example [`ingest.page.json`](../../schemas/v1/examples/ingest.page.json). It never holds a title, an
+uploader, a description, an upload date, a format's URL or a header. Further `error.reason` values for a page:
+`login_required`, `age_restricted`, `bot_check`, `drm`, `region_blocked`, `private`, `removed`, `unsupported_site`,
+`extractor_broken`, `js_runtime_missing`, `network`, `playlist`, `live`, `too_long`, `not_https_format`,
+`unexpected_output`, `media_tools_missing` (separate streams and no verified FFmpeg) and `online_step_failed`.
+yt-dlp's text chooses a reason and is never echoed, stored or logged.
 **`SOURCE_FETCH_FAILED` is `retryable: false` as a code, whatever its reason:** nothing retries it automatically.
 The reasons `offline`, `stalled`, `truncated` and `deadline` describe a transfer that may succeed if the caller
 runs the command again (with a longer `--max-download-seconds` for `deadline`), as their remediations say; that

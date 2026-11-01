@@ -112,6 +112,7 @@ mod jobs;
 mod lifecycle;
 mod local_asr_check;
 mod managed;
+mod pages;
 mod prepare;
 mod progress;
 mod screen_text;
@@ -256,8 +257,9 @@ pub use vsift_domain::{
 };
 /// Online-source values that appear in this API (ADR 0028).
 pub use vsift_domain::{
-    AddressCheck, DirectLinkOrigin, DownloadLimits, DownloadLimitsError, HostName,
-    SourceFetchReason, SourceLink, SourceOrigin,
+    AddressCheck, DirectLinkOrigin, DownloadLimits, DownloadLimitsError, HostName, PageJoin,
+    PageOrigin, PageProvider, PageToolRecord, PageToolVersion, PageVideoId, SourceFetchReason,
+    SourceLink, SourceOrigin,
 };
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{

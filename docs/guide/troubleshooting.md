@@ -311,14 +311,25 @@ it, but may give the same stretch; a transcript file you supply is the sure reme
 ## `SOURCE_FETCH_FAILED`: a video link could not be fetched
 
 From 0.3.0, `vsift ingest --url <link>` fetches one video from a direct `https://` link to the file (MP4, MOV,
-MKV or WebM) into a new session. When it cannot, nothing is opened, no partial file is kept, local video files
-work as before, and the answer's `reason` says why. The link itself is never printed or stored.
+MKV or WebM), or from a public video page through yt-dlp when one is set up, into a new session. When it cannot,
+nothing is opened, no partial file is kept, local video files work as before, and the answer's `reason` says why.
+The link itself is never printed or stored.
 
 | `reason` | What happened | What to do |
 | --- | --- | --- |
 | `not_https`, `credentials_in_link`, `port_not_allowed` | The link is not `https://`, carries a user name or password, or names another port than 443. | Ask for a plain `https://` link to the file, or for the file. |
 | `address_refused` | The link, or a redirect, points at a private, local or internal address. VSift never fetches those. | If the video is on your own network, download it and open the file. |
-| `web_page`, `not_a_video` | The link is a web page (such as a video site's page), or what it serves is not a video file. | Use the link to the video file itself, or download the video and open the file. |
+| `web_page` | The link is a web page and no yt-dlp is set up to read it. | On Ubuntu x86-64, add the optional part: `vsift setup plan --profile desktop --include online_links` shows it. Elsewhere, register your own: `vsift setup configure yt-dlp --executable <absolute-path>`. Each site's terms apply. Or use the link to the video file, or open a file you downloaded. |
+| `not_a_video` | What the link or the page served is not a video file. | Use the link to the video file itself, or download the video and open the file. |
+| `login_required`, `age_restricted`, `private` | The site shows this video only after a sign-in. VSift never signs in and uses no cookies. | Download the video yourself, if you may, and open the file. |
+| `bot_check` | The site asked for proof that a person is asking, which is common from shared and cloud addresses. | Download the video yourself and open the file. |
+| `drm`, `region_blocked` | The video is protected against copying, or not offered where you are. VSift does not get around either. | Use another copy you may use. |
+| `removed`, `unsupported_site` | The site says the video is gone, or yt-dlp has no way to read the site. | Check the link, or find the video file's own link. |
+| `extractor_broken` | yt-dlp could not read the site as it is today, which happens when a site changes. This is not a VSift defect. | With a yt-dlp VSift installed, run `vsift setup plan` for a newer reviewed one. A yt-dlp you supplied is yours to update. |
+| `js_runtime_missing` | The site needs a JavaScript runtime that yt-dlp could not use. | With a yt-dlp you supplied, register Deno: `vsift setup configure js-runtime --executable <absolute-path>`. Otherwise run `vsift setup check`. |
+| `playlist`, `live`, `too_long`, `not_https_format` | The link is a playlist or channel, a stream that is live or not finished, a video over four hours or with no stated length, or offered only as a stream VSift does not fetch. | Use the link to one finished video, or open a file. |
+| `media_tools_missing` | The site offers separate audio and video, and joining them needs FFmpeg. | Run `vsift setup check`, then the command again. |
+| `network`, `unexpected_output`, `online_step_failed` | yt-dlp could not reach the site, left something other than the file expected (all of it was removed), or failed for a cause VSift cannot name. | Run the command again later. If you supplied yt-dlp, it may be out of date. |
 | `tls`, `proxy_auth`, `offline`, `stalled`, `truncated` | The network: a certificate that is not trusted, a proxy that wants credentials, no connection, no data for 30 seconds, a connection that ended early. | Check the network and run the command again. Proxy settings come from `HTTPS_PROXY` (or `ALL_PROXY`) and `NO_PROXY` (see below). |
 | `proxy_unusable` | `HTTPS_PROXY` or `ALL_PROXY` is set, but not to a proxy VSift can use. VSift does not go around a proxy you set. | Set it to the proxy's URL (`http://proxy.example:3128`) or to `host:port`, or unset it to connect directly. |
 | `size`, `deadline` | The video is larger than the download limit (4 GiB by default) or took longer than the time limit (30 minutes). | `--max-download-bytes` (up to 20 GiB) and `--max-download-seconds` (up to 4 hours) raise them. |
@@ -332,6 +343,8 @@ matched by host name only: an entry is a host (`videos.example.org`), a domain w
 (`*.example.org`), an IP address or a CIDR range, and an entry with a port. A host they were meant to exclude is sent
 through the proxy. Through a proxy, VSift cannot see the address a name resolves to, so it refuses internal-looking
 names (one label, `localhost`, `.local`, `.internal`, `.corp` and the like), on the link and on every redirect.
+yt-dlp gets the same proxy variables, in its environment and never on its command line. Whatever the proxy, yt-dlp
+makes its own connections, which VSift cannot see or limit.
 
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 

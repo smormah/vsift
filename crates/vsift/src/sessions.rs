@@ -18,13 +18,14 @@ use vsift_domain::{
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
     FfprobeSourceDuration, FilesystemAdmissionPermit, FilesystemSessionStore, FreeSpaceCheck,
-    MAX_SOURCE_BYTES, MediaProviderConformance, SessionRootProvisioning, SessionStatus,
-    SourceSnapshot,
+    MAX_SOURCE_BYTES, MediaProviderConformance, PageSourceStore, SessionRootProvisioning,
+    SessionStatus, SourceSnapshot,
 };
 
 use crate::{
     engine::{Engine, absolute_selection},
     error::{EngineError, SessionRootError},
+    pages::EnginePageTools,
     verification::Cancellation,
 };
 
@@ -588,6 +589,9 @@ impl Engine {
     /// session, then opens it exactly as [`Self::ingest`] opens a local file
     /// (ADR 0028, #407).
     ///
+    /// A link that answers with a web page goes to yt-dlp when one is set
+    /// up (ADR 0028 section 4.7), and is refused as `web_page` when none is.
+    ///
     /// This is the only operation that uses the network for a video, and
     /// only for the link the caller gave. HTTPS on port 443, no credentials,
     /// at most three redirects, public addresses only (checked where the
@@ -629,6 +633,10 @@ impl Engine {
 
     /// [`Self::ingest`] of a resolved request: a worker request's step
     /// passes its contained source and its recorded session id here.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one auditable path from the request to the opened session"
+    )]
     pub(crate) async fn ingest_prepared(
         &self,
         request: PreparedIngest,
@@ -663,6 +671,7 @@ impl Engine {
             Some(session_id) => session_id,
             None => self.new_session_id()?,
         };
+        let from_link = matches!(request.source, IngestSource::Link { .. });
         let (source, contained) = match request.source {
             IngestSource::Path(path) => (SessionSource::Local(path), None),
             // The contained adapter stages the opened file; the use case's
@@ -698,6 +707,22 @@ impl Engine {
             open.initialize_operation_id.clone(),
         );
         let opened = match contained {
+            None if from_link => {
+                open_session(
+                    PageSourceStore::new(
+                        store,
+                        EnginePageTools {
+                            engine: self,
+                            cancellation: request.cancellation.0.clone(),
+                        },
+                    ),
+                    open,
+                    import.as_ref(),
+                    clock_probe.as_ref(),
+                    &request.cancellation,
+                )
+                .await
+            }
             None => {
                 open_session(
                     store,

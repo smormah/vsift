@@ -5,7 +5,10 @@ use vsift_contract::CommandName;
 use super::{
     clock, push_outcome,
     text::{RenderedText, TerminalText, TooLarge},
-    view::{Bundle, CleanPage, Envelope, Opened, Origin, SessionPage, SessionStatus, Workspace},
+    view::{
+        Bundle, CleanPage, DirectOrigin, Envelope, Opened, Origin, PageOrigin, SessionPage,
+        SessionStatus, Workspace,
+    },
 };
 
 /// `ingest`: the newly opened session and any imported transcript.
@@ -245,9 +248,34 @@ fn push_status_lines(text: &mut TerminalText, status: &SessionStatus) {
 /// The `Fetched from:` line of a source fetched from a link (ADR 0028):
 /// hosts and the time only, never the link.
 fn push_origin(text: &mut TerminalText, origin: Option<&Origin>) {
-    let Some(origin) = origin else {
-        return;
-    };
+    match origin {
+        Some(Origin::Direct(origin)) => push_direct_origin(text, origin),
+        Some(Origin::Page(origin)) => push_page_origin(text, origin),
+        None => {}
+    }
+}
+
+/// A page's line: the site as yt-dlp names it, and whose yt-dlp it was.
+fn push_page_origin(text: &mut TerminalText, origin: &PageOrigin) {
+    text.push_fixed("Fetched from: a page yt-dlp read as ")
+        .push_value(&origin.provider)
+        .push_fixed(" at ")
+        .push_value(&origin.retrieved_at)
+        .push_fixed(if origin.yt_dlp.source == "user_managed" {
+            ", with the yt-dlp you supplied"
+        } else {
+            ", with the reviewed yt-dlp"
+        });
+    if origin.joined == "audio_video" {
+        text.push_fixed(", joined from separate audio and video");
+    }
+    if origin.address_check.as_deref() == Some("proxy_resolved") {
+        text.push_fixed(", through a proxy");
+    }
+    text.end_line();
+}
+
+fn push_direct_origin(text: &mut TerminalText, origin: &DirectOrigin) {
     text.push_fixed("Fetched from: ")
         .push_value(&origin.final_host);
     if origin.final_host != origin.requested_host {

@@ -9,11 +9,12 @@ use serde_json::Value;
 use vsift_application::OpenSessionOutcome;
 use vsift_contract::{
     CommandName, LifecycleResponse, OpenData, OperationResponse, TerminalEventResponse,
-    source_fetch_remediation,
+    source_fetch_command, source_fetch_remediation,
 };
 use vsift_domain::{
-    AddressCheck, DirectLinkOrigin, FailureCode, HostName, PublicationGuarantee, SessionId,
-    SessionLifetime, Sha256Hex, SourceFetchReason, SourceId, SourceOrigin, StorageGeneration,
+    AddressCheck, DirectLinkOrigin, FailureCode, HostName, PageJoin, PageOrigin, PageProvider,
+    PageToolRecord, PageToolVersion, PageVideoId, PublicationGuarantee, SessionId, SessionLifetime,
+    Sha256Hex, SourceFetchReason, SourceId, SourceOrigin, StorageGeneration,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -81,6 +82,86 @@ fn nasa_origin() -> Result<SourceOrigin, Box<dyn Error>> {
         1_790_208_000,
         72_873_726,
     )?))
+}
+
+/// A page fetched by a managed yt-dlp with its Deno, joined from two streams,
+/// its id kept only as a digest.
+fn page_origin() -> Result<SourceOrigin, Box<dyn Error>> {
+    let digest = |character: char| {
+        Sha256Hex::parse(character.to_string().repeat(64)).map_err(|_| "digest".to_owned())
+    };
+    Ok(SourceOrigin::PlatformPage(Box::new(PageOrigin::new(
+        (
+            PageProvider::parse("Generic")?,
+            PageVideoId::Digest(digest('b')?),
+        ),
+        digest('c')?,
+        (
+            PageToolRecord::Managed {
+                catalogue_version: PageToolVersion::parse("yt-dlp-2026.08.19-linux-x86_64")?,
+            },
+            Some(PageToolRecord::Managed {
+                catalogue_version: PageToolVersion::parse("deno-2.9.7-x86_64-linux-gnu")?,
+            }),
+        ),
+        true,
+        1_790_208_000,
+        (72_873_726, PageJoin::AudioVideo),
+    )?)))
+}
+
+#[test]
+fn an_ingest_from_a_page_states_its_origin_and_matches_its_example() -> TestResult {
+    let opened = OpenSessionOutcome {
+        session_id: SessionId::parse(SESSION)?,
+        source_id: SourceId::parse(SOURCE)?,
+        source_bytes: 72_873_726,
+        generation: StorageGeneration::from_value(1),
+        publication: PublicationGuarantee::ProcessCrashConsistent,
+        lifetime: SessionLifetime::open(1_790_208_000)?,
+        time_anchors: vsift_domain::TimeAnchors::none(),
+        origin: Some(page_origin()?),
+    };
+    let value = serde_json::to_value(
+        OperationResponse::complete("ingest", &OpenData::new(&opened, EXPIRES_AT.to_owned()))?
+            .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())),
+    )?;
+    regenerate("examples/ingest.page.json", &value)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("ingest-data.schema.json", &value["data"])?;
+    assert_eq!(value, load("examples/ingest.page.json")?);
+    let origin = &value["data"]["origin"];
+    assert_eq!(origin["kind"], "platform_page");
+    assert_eq!(origin["joined"], "audio_video");
+    assert_eq!(origin["address_check"], "proxy_resolved");
+    assert_eq!(origin["yt_dlp"]["source"], "managed");
+    for member in [
+        "video_id",
+        "title",
+        "uploader",
+        "upload_date",
+        "url",
+        "link",
+    ] {
+        assert!(origin.get(member).is_none(), "{member}");
+    }
+    Ok(())
+}
+
+/// A web page with no yt-dlp set up names the optional component and asks the
+/// user first; no other reason needs anyone's approval.
+#[test]
+fn only_a_web_page_asks_for_confirmation_and_offers_a_command() {
+    assert!(source_fetch_remediation(SourceFetchReason::WebPage).contains("reason web_page"));
+    for reason in SourceFetchReason::ALL {
+        let expected = reason == SourceFetchReason::WebPage
+            && cfg!(all(target_os = "linux", target_arch = "x86_64"));
+        assert_eq!(
+            source_fetch_command(reason).is_some(),
+            expected,
+            "{reason:?}"
+        );
+    }
 }
 
 #[test]

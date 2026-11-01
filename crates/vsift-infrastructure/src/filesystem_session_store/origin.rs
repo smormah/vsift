@@ -10,12 +10,26 @@
 
 use serde::{Deserialize, Serialize};
 use vsift_application::SessionStorageError;
-use vsift_domain::{AddressCheck, DirectLinkOrigin, HostName, Sha256Hex, SourceOrigin};
+use vsift_domain::{
+    AddressCheck, DirectLinkOrigin, HostName, PageJoin, PageOrigin, PageProvider, PageToolRecord,
+    PageToolVersion, PageVideoId, Sha256Hex, SourceOrigin,
+};
 
-/// One stored origin.
+/// One stored origin. Each form names its `kind` and refuses a member it does
+/// not know, so the two cannot be mistaken for each other.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum StoredOrigin {
+    /// A direct link (#407).
+    Direct(StoredDirectOrigin),
+    /// A page fetched through yt-dlp (#409).
+    Page(Box<StoredPageOrigin>),
+}
+
+/// The stored form of a direct link's origin.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct StoredOrigin {
+pub(super) struct StoredDirectOrigin {
     kind: String,
     link_sha256: String,
     requested_host: String,
@@ -26,10 +40,112 @@ pub(super) struct StoredOrigin {
     bytes: u64,
 }
 
+/// The stored form of a page's origin.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct StoredPageOrigin {
+    kind: String,
+    provider: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    video_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    video_id_sha256: Option<String>,
+    link_sha256: String,
+    yt_dlp: StoredPageTool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    js_runtime: Option<StoredPageTool>,
+    through_proxy: bool,
+    retrieved_at_unix_seconds: u64,
+    bytes: u64,
+    joined: String,
+}
+
+/// The stored form of a page's tool: a catalogue version, or a user's file.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredPageTool {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    catalogue_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
+}
+
+fn encode_page_tool(tool: &PageToolRecord) -> StoredPageTool {
+    match tool {
+        PageToolRecord::Managed { catalogue_version } => StoredPageTool {
+            catalogue_version: Some(catalogue_version.as_str().to_owned()),
+            version: None,
+            sha256: None,
+        },
+        PageToolRecord::UserManaged { version, sha256 } => StoredPageTool {
+            catalogue_version: None,
+            version: Some(version.as_str().to_owned()),
+            sha256: Some(sha256.as_str().to_owned()),
+        },
+    }
+}
+
+fn decode_page_tool(stored: &StoredPageTool) -> Result<PageToolRecord, SessionStorageError> {
+    let integrity = |_| SessionStorageError::IntegrityFailure;
+    match (&stored.catalogue_version, &stored.version, &stored.sha256) {
+        (Some(catalogue_version), None, None) => Ok(PageToolRecord::Managed {
+            catalogue_version: PageToolVersion::parse(catalogue_version).map_err(integrity)?,
+        }),
+        (None, Some(version), Some(sha256)) => Ok(PageToolRecord::UserManaged {
+            version: PageToolVersion::parse(version).map_err(integrity)?,
+            sha256: Sha256Hex::parse(sha256.clone())
+                .map_err(|_| SessionStorageError::IntegrityFailure)?,
+        }),
+        _ => Err(SessionStorageError::IntegrityFailure),
+    }
+}
+
+fn decode_page_origin(
+    stored: &StoredPageOrigin,
+    source_bytes: u64,
+) -> Result<SourceOrigin, SessionStorageError> {
+    let integrity = |_| SessionStorageError::IntegrityFailure;
+    if stored.kind != "platform_page" || stored.bytes != source_bytes {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let video_id = match (&stored.video_id, &stored.video_id_sha256) {
+        (Some(id), None) if PageVideoId::is_id_shaped(id) => PageVideoId::Public(id.clone()),
+        (None, Some(digest)) => PageVideoId::Digest(
+            Sha256Hex::parse(digest.clone()).map_err(|_| SessionStorageError::IntegrityFailure)?,
+        ),
+        _ => return Err(SessionStorageError::IntegrityFailure),
+    };
+    let joined =
+        PageJoin::from_identifier(&stored.joined).ok_or(SessionStorageError::IntegrityFailure)?;
+    let page = PageOrigin::new(
+        (
+            PageProvider::parse(&stored.provider).map_err(integrity)?,
+            video_id,
+        ),
+        Sha256Hex::parse(stored.link_sha256.clone())
+            .map_err(|_| SessionStorageError::IntegrityFailure)?,
+        (
+            decode_page_tool(&stored.yt_dlp)?,
+            stored
+                .js_runtime
+                .as_ref()
+                .map(decode_page_tool)
+                .transpose()?,
+        ),
+        stored.through_proxy,
+        stored.retrieved_at_unix_seconds,
+        (stored.bytes, joined),
+    )
+    .map_err(integrity)?;
+    Ok(SourceOrigin::PlatformPage(Box::new(page)))
+}
+
 /// The stored form of `origin`.
 pub(super) fn encode_origin(origin: &SourceOrigin) -> StoredOrigin {
     match origin {
-        SourceOrigin::DirectHttps(direct) => StoredOrigin {
+        SourceOrigin::DirectHttps(direct) => StoredOrigin::Direct(StoredDirectOrigin {
             kind: origin.kind().to_owned(),
             link_sha256: direct.link_sha256().as_str().to_owned(),
             requested_host: direct.requested_host().as_str().to_owned(),
@@ -38,7 +154,26 @@ pub(super) fn encode_origin(origin: &SourceOrigin) -> StoredOrigin {
             address_check: direct.address_check().identifier().to_owned(),
             retrieved_at_unix_seconds: direct.retrieved_at_unix_seconds(),
             bytes: direct.bytes(),
-        },
+        }),
+        SourceOrigin::PlatformPage(page) => {
+            let (video_id, video_id_sha256) = match page.video_id() {
+                PageVideoId::Public(id) => (Some(id.clone()), None),
+                PageVideoId::Digest(digest) => (None, Some(digest.as_str().to_owned())),
+            };
+            StoredOrigin::Page(Box::new(StoredPageOrigin {
+                kind: origin.kind().to_owned(),
+                provider: page.provider().as_str().to_owned(),
+                video_id,
+                video_id_sha256,
+                link_sha256: page.link_sha256().as_str().to_owned(),
+                yt_dlp: encode_page_tool(page.yt_dlp()),
+                js_runtime: page.js_runtime().map(encode_page_tool),
+                through_proxy: page.through_proxy(),
+                retrieved_at_unix_seconds: page.retrieved_at_unix_seconds(),
+                bytes: page.bytes(),
+                joined: page.joined().identifier().to_owned(),
+            }))
+        }
     }
 }
 
@@ -53,6 +188,10 @@ pub(super) fn decode_origin(
     stored: &StoredOrigin,
     source_bytes: u64,
 ) -> Result<SourceOrigin, SessionStorageError> {
+    let stored = match stored {
+        StoredOrigin::Direct(stored) => stored,
+        StoredOrigin::Page(stored) => return decode_page_origin(stored, source_bytes),
+    };
     let integrity = |_| SessionStorageError::IntegrityFailure;
     if stored.kind != "direct_https" || stored.bytes != source_bytes {
         return Err(SessionStorageError::IntegrityFailure);
@@ -122,6 +261,79 @@ mod tests {
         );
         let read: StoredOrigin = serde_json::from_str(&json)?;
         assert_eq!(decode_origin(&read, 4_096)?, origin);
+        Ok(())
+    }
+
+    fn page_origin(public: bool) -> Result<SourceOrigin, Box<dyn Error>> {
+        let digest = Sha256Hex::parse("b".repeat(64)).map_err(|_| "digest")?;
+        Ok(SourceOrigin::PlatformPage(Box::new(PageOrigin::new(
+            (
+                PageProvider::parse("Generic")?,
+                PageVideoId::recorded("abc-1", digest.clone(), public),
+            ),
+            digest.clone(),
+            (
+                PageToolRecord::Managed {
+                    catalogue_version: PageToolVersion::parse("yt-dlp-2026.08.19-linux-x86_64")?,
+                },
+                Some(PageToolRecord::UserManaged {
+                    version: PageToolVersion::parse("deno 2.9.7")?,
+                    sha256: digest,
+                }),
+            ),
+            true,
+            1_792_587_792,
+            (4_096, PageJoin::AudioVideo),
+        )?)))
+    }
+
+    #[test]
+    fn a_page_origin_round_trips_and_its_id_is_kept_as_it_was_recorded()
+    -> Result<(), Box<dyn Error>> {
+        for public in [true, false] {
+            let origin = page_origin(public)?;
+            let json = serde_json::to_string(&encode_origin(&origin))?;
+            assert_eq!(json.contains("abc-1"), public, "{json}");
+            let read: StoredOrigin = serde_json::from_str(&json)?;
+            assert_eq!(decode_origin(&read, 4_096)?, origin);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_modified_page_origin_is_an_integrity_failure() -> Result<(), Box<dyn Error>> {
+        let json = serde_json::to_string(&encode_origin(&page_origin(true)?))?;
+        for (from, to) in [
+            (r#""kind":"platform_page""#, r#""kind":"direct_https""#),
+            (r#""provider":"Generic""#, r#""provider":"a b""#),
+            (r#""video_id":"abc-1""#, r#""video_id":"a b""#),
+            (r#""joined":"audio_video""#, r#""joined":"other""#),
+            (
+                r#""catalogue_version":"yt-dlp-2026.08.19-linux-x86_64""#,
+                r#""version":"2026.08.19""#,
+            ),
+        ] {
+            assert_ne!(json, json.replace(from, to), "{from}");
+            let read: StoredOrigin = serde_json::from_str(&json.replace(from, to))?;
+            assert_eq!(
+                decode_origin(&read, 4_096),
+                Err(SessionStorageError::IntegrityFailure),
+                "{to}"
+            );
+        }
+        let read: StoredOrigin = serde_json::from_str(&json)?;
+        assert_eq!(
+            decode_origin(&read, 1),
+            Err(SessionStorageError::IntegrityFailure),
+            "the size must be the source's"
+        );
+        assert!(
+            serde_json::from_str::<StoredOrigin>(
+                &json.replace(r#""bytes":4096"#, r#""bytes":4096,"title":"a title""#)
+            )
+            .is_err(),
+            "a stored title is refused"
+        );
         Ok(())
     }
 

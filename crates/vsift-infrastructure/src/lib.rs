@@ -54,6 +54,8 @@ mod media_tool_verification;
 mod media_tool_verification_cache;
 mod ocr_runner;
 mod offline_artifact_import;
+mod page_acquisition;
+mod page_source_store;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -83,6 +85,8 @@ mod watch_output;
 mod whisper_build;
 mod whisper_cli;
 mod xz_tar_inventory;
+mod ytdlp_info;
+mod ytdlp_refusal;
 
 pub use archive_inventory::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, ArchiveInventoryError,
@@ -202,6 +206,8 @@ pub use ocr_runner::{
     parse_runner_description, parse_runner_output,
 };
 pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
+pub use page_acquisition::{PageTool, PageTools, ProxyVariables};
+pub use page_source_store::{PageSourceStore, PageToolSource};
 pub use process_dependency_probe::{
     DEFAULT_PROBE_TIMEOUT, ExplicitProbePaths, ProcessDependencyProbe,
 };
@@ -272,4 +278,10 @@ pub use whisper_cli::{
 pub use xz_tar_inventory::{
     MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory,
     inspect_xz_tar_selected_files, stage_xz_tar_selected_files,
+};
+pub use ytdlp_info::{
+    MAX_YTDLP_INFO_BYTES, SelectedFormat, YtDlpVideo, is_safe_format_id, parse_ytdlp_info,
+};
+pub use ytdlp_refusal::{
+    MAX_YTDLP_STDERR_BYTES, SITE_PHRASES, YTDLP_PHRASES, classify_ytdlp_failure,
 };

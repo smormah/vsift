@@ -2,7 +2,8 @@ name: Online video components review
 
 # The review of the optional online-video components' pins (ADR 0028 section 4):
 # yt-dlp's signed sums verified with its own key, Deno's one-entry zip read,
-# and both executables started once. It fetches pinned publisher files on a
+# both executables started once, and yt-dlp's phrases and flags checked. It
+# fetches pinned publisher files on a
 # disposable hosted runner only; nothing is fetched to a development machine.
 on:
   workflow_dispatch:
@@ -11,6 +12,8 @@ on:
       - .github/workflows/online-video-components-review.yml
       - tools/online_video_component_review.py
       - tools/test_online_video_component_review.py
+      - crates/vsift-infrastructure/src/ytdlp_refusal.rs
+      - crates/vsift-infrastructure/src/page_acquisition.rs
 
 permissions: {}
 

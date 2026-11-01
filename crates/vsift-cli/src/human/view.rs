@@ -646,15 +646,41 @@ pub(crate) struct ClockTime {
     pub(crate) end: Option<Clock>,
 }
 
-/// Where a fetched source came from (ADR 0028): hosts and a digest, never
-/// the link.
+/// Where a fetched source came from (ADR 0028), never the link.
 #[derive(Debug, Deserialize)]
-pub(crate) struct Origin {
+#[serde(untagged)]
+pub(crate) enum Origin {
+    /// A direct link: hosts and a digest.
+    Direct(DirectOrigin),
+    /// A public page fetched through yt-dlp.
+    Page(PageOrigin),
+}
+
+/// The origin of a direct link.
+#[derive(Debug, Deserialize)]
+pub(crate) struct DirectOrigin {
     pub(crate) requested_host: String,
     pub(crate) final_host: String,
     pub(crate) redirects: u64,
     pub(crate) address_check: String,
     pub(crate) retrieved_at: String,
+}
+
+/// The origin of a page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PageOrigin {
+    pub(crate) provider: String,
+    pub(crate) yt_dlp: PageTool,
+    pub(crate) joined: String,
+    pub(crate) retrieved_at: String,
+    #[serde(default)]
+    pub(crate) address_check: Option<String>,
+}
+
+/// Which tool fetched a page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PageTool {
+    pub(crate) source: String,
 }
 
 /// A session's committed status (`session status`, `renew`, `close`).
