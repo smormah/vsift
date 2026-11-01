@@ -709,7 +709,13 @@ impl Engine {
         let opened = match contained {
             None if from_link => {
                 open_session(
-                    PageSourceStore::new(store, EnginePageTools(self)),
+                    PageSourceStore::new(
+                        store,
+                        EnginePageTools {
+                            engine: self,
+                            cancellation: request.cancellation.0.clone(),
+                        },
+                    ),
                     open,
                     import.as_ref(),
                     clock_probe.as_ref(),

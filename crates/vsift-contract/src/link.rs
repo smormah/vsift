@@ -264,9 +264,9 @@ pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str
 /// with a managed yt-dlp it names the optional group; elsewhere the user
 /// supplies the tool (ADR 0028 sections 4.1 and 4.7).
 const WEB_PAGE_REMEDIATION: &str = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-    "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file, and no yt-dlp is set up to read it (reason web_page). Tell the user what the optional online_links group does and that each site's terms apply, then ask before adding it: vsift setup plan --profile desktop --include online_links shows it. Or ask for the video file's own link or for the file; do not fetch the page or the video yourself."
+    "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file, and no usable yt-dlp is set up to read it (reason web_page). Tell the user what the optional online_links group does and that each site's terms apply, then ask before adding it: vsift setup plan --profile desktop --include online_links shows it. Or ask for the video file's own link or for the file; do not fetch the page or the video yourself."
 } else {
-    "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file, and no yt-dlp is set up to read it (reason web_page). On this system the user supplies yt-dlp and registers it with vsift setup configure yt-dlp --executable <absolute-path>, and each site's terms apply; ask them before doing that. Or ask for the video file's own link or for the file; do not fetch the page or the video yourself."
+    "Fetching the video link failed; nothing was opened and local video files are not affected. The link is a web page, not a video file, and no usable yt-dlp is set up to read it (reason web_page). On this system the user supplies yt-dlp and registers it with vsift setup configure yt-dlp --executable <absolute-path>, and each site's terms apply; ask them before doing that. Or ask for the video file's own link or for the file; do not fetch the page or the video yourself."
 };
 
 /// The `vsift` arguments a remediation offers for `reason`, and whether they
