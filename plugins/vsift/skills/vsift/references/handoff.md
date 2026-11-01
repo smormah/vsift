@@ -216,8 +216,9 @@ never change a value or add one VSift did not print: a reading with `utc` null h
 no instant, and a `segment` is never dropped, because it is the reader's sign that the time may be
 off. When you state one, add `--session <session>` before `--json` in the check, which compares the
 text exactly with what VSift returns for that item now. Clock times can change after you read them,
-so a `clock_time_may_be_stale` finding means read the item again and cite what VSift returns now. In the statement and the prose, write only
-the time the citation states. A VSift before 0.3.0 refuses the member.
+so on a `clock_time_differs` or `clock_time_may_be_stale` finding, read the item again and cite what
+VSift returns now. In the statement and the prose, write only the time the citation states. A VSift
+before 0.3.0 refuses the member.
 
 `pixels_inspected` is yours alone: true only when you opened that image and read it.
 Times in the prose are written `mm:ss.mmm` from the microseconds VSift returned. When

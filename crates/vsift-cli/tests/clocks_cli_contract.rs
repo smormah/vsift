@@ -390,7 +390,7 @@ fn finding(data: &Value) -> (&Value, &Value) {
 
 /// The brief's journey (ADR 0029 decisions 24 and 25), through the binary: a
 /// report written before `clocks` ran, and one written before a gap was
-/// accepted, are told so, and a copy of what VSift returns now always passes.
+/// accepted, are told so, and a copy of what `VSift` returns now always passes.
 #[tokio::test]
 async fn a_handoff_is_held_to_the_clock_times_vsift_returns_now() -> TestResult {
     let root = OwnedRoot::new()?;

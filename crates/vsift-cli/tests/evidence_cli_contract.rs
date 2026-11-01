@@ -1295,7 +1295,7 @@ async fn a_cited_clock_time_is_held_for_each_kind_of_evidence() -> TestResult {
         "lifecycle": {"action": "left_open"}
     });
     let path = harness.root.path("report.md");
-    let mut checked = |handoff: &Value| -> Built<Value> {
+    let checked = |handoff: &Value| -> Built<Value> {
         fs::write(&path, format!("```vsift-handoff\n{handoff}\n```\n"))?;
         let output = harness.run(&[
             "handoff",

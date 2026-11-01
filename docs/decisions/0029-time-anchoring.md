@@ -715,8 +715,11 @@ session was read, and `identities_checked` does not count clock times: the findi
 - **One place:** `references/handoff.md` and `workflows/logs-by-clock.md`, mirrored in
   `plugins/vsift/`, with one sentence in `references/commands.md`. That page allowed exactly two forms
   of `handoff check`, neither with `--session`, so an agent's own check could never have held a clock
-  time; it now allows `--session <session>` before `--json` when a report states one. A matched
-  moment's citation carries its `clock_time`. A cited item with a `segment`
+  time; it now allows `--session <session>` before `--json` when a report states one. The trial
+  tooling reads that shape as the same one `free` call, with a literal session id only, or an agent
+  following the workflow would be graded as breaking the rules, so the `grader` freeze component moves
+  too. A trial's grade does not compare `clock_time`. A matched moment's citation carries its
+  `clock_time`. A cited item with a `segment`
   after a `detected` gap changes no value, but the subtraction may not hold past it, so the claim says
   so, with the gap's `jump_us`. An agent never runs `--accept-gap` or `--screen-zone` on its own
   reading. No line of `--help` changes.

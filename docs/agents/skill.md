@@ -446,9 +446,11 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **`references/commands.md`** allows `--session <session>` before `--json` in the two draft forms, when a report
   states a clock time. Without it an agent's own check could never hold one.
 - `SKILL.md` and the fuzz seed copy are unchanged, and `plugins/vsift/` mirrors the four files.
-- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten again at the merge
-  rebase (`v030` rules). W6c changes another part of the skill with no order between the two, so whichever merges
-  second rewrites it again. **Untried:** no trial scenario runs this until the cut.
+- **The trial tooling** (`tools/vsift-agent-trials/src/shell.rs`) reads the `--session` shape of each form as the
+  same one `free` call, with a literal session id only.
+- **The freeze:** the `skill` and `grader` components move; the draft rewrites them, and they are rewritten again
+  at the merge rebase (`v030` rules). W6c changes another part of the skill with no order between the two, so
+  whichever merges second rewrites it again. **Untried:** no trial scenario runs this until the cut.
 
 ## The change for 0.3.0: `vsift skill install`, `status` and `show` (ADR 0038 slice 3; draft, 2026-10-29)
 

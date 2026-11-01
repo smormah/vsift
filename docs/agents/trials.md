@@ -164,11 +164,16 @@ the skill. A trial may:
   (`@'` ... `'@ | vsift handoff check --json`), each only in its own shell: the heredoc
   in a POSIX shell (also inside `bash -lc`), the here-string in PowerShell (inside
   `powershell`/`pwsh -Command`); the body is the draft and is never read as commands.
+  Since 0.3.0 each form has one more shape, `vsift handoff check --session <id> --json`,
+  for a report that states a clock time, with `<id>` a literal session id by the handoff
+  schema's pattern. It is the same `free` call. A trial's grade does not compare
+  `clock_time`: only `handoff check --session` holds it
+  ([ADR 0029](../decisions/0029-time-anchoring.md), decision 28).
   In bash the here-string is not one (the draft's first apostrophe ends the quoting),
   so it is read as ordinary shell text.
   Anything wider (an unquoted or double-quoted delimiter, a double-quoted here-string,
-  another command or option, text after the closing line) is ordinary shell text and
-  stays strict (P13 PR 5);
+  another command or option, `--session` after `--json`, a variable or substitution as
+  the id, text after the closing line) is ordinary shell text and stays strict (P13 PR 5);
 - narrow a command's own output in the same pipeline with a line filter (`head`,
   `tail`, `Select-Object`, `Out-String`). The skill itself teaches only `| tail -n 1`
   (PowerShell `| Select-Object -Last 1`) after `--events jsonl`;
