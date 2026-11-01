@@ -74,7 +74,7 @@ VSift works without these. Each adds one thing, and `vsift setup` lists them on 
 
 - **On-screen text:** read and search the text shown in a recording.
 - **Speakers:** label who said what.
-- **Web videos:** open a public video page, as far as the site's terms allow ([how](docs/guide/online-videos.md)). Linux only for now.
+- **Web videos:** open a public video page, as far as the site's terms allow ([how](docs/guide/online-videos.md)). VSift adds it on Ubuntu; elsewhere you supply yt-dlp.
 
 Add one with `vsift setup --include web-videos`.
 ````

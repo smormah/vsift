@@ -33,7 +33,8 @@ vsift ingest --url <the page's link>
 
 VSift reads what the page offers, fetches one finished video of at most four hours, and joins separate sound and
 picture when the site serves them apart. Links that need a sign-in, links to a private or protected video, and links
-to your own network never work, and a playlist or channel, a live stream and a video over four hours are refused. When it fails, the answer says why
+to your own network never work, and a playlist or channel, a live stream and a video over four hours are refused.
+When it fails, the answer says why
 ([troubleshooting](troubleshooting.md#source_fetch_failed-a-video-link-could-not-be-fetched)); your local files are
 not affected.
 
