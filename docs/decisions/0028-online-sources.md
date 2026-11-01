@@ -1,6 +1,9 @@
 # ADR 0028: Online sources: direct HTTPS links and public video pages
 
-- Status: **Proposed, 2026-10-21.** The design was sent to the supervisor on 2026-10-21 and
+- Status: **Accepted, 2026-10-28,** with the merge of the first slice's pull request
+  ([#502](https://github.com/smormah/vsift/pull/502), `e5a70eb4`), as the rule below says. The
+  status was recorded late, on 2026-11-01.
+  **Proposed, 2026-10-21.** The design was sent to the supervisor on 2026-10-21 and
   given the go the same day, with the maintainer's decisions on the yt-dlp pin, the update
   path and joining separate audio and video, and the supervisor's on the rest (recorded below).
   It becomes Accepted with the merge of the first slice's pull request, after the `0.2.3` cut,
