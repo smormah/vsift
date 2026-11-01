@@ -293,7 +293,9 @@ SHA-256 of it), never from the delivery, so every redelivery carries the same id
   lasts while the session exists, or while the table is not full, and not for the retention:
   a duplicate delivered later runs again, and the same id with another request is accepted
   (the P14 soak met both, #286). **Acknowledge a message before the session can be
-  cleaned**, and do not rely on a replay or an `IDEMPOTENCY_CONFLICT` for an old id.
+  cleaned**, and do not rely on a replay or an `IDEMPOTENCY_CONFLICT` for an old id. A
+  supervisor that may redeliver late keeps its own ledger of the idempotency keys it has
+  acknowledged, which sticky routing needs as well.
 
 ## 6. Restart and recovery
 

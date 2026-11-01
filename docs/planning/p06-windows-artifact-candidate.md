@@ -2,7 +2,10 @@
 
 Date: 2026-09-13. Target: Windows 11 x64 desktop. This is a read-only source and
 archive-inventory review, **not** an accepted installer catalogue or permission to
-activate downloads. P06 and its source gate remain open.
+activate downloads. P06 and its source gate remain open. **Later position
+(2026-11-01):** P06 closed on the scope that ADR 0015 narrowed it to and is complete in the
+[delivery ledger](delivery-ledger.json); the Windows x86-64 catalogue of ADR 0032 is what
+the managed installation uses today. This record keeps its dated position.
 
 **2026-10-18:** the whisper.cpp v1.9.2 values below are the earlier pin; the hosted checks now stage v1.9.5 from the build release `b5454` ([the section of that date](#2026-10-18-re-pin-whispercpp-v195-build-b5454)).
 

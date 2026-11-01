@@ -442,6 +442,13 @@ impl LinkRoute {
         Self { test: Some(route) }
     }
 
+    #[cfg_attr(
+        not(any(test, feature = "install-test-hooks")),
+        allow(
+            clippy::unused_self,
+            reason = "the test route is read only with test hooks"
+        )
+    )]
     fn stall(&self) -> Duration {
         #[cfg(any(test, feature = "install-test-hooks"))]
         if let Some(route) = &self.test {
@@ -450,6 +457,13 @@ impl LinkRoute {
         STALL_DEADLINE
     }
 
+    #[cfg_attr(
+        not(any(test, feature = "install-test-hooks")),
+        allow(
+            clippy::unused_self,
+            reason = "the test route is read only with test hooks"
+        )
+    )]
     fn room_step(&self) -> u64 {
         #[cfg(any(test, feature = "install-test-hooks"))]
         if let Some(route) = &self.test {
@@ -464,6 +478,13 @@ impl LinkRoute {
         self.test.as_ref().and_then(|route| route.free_space)
     }
 
+    #[cfg_attr(
+        not(any(test, feature = "install-test-hooks")),
+        allow(
+            clippy::unused_self,
+            reason = "the test route is read only with test hooks"
+        )
+    )]
     fn allowance(&self) -> Allowance {
         #[cfg(any(test, feature = "install-test-hooks"))]
         if let Some(route) = &self.test {

@@ -71,10 +71,10 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | --- | --- | --- |
 | `setup` (plain) | The setup door for a person at a terminal: the check, one offer and one question, and an install only on a typed yes (ADR 0036). With `--unattended --install <parts>` it installs the named parts without asking and reports pass, fail or error; `--json` gives the `setup` result ([`setup.schema.json`](../../schemas/v1/setup.schema.json)). Attended, `--json` and `--events` answer `INVALID_ARGUMENT`; unattended, `--events` does | Since 0.3.0 (ADR 0036; the unattended form with the second pull request) |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner`, `yt-dlp` and `js-runtime` since 0.3.0) | Partial P06 |
-| `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
-| `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
-| `setup install` | Apply an accepted Ubuntu 24.04 x86-64 plan: download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
+| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner`, `yt-dlp` and `js-runtime` since 0.3.0) | Implemented in P06 (scope narrowed by ADR 0015) |
+| `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Implemented in P06 (scope narrowed by ADR 0015) |
+| `setup plan` | Read-only diagnosis plus exact reviewed catalogue actions and digest (Ubuntu 24.04 x86-64 and Windows x86-64, see "Catalogues per target"); manual guidance on unaccepted targets | Implemented in P06 (read-only plans); a Windows catalogue since 0.3.0 (ADR 0032) |
+| `setup install` | Apply an accepted plan (Ubuntu 24.04 x86-64 or Windows x86-64): download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
 | `setup list`, `setup repair` | Read-only: the managed versions of each component and whether each verifies; a diagnosis and the plan of existing commands that fixes it | Implemented in P13 PR 6 |
 | `setup rollback`, `setup remove` | Select the previous or a named verified managed version; remove a version, a component or abandoned stages | Implemented in P13 PR 6 |
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
@@ -3035,7 +3035,7 @@ second) with `status: "timed_out"` beside `existing_executable_probe_only`. Both
 then true of the moment each was observed; the step always follows the first, because it is
 part of what acceptance compares. Sharing one deadline between the two is not done. On **Ubuntu 24.04
 x86-64** it consults the reviewed, pinned catalogue for the paired FFmpeg and
-FFprobe build, whisper.cpp CLI and multilingual `base` model. It returns only
+FFprobe build, whisper.cpp CLI and multilingual `base` model (**Windows x86-64** has its own catalogue, which offers FFmpeg, FFprobe and the model: see "Catalogues per target" below). It returns only
 actions needed by the current probe and configured-model presence, with exact
 publisher URL, sizes, SHA-256, archive inventory, installed files, licence and
 notice/source links, known trust limits, private destination and permissions.
@@ -3070,7 +3070,7 @@ install. After a complete install `setup plan` shows every action `current`,
 `install_needed: false` and readiness no longer blocked on the managed tools, under
 the same digest.
 
-Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
+macOS ARM64, other hosts and expired or invalid catalogue
 entries return typed `unavailable_*` status, no actions or digest, and manual
 BYO guidance. Missing and unhealthy tools receive
 `manual_selection_required` unless a reviewed managed action applies.
