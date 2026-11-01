@@ -172,7 +172,7 @@ vsift frame get <session> --at <us> --json
 - Open the image at `data.files[].path` with your image tool, one image per step on
   `compact`. Record the `evidence_id` you cite and `delta_us` from `data.selections`:
   when it is not zero, the frame is from another moment than the one asked for.
-- To read small text, crop the frame (the rectangle is in the frame's pixels):
+- **Small numbers can be misread:** a frame taken while the screen moves can turn a digit into a different one, and enlarging does not bring it back. Read small text, and above all numbers, from a frame where the screen has settled: a candidate with stability `settled`, or a frame shortly after the change rather than during it. Compare a neighbouring frame (`frame neighbours`, `frame burst`). Treat a number read from text under about 10 px as uncertain unless a second frame or the transcript agrees. To read small text, crop the frame (the rectangle is in the frame's pixels):
 
 ```console
 vsift crop <session> <evidence> --rect <rect> --json

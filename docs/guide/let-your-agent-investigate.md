@@ -124,8 +124,9 @@ tell you the assistant read a frame correctly.
 
 ## 7. Without the skill
 
-An assistant that has no skill can still use VSift from its own help: `vsift --help` ends with "A typical
-investigation", a worked example of the commands in order, with the limits on result sizes and how to read an error.
+An assistant that has no skill can still use VSift from its own help: `vsift --help` (not the shorter `-h`) ends with
+"A typical investigation", a worked example of the commands in order, with how to cite each fact, how to read small
+numbers, the limits on result sizes and how to read an error.
 That has been measured only as a baseline on the 0.1.0 pre-release, before the help was extended: agents with only
 the CLI reached the key facts in 1 of 6 and 2 of 6 runs, and none installed anything. Use the skill when you want a
 report you can check.

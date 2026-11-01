@@ -75,33 +75,49 @@ fn parse_stdout(output: &std::process::Output) -> Result<Value, Box<dyn std::err
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
-/// P14 PR 7: both `-h` and `--help` carry the worked example (the supplied
-/// transcript path included) and the operator-only note, and every command's help
-/// says the two global options are for operators. `command::tests` parses every
-/// command the example names.
+/// The words of a help text, one space apart: where a line wraps is layout.
+fn flowed(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// P14 PR 7, #454 and design note E2: `--help` puts the commands a person
+/// reads first, then what an assistant without the skill reads: the worked
+/// example (the supplied transcript path included), how to cite, small numbers
+/// and the operator-only note. Every command's `--help` says the two global
+/// options are for operators. `command::tests` parses every command the
+/// example names.
 #[test]
-fn help_carries_the_typical_investigation_and_the_operator_note()
+fn long_help_puts_the_person_first_and_keeps_the_assistants_guidance()
 -> Result<(), Box<dyn std::error::Error>> {
-    for flag in ["-h", "--help"] {
-        let help = run(&[flag])?;
-        assert!(help.status.success(), "{flag}");
-        let text = String::from_utf8(help.stdout)?;
-        for needle in [
-            "A typical investigation",
-            "vsift setup check --json",
-            "vsift ingest <video> --json",
-            "--transcript <file>",
-            "--transcript-offset <microseconds>",
-            "vsift job start <session> --json",
-            "vsift job status <job> --json",
-            "vsift handoff check --json",
-            "are for operators who run VSift as a service",
-            "plan is theirs to accept",
-            "For operators who run a worker host; an agent leaves it out.",
-        ] {
-            assert!(text.contains(needle), "{flag}: missing {needle}");
-        }
+    let help = run(&["--help"])?;
+    assert!(help.status.success());
+    let text = flowed(&String::from_utf8(help.stdout)?);
+    for needle in [
+        "A typical investigation",
+        "vsift setup check --json",
+        "vsift ingest <video> --json",
+        "--transcript <file>",
+        "--transcript-offset <microseconds>",
+        "vsift job start <session> --json",
+        "vsift job status <job> --json",
+        "vsift handoff check --json",
+        "are for operators who run VSift as a service",
+        "plan is theirs to accept",
+        "For operators who run a worker host; an agent leaves it out.",
+        "Cite every fact.",
+        "names the id that says or shows it",
+        "a transcript segment (tsg_...)",
+        "a frame or crop (evd_...)",
+        "Small numbers can be misread.",
+        "a frame where the screen has settled",
+        "vsift frame neighbours <session> <evidence> --json",
+    ] {
+        assert!(text.contains(needle), "missing {needle}");
     }
+    let person = text.find("Get started").ok_or("no Get started group")?;
+    let citing = text.find("Cite every fact.").ok_or("no citing")?;
+    let example = text.find("A typical investigation").ok_or("no guidance")?;
+    assert!(person < citing && citing < example, "{text}");
     let ingest = String::from_utf8(run(&["ingest", "--help"])?.stdout)?;
     assert!(
         ingest.contains("--session-root") && ingest.contains("an agent leaves it out"),
@@ -110,12 +126,117 @@ fn help_carries_the_typical_investigation_and_the_operator_note()
     Ok(())
 }
 
+/// Design note E2: `-h` is the commands and the key options. It leaves out
+/// the assistant's guidance and the operators' options, and tells an assistant
+/// that stopped there where to read on.
+#[test]
+fn short_help_is_for_a_person_and_points_an_assistant_to_the_long_help()
+-> Result<(), Box<dyn std::error::Error>> {
+    let help = run(&["-h"])?;
+    assert!(help.status.success());
+    let text = String::from_utf8(help.stdout)?;
+    for needle in [
+        "point it at a video",
+        "vsift <video> [--output <folder>] [--keep <folder>]",
+        "Get started",
+        "Explore a video step by step",
+        "Advanced",
+        "--json",
+        "read  vsift --help  to the end",
+    ] {
+        assert!(text.contains(needle), "missing {needle}");
+    }
+    for needle in [
+        "A typical investigation",
+        "--session-root",
+        "--host-isolation",
+    ] {
+        assert!(!text.contains(needle), "kept {needle}");
+    }
+    let ingest = String::from_utf8(run(&["ingest", "-h"])?.stdout)?;
+    assert!(ingest.contains("Examples:"), "{ingest}");
+    assert!(ingest.contains("Guide: https://"), "{ingest}");
+    assert!(!ingest.contains("--session-root"), "{ingest}");
+    Ok(())
+}
+
+/// Design note E1: plain `vsift` is the short help, runs no check, and is
+/// neither `-h` nor `--help`.
+#[test]
+fn plain_vsift_says_where_to_start_and_runs_nothing() -> Result<(), Box<dyn std::error::Error>> {
+    let config = ConfigBase::new()?;
+    let base = config.path();
+    let output = with_config_base(&mut Command::cargo_bin("vsift")?, base)
+        .env("PATH", "")
+        .output()?;
+    assert!(output.status.success());
+    assert_eq!(output.stderr, [] as [u8; 0]);
+    let text = String::from_utf8(output.stdout)?;
+    for needle in [
+        "vsift setup ",
+        "vsift ./meeting.mp4 ",
+        "New here? Start with  vsift setup",
+        "vsift --help",
+    ] {
+        assert!(text.contains(needle), "missing {needle}: {text}");
+    }
+    assert!(!text.contains("Usage:"), "{text}");
+    assert!(!base.exists(), "plain vsift wrote to the per-user folders");
+    Ok(())
+}
+
+/// Design note E3: `vsift help <command>` is the same as `<command> --help`,
+/// at every depth.
+#[test]
+fn help_command_is_the_long_help() -> Result<(), Box<dyn std::error::Error>> {
+    for (help, flag) in [
+        (vec!["help"], vec!["--help"]),
+        (vec!["help", "watch"], vec!["watch", "--help"]),
+        (
+            vec!["help", "setup", "check"],
+            vec!["setup", "check", "--help"],
+        ),
+    ] {
+        let by_command = run(&help)?;
+        assert!(by_command.status.success(), "{help:?}");
+        assert_eq!(by_command.stdout, run(&flag)?.stdout, "{help:?}");
+    }
+    let unknown = run(&["help", "nope", "--json"])?;
+    assert_eq!(unknown.status.code(), Some(2));
+    assert_eq!(
+        parse_stdout(&unknown)?["error"]["remediation"][0]["command"]["arguments"],
+        serde_json::json!(["--help"])
+    );
+    Ok(())
+}
+
+/// Design note E4: help a program reads is the text as written, whatever
+/// width the environment claims.
+#[test]
+fn piped_help_ignores_the_environments_width() -> Result<(), Box<dyn std::error::Error>> {
+    for arguments in [["--help"].as_slice(), ["ingest", "--help"].as_slice()] {
+        let config = ConfigBase::new()?;
+        let base = config.path();
+        let narrow = with_config_base(&mut Command::cargo_bin("vsift")?, base)
+            .args(arguments)
+            .env("COLUMNS", "40")
+            .output()?;
+        let plain = with_config_base(&mut Command::cargo_bin("vsift")?, base)
+            .args(arguments)
+            .env_remove("COLUMNS")
+            .output()?;
+        assert!(narrow.status.success(), "{arguments:?}");
+        assert_eq!(narrow.stdout, plain.stdout, "{arguments:?}");
+    }
+    Ok(())
+}
+
 /// #340: an agent that has only the help learns, before it runs `audio`, that
 /// the clip is for a person or a speech tool, that a coding agent cannot
-/// listen to it, and that the transcript is how it reads speech. The one-line
-/// summary says it where the root help lists the command; `audio -h` and
-/// `audio --help` say it again, and the long form says what reading the
-/// file's bytes gives.
+/// listen to it, and that the transcript is how it reads speech. The root
+/// help lists the command by what it is for and says the rest in the
+/// assistant's part; `audio -h` and `audio --help` say it all, and the long
+/// form says what reading the file's bytes gives.
 #[test]
 fn audio_help_says_a_coding_agent_cannot_listen_and_reads_the_transcript()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -130,14 +251,16 @@ fn audio_help_says_a_coding_agent_cannot_listen_and_reads_the_transcript()
         .lines()
         .find(|line| line.trim_start().starts_with("audio "))
         .ok_or("the root help does not list audio")?;
+    assert!(listed.contains(needles[0]), "root help: {listed}");
+    let root = flowed(&root);
     for needle in needles {
-        assert!(listed.contains(needle), "root help: {needle}: {listed}");
+        assert!(root.contains(needle), "root help: {needle}");
     }
 
     for flag in ["-h", "--help"] {
         let output = run(&["audio", flag])?;
         assert!(output.status.success(), "{flag}");
-        let text = String::from_utf8(output.stdout)?;
+        let text = flowed(&String::from_utf8(output.stdout)?);
         for needle in needles {
             assert!(text.contains(needle), "audio {flag}: missing {needle}");
         }
@@ -156,7 +279,7 @@ fn help_and_version_publish_the_r0_namespace() -> Result<(), Box<dyn std::error:
     let help_text = String::from_utf8(help.stdout)?;
 
     assert!(help.status.success());
-    assert!(help_text.contains("Sift technical video"));
+    assert!(help_text.contains("point it at a video"));
     for namespace in [
         "setup",
         "ingest",

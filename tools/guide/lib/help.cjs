@@ -21,18 +21,20 @@ function normaliseHelp(text) {
     .trimEnd();
 }
 
-/** The commands a help text lists under `Commands:`, as `{ name, summary }`. */
+/**
+ * The commands a help text lists between its usage and its arguments or options, as
+ * `{ name, summary }`: under `Commands:`, or in the root help's groups.
+ */
 function listedCommands(help) {
   const lines = help.split('\n');
-  const start = lines.indexOf('Commands:');
-  if (start < 0) return [];
+  const usage = lines.findIndex((line) => line.startsWith('Usage:'));
+  if (usage < 0) return [];
   const commands = [];
-  for (const line of lines.slice(start + 1)) {
-    if (line.trim() === '') break;
+  for (const line of lines.slice(usage + 1)) {
+    if (line === 'Arguments:' || line === 'Options:') break;
     const match = /^ {2}(\S+)\s{2,}(.*)$/.exec(line);
-    if (!match) break;
     // The implicit `help` pseudo-command repeats what `--help` shows.
-    if (match[1] !== 'help') commands.push({ name: match[1], summary: match[2].trim() });
+    if (match && match[1] !== 'help') commands.push({ name: match[1], summary: match[2].trim() });
   }
   return commands;
 }
