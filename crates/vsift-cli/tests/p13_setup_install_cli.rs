@@ -738,6 +738,71 @@ struct OptionalFault {
     reason: &'static str,
 }
 
+/// The JSON result of the install: a partial success whose core is ready and
+/// whose optional group failed with the reason in `fault`, the first
+/// component fetched and the next one blocked.
+fn assert_partial_install_report(value: &Value, fault: &OptionalFault) -> TestResult {
+    validate("operation-response.schema.json", value)?;
+    validate("setup-install.schema.json", &value["data"])?;
+    assert_eq!(value["status"], "partial", "{value}");
+    assert!(value["error"].is_null(), "{value}");
+    let data = &value["data"];
+    assert_eq!(data["core"], "ready");
+    for component in data["components"].as_array().ok_or("no components")? {
+        assert_eq!(component["status"], "already_current", "{component}");
+    }
+    let optional = data["optional_components"]
+        .as_array()
+        .ok_or("no optional components")?;
+    assert_eq!(optional.len(), 2);
+    for component in optional {
+        assert_eq!(component["status"], "failed", "{component}");
+    }
+    assert_eq!(optional[0]["reason"], fault.reason, "{optional:?}");
+    assert_eq!(optional[0]["step"], "download");
+    assert_eq!(optional[0]["failure_code"], "DOWNLOAD_FAILED");
+    assert_eq!(optional[1]["reason"], "blocked");
+    let groups = data["optional_groups"]
+        .as_array()
+        .ok_or("no optional groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["name"], "online_links");
+    assert_eq!(groups[0]["status"], "not_installed");
+    assert_eq!(groups[0]["reason"], fault.reason);
+    assert_eq!(groups[0]["failure_code"], "DOWNLOAD_FAILED");
+    assert!(
+        groups[0]["next_step"]
+            .as_str()
+            .is_some_and(|text| text.contains("VSift is ready for local videos")),
+        "{}",
+        groups[0]
+    );
+    Ok(())
+}
+
+/// No stage is left in the managed root, and neither optional component is
+/// installed or selected.
+fn assert_nothing_left_behind(base: &Base) -> TestResult {
+    let root = base.managed_root();
+    for entry in fs::read_dir(&root)? {
+        let name = entry?.file_name();
+        assert!(
+            !name.to_string_lossy().starts_with("stage-"),
+            "a stage was left behind"
+        );
+    }
+    let store = ManagedArtifactStore::at(root.clone())?;
+    for component in [ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp] {
+        let selected = store.open_selected_runtime(component.identifier())?;
+        assert!(
+            selected.is_none(),
+            "{} was selected",
+            component.identifier()
+        );
+    }
+    Ok(())
+}
+
 /// ADR 0028 section 4.9, D-07: with the core stand-ins already current, a
 /// `setup install` of a plan that includes `online_links` whose optional
 /// download is cut off by the proxy in `fault` goes through the real
@@ -816,42 +881,7 @@ fn assert_optional_fault_leaves_the_core_ready(fault: &OptionalFault) -> TestRes
                 "{stderr}"
             );
         } else {
-            let value = json(&install)?;
-            validate("operation-response.schema.json", &value)?;
-            validate("setup-install.schema.json", &value["data"])?;
-            assert_eq!(value["status"], "partial", "{value}");
-            assert!(value["error"].is_null(), "{value}");
-            let data = &value["data"];
-            assert_eq!(data["core"], "ready");
-            for component in data["components"].as_array().ok_or("no components")? {
-                assert_eq!(component["status"], "already_current", "{component}");
-            }
-            let optional = data["optional_components"]
-                .as_array()
-                .ok_or("no optional components")?;
-            assert_eq!(optional.len(), 2);
-            for component in optional {
-                assert_eq!(component["status"], "failed", "{component}");
-            }
-            assert_eq!(optional[0]["reason"], fault.reason, "{optional:?}");
-            assert_eq!(optional[0]["step"], "download");
-            assert_eq!(optional[0]["failure_code"], "DOWNLOAD_FAILED");
-            assert_eq!(optional[1]["reason"], "blocked");
-            let groups = data["optional_groups"]
-                .as_array()
-                .ok_or("no optional groups")?;
-            assert_eq!(groups.len(), 1);
-            assert_eq!(groups[0]["name"], "online_links");
-            assert_eq!(groups[0]["status"], "not_installed");
-            assert_eq!(groups[0]["reason"], fault.reason);
-            assert_eq!(groups[0]["failure_code"], "DOWNLOAD_FAILED");
-            assert!(
-                groups[0]["next_step"]
-                    .as_str()
-                    .is_some_and(|text| text.contains("VSift is ready for local videos")),
-                "{}",
-                groups[0]
-            );
+            assert_partial_install_report(&json(&install)?, fault)?;
         }
         seen_output.push_str(&stdout);
         seen_output.push_str(&stderr);
@@ -871,23 +901,7 @@ fn assert_optional_fault_leaves_the_core_ready(fault: &OptionalFault) -> TestRes
         "the user name was printed"
     );
 
-    let root = base.managed_root();
-    for entry in fs::read_dir(&root)? {
-        let name = entry?.file_name();
-        assert!(
-            !name.to_string_lossy().starts_with("stage-"),
-            "a stage was left behind"
-        );
-    }
-    let store = ManagedArtifactStore::at(root.clone())?;
-    for component in [ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp] {
-        let selected = store.open_selected_runtime(component.identifier())?;
-        assert!(
-            selected.is_none(),
-            "{} was selected",
-            component.identifier()
-        );
-    }
+    assert_nothing_left_behind(&base)?;
     Ok(())
 }
 

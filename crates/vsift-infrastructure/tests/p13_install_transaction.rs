@@ -40,8 +40,8 @@ use vsift_application::{
     MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, NoProgress,
     OptionalComponent, OptionalComponentSet, ProgressSink, ReviewedArchiveLimits,
     ReviewedArchiveSelection, ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile,
-    RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal, install_managed_plan,
-    plan_managed_setup, plan_managed_setup_including,
+    RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal, install_managed_components,
+    install_managed_plan, plan_managed_setup, plan_managed_setup_including,
 };
 use vsift_domain::{
     ArtifactIntegrity, DependencyState, DependencyStatus, FailureCode, ManagedArtifactFormat,
