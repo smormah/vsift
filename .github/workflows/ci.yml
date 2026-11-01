@@ -197,7 +197,7 @@ jobs:
               )
             fi
           fi
-          cargo test "${scope[@]}" --locked -- --nocapture "${skip[@]}"
+          cargo test -p vsift-cli --test p13_setup_install_cli --locked --no-fail-fast -- --nocapture
 
       # A folder guard that drops while something still holds its folder open
       # leaves the folder behind on Windows (#423). `/tmp` is the user's

@@ -184,7 +184,11 @@ pub(crate) async fn install_saved(
         outcome.report(),
     )
     .with_cleanup(&outcome.cleanup().stages, &outcome.cleanup().versions);
-    match outcome.report().first_failure() {
+    match outcome
+        .report()
+        .first_failure()
+        .or_else(|| outcome.report().optional_failure())
+    {
         // The core is installed. When an optional component was not, the
         // result is still a success, `partial` with a warning so it is seen
         // (ADR 0032; exit 0).
