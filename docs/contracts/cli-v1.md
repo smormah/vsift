@@ -3186,7 +3186,33 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   is written. A session that is closed, expired or not found is a gap in
   `data.session.gap` (`session_closed`, `session_expired`, `session_not_found`), not a
   failure; the draft is still checked. A committed record that fails its integrity
-  check is `INTEGRITY_FAILURE`.
+  check is `INTEGRITY_FAILURE`. `data.session.resolved` says that the session was read,
+  whatever the findings; the findings carry the verdict.
+- **A citation's `clock_time` (0.3.0, [ADR 0029](../decisions/0029-time-anchoring.md),
+  decisions 23 to 27).** Any citation may state the `clock_time` VSift returned for the
+  item: `source` and `confidence`, any `clock_id` and `segment`, and its readings (`start`
+  and `end` for a transcript segment, `at` for a frame or crop, either or both for audio).
+  A reading holds `utc`, `local` or both, in VSift's exact form (the schema pins six
+  fraction digits, `Z` on `utc` and none on `local`), and `utc_offset` only beside both.
+  Without `--session` only the schema applies. With it, and an identity that resolved,
+  the stated value is compared as exact text with what VSift returns for that item now,
+  from the session's anchors now; `identities_checked` does not count it.
+  - `source`, `confidence`, `clock_id` and `segment` are compared whole, null being the
+    same as absent, so leaving out a `segment` VSift gives is refused. Each `utc`, `local`
+    and `utc_offset` is compared only where it is stated.
+  - **`clock_time_differs`:** a stated value is not VSift's, or the session has no anchor.
+  - **`clock_time_not_an_instant`:** VSift's reading has `utc` null, and the draft states
+    `utc` or `utc_offset`.
+  - **`clock_time_may_be_stale`:** a stated value differs and the session's clock record
+    has changed around the item: the selected anchor is `screen_clock_confirmed`, an
+    accepted gap lies between the anchor and the item, or, for `segment`, the session has
+    any gap. The check cannot tell a report that went stale from one that was wrong, and
+    says neither. It is an error like the others: read the item again and cite what VSift
+    returns now.
+
+  A time in a claim's `statement` or the Markdown is not read
+  ([L-245](../planning/known-limits.md#l-245)). A `handoff check` before `0.3.0` refuses a
+  citation that has the member, as it does `category`.
 - **Result.** Whenever the draft was read, the result is `complete` and the process
   exits 0 (decision H1), with `data` per `schemas/v1/handoff-check-data.schema.json`:
   `valid` (true exactly when `errors` is empty), `handoff_version` (`"1"`), `errors`,

@@ -205,6 +205,103 @@
       "description": "A time VSift recorded: optional, null or absent allowed; a given value must match the record.",
       "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/time_us" }]
     },
+    "clock_id": { "type": "string", "pattern": "^c[1-8]$" },
+    "clock_source": {
+      "enum": [
+        "operator",
+        "quicktime_creationdate",
+        "screen_clock_confirmed",
+        "container_creation_time",
+        "screen_timestamp",
+        "screen_clock"
+      ]
+    },
+    "clock_confidence": { "enum": ["exact", "high", "medium"] },
+    "clock_segment": {
+      "description": "Which segment of the timeline the item lies in, when VSift gives one. It is the sign that a gap divides the timeline, so it is never left out of a copy.",
+      "oneOf": [{ "type": "null" }, { "type": "integer", "minimum": 0, "maximum": 32 }]
+    },
+    "clock_reading": {
+      "description": "One reading, copied exactly as VSift printed it. State utc, local or both. utc_offset goes only beside both. A reading VSift gives with utc null has no zone and names no instant, so it is stated as local alone.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "utc": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$" }
+          ]
+        },
+        "local": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$" }
+          ]
+        },
+        "utc_offset": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string", "pattern": "^[+-][0-9]{2}:[0-9]{2}$" }
+          ]
+        }
+      },
+      "anyOf": [
+        { "required": ["utc"], "properties": { "utc": { "type": "string" } } },
+        { "required": ["local"], "properties": { "local": { "type": "string" } } }
+      ],
+      "allOf": [
+        {
+          "if": { "required": ["utc_offset"], "properties": { "utc_offset": { "type": "string" } } },
+          "then": {
+            "required": ["utc", "local"],
+            "properties": { "utc": { "type": "string" }, "local": { "type": "string" } }
+          }
+        }
+      ]
+    },
+    "clock_time_range": {
+      "description": "Optional (0.3.0): the clock_time VSift returned for a segment, copied. A given value must be what VSift returns now, with the session's source and any segment; a VSift before 0.3.0 refuses the member.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "confidence", "start", "end"],
+      "properties": {
+        "source": { "$ref": "#/$defs/clock_source" },
+        "confidence": { "$ref": "#/$defs/clock_confidence" },
+        "clock_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_id" }] },
+        "segment": { "$ref": "#/$defs/clock_segment" },
+        "start": { "$ref": "#/$defs/clock_reading" },
+        "end": { "$ref": "#/$defs/clock_reading" }
+      }
+    },
+    "clock_time_point": {
+      "description": "Optional (0.3.0): the clock_time VSift returned for a frame or crop, copied. A given value must be what VSift returns now, with the session's source and any segment; a VSift before 0.3.0 refuses the member.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "confidence", "at"],
+      "properties": {
+        "source": { "$ref": "#/$defs/clock_source" },
+        "confidence": { "$ref": "#/$defs/clock_confidence" },
+        "clock_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_id" }] },
+        "segment": { "$ref": "#/$defs/clock_segment" },
+        "at": { "$ref": "#/$defs/clock_reading" }
+      }
+    },
+    "clock_time_audio": {
+      "description": "Optional (0.3.0): the clock_time VSift returned for an audio clip, copied: its planned range (start and end), its first decoded sample (at), or both. A given value must be what VSift returns now, with the session's source and any segment; a VSift before 0.3.0 refuses the member.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "confidence"],
+      "anyOf": [{ "required": ["at"] }, { "required": ["start", "end"] }],
+      "properties": {
+        "source": { "$ref": "#/$defs/clock_source" },
+        "confidence": { "$ref": "#/$defs/clock_confidence" },
+        "clock_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_id" }] },
+        "segment": { "$ref": "#/$defs/clock_segment" },
+        "at": { "$ref": "#/$defs/clock_reading" },
+        "start": { "$ref": "#/$defs/clock_reading" },
+        "end": { "$ref": "#/$defs/clock_reading" }
+      }
+    },
     "transcript_segment_citation": {
       "description": "One transcript segment, as transcript get or search returned it. The segment_id is required; the revision and times are optional, because the harness resolves them from the segment's identity.",
       "type": "object",
@@ -216,7 +313,8 @@
         "revision_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/revision_id" }] },
         "segment_id": { "type": "string", "pattern": "^tsg_[a-z0-9]{16,64}$" },
         "start_us": { "$ref": "#/$defs/optional_time_us" },
-        "end_us": { "$ref": "#/$defs/optional_time_us" }
+        "end_us": { "$ref": "#/$defs/optional_time_us" },
+        "clock_time": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_time_range" }] }
       }
     },
     "frame_citation": {
@@ -245,7 +343,8 @@
         "pixels_inspected": {
           "description": "True only when the model opened this image and read it. Only the model knows it, so it is required.",
           "type": "boolean"
-        }
+        },
+        "clock_time": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_time_point" }] }
       }
     },
     "crop_citation": {
@@ -275,7 +374,8 @@
             }
           ]
         },
-        "pixels_inspected": { "type": "boolean" }
+        "pixels_inspected": { "type": "boolean" },
+        "clock_time": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_time_point" }] }
       }
     },
     "audio_citation": {
@@ -301,7 +401,8 @@
             }
           ]
         },
-        "actual_start_us": { "$ref": "#/$defs/optional_time_us" }
+        "actual_start_us": { "$ref": "#/$defs/optional_time_us" },
+        "clock_time": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/clock_time_audio" }] }
       }
     },
     "gap": {

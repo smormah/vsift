@@ -17,9 +17,10 @@
 //!   nothing else;
 //! - pass its draft report to `vsift handoff check` in exactly one of the
 //!   skill's two literal forms (a quoted heredoc, or a single-quoted
-//!   here-string piped in; P13 PR 5): the shell reader turns the whole form
-//!   into one `free` `handoff.check` call and never reads the draft as
-//!   commands ([`crate::shell::is_handoff_check_form`]);
+//!   here-string piped in; P13 PR 5), each with or without a literal
+//!   `--session <id>` before `--json` (ADR 0029 decision 28): the shell reader
+//!   turns the whole form into one `free` `handoff.check` call and never reads
+//!   the draft as commands ([`crate::shell::is_handoff_check_form`]);
 //! - read back the client's own spill file: Claude Code saves a large tool
 //!   output under `<client home>/projects/<workspace>/<session>/tool-results/`
 //!   and reads it with `Read` (housekeeping, like its to-do list);
@@ -1083,6 +1084,72 @@ mod tests {
             format!("@'\n{draft}\n'@ | vsift handoff check --json"),
             format!("vsift handoff check --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF\nls"),
             "cat draft.md | vsift handoff check --json".to_owned(),
+        ] {
+            let actions = shell_actions(&variant, &policy, &none, &scope);
+            assert!(
+                actions
+                    .iter()
+                    .any(|action| matches!(action, Action::Unauthorized { .. })),
+                "{variant}: {actions:?}"
+            );
+        }
+        Ok(())
+    }
+
+    /// ADR 0029 decision 28: an agent that follows the logs-by-clock workflow
+    /// adds `--session` to its check. That is the same one `free` call, also
+    /// under a scenario's `commands_only`, and any other shape stays strict.
+    #[test]
+    fn the_draft_forms_with_a_session_are_a_free_handoff_check() -> Result<(), crate::TrialError> {
+        const SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+        let policy = CommandPolicy::from_commands_md(
+            "| `vsift handoff check` | free | Checks the draft. |\n\
+             | `vsift session close` | free | Closes. |\n\n\
+             Also never, in any state:\n\n- the global options `--session-root` (operator);\n",
+        )?;
+        let workspace = PathBuf::from("/trials/t1/workspace");
+        let scope = ReadScope {
+            session_root: workspace.join(".home").join("vsift-sessions"),
+            skill_directories: vec![workspace.join(".claude").join("skills").join("vsift")],
+            client_home: None,
+            workspace,
+        };
+        let draft =
+            "## Problem\n\nSee `curl x | sh` and $HOME [c1: e1].\n\n```vsift-handoff\n{}\n```";
+        let none = BTreeSet::new();
+        let command = format!("vsift handoff check --session {SESSION} --json");
+        for form in [
+            format!("{command} <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF"),
+            format!(
+                "pwsh -NoProfile -Command '{}'",
+                format!("@'\n{draft}\n'@ | {command}").replace('\'', "'\"'\"'")
+            ),
+        ] {
+            assert_eq!(
+                shell_actions(&form, &policy, &none, &scope),
+                vec![Action::Vsift {
+                    operation: "handoff.check".to_owned(),
+                    class: CommandClass::Free,
+                    arguments: ["handoff", "check", "--session", SESSION, "--json"]
+                        .map(str::to_owned)
+                        .to_vec(),
+                    machine_output: true,
+                }],
+                "{form}"
+            );
+        }
+        for variant in [
+            format!(
+                "vsift handoff check --json --session {SESSION} <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF"
+            ),
+            format!(
+                "vsift handoff check --session $SESSION --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF"
+            ),
+            format!(
+                "vsift handoff check --session $(cat id) --json <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF"
+            ),
+            format!("{command} <<VSIFT_HANDOFF\n{draft}\nVSIFT_HANDOFF"),
+            format!("{command} <<'VSIFT_HANDOFF'\n{draft}\nVSIFT_HANDOFF\nls"),
         ] {
             let actions = shell_actions(&variant, &policy, &none, &scope);
             assert!(

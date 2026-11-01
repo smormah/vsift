@@ -164,11 +164,16 @@ the skill. A trial may:
   (`@'` ... `'@ | vsift handoff check --json`), each only in its own shell: the heredoc
   in a POSIX shell (also inside `bash -lc`), the here-string in PowerShell (inside
   `powershell`/`pwsh -Command`); the body is the draft and is never read as commands.
+  Since 0.3.0 each form has one more shape, `vsift handoff check --session <id> --json`,
+  for a report that states a clock time, with `<id>` a literal session id by the handoff
+  schema's pattern. It is the same `free` call. A trial's grade does not compare
+  `clock_time`: only `handoff check --session` holds it
+  ([ADR 0029](../decisions/0029-time-anchoring.md), decision 28).
   In bash the here-string is not one (the draft's first apostrophe ends the quoting),
   so it is read as ordinary shell text.
   Anything wider (an unquoted or double-quoted delimiter, a double-quoted here-string,
-  another command or option, text after the closing line) is ordinary shell text and
-  stays strict (P13 PR 5);
+  another command or option, `--session` after `--json`, a variable or substitution as
+  the id, text after the closing line) is ordinary shell text and stays strict (P13 PR 5);
 - narrow a command's own output in the same pipeline with a line filter (`head`,
   `tail`, `Select-Object`, `Out-String`). The skill itself teaches only `| tail -n 1`
   (PowerShell `| Select-Object -Last 1`) after `--events jsonl`;
@@ -950,6 +955,8 @@ state file recorded for another version: `records/`, `state-claude.json`, `state
 **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** W2's pull request ([ADR 0035](../decisions/0035-search-across-kept-sessions.md), 2026-10-30) adds one line to `references/commands.md`, classing `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and the whole-freeze digest `78a332a2...` to `cdfb205e...`; the other six components are unchanged. No agent has tried the command.
 
 **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** W6c's pull request (#454, 2026-11-01) adds the small-number advice to `SKILL.md` in one place, so the `skill` component moved `80c3933f...` to `930fabf1...` and the whole-freeze digest `ba60a2fb...` to `0cf5c9cb...`; the other six components are unchanged. `freeze write` at `4b2e4b1e05cb28dcec7336dd3b29fad8b5d1137a`, on `main` at `4a2f9cc2`, which had not moved since the draft freeze, so only `commit` changed. W10 writes it again at its own merge rebase. `vsift --help` is not a frozen component, so its new text needs no freeze of its own; cold scenarios read it from the binary under test.
+
+**W10's freeze.** 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut. W10's pull request ([ADR 0029](../decisions/0029-time-anchoring.md), note of 2026-10-31, #556) changes `references/handoff.md`, `references/commands.md`, `workflows/logs-by-clock.md` and `handoff.schema.json`, and `tools/vsift-agent-trials/src/shell.rs` reads the `--session` shape of the draft forms, so both `skill` and `grader` move. `freeze write` at `252d1d460cdb6624402e4aa5ef6f890216b4dacb`, on `main` at `f760dd22`, which already holds W6c's change, gave the `skill` digest `6065ffdb6261997ae2e89866609d56a1ea37cbe1f9d04f4a63f11c5ee6de396f` (it was `930fabf1...`), the `grader` digest `76d1243cea10da20553681cb5b5dfdea6b06eb1860843bc2a8ee12e07f84b3cb` (it was `da1b01be...`) and the whole-freeze digest `5d7d254ba1e6cbf669ebd72b1fad4eac3f268658fee83766b22bd5b43afea154` (it was `0cf5c9cb...`); the other five components are unchanged and `committed_freeze` pins the new value. The drafts of that pull request wrote earlier values, and this replaces them. No agent has tried it.
 
 **W3's freeze.** W3's pull request ([ADR 0029](../decisions/0029-time-anchoring.md), stage 2, #553, 2026-10-30) adds one line to `references/commands.md`, classing `clocks` `explicit`, with what `--screen-zone` and `--accept-gap` may carry. `freeze write` at `f73d3e81b87fc6662db06d9d71808beab5a145f1`, on the `main` that pull request was rebased onto to merge (`05eb1264`), gave the `skill` digest `80c3933f61cc5d63416b8790bd1745ef1b84c38f98773f2b066de0520bed2bca` (it was `7bbc0f98...`) and the whole-freeze digest `ba60a2fbe5682e99b47072d88b1dac6310a8b76e76cd0d920b96beb9e999a479` (it was `cdfb205e...`); the other six components are unchanged and `committed_freeze` pins the new value. The draft of that pull request had written the same digests, and this replaces it. No agent has tried the command.
 

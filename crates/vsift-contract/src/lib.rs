@@ -201,7 +201,7 @@ pub use candidates::{
     VISUAL_COVERAGE_WARNING, VISUAL_TOOLS_REMEDIATION, VisualCandidateData, candidates_response,
     candidates_response_with_view,
 };
-pub use clock::{ClockData, ClockTimeData, TimeAnchorData};
+pub use clock::{ClockData, ClockItemPosition, ClockTimeData, TimeAnchorData};
 pub use clocks::{
     CLOCK_RULES_REMEDIATION, CLOCKS_PARTIAL_WARNING, ClocksData, ClocksPresentation,
     READS_PENDING_REASON, clocks_response,

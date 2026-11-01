@@ -2,7 +2,8 @@
 
 - Status: **Accepted.** Stage 1 on 2026-10-27, with the merge of its pull request (#501), and
   stage 2, the amendment of 2026-10-30 at the end of this record, with the merge of its own
-  (#553), both for `0.3.0`. The design was sent to the supervisor on 2026-10-21 and given the go
+  (#553), both for `0.3.0`; the note of 2026-10-31 at the very end, on citing clock times in a report,
+  was accepted by the planner that day. The design was sent to the supervisor on 2026-10-21 and given the go
   the same day; the maintainer named the feature "time anchoring" and decided stage 1's scope
   and its split from stage 2 (below).
 - Date: 2026-10-21
@@ -119,7 +120,8 @@ The operator often knows the start exactly. VSift read none of this before `0.3.
 8. **No skill change in stage 1.** The skill's handoff schema cannot carry clock times
    (`additionalProperties: false`); the agent reads them from the JSON. Adding them to the
    handoff and the skill's procedure is a trial-freeze change for the `0.3.0` cut, in one
-   place, if the maintainer wants it.
+   place, if the maintainer wants it. *Note of 2026-10-31:* the maintainer wanted it; the last note
+   below is that change.
 
 9. **A clock face is not an instant (maintainer, 2026-10-21; binding on stage 2).** Screen
    shares in meetings span countries: the presenter's taskbar shows the presenter's own zone,
@@ -619,3 +621,112 @@ them is right.
   zones, a cut, a pause, a freeze, a midnight crossing, a meeting timer past its first hour, a chat full
   of static times, a scrolling log), and RM01, RM04 and RM10: no recording may gain a clock that a
   person cannot see.
+
+## Note of 2026-10-31: the handoff cites clock times
+
+Status: **Accepted, 2026-10-31, by the planner.** This is the one skill change decision 8 and
+the maintainer's answer of 2026-10-23 set aside for after stage 2. It changes no clock time, and no
+command takes one (L-239 stands).
+
+### 23. What a citation states
+
+Each of the four citation kinds takes an optional `clock_time`, which is VSift's own member for that
+item copied whole. A citation with none is unchanged, and so is a report.
+
+| Citation | Readings it holds | Why |
+| --- | --- | --- |
+| `transcript_segment` | `start` and `end` | A segment is a range |
+| `frame`, `crop` | `at` | The delivered frame's time |
+| `audio` | `start` and `end`, `at`, or all three | The planned range, and the first decoded sample |
+
+- `source` and `confidence` are required, so a time never travels without what it rests on.
+  `clock_id` and `segment` are optional, as they are in VSift's member.
+- A reading holds `utc`, `local` and `utc_offset`, each optional and nullable, with at least one of
+  `utc` and `local`, and `utc_offset` only beside both. So a report may state the time a reader needs,
+  and a whole copy is always valid.
+- **The form is VSift's, exactly.** The schema pins it with patterns: `utc` with six fraction digits
+  and `Z`, `local` with six fraction digits and no zone, `utc_offset` as `±HH:MM`. A malformed or
+  shortened time therefore fails without `--session`.
+- All four kinds take it because VSift gives each of them a clock time and a claim can rest on any of
+  them. A candidate is not a citation kind, so it takes none.
+
+*Rejected:* a time on the claim, because a claim can cite several items at different times; and one
+string on the citation, because it loses the source and the segment, which say how far to trust it.
+
+**A version-1 reader that predates it.** `handoff_version` stays `"1"`, as it did for `category`,
+`priority` and `transcript_pages`. Every report valid before stays valid. A `handoff check` before
+`0.3.0` refuses a citation that has the member, because the schema has `additionalProperties: false`
+and the citation matches none of its shapes. That is a refusal of the draft, not a failure, and
+`references/handoff.md` says so, as it does for `category`.
+
+### 24. What `handoff check --session` compares
+
+The check holds a stated clock time to what VSift returns for that item now. It works the value out
+with the same `ClockTimeData` constructors the results use, from the item's stored position and the
+session's anchors now, so the two cannot disagree. No evidence file is opened and nothing is written.
+A citation is compared only when its identity resolved with its kind.
+
+- `source`, `confidence`, `clock_id` and `segment` are compared whole, with null the same as absent.
+  **Leaving out a `segment` VSift gives is refused:** it is the reader's only sign that the time may be
+  off, so a copy cannot drop it.
+- For each reading stated, each of `utc`, `local` and `utc_offset` that is stated must equal VSift's.
+  The comparison is exact text, with no parsing. What is not stated is not compared, so a report may
+  give `utc` alone or `local` alone.
+- A clock time on an item in a session with no anchor is `clock_time_differs`, as is any other reading
+  or value VSift does not have.
+- **A time with no zone never becomes an instant (decision 9).** Where VSift's reading has `utc` null,
+  a stated `utc` or `utc_offset` is `clock_time_not_an_instant`, a rule of its own, so the message can
+  say why.
+
+### 25. When the anchors change after the report was written
+
+`--accept-gap` and `--screen-zone` change clock times by a person's word, and a later `clocks` can
+add a gap, so a report can go stale honestly. No stamp is added to the report: an agent has nothing to
+copy it from, and one that came only from the skeleton would be missing from other reports. The check
+states what it can see and does not say which happened:
+
+- Where a stated value differs and the session's record reaches that item, the rule is
+  `clock_time_may_be_stale`. The record reaches it when the selected anchor is
+  `screen_clock_confirmed`, when an accepted gap lies between the anchor and the item, or, for a
+  `segment` that differs, when the session has any gap.
+- Otherwise the rule is `clock_time_differs`.
+
+Both are errors. The report states a time VSift no longer gives, and the action is the same: read the
+item again and cite what VSift returns now. The rule's name and message claim nothing about the cause,
+because a made-up time in a session with a confirmed anchor gets it too. *Rejected:* undoing the changes and calling the report
+stale only if it then matches. With two accepted gaps, a report written between them matches neither
+end, and would be accused of an error it did not make.
+
+### 26. Without `--session`
+
+Only the schema applies, as for other citations. A session that is closed, expired or not found is
+the existing `gap`, and clock times are not compared, as identities are not.
+
+### 27. Three new finding codes
+
+`clock_time_differs`, `clock_time_not_an_instant` and `clock_time_may_be_stale`, of the `session`
+scope, added to `handoff-check-data.schema.json`. This is an additive contract change with tests, and
+it moves `committed_freeze`, as the skill change does anyway. `data.session` gains no member, so a
+report with no clock time answers byte for byte as before. `resolved` keeps its meaning, that the
+session was read, and `identities_checked` does not count clock times: the findings carry the verdict.
+
+### 28. The skill, the skeleton and what stays open
+
+- **One place:** `references/handoff.md` and `workflows/logs-by-clock.md`, mirrored in
+  `plugins/vsift/`, with one sentence in `references/commands.md`. That page allowed exactly two forms
+  of `handoff check`, neither with `--session`, so an agent's own check could never have held a clock
+  time; it now allows `--session <session>` before `--json` when a report states one. The trial
+  tooling reads that shape as the same one `free` call, with a literal session id only, or an agent
+  following the workflow would be graded as breaking the rules, so the `grader` freeze component moves
+  too. A trial's grade does not compare `clock_time`. A matched moment's citation carries its
+  `clock_time`. A cited item with a `segment`
+  after a `detected` gap changes no value, but the subtraction may not hold past it, so the claim says
+  so, with the gap's `jump_us`. An agent never runs `--accept-gap` or `--screen-zone` on its own
+  reading. No line of `--help` changes.
+- **`handoff skeleton`** writes empty `citations`, so it needs no change. A test pins that a skeleton
+  filled with a cited clock time passes.
+- **What remains (L-245):** only the structured member is held. A time in a claim's `statement` or in
+  the Markdown is not read, a closed session's clock times cannot be checked, and without `--session`
+  a time with no zone stated as an instant passes the schema. Where a value differs and the record
+  reaches the item, the check cannot tell a stale report from a wrong one. The workflow tells the agent
+  to write only what the citation states.

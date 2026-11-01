@@ -57,10 +57,10 @@ pub struct CommandPolicy {
 pub const HELP_OPERATION: &str = "help";
 
 /// The operation of `vsift handoff check`, which the skill's REPORT state
-/// runs on every draft before sending it (P13 PR 5). It reads only the
-/// draft, never the video or a session's evidence, so a scenario that
-/// limits which operations an agent may run (`commands_only`) always
-/// allows it, as it allows the help forms.
+/// runs on every draft before sending it (P13 PR 5). It reads the draft and,
+/// with `--session`, a session's identities and clock times, never the video
+/// or an evidence file, so a scenario that limits which operations an agent
+/// may run (`commands_only`) always allows it, as it allows the help forms.
 pub const HANDOFF_CHECK_OPERATION: &str = "handoff.check";
 
 /// The console lines of `commands.md` that make the help forms free.

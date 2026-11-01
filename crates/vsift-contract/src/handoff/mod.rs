@@ -19,7 +19,8 @@
 //!    control characters.
 //!
 //! [`HandoffCheck::resolve_in_session`] then optionally resolves the cited
-//! identities against one session's records, which a host reads.
+//! identities against one session's records, which a host reads, and holds
+//! each stated clock time to what `VSift` returns for that item now.
 //!
 //! `handoff skeleton` (ADR 0038) uses the same checker the other way round:
 //! [`HandoffChecker::skeleton`] writes a valid handoff that states nothing
@@ -262,8 +263,8 @@ impl HandoffCheck {
         self.session.as_ref()
     }
 
-    /// Resolves the cited identities against `records` of `session_id`.
-    /// Without a readable handoff nothing is cited, so nothing is checked.
+    /// Resolves the cited identities against `records` of `session_id` and
+    /// compares the clock times stated for them. Without a readable handoff nothing is cited, so nothing is checked.
     pub fn resolve_in_session(&mut self, session_id: &str, records: &HandoffSessionRecords) {
         let (check, findings) = session::resolve(
             self.handoff.as_ref().unwrap_or(&Value::Null),

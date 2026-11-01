@@ -3,8 +3,8 @@
 
 use vsift_application::SessionStorageError;
 use vsift_contract::{
-    HandoffEvidenceKind, HandoffSessionGap, HandoffSessionRecords, HandoffSkeletonFacts,
-    HandoffTranscriptBasis,
+    ClockItemPosition, HandoffEvidenceKind, HandoffSessionGap, HandoffSessionRecords,
+    HandoffSkeletonFacts, HandoffTranscriptBasis,
 };
 use vsift_domain::{CoverageBasis, EvidenceSubject, SearchCoverage, SessionId, SessionPhase};
 
@@ -18,7 +18,8 @@ use crate::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HandoffSessionLookup {
     /// The session is open: every transcript segment of every committed
-    /// revision, and every committed evidence item with its kind.
+    /// revision, every committed evidence item with its kind, where each lies
+    /// on the timeline, and the session's anchors now.
     Open(HandoffSessionRecords),
     /// The session's records cannot be read now.
     Unavailable(HandoffSessionGap),
@@ -63,10 +64,15 @@ impl Engine {
             ));
         }
         let mut records = HandoffSessionRecords::new();
+        records.set_time_anchors(status.time_anchors().clone());
         let read = store
             .visit_transcript_revisions(session_id, now, |revision| {
                 for segment in revision.segments() {
                     records.add_segment(segment.id().as_str());
+                    records.add_position(
+                        segment.id().as_str(),
+                        ClockItemPosition::Range(segment.range()),
+                    );
                 }
             })
             .and_then(|()| store.read_evidence_records(session_id, now));
@@ -88,12 +94,26 @@ impl Engine {
         };
         for record in inventory.records() {
             for item in record.items() {
-                let kind = match item.subject() {
-                    EvidenceSubject::Frame(_) => HandoffEvidenceKind::Frame,
-                    EvidenceSubject::Crop { .. } => HandoffEvidenceKind::Crop,
-                    EvidenceSubject::Audio { .. } => HandoffEvidenceKind::Audio,
+                let (kind, position) = match item.subject() {
+                    EvidenceSubject::Frame(frame) => (
+                        HandoffEvidenceKind::Frame,
+                        ClockItemPosition::Point(frame.time),
+                    ),
+                    EvidenceSubject::Crop { frame, .. } => (
+                        HandoffEvidenceKind::Crop,
+                        ClockItemPosition::Point(frame.time),
+                    ),
+                    EvidenceSubject::Audio {
+                        range,
+                        actual_start,
+                        ..
+                    } => (
+                        HandoffEvidenceKind::Audio,
+                        ClockItemPosition::RangeWithPoint(*range, *actual_start),
+                    ),
                 };
                 records.add_evidence(item.id().as_str(), kind);
+                records.add_position(item.id().as_str(), position);
             }
         }
         Ok(HandoffSessionLookup::Open(records))

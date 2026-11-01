@@ -165,7 +165,9 @@ vsift <namespace> <operation> --help
 
 Before you send the report, check it once with `vsift handoff check`. Pass your whole
 final message, unchanged, in place of `<report>`, in exactly one of these two forms and
-no other: no other command in the same call, no file, no variable. The quotes around
+no other: no other command in the same call, no file, no variable. The one addition
+allowed is `--session <session>` before `--json`, when your report states a clock time
+([handoff.md](handoff.md), "Citations"). The quotes around
 the first `VSIFT_HANDOFF` and the single quotes of `@'` keep your text exactly as
 written. Each form belongs to one shell; never use the other shell's form. **On Windows,
 use the PowerShell form whenever your client has a PowerShell tool** (Claude Code does): it

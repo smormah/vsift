@@ -20,7 +20,7 @@ use std::{
 
 use assert_cmd::Command;
 use jsonschema::{Retrieve, Uri};
-use serde_json::Value;
+use serde_json::{Value, json};
 use vsift::{
     DurabilityRequirement, MediaTime, OperationId, SessionId, StorageGeneration, TranscriptOffset,
 };
@@ -144,6 +144,7 @@ fn json(output: &Output) -> Built<Value> {
     if value["error"].is_null() {
         match value["command"].as_str() {
             Some("clocks") => validate("clocks-data.schema.json", &value["data"])?,
+            Some("handoff.check") => validate("handoff-check-data.schema.json", &value["data"])?,
             Some("session.status") => {
                 validate("time-anchor.schema.json", &value["data"]["time_anchor"])?;
             }
@@ -340,6 +341,164 @@ fn item_after_the_gap(root: &OwnedRoot) -> Built<Value> {
         })
         .cloned()
         .ok_or_else(|| "no segment after the gap".into())
+}
+
+/// A report citing `item`, with `clock_time` on the citation when it is given.
+fn report_citing(item: &Value, clock_time: Option<&Value>) -> String {
+    let mut citation = json!({"id": "e1", "type": "transcript_segment",
+        "segment_id": item["segment_id"]});
+    if let Some(clock_time) = clock_time {
+        citation["clock_time"] = clock_time.clone();
+    }
+    let handoff = json!({
+        "handoff_version": "1", "status": "complete",
+        "question": "What is said at the time of the log line?",
+        "capabilities": {"image_access": "unavailable"},
+        "claims": [{"id": "c1", "section": "context", "kind": "observed", "support": "supported",
+            "certainty": "medium", "statement": "The speaker names the dialog.", "citations": ["e1"]}],
+        "citations": [citation],
+        "gaps": [{"kind": "image_access", "reason": "image_access_unavailable", "note": null}],
+        "untrusted_instructions": [],
+        "lifecycle": {"action": "left_open"}
+    });
+    format!("The speaker names the dialog [c1: e1].\n\n```vsift-handoff\n{handoff}\n```\n")
+}
+
+/// What `handoff check --session` answers for `report`.
+fn check(root: &OwnedRoot, report: &str) -> Built<Value> {
+    let path = root.path("report.md");
+    fs::write(&path, report)?;
+    let file = path.to_str().ok_or("the path is not text")?;
+    let output = vsift(
+        root,
+        &[
+            "handoff",
+            "check",
+            "--file",
+            file,
+            "--session",
+            SESSION,
+            "--json",
+        ],
+    )?;
+    Ok(json(&output)?["data"].clone())
+}
+
+fn finding(data: &Value) -> (&Value, &Value) {
+    (&data["errors"][0]["pointer"], &data["errors"][0]["rule"])
+}
+
+/// The brief's journey (ADR 0029 decisions 24 and 25), through the binary: a
+/// report written before `clocks` ran, and one written before a gap was
+/// accepted, are told so, and a copy of what `VSift` returns now always passes.
+#[tokio::test]
+async fn a_handoff_is_held_to_the_clock_times_vsift_returns_now() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root, Some("2026-10-21T14:00:00Z")).await?;
+    commit_reads(&seeded, &clock_with_a_jump())?;
+
+    let before = item_after_the_gap(&root)?;
+    let no_clock_time = report_citing(&before, None);
+    let written_before_clocks = report_citing(&before, Some(&before["clock_time"]));
+    assert_eq!(check(&root, &no_clock_time)?["valid"], true);
+    assert_eq!(check(&root, &written_before_clocks)?["valid"], true);
+
+    clocks_json(&root, &[])?;
+    let detected = item_after_the_gap(&root)?;
+    assert_eq!(check(&root, &no_clock_time)?["valid"], true);
+    let data = check(&root, &written_before_clocks)?;
+    assert_eq!(data["valid"], false);
+    assert_eq!(
+        finding(&data),
+        (
+            &json!("/citations/0/clock_time/segment"),
+            &json!("clock_time_may_be_stale")
+        )
+    );
+    let written_before_accepting = report_citing(&detected, Some(&detected["clock_time"]));
+    assert_eq!(check(&root, &written_before_accepting)?["valid"], true);
+
+    clocks_json(&root, &["--accept-gap", "g1"])?;
+    let accepted = item_after_the_gap(&root)?;
+    assert_ne!(
+        accepted["clock_time"]["start"],
+        detected["clock_time"]["start"]
+    );
+    let data = check(&root, &written_before_accepting)?;
+    assert_eq!(data["valid"], false);
+    assert_eq!(data["session"]["resolved"], true);
+    assert_eq!(
+        finding(&data),
+        (
+            &json!("/citations/0/clock_time/start/utc"),
+            &json!("clock_time_may_be_stale")
+        )
+    );
+    let now = report_citing(&accepted, Some(&accepted["clock_time"]));
+    let data = check(&root, &now)?;
+    assert_eq!(data["valid"], true, "{data}");
+    assert_eq!(data["session"]["identities_checked"], 1);
+    assert_eq!(check(&root, &no_clock_time)?["valid"], true);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_time_with_no_zone_cannot_be_reported_as_an_instant() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let _seeded = seed(&root, Some("2026-10-21T14:00:00")).await?;
+    let item = item_after_the_gap(&root)?;
+    assert_eq!(item["clock_time"]["start"]["utc"], Value::Null);
+    let copy = report_citing(&item, Some(&item["clock_time"]));
+    assert_eq!(check(&root, &copy)?["valid"], true);
+
+    let mut instant = item["clock_time"].clone();
+    instant["start"]["utc"] = json!("2026-10-21T14:00:06.000000Z");
+    let data = check(&root, &report_citing(&item, Some(&instant)))?;
+    assert_eq!(
+        finding(&data),
+        (
+            &json!("/citations/0/clock_time/start/utc"),
+            &json!("clock_time_not_an_instant")
+        )
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_clock_time_in_a_session_with_no_anchor_is_refused() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let _seeded = seed(&root, None).await?;
+    let item = item_after_the_gap(&root)?;
+    assert_eq!(item.get("clock_time"), None);
+    let stated = json!({"source": "operator", "confidence": "exact",
+        "start": {"utc": "2026-10-21T14:00:06.000000Z"},
+        "end": {"utc": "2026-10-21T14:00:07.000000Z"}});
+    let data = check(&root, &report_citing(&item, Some(&stated)))?;
+    assert_eq!(
+        finding(&data),
+        (
+            &json!("/citations/0/clock_time"),
+            &json!("clock_time_differs")
+        )
+    );
+    Ok(())
+}
+
+/// A closed session's records are no longer read, so a clock time is treated
+/// as an identity is: the gap says so and the draft is checked without them.
+#[tokio::test]
+async fn a_closed_session_compares_no_clock_time() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let _seeded = seed(&root, Some("2026-10-21T14:00:00Z")).await?;
+    let item = item_after_the_gap(&root)?;
+    let report = report_citing(&item, Some(&item["clock_time"]));
+    let closed = vsift(&root, &["session", "close", SESSION, "--json"])?;
+    assert_eq!(closed.status.code(), Some(0));
+    let data = check(&root, &report)?;
+    assert_eq!(data["valid"], true, "{data}");
+    assert_eq!(data["session"]["gap"], "session_closed");
+    assert_eq!(data["session"]["resolved"], false);
+    Ok(())
 }
 
 #[tokio::test]

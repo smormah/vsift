@@ -68,6 +68,14 @@ does not. Every claim names the frames that prove it, so you can open them with 
 Most clocks show no date, so they tell you about gaps and pauses but give no clock time until you confirm a
 zone. The accuracy of these readings has been measured on synthetic screens only, not on a real taskbar.
 
+### Clock times in a report
+
+A report's citations can state the clock time of what they cite, and `vsift handoff check --session <session>`
+holds it to what VSift returns for that item now. Copy the item's `clock_time` whole: the check compares the
+exact text, refuses a dropped `segment`, and refuses a time with no zone written as an instant. If someone
+accepts a gap or confirms a zone after the report was written, the check says the value may be stale, and the
+fix is to read the item again. Only the structured value is checked: a time written in a sentence is not.
+
 ## Rules for good evidence
 
 1. **Quote the visible form.** When you copy words from a transcript, copy `display_text` (the line after
