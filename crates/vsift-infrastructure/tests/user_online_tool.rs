@@ -8,6 +8,7 @@ use std::{
     error::Error,
     fs,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -20,17 +21,25 @@ type TestResult = Result<(), Box<dyn Error>>;
 
 const FIXTURE_TOOL: &str = env!("CARGO_BIN_EXE_vsift-smoke-fixture");
 
+/// Makes each folder's name differ within one process: the clock alone does
+/// not, because macOS reports it in microseconds and the tests start together.
+static NEXT_FOLDER: AtomicU64 = AtomicU64::new(0);
+
 /// A temporary folder holding staged copies of the stand-in, removed on drop.
 struct Folder(PathBuf);
 
 impl Folder {
     fn new() -> Result<Self, Box<dyn Error>> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let sequence = NEXT_FOLDER.fetch_add(1, Ordering::Relaxed);
         let path = env::temp_dir().join(format!(
-            "vsift-user-online-tool-{}-{stamp}",
+            "vsift-user-online-tool-{}-{stamp}-{sequence}",
             std::process::id()
         ));
-        fs::create_dir_all(path.join("workspaces"))?;
+        // `create_dir`, not `create_dir_all`: a folder that already exists is
+        // another test's, and must fail here, not be shared and removed.
+        fs::create_dir(&path)?;
+        fs::create_dir(path.join("workspaces"))?;
         Ok(Self(path))
     }
 
