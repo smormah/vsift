@@ -3615,7 +3615,7 @@ a Sigstore build-provenance attestation. It carries everything from P00 to P13 b
 - Per-user dependency configuration now reports `BUSY` only when the OS says
   another handle holds its lock. Other lock acquisition failures surface as
   storage I/O; an intermittent hosted `BUSY` test symptom remained under review then (issue #66,
-closed on 2026-09-23).
+  closed on 2026-09-23).
 - Registration explicitly releases its short-lived root initialization lock
   before returning the long-lived marker hold, preventing a duplicated file
   descriptor from prolonging root contention during an immediate bucket scan.
