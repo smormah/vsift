@@ -54,10 +54,7 @@ pub const YTDLP_PHRASES: [(SourceFetchReason, &[&str]); 12] = [
     ),
     (
         SourceFetchReason::Removed,
-        &[
-            "Video unavailable",
-            "This video has been removed",
-        ],
+        &["Video unavailable", "This video has been removed"],
     ),
     (SourceFetchReason::UnsupportedSite, &["Unsupported URL"]),
     (

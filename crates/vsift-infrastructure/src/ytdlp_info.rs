@@ -120,8 +120,13 @@ pub fn parse_ytdlp_info(
     if stdout.len() > MAX_YTDLP_INFO_BYTES {
         return Err(SourceFetchReason::UnexpectedOutput);
     }
-    let raw: RawInfo = serde_json::from_slice(stdout.trim_ascii())
-        .map_err(|_| SourceFetchReason::UnexpectedOutput)?;
+    let text = stdout.trim_ascii();
+    // Serde would also read a struct from an array.
+    if text.first() != Some(&b'{') {
+        return Err(SourceFetchReason::UnexpectedOutput);
+    }
+    let raw: RawInfo =
+        serde_json::from_slice(text).map_err(|_| SourceFetchReason::UnexpectedOutput)?;
     check_single_video(&raw)?;
     check_finished(&raw)?;
     check_availability(raw.availability.as_deref())?;
@@ -191,7 +196,10 @@ fn check_duration(duration: Option<f64>) -> Result<(), SourceFetchReason> {
 #[must_use]
 pub fn is_safe_format_id(id: &str) -> bool {
     id.len() <= MAX_FORMAT_ID_BYTES
-        && id.bytes().next().is_some_and(|byte| byte.is_ascii_alphanumeric())
+        && id
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric())
         && id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
@@ -324,8 +332,8 @@ mod tests {
     }
 
     #[test]
-    fn one_file_and_a_pair_are_read_and_nothing_untrusted_is_kept()
-    -> Result<(), SourceFetchReason> {
+    fn one_file_and_a_pair_are_read_and_nothing_untrusted_is_kept() -> Result<(), SourceFetchReason>
+    {
         let video = parse(&single())?;
         assert_eq!(video.join(), PageJoin::SingleFile);
         assert_eq!(video.provider.as_str(), "Generic");
@@ -356,31 +364,88 @@ mod tests {
     #[test]
     fn what_may_not_be_fetched_is_refused_with_its_reason() {
         let cases = [
-            (with("_type", json!("playlist")), SourceFetchReason::Playlist),
+            (
+                with("_type", json!("playlist")),
+                SourceFetchReason::Playlist,
+            ),
             (with("entries", json!([])), SourceFetchReason::Playlist),
             (with("is_live", json!(true)), SourceFetchReason::Live),
             (with("was_live", json!(true)), SourceFetchReason::Live),
-            (with("live_status", json!("is_upcoming")), SourceFetchReason::Live),
-            (with("live_status", json!("post_live")), SourceFetchReason::Live),
-            (with("availability", json!("private")), SourceFetchReason::Private),
-            (with("availability", json!("needs_auth")), SourceFetchReason::LoginRequired),
-            (with("availability", json!("premium_only")), SourceFetchReason::LoginRequired),
-            (with("availability", json!("subscriber_only")), SourceFetchReason::LoginRequired),
-            (with("duration", json!(14_400.5)), SourceFetchReason::TooLong),
+            (
+                with("live_status", json!("is_upcoming")),
+                SourceFetchReason::Live,
+            ),
+            (
+                with("live_status", json!("post_live")),
+                SourceFetchReason::Live,
+            ),
+            (
+                with("availability", json!("private")),
+                SourceFetchReason::Private,
+            ),
+            (
+                with("availability", json!("needs_auth")),
+                SourceFetchReason::LoginRequired,
+            ),
+            (
+                with("availability", json!("premium_only")),
+                SourceFetchReason::LoginRequired,
+            ),
+            (
+                with("availability", json!("subscriber_only")),
+                SourceFetchReason::LoginRequired,
+            ),
+            (
+                with("duration", json!(14_400.5)),
+                SourceFetchReason::TooLong,
+            ),
             (with("duration", Value::Null), SourceFetchReason::TooLong),
-            (with("protocol", json!("m3u8_native")), SourceFetchReason::NotHttpsFormat),
-            (with("protocol", json!("http")), SourceFetchReason::NotHttpsFormat),
+            (
+                with("protocol", json!("m3u8_native")),
+                SourceFetchReason::NotHttpsFormat,
+            ),
+            (
+                with("protocol", json!("http")),
+                SourceFetchReason::NotHttpsFormat,
+            ),
             (with("ext", json!("flv")), SourceFetchReason::NotHttpsFormat),
-            (with("filesize", json!(5_000_000_000_u64)), SourceFetchReason::Size),
-            (with("extractor_key", json!("a b")), SourceFetchReason::UnexpectedOutput),
+            (
+                with("filesize", json!(5_000_000_000_u64)),
+                SourceFetchReason::Size,
+            ),
+            (
+                with("extractor_key", json!("a b")),
+                SourceFetchReason::UnexpectedOutput,
+            ),
             (with("id", json!("")), SourceFetchReason::UnexpectedOutput),
-            (with("filesize", json!(-1)), SourceFetchReason::UnexpectedOutput),
-            (with("format_id", json!("../x")), SourceFetchReason::UnexpectedOutput),
-            (with("format_id", json!(".hidden")), SourceFetchReason::UnexpectedOutput),
-            (with("format_id", json!("-x")), SourceFetchReason::UnexpectedOutput),
-            (with("format_id", json!("18,19")), SourceFetchReason::UnexpectedOutput),
-            (with("format_id", json!("18[height=1]")), SourceFetchReason::UnexpectedOutput),
-            (with("format_id", json!("a".repeat(65))), SourceFetchReason::UnexpectedOutput),
+            (
+                with("filesize", json!(-1)),
+                SourceFetchReason::UnexpectedOutput,
+            ),
+            (
+                with("format_id", json!("../x")),
+                SourceFetchReason::UnexpectedOutput,
+            ),
+            (
+                with("format_id", json!(".hidden")),
+                SourceFetchReason::UnexpectedOutput,
+            ),
+            (
+                with("format_id", json!("-x")),
+                SourceFetchReason::UnexpectedOutput,
+            ),
+            (
+                with("format_id", json!("18,19")),
+                SourceFetchReason::UnexpectedOutput,
+            ),
+            (
+                with("format_id", json!("18[height=1]")),
+                SourceFetchReason::UnexpectedOutput,
+            ),
+            (
+                with("format_id", json!("a".repeat(65))),
+                SourceFetchReason::UnexpectedOutput,
+            ),
         ];
         for (value, reason) in cases {
             assert_eq!(parse(&value), Err(reason), "{value}");

@@ -21,8 +21,7 @@ use vsift_domain::{
 };
 
 use crate::{
-    FilesystemSessionStore, SessionReadHold, SessionRegistration,
-    PageTools,
+    FilesystemSessionStore, PageTools, SessionReadHold, SessionRegistration,
     link_acquisition::{
         LinkFetchError, LinkRoute, LinkSink, LinkSinkError, MAGIC_BYTES, check_page_link,
         fetch_link,
@@ -819,13 +818,19 @@ impl SourceSnapshot {
             output: &output,
             slot: &slot,
         };
-        let acquired = acquire_page(&url, limits, tools, folders, (&StoreRoom(store), cancellation))
-            .await
-            .map_err(|failure| match failure {
-                PageFailure::Refused(reason) => SourceError::Fetch(reason),
-                PageFailure::Cancelled => SourceError::Cancelled,
-                PageFailure::NoRoom => SourceError::NoRoom,
-            });
+        let acquired = acquire_page(
+            &url,
+            limits,
+            tools,
+            folders,
+            (&StoreRoom(store), cancellation),
+        )
+        .await
+        .map_err(|failure| match failure {
+            PageFailure::Refused(reason) => SourceError::Fetch(reason),
+            PageFailure::Cancelled => SourceError::Cancelled,
+            PageFailure::NoRoom => SourceError::NoRoom,
+        });
         let staged = acquired.and_then(|acquired| {
             let mut options = OpenOptions::new();
             options.read(true).follow(FollowSymlinks::No);

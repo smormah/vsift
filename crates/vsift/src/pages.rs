@@ -58,8 +58,7 @@ impl Engine {
 /// The executable of `role` in a held managed version, and its record.
 fn managed_page_tool(hold: ManagedRuntimeHold, role: ManagedRuntimeRole) -> Option<PageTool> {
     let catalogue_version = PageToolVersion::parse(hold.runtime().identity().version()).ok()?;
-    let executable =
-        TrustedExecutable::managed_in(&hold, &managed_executable_name(role)?).ok()?;
+    let executable = TrustedExecutable::managed_in(&hold, &managed_executable_name(role)?).ok()?;
     Some(PageTool {
         executable,
         record: PageToolRecord::Managed { catalogue_version },

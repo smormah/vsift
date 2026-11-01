@@ -189,9 +189,7 @@ pub const fn source_fetch_remediation(reason: SourceFetchReason) -> &'static str
         SourceFetchReason::Compressed => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. The server sent the video compressed, which VSift does not accept (reason compressed). Ask the user for another link to the file, or for the file."
         }
-        SourceFetchReason::WebPage => {
-            WEB_PAGE_REMEDIATION
-        }
+        SourceFetchReason::WebPage => WEB_PAGE_REMEDIATION,
         SourceFetchReason::NotAVideo => {
             "Fetching the video link failed; nothing was opened and local video files are not affected. What the link served is not an MP4, MOV, Matroska or WebM file (reason not_a_video). Ask the user for a link to the video file, or for the file."
         }
@@ -275,9 +273,7 @@ const WEB_PAGE_REMEDIATION: &str = if cfg!(all(target_os = "linux", target_arch 
 #[must_use]
 pub const fn source_fetch_command(reason: SourceFetchReason) -> Option<&'static [&'static str]> {
     match reason {
-        SourceFetchReason::WebPage
-            if cfg!(all(target_os = "linux", target_arch = "x86_64")) =>
-        {
+        SourceFetchReason::WebPage if cfg!(all(target_os = "linux", target_arch = "x86_64")) => {
             Some(&[
                 "setup",
                 "plan",

@@ -9,10 +9,10 @@ use vsift_domain::{SessionId, SessionPhase};
 
 use super::map_committed_io;
 use super::{
-    FilesystemSessionStore, MAX_REMOVED_WORK_DIRECTORIES, SESSIONS_DIRECTORY, SessionWorkDirectory,
-    WORK_DIRECTORY, WORK_LOCK_FILE, WORK_PREFIX, WORK_RANDOM_BYTES, chain::read_committed_manifest,
-    create_private_child_directory, lowercase_hex, map_lock_error, map_storage_io,
-    open_regular_file,
+    FilesystemSessionStore, MAX_REMOVED_WORK_DIRECTORIES, SESSIONS_DIRECTORY, SessionReadHold,
+    SessionWorkDirectory, WORK_DIRECTORY, WORK_LOCK_FILE, WORK_PREFIX, WORK_RANDOM_BYTES,
+    chain::read_committed_manifest, create_private_child_directory, lowercase_hex, map_lock_error,
+    map_storage_io, open_regular_file,
 };
 use crate::file_lock::HeldFileLock;
 

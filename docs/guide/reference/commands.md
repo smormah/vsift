@@ -144,7 +144,7 @@ A typical investigation (every command takes --json):
        For a direct https:// link to a video file, put --url <link> in place of
        <video> (--url - reads the link from standard input). VSift fetches it
        once, with limits, and nothing after that uses the network. A web page
-       is not a video file.
+       is read only through yt-dlp, if one is set up (setup check says).
        Without a transcript file, speech is found only when local speech
        recognition is set up (setup check says); then run:
          vsift job start <session> --json
@@ -828,9 +828,9 @@ Options:
           Machine-readable output: one versioned JSON result
 
       --url <LINK>
-          Instead of a local file, a direct https:// link to a video file.
+          Instead of a local file, an https:// link to a video file or page.
 
-          The link names one file (MP4, MOV, MKV or WebM): it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed.
+          The link names one file (MP4, MOV, MKV or WebM): it is fetched once into the session (port 443, no sign-in, public addresses only), then everything works offline as for a local file. A public video page is read through yt-dlp when one is set up (setup check says). `-` reads the link from standard input, which keeps a signed link out of the process list and the shell history. The link itself is never stored or printed.
 
       --events <EVENTS>
           Emit versioned evidence, progress and terminal records as JSON Lines

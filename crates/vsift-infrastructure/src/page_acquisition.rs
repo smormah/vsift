@@ -562,9 +562,14 @@ fn join_arguments(video: &ExpectedFile, audio: &ExpectedFile, slot: &Path) -> Ve
         .collect();
     for input in [video, audio] {
         arguments.extend(
-            ["-protocol_whitelist", "file", "-f", input.container.demuxer()]
-                .into_iter()
-                .map(OsString::from),
+            [
+                "-protocol_whitelist",
+                "file",
+                "-f",
+                input.container.demuxer(),
+            ]
+            .into_iter()
+            .map(OsString::from),
         );
         if input.container == SourceContainer::IsoMedia {
             arguments.extend(
@@ -711,9 +716,10 @@ fn expected_files(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| unexpected)?;
     if found.len() != names.len()
-        || !found
-            .iter()
-            .all(|name| name.to_str().is_some_and(|name| names.iter().any(|n| n == name)))
+        || !found.iter().all(|name| {
+            name.to_str()
+                .is_some_and(|name| names.iter().any(|n| n == name))
+        })
     {
         return Err(unexpected);
     }
@@ -847,13 +853,13 @@ mod tests {
             DownloadLimits::DEFAULT,
             PageTiming {
                 first_bytes: Duration::from_secs(600),
-                stall: Duration::ZERO,
+                stall: Duration::from_millis(100),
             },
             0,
         );
         assert!(watch.check(0, &Room(true)).is_none());
         assert!(watch.check(1, &Room(true)).is_none());
-        std::thread::sleep(Duration::from_millis(2));
+        std::thread::sleep(Duration::from_millis(120));
         assert!(matches!(
             watch.check(1, &Room(true)),
             Some(Stop::Refused(SourceFetchReason::Stalled))

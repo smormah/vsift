@@ -1,0 +1,39 @@
+{
+  "command": "ingest",
+  "coverage": null,
+  "data": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "generation": 1,
+    "origin": {
+      "address_check": "proxy_resolved",
+      "bytes": 72873726,
+      "joined": "audio_video",
+      "js_runtime": {
+        "catalogue_version": "deno-2.9.7-x86_64-linux-gnu",
+        "source": "managed"
+      },
+      "kind": "platform_page",
+      "link_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "provider": "Generic",
+      "retrieved_at": "2026-09-24T00:00:00Z",
+      "video_id_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "yt_dlp": {
+        "catalogue_version": "yt-dlp-2026.08.19-linux-x86_64",
+        "source": "managed"
+      }
+    },
+    "publication": "process_crash_consistent",
+    "session_id": "ses_0123456789abcdef0123456789abcdef",
+    "source_bytes": 72873726,
+    "source_id": "src_sha256_d7ccece71288c5ff35d7b16c871a93a8ed48bbb7380617899575069b4d6545f4"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

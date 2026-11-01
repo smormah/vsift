@@ -1063,7 +1063,7 @@ impl From<EngineError> for CommandFailure {
         let needs_confirmation = matches!(
             &error,
             EngineError::OpenSession(OpenSessionError::SourceFetch(
-                SourceFetchReason::WebPage
+                vsift::SourceFetchReason::WebPage
             ))
         );
         Self {
@@ -2055,6 +2055,61 @@ mod tests {
         assert_eq!(value["command"], "setup.install");
         assert_eq!(value["error"]["code"], "STORAGE_IO");
         assert_eq!(stderr, [] as [u8; 0]);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod web_page_failure {
+    use vsift::{EngineError, OpenSessionError, SourceFetchReason};
+    use vsift_contract::CommandName;
+
+    use super::{CommandFailure, failure_response};
+
+    fn answer(reason: SourceFetchReason) -> Result<serde_json::Value, serde_json::Error> {
+        let failure = CommandFailure::from(EngineError::OpenSession(
+            OpenSessionError::SourceFetch(reason),
+        ));
+        serde_json::to_value(failure_response(CommandName::Ingest, failure))
+    }
+
+    /// Adding the optional component is the user's decision (ADR 0028
+    /// section 4.7), wherever the remediation sends them.
+    #[test]
+    fn a_web_page_asks_the_user_and_no_other_reason_does() -> Result<(), serde_json::Error> {
+        let refused = answer(SourceFetchReason::WebPage)?;
+        let remediation = &refused["error"]["remediation"][0];
+        assert_eq!(refused["error"]["reason"], "web_page");
+        assert_eq!(remediation["required_authority"], "user_confirmation");
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            assert_eq!(
+                remediation["command"]["arguments"],
+                serde_json::json!([
+                    "setup",
+                    "plan",
+                    "--profile",
+                    "desktop",
+                    "--include",
+                    "online_links"
+                ])
+            );
+        } else {
+            assert!(remediation["command"].is_null());
+            assert!(
+                remediation["summary"]
+                    .as_str()
+                    .is_some_and(|summary| summary.contains("setup configure yt-dlp"))
+            );
+        }
+        for reason in SourceFetchReason::ALL {
+            if reason != SourceFetchReason::WebPage {
+                let refused = answer(reason)?;
+                assert_eq!(
+                    refused["error"]["remediation"][0]["required_authority"], "none",
+                    "{reason:?}"
+                );
+            }
+        }
         Ok(())
     }
 }

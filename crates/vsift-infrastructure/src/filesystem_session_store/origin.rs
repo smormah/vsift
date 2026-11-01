@@ -128,7 +128,11 @@ fn decode_page_origin(
             .map_err(|_| SessionStorageError::IntegrityFailure)?,
         (
             decode_page_tool(&stored.yt_dlp)?,
-            stored.js_runtime.as_ref().map(decode_page_tool).transpose()?,
+            stored
+                .js_runtime
+                .as_ref()
+                .map(decode_page_tool)
+                .transpose()?,
         ),
         stored.through_proxy,
         stored.retrieved_at_unix_seconds,

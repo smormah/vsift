@@ -557,7 +557,7 @@ impl PageProvider {
 /// How a page's video is named in its record. An unlisted video's id is a
 /// capability token, so the id is kept in clear only when the site reports
 /// the video public; otherwise only its SHA-256 is kept.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PageVideoId {
     /// The site reports the video public.
     Public(String),
@@ -618,7 +618,7 @@ impl PageToolVersion {
 }
 
 /// Which yt-dlp or JavaScript runtime fetched a page.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PageToolRecord {
     /// A version `VSift` installed from its reviewed catalogue.
     Managed {

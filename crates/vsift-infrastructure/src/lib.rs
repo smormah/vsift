@@ -163,14 +163,6 @@ pub use input_root::{
 #[cfg(any(test, feature = "install-test-hooks"))]
 pub use link_acquisition::{LinkTestRoute, TestAnswers};
 pub use link_acquisition::{is_internal_name, is_public_address};
-pub use page_acquisition::{PageTool, PageTools, ProxyVariables};
-pub use page_source_store::{PageSourceStore, PageToolSource};
-pub use ytdlp_info::{
-    MAX_YTDLP_INFO_BYTES, SelectedFormat, YtDlpVideo, is_safe_format_id, parse_ytdlp_info,
-};
-pub use ytdlp_refusal::{
-    MAX_YTDLP_STDERR_BYTES, SITE_PHRASES, YTDLP_PHRASES, classify_ytdlp_failure,
-};
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
     local_asr_fixture_sha256, run_within_budget,
@@ -214,6 +206,8 @@ pub use ocr_runner::{
     parse_runner_description, parse_runner_output,
 };
 pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
+pub use page_acquisition::{PageTool, PageTools, ProxyVariables};
+pub use page_source_store::{PageSourceStore, PageToolSource};
 pub use process_dependency_probe::{
     DEFAULT_PROBE_TIMEOUT, ExplicitProbePaths, ProcessDependencyProbe,
 };
@@ -284,4 +278,10 @@ pub use whisper_cli::{
 pub use xz_tar_inventory::{
     MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory,
     inspect_xz_tar_selected_files, stage_xz_tar_selected_files,
+};
+pub use ytdlp_info::{
+    MAX_YTDLP_INFO_BYTES, SelectedFormat, YtDlpVideo, is_safe_format_id, parse_ytdlp_info,
+};
+pub use ytdlp_refusal::{
+    MAX_YTDLP_STDERR_BYTES, SITE_PHRASES, YTDLP_PHRASES, classify_ytdlp_failure,
 };

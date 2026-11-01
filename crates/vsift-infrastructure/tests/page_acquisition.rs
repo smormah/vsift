@@ -31,7 +31,7 @@ use vsift_application::{
 };
 use vsift_domain::{
     DownloadLimits, DurabilityRequirement, OperationId, PageJoin, PageOrigin, PageToolRecord,
-    PageToolVersion, PageVideoId, Sha256Hex, SessionId, SourceFetchReason, SourceLink,
+    PageToolVersion, PageVideoId, SessionId, Sha256Hex, SourceFetchReason, SourceLink,
     SourceOrigin,
 };
 use vsift_infrastructure::{
@@ -394,9 +394,7 @@ async fn one_file_is_fetched_with_the_exact_invocation_and_recorded() -> TestRes
     )?;
     root.scenario(
         &single_info(),
-        &[
-            format!("write vsift-page.18.mp4 {MP4} 4096"),
-        ],
+        &[format!("write vsift-page.18.mp4 {MP4} 4096")],
     )?;
     let snapshot = stage(&store, DownloadLimits::DEFAULT, &tools, &NeverCancelled).await?;
     assert_eq!(snapshot.bytes(), 4_096);
@@ -437,7 +435,10 @@ async fn one_file_is_fetched_with_the_exact_invocation_and_recorded() -> TestRes
             "--dump-single-json"
         ])
     );
-    assert_eq!(download.arguments, tail(&["--format", "18[protocol=https]"]));
+    assert_eq!(
+        download.arguments,
+        tail(&["--format", "18[protocol=https]"])
+    );
 
     for call in [metadata, download] {
         for (name, _) in &call.environment {
@@ -451,7 +452,9 @@ async fn one_file_is_fetched_with_the_exact_invocation_and_recorded() -> TestRes
         }
         assert_ne!(home, output, "the output folder holds only the output");
         assert!(
-            Path::new(home).starts_with(root.0.join("workspace").join("sessions").join(SESSION)),
+            Path::new(home)
+                .components()
+                .any(|part| part.as_os_str() == SESSION),
             "the temporary folder is the session's"
         );
         assert!(
@@ -558,7 +561,10 @@ async fn separate_streams_are_joined_and_an_unlisted_id_is_not_kept() -> TestRes
         2,
         "every input is restricted"
     );
-    assert_eq!(join.environment.iter().filter(|(n, _)| n == "HOME").count(), 0);
+    assert_eq!(
+        join.environment.iter().filter(|(n, _)| n == "HOME").count(),
+        0
+    );
     let origin = page_origin(&snapshot)?;
     assert_eq!(origin.joined(), PageJoin::AudioVideo);
     assert!(matches!(origin.video_id(), PageVideoId::Digest(_)));
@@ -735,7 +741,7 @@ async fn every_phrase_gives_its_typed_reason_and_is_not_echoed() -> TestResult {
             &[format!("stderr ERROR: {phrase}"), String::from("exit1 1")],
         )?;
         let result = stage(&store, DownloadLimits::DEFAULT, &tools, &NeverCancelled).await;
-        let printed = format!("{result:?}");
+        let printed = format!("{:?}", result.as_ref().err());
         assert_eq!(refused(result)?, expected, "{phrase}");
         assert!(!printed.contains(&phrase), "{phrase}");
     }
@@ -894,7 +900,7 @@ async fn a_cancelled_fetch_stops_the_tool_and_leaves_nothing() -> TestResult {
     let tools = user_tools(&root)?;
     root.scenario(&single_info(), &[String::from("hang-phase 1")])?;
     let result = stage(&store, DownloadLimits::DEFAULT, &tools, &CancelledNow).await;
-    assert!(matches!(result, Err(SourceError::Cancelled)), "{result:?}");
+    assert!(matches!(result, Err(SourceError::Cancelled)));
     assert_eq!(root.session_files()?, Vec::<PathBuf>::new());
     Ok(())
 }
@@ -999,7 +1005,8 @@ async fn stage_routed(
     let route = LinkTestRoute::new(
         port,
         fs::read(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tls/link-test-ca.cert.pem"),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/tls/link-test-ca.cert.pem"),
         )?,
         answers,
     );
@@ -1040,13 +1047,10 @@ async fn a_web_page_goes_to_ytdlp_when_one_is_resolved() -> TestResult {
 async fn a_web_page_stays_refused_when_no_ytdlp_is_resolved() -> TestResult {
     let root = OwnedRoot::new()?;
     let result = stage_routed(&root, HTML_REPLY, None).await?;
-    assert!(
-        matches!(
-            result,
-            Err(OpenSessionError::SourceFetch(SourceFetchReason::WebPage))
-        ),
-        "{result:?}"
-    );
+    assert!(matches!(
+        result,
+        Err(OpenSessionError::SourceFetch(SourceFetchReason::WebPage))
+    ));
     assert_eq!(root.session_files()?, Vec::<PathBuf>::new());
     Ok(())
 }

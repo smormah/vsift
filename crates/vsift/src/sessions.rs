@@ -24,8 +24,8 @@ use vsift_infrastructure::{
 
 use crate::{
     engine::{Engine, absolute_selection},
-    pages::EnginePageTools,
     error::{EngineError, SessionRootError},
+    pages::EnginePageTools,
     verification::Cancellation,
 };
 

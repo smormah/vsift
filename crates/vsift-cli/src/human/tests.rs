@@ -174,6 +174,7 @@ fn frozen_examples_render_as_readable_text() -> TestResult {
     for (command, file, snapshot) in [
         (CommandName::Ingest, "ingest.transcript.json", "ingest"),
         (CommandName::Ingest, "ingest.url.json", "ingest-url"),
+        (CommandName::Ingest, "ingest.page.json", "ingest-page"),
         (
             CommandName::Ingest,
             "ingest.time-anchor.json",

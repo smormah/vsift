@@ -13,8 +13,8 @@ use vsift_contract::{
 };
 use vsift_domain::{
     AddressCheck, DirectLinkOrigin, FailureCode, HostName, PageJoin, PageOrigin, PageProvider,
-    PageToolRecord, PageToolVersion, PageVideoId, PublicationGuarantee, SessionId,
-    SessionLifetime, Sha256Hex, SourceFetchReason, SourceId, SourceOrigin, StorageGeneration,
+    PageToolRecord, PageToolVersion, PageVideoId, PublicationGuarantee, SessionId, SessionLifetime,
+    Sha256Hex, SourceFetchReason, SourceId, SourceOrigin, StorageGeneration,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -135,7 +135,14 @@ fn an_ingest_from_a_page_states_its_origin_and_matches_its_example() -> TestResu
     assert_eq!(origin["joined"], "audio_video");
     assert_eq!(origin["address_check"], "proxy_resolved");
     assert_eq!(origin["yt_dlp"]["source"], "managed");
-    for member in ["video_id", "title", "uploader", "upload_date", "url", "link"] {
+    for member in [
+        "video_id",
+        "title",
+        "uploader",
+        "upload_date",
+        "url",
+        "link",
+    ] {
         assert!(origin.get(member).is_none(), "{member}");
     }
     Ok(())
@@ -149,7 +156,11 @@ fn only_a_web_page_asks_for_confirmation_and_offers_a_command() {
     for reason in SourceFetchReason::ALL {
         let expected = reason == SourceFetchReason::WebPage
             && cfg!(all(target_os = "linux", target_arch = "x86_64"));
-        assert_eq!(source_fetch_command(reason).is_some(), expected, "{reason:?}");
+        assert_eq!(
+            source_fetch_command(reason).is_some(),
+            expected,
+            "{reason:?}"
+        );
     }
 }
 
