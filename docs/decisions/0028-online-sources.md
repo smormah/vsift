@@ -638,6 +638,10 @@ evidence goes back to the planner.
   settings when the environment has none, so `through_proxy` can be false for a proxied fetch by a user's yt-dlp. The
   link is on yt-dlp's command line, where other local users can read it while it runs; section 5's "never stored,
   printed or logged" is about VSift's own output. Both are stated in L-209 and the threat model's table.
+- **A registered tool is not pinned by digest (the planner's decision on #561).** A person updates their own yt-dlp
+  as a matter of course, so a pin would report every ordinary update as a change. Each fetch identifies the file
+  again, and each origin records the digest read when it was identified for that fetch; nothing holds the file
+  between that read and the run, and it is the user's own file. L-247 stays open.
 - **The live checks (the planner's review of #561).** `Online links live` gains two dispatch-only parts, which never
   run on a pull request. RM06's page goes through the pinned user-supplied yt-dlp on Windows and macOS, with no
   runtime, which is also the only test of the engine's path through a registered yt-dlp. With the `youtube` input, and

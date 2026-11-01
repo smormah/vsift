@@ -5347,7 +5347,9 @@ that week.**
   and Python's, and has not been run. On Linux, Python reads only the environment.
   **The link is on yt-dlp's command line,** in both phases: other local users can read it in the process list while
   yt-dlp runs, and it can hold a signed token or an unlisted video's id. Section 5's "never stored, printed or logged"
-  is about VSift's own output, and `--url -` keeps the link off VSift's command line only. Sites change, so a managed
+  is about VSift's own output, and `--url -` keeps the link off VSift's command line only. Joining separate audio and
+  video is VSift's first use of FFmpeg's `mp4` and `matroska` muxers, and no campaign has yet aimed hostile files at
+  them. Sites change, so a managed
   yt-dlp can stop working between VSift releases until a re-pin (`extractor_broken`); a user's yt-dlp is the user's to
   keep current, and is run though nobody here reviewed it. A site that answers VSift's first request with an HTTP
   error is refused as `http_status` and never reaches yt-dlp, because only a `web_page` answer is routed there.
@@ -5569,7 +5571,7 @@ that week.**
 - **Evidence:** ADR 0028's implementation note of 2026-11-01; `identify_user_online_tool` and its tests in `crates/vsift-infrastructure/src/user_online_tool.rs`; `setup_configure_online_tools_cli_contract`; the contract tests in `setup_optional_contract`.
 - **Impact: low by the rubric** (a disclosed estimate): registering is the user's explicit act, as for FFmpeg or the OCR runner; the run is bounded and sends no URL; what is reported carries its lower trust (`source: "user_managed"`).
 - **Mitigation:** the plan's and the guide's wording say a supplied file is not reviewed; `setup configure` itself runs nothing; the managed pair on Ubuntu 24.04 is the reviewed alternative.
-- **Next step:** with the acquisition half (L-209), decide whether a registered tool should also be pinned by digest in the configuration so a changed file is reported on the next check.
+- **Next step:** decided with the acquisition half: a registered tool is not pinned by digest. A person updates their own yt-dlp as a matter of course, so a pin would report every ordinary update as a change. Each fetch identifies the file again, and each origin records the digest read when it was identified for that fetch; nothing holds the file between that read and the run, and it is the user's own file.
 - **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
 
 ## Review workflow
