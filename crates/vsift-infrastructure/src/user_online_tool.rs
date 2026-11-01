@@ -8,7 +8,7 @@
 //! its version output and the SHA-256 of the file, so a later change to it
 //! is visible. Nothing here fetches anything.
 
-use std::{ffi::OsString, fmt, num::NonZeroUsize, path::Path, time::Duration};
+use std::{ffi::OsString, fmt, num::NonZeroUsize, path::Path, time::{Duration, Instant}};
 
 use vsift_domain::Sha256Hex;
 
@@ -21,8 +21,8 @@ use crate::{
 /// The most a user-supplied tool may weigh: yt-dlp's one-file builds are
 /// about 40 MB and Deno about 96 MB.
 const MAX_TOOL_BYTES: u64 = 512 * 1024 * 1024;
-/// How long its version output may take, start-up of a one-file build
-/// included.
+/// The longest its version output may take, start-up of a one-file build
+/// included; a caller's remaining time can only shorten it.
 const VERSION_DEADLINE: Duration = Duration::from_secs(30);
 /// The most of its output that is read.
 const OUTPUT_LIMIT_BYTES: usize = 4096;
@@ -144,7 +144,10 @@ impl std::error::Error for UserOnlineToolFault {}
 
 /// Runs `executable` with the fixed version invocation, in a private folder
 /// made in `workspace_parent` (removed afterwards) that is also its
-/// temporary and home folder, and hashes the file.
+/// temporary and home folder, and hashes the file. The run gets at most
+/// `time_left` (and never more than 30 seconds): `setup check` shares one
+/// deadline among everything it checks, so a caller passes what is left of
+/// it. With nothing left, nothing is read or started.
 ///
 /// # Errors
 ///
@@ -154,23 +157,42 @@ pub async fn identify_user_online_tool(
     executable: &TrustedExecutable,
     workspace_parent: &Path,
     host_isolation: HostIsolation,
+    time_left: Duration,
     cancellation: ProcessCancellation,
 ) -> Result<UserOnlineToolFacts, UserOnlineToolFault> {
+    let started = Instant::now();
+    if time_left.is_zero() {
+        return Err(UserOnlineToolFault::Deadline);
+    }
     let (_, digest) = hash_file_bounded(executable.path(), MAX_TOOL_BYTES)
         .await
         .map_err(|_| UserOnlineToolFault::Unreadable)?;
     let sha256 =
         Sha256Hex::parse(lowercase_hex(&digest)).map_err(|_| UserOnlineToolFault::Unreadable)?;
+    // Reading the file counts against the time too.
+    let time_left = time_left.saturating_sub(started.elapsed());
+    if time_left.is_zero() {
+        return Err(UserOnlineToolFault::Deadline);
+    }
     let workspace = VerificationWorkspace::create(workspace_parent)
         .map_err(|_| UserOnlineToolFault::Workspace)?;
     let working = ProcessWorkingDirectory::new(workspace.path())
         .map_err(|_| UserOnlineToolFault::Workspace)?;
-    let mut request = ProcessRequest::new(executable.clone(), working, VERSION_DEADLINE)
+    let mut request = ProcessRequest::new(executable.clone(), working, time_left.min(VERSION_DEADLINE))
         .map_err(|_| UserOnlineToolFault::CouldNotStart)?
         .with_arguments(tool.version_arguments().iter().map(OsString::from));
     for name in ["TMPDIR", "TEMP", "TMP", "HOME"] {
         request = request
             .with_environment(name, workspace.path().as_os_str())
+            .map_err(|_| UserOnlineToolFault::CouldNotStart)?;
+    }
+    // A one-file Python build on Windows cannot start without the system
+    // folder's variable (Python's random-number start-up needs it); it is
+    // a folder name, not personal data, and the only variable passed through.
+    #[cfg(windows)]
+    if let Some(system_root) = std::env::var_os("SystemRoot") {
+        request = request
+            .with_environment("SystemRoot", system_root)
             .map_err(|_| UserOnlineToolFault::CouldNotStart)?;
     }
     for (name, value) in tool.fixed_environment() {

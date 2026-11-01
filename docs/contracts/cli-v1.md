@@ -3543,10 +3543,13 @@ come with their stories.
   managed one and is what the check reports; a file that cannot be identified (it does not start, fails, times out
   or prints no version line) makes the group `not_installed` with a `next_step` that gives the reason in words and
   no `add_command`. A user-managed tool is not pinned or reviewed, and the check never echoes anything it printed
-  but the version line.
+  but the version line. The registered files are identified within what is left of the deadline all tool checks
+  share (30 seconds, up to 60 with `--timeout-seconds`), after the other tools; with nothing left a file is not
+  started and the reason is `deadline`. A registered JavaScript runtime with no registered yt-dlp is listed apart, in
+  `unused_components`, with a sentence in `next_step`: it runs only with a yt-dlp the user registered.
 - **`setup configure yt-dlp|js-runtime --executable <path>`** (since 0.3.0) records the user's yt-dlp and the
   JavaScript runtime it runs (Deno only in 0.3.0) in a file of their own each, apart from the other selections, so
-  an earlier release's configuration is untouched. `yt_dlp` and `js_runtime` are accepted as spellings. Like every
+  an earlier release's configuration is untouched. `yt_dlp` is accepted as a hidden spelling, because `--include online_links` and the JSON results use the underscore; `js_runtime` is not accepted. Like every
   `setup configure`, it validates only that the path is an absolute regular file and runs nothing; the response
   names the dependency (`yt_dlp` or `js_runtime`) and what to do next. On Windows and macOS, where no managed yt-dlp
   is offered, this is the way to use public video pages. `ingest --url` of a page uses it (a later pull request).

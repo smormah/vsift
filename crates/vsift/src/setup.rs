@@ -3,7 +3,7 @@
 
 use std::{
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use vsift_application::{
@@ -326,7 +326,13 @@ impl Engine {
             request.probe_timeout,
             selections.clone().into_probe_paths(),
         );
+        let probes_started = Instant::now();
         let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+        // What the tool checks share (`probe_timeout`) is spent once; the
+        // registered online tools get what is left of it.
+        let time_left = request
+            .probe_timeout
+            .saturating_sub(probes_started.elapsed());
         let managed_model = match store.read_model()? {
             Some(configured) => Some((configured, None)),
             None => lookup.model().map(|model| (model.path, Some(model.hold))),
@@ -346,7 +352,7 @@ impl Engine {
                 .map_err(|_| EngineError::ReviewedPolicyInvalid)?,
         );
         let mut optional = optional_capabilities(managed_install, catalogue.as_ref(), &mut lookup);
-        self.apply_user_supplied_tools(&store, &mut optional)
+        self.apply_user_supplied_tools(&store, time_left, &mut optional)
             .await?;
         let managed_install_by_dependency = RuntimeDependency::ALL.map(|dependency| {
             let supplier = match dependency {
@@ -574,6 +580,7 @@ impl Engine {
     async fn apply_user_supplied_tools(
         &self,
         store: &vsift_infrastructure::UserDependencyConfigStore,
+        time_left: Duration,
         optional: &mut [(OptionalComponent, OptionalCapability)],
     ) -> Result<(), EngineError> {
         let yt_dlp = store.read_yt_dlp()?;
@@ -586,8 +593,10 @@ impl Engine {
             .workspace_parent()
             .to_path_buf();
         let isolation = self.config().host_isolation.into_infrastructure();
+        let end = Instant::now() + time_left;
         let identify = |kind: UserSuppliedKind, tool: UserOnlineTool, path: PathBuf| {
             let workspace_parent = workspace_parent.clone();
+            let time_left = end.saturating_duration_since(Instant::now());
             async move {
                 let executable = TrustedExecutable::explicit(&path).map_err(|_| "unreadable")?;
                 let facts = identify_user_online_tool(
@@ -595,6 +604,7 @@ impl Engine {
                     &executable,
                     &workspace_parent,
                     isolation,
+                    time_left,
                     ProcessCancellation::new(),
                 )
                 .await

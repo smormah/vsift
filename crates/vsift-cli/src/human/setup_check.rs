@@ -377,14 +377,11 @@ fn push_table(
         let OptionalComponent::OnlineLinks = component;
         rows.push(Row {
             part: "Web videos",
+            // A registered runtime that nothing uses does not change the row.
             status: match capability.base() {
-                OptionalCapability::Installed(_) | OptionalCapability::UserSupplied(_) => {
-                    ("added", Tone::Good)
-                }
-                OptionalCapability::NotInstalled
-                | OptionalCapability::UserSuppliedUnusable { .. }
-                | OptionalCapability::WithUnusedRuntime { .. } => ("none added", Tone::Quiet),
+                usable if usable.is_usable() => ("added", Tone::Good),
                 OptionalCapability::Unavailable => ("not available", Tone::Quiet),
+                _ => ("none added", Tone::Quiet),
             },
             uses: "yt-dlp",
             purpose: "web page videos (optional)",

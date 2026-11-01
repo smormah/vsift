@@ -31,6 +31,13 @@
 //! (offline, no URL is fetched) and activated after the core, `setup check`
 //! reports them as managed, `setup list` shows them, and removing the
 //! runtime leaves the local-video readiness as it was.
+//!
+//! A third checkpoint is for Windows and macOS, where no managed yt-dlp is
+//! offered (ADR 0028 section 4.6): the publisher's pinned `yt-dlp.exe` or
+//! `yt-dlp_macos` (2026.08.19), fetched by the workflow, is registered with
+//! `setup configure yt-dlp`, and `setup check` must run it under VSift's
+//! restricted environment and report it as user-managed with that version
+//! and the pinned digest. No page is fetched.
 
 mod published_binary;
 
@@ -398,5 +405,78 @@ fn real_managed_install_with_online_links_installs_reports_and_removes_the_pair(
     assert_eq!(removed.status.code(), Some(0));
     let row = managed_row(&base)?;
     assert_eq!(row["status"], "not_installed", "{row}");
+    Ok(())
+}
+
+/// The pinned publisher file for this system (ADR 0028 section 4.1): its
+/// name, size and SHA-256, from the release's signed sums.
+#[cfg(windows)]
+const PINNED_USER_YT_DLP: (u64, &str) = (
+    17_840_399,
+    "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+);
+#[cfg(target_os = "macos")]
+const PINNED_USER_YT_DLP: (u64, &str) = (
+    37_146_048,
+    "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202",
+);
+
+/// A yt-dlp the user supplies, as on Windows and macOS. The workflow fetches
+/// the pinned file and checks its size; the digest `setup check` reports is
+/// the proof of its bytes.
+#[cfg(any(windows, target_os = "macos"))]
+#[test]
+#[ignore = "opt-in: set VSIFT_P13_REAL_USER_YT_DLP=1 and VSIFT_P13_USER_YT_DLP to the pinned yt-dlp.exe or yt-dlp_macos of 2026.08.19, on Windows or macOS"]
+fn real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed() -> TestResult {
+    if env::var_os("VSIFT_P13_REAL_USER_YT_DLP").is_none() {
+        return Err("set VSIFT_P13_REAL_USER_YT_DLP=1 to run the user-supplied yt-dlp check".into());
+    }
+    let supplied = PathBuf::from(
+        env::var_os("VSIFT_P13_USER_YT_DLP").ok_or("set VSIFT_P13_USER_YT_DLP to the file")?,
+    );
+    let (bytes, digest) = PINNED_USER_YT_DLP;
+    assert_eq!(fs::metadata(&supplied)?.len(), bytes, "not the pinned file");
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let base = Base(env::temp_dir().join(format!("vsift-p13-real-user-ytdlp-{stamp}")));
+    fs::create_dir(&base.0)?;
+
+    let configured = base
+        .vsift()?
+        .args(["setup", "configure", "yt-dlp", "--executable"])
+        .arg(&supplied)
+        .arg("--json")
+        .output()?;
+    assert_eq!(configured.status.code(), Some(0));
+    let configured: Value = serde_json::from_slice(&configured.stdout)?;
+    assert_eq!(configured["data"]["dependency"], "yt_dlp");
+
+    let started = Instant::now();
+    let check = base
+        .vsift()?
+        .args(["setup", "check", "--json", "--timeout-seconds", "60"])
+        .output()?;
+    println!(
+        "setup check: exit {:?} in {:.1} s",
+        check.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    let value: Value = serde_json::from_slice(&check.stdout)?;
+    let row = value["optional_components"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+        .ok_or("no online_links row")?;
+    println!("{}", serde_json::to_string_pretty(row)?);
+    assert_eq!(row["status"], "installed", "{row}");
+    let component = &row["components"][0];
+    assert_eq!(component["component"], "yt_dlp");
+    assert_eq!(component["source"], "user_managed");
+    assert_eq!(component["version"], "2026.08.19");
+    assert_eq!(component["sha256"], digest);
+    assert!(
+        row["next_step"]
+            .as_str()
+            .is_some_and(|step| step.contains("No JavaScript runtime is registered")),
+        "{row}"
+    );
     Ok(())
 }
