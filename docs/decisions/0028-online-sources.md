@@ -686,10 +686,12 @@ evidence goes back to the planner.
   (Ubuntu 24.04 x86-64; they print a skip elsewhere, where no managed `online_links` exists). Each publishes core
   stand-ins under the plan's versions, includes `online_links`, and sends the real binary's optional download, through
   the real transfer client, to a local proxy that:
-  - answers `407` (reason `proxy_auth`);
-  - refuses the tunnel with `403` (a blocked host);
-  - has a name that cannot be resolved (the issue's "DNS failure"; `.invalid` never resolves);
-  - is a closed port (the issue's "offline machine").
+  - answers `407`: reason `proxy_auth`;
+  - refuses the tunnel with `403` (a blocked host): reason `offline`, because the transfer client reads a refused tunnel as no connection;
+  - has a name that cannot be resolved (the issue's "DNS failure"; `.invalid` never resolves): reason `offline`;
+  - is a closed port (the issue's "offline machine"): reason `offline`.
+
+  The three `offline` cases differ in what the proxy saw (a request, or none), not in the reason the person is told; the test for a blocked host also asserts that the proxy was asked. Hosted run 41361026166 (Ubuntu, head `cabbaf94`) got these reasons for all four cases, and the second optional component `blocked`, in the JSON result.
 
   In each: exit 0, `status: "partial"`, `core: "ready"`, the group `not_installed` with the typed reason and
   `DOWNLOAD_FAILED`, the second component `blocked`, the credential in no output (JSON or readable), no stage left,

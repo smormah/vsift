@@ -876,9 +876,10 @@ fn assert_optional_fault_leaves_the_core_ready(fault: &OptionalFault) -> TestRes
                 stdout.contains("Optional component online_links: not_installed"),
                 "{stdout}"
             );
+            assert!(stdout.contains("Status: partial"), "{stdout}");
             assert!(
-                stderr.contains("optional_component_not_installed"),
-                "{stderr}"
+                stdout.contains("optional_component_not_installed"),
+                "{stdout}"
             );
         } else {
             assert_partial_install_report(&json(&install)?, fault)?;
