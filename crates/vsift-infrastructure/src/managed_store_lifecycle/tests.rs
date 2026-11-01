@@ -335,7 +335,10 @@ fn the_online_links_components_are_listed_rolled_back_and_removed_like_the_core(
         Some("2026.08.01")
     );
     assert_eq!(selected(&store)?.as_deref(), Some("1.0.0"));
-    assert!(diagnose_managed_store(Some(&after)).findings.is_empty());
+    assert_eq!(
+        diagnose_managed_store(Some(&after)).findings,
+        [] as [vsift_application::RepairFinding; 0]
+    );
     Ok(())
 }
 

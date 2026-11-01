@@ -8,7 +8,7 @@ use std::{
     env,
     error::Error,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Output,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
@@ -67,7 +67,7 @@ fn json(output: &Output) -> Result<Value, Box<dyn Error>> {
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
-fn configure(root: &OwnedRoot, name: &str, executable: &PathBuf) -> Result<Output, Box<dyn Error>> {
+fn configure(root: &OwnedRoot, name: &str, executable: &Path) -> Result<Output, Box<dyn Error>> {
     let executable = executable.to_str().ok_or("path is not UTF-8")?;
     vsift(
         root,

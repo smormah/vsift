@@ -88,7 +88,7 @@ pub(crate) struct OptionalCheckResponse {
 struct OptionalCheckComponentResponse {
     component: &'static str,
     version: String,
-    /// `managed` (VSift installed and reviewed it) or `user_managed` (the
+    /// `managed` (`VSift` installed and reviewed it) or `user_managed` (the
     /// user supplied it; keeping it current is theirs).
     source: &'static str,
     /// The SHA-256 of a user-supplied file; absent for a managed one, whose

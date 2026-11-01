@@ -620,7 +620,7 @@ impl Engine {
             if let Some(path) = runtime {
                 let identified =
                     identify(UserSuppliedKind::JsRuntime, UserOnlineTool::JsRuntime, path).await;
-                wrap_unused_runtime(optional, identified);
+                wrap_unused_runtime(optional, &identified);
             }
             return Ok(());
         };
@@ -639,13 +639,13 @@ impl Engine {
                 Err(reason) => {
                     set_online_links(
                         optional,
-                        OptionalCapability::UserSuppliedUnusable { tool: kind, reason },
+                        &OptionalCapability::UserSuppliedUnusable { tool: kind, reason },
                     );
                     return Ok(());
                 }
             }
         }
-        set_online_links(optional, OptionalCapability::UserSupplied(tools));
+        set_online_links(optional, &OptionalCapability::UserSupplied(tools));
         Ok(())
     }
 
@@ -693,7 +693,7 @@ impl Engine {
 /// runtime that no registered yt-dlp uses.
 fn wrap_unused_runtime(
     optional: &mut [(OptionalComponent, OptionalCapability)],
-    runtime: Result<UserSuppliedTool, &'static str>,
+    runtime: &Result<UserSuppliedTool, &'static str>,
 ) {
     for (component, current) in optional.iter_mut() {
         if *component == OptionalComponent::OnlineLinks {
@@ -707,7 +707,7 @@ fn wrap_unused_runtime(
 
 fn set_online_links(
     optional: &mut [(OptionalComponent, OptionalCapability)],
-    capability: OptionalCapability,
+    capability: &OptionalCapability,
 ) {
     for (component, current) in optional.iter_mut() {
         if *component == OptionalComponent::OnlineLinks {

@@ -35,7 +35,7 @@
 //! A third checkpoint is for Windows and macOS, where no managed yt-dlp is
 //! offered (ADR 0028 section 4.6): the publisher's pinned `yt-dlp.exe` or
 //! `yt-dlp_macos` (2026.08.19), fetched by the workflow, is registered with
-//! `setup configure yt-dlp`, and `setup check` must run it under VSift's
+//! `setup configure yt-dlp`, and `setup check` must run it under `VSift`'s
 //! restricted environment and report it as user-managed with that version
 //! and the pinned digest. No page is fetched.
 
