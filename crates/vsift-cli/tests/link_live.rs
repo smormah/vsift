@@ -435,7 +435,11 @@ fn a_public_video_page_is_refused_as_a_web_page() -> TestResult {
 fn installed_versions(root: &OwnedRoot) -> Result<Value, Box<dyn Error>> {
     let (code, checked) = vsift(root, &["setup", "check", "--profile", "desktop"])?;
     assert_eq!(code, Some(0), "{checked}");
-    let components = checked["data"]["optional_components"][0]["components"].clone();
+    let components = checked["optional_components"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+        .ok_or("no online_links row")?["components"]
+        .clone();
     assert!(
         components.as_array().is_some_and(|list| !list.is_empty()),
         "no optional component is reported: {checked}"
@@ -451,16 +455,22 @@ fn qualify_one(
     item: &Listed,
     problems: &mut Vec<String>,
 ) -> Result<Value, Box<dyn Error>> {
-    let (code, outcome) = vsift(root, &["ingest", "--url", item.link])?;
-    let text = outcome.to_string();
-    if text.contains("https://") {
-        problems.push(format!("{}: a link was printed", item.id));
-    }
     let mut entry = serde_json::json!({
         "id": item.id,
         "licence": item.licence,
         "host": item.link.split('/').nth(2).unwrap_or(""),
     });
+    // An answer that is not JSON must not lose the record of the other pages.
+    let Ok((code, outcome)) = vsift(root, &["ingest", "--url", item.link]) else {
+        entry["outcome"] = "unreadable".into();
+        problems.push(format!("{}: the answer was not JSON", item.id));
+        println!("{} {entry}", item.id);
+        return Ok(entry);
+    };
+    let text = outcome.to_string();
+    if text.contains("https://") {
+        problems.push(format!("{}: a link was printed", item.id));
+    }
     if code == Some(0) {
         let data = &outcome["data"];
         entry["outcome"] = "fetched".into();
