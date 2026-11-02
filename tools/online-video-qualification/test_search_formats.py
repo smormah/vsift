@@ -40,6 +40,14 @@ class ClassifyTests(unittest.TestCase):
         verdict = search.classify({"requested_formats": [VIDEO_ONLY, AUDIO_ONLY]})
         self.assertEqual(verdict["verdict"], "PAIR")
 
+    def test_the_selection_is_read_from_the_requested_downloads(self) -> None:
+        pair = {"requested_downloads": [{"requested_formats": [VIDEO_ONLY, AUDIO_ONLY]}]}
+        self.assertEqual(search.classify(pair)["verdict"], "PAIR")
+        single = {"requested_downloads": [COMBINED]}
+        verdict = search.classify(single)
+        self.assertEqual(verdict["verdict"], "SINGLE_FILE")
+        self.assertEqual(verdict["selected"][0]["format_id"], "c")
+
     def test_a_combined_file_is_one_file(self) -> None:
         self.assertEqual(search.classify(COMBINED)["verdict"], "SINGLE_FILE")
         self.assertEqual(

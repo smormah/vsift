@@ -98,7 +98,9 @@ def describe(entry: dict) -> dict:
 
 def classify(info: dict) -> dict:
     """What phase 1 selected: a pair, one file, or nothing; plus the near misses."""
-    selected = info.get("requested_formats") or [info]
+    downloads = info.get("requested_downloads") or []
+    first = downloads[0] if downloads else info
+    selected = first.get("requested_formats") or [first]
     chosen = [describe(entry) for entry in selected]
     pair = (
         len(selected) == 2
