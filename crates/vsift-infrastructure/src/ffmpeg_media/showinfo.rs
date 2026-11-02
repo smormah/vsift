@@ -29,16 +29,17 @@ use vsift_domain::{
 
 use super::{MediaError, parse_seconds_micros, parse_time_base};
 
-/// Hard bound for one frame listing's diagnostics: 1,201 frame lines of
-/// about 250 bytes, with configuration, colour and side-data lines.
+/// Hard bound for one frame listing's diagnostics: up to 1,265 frame lines
+/// (the 1,201 asked for and a small fixed slack more) of about 250 bytes,
+/// with configuration, colour and side-data lines.
 pub const MAX_LISTING_DIAGNOSTIC_BYTES: usize = 1024 * 1024;
 /// Frame lines `showinfo` may log beyond the [`MAX_LISTED_FRAMES`] + 1 that
 /// the listing run's `-frames:v` asks for.
 ///
 /// The limit is applied at the output, after the filter graph, so frames
 /// already queued between `showinfo` and the output are logged too: `FFmpeg`
-/// 9.0 logs one more, and the count differs between builds and thread
-/// settings. A dense range must still be cut and reported as "more may
+/// 9.0 logs one more (measured), and the count may differ between builds and
+/// thread settings. A dense range must still be cut and reported as "more may
 /// follow", not rejected as damaged. The slack stays small and fixed, so the
 /// bound on a hostile log is still tight (and the byte bound still applies).
 const LISTING_OVERRUN_SLACK: usize = 64;

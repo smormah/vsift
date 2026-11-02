@@ -212,7 +212,7 @@ fn a_dense_burst_gets_outside_listing_not_a_damaged_file_error() -> TestResult {
     let varying = root.0.join("varying.mp4");
     make(&ffmpeg, &varying, Some("select='gt(mod(n,11),0)'"))?;
 
-    for (name, file) in [("constant rate", &constant), ("varying rate", &varying)] {
+    for (name, file) in [("varying rate", &varying), ("constant rate", &constant)] {
         let session = ingest(&base, file)?;
 
         // 60 s of 30 fps video is at least 1,600 frames: more than one listing.

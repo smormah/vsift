@@ -1267,7 +1267,7 @@ Counts: 1 high, 57 medium, 145 low (203 entries), recounted on 2026-11-02 from t
 
 ### L-015
 
-**A burst or a neighbours search over a range denser than one frame listing is refused, not listed in pieces.**
+**Bursts over more than 1,200 frames (20 s of 60 fps video) are refused as `outside_listing`, not listed in pieces.**
 
 - **What:** one frame listing covers at most 60 s and 1,200 frames. A burst over a range
   denser than that (60 fps over more than 20 s, 30 fps over more than 40 s) is refused
