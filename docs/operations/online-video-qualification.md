@@ -1,6 +1,6 @@
 # Online video: the opt-in platform qualification (#409)
 
-Status (2026-11-02, `0.3.0`): **done as far as a hosted runner can take it, and one run from an ordinary network added a real pair.** A real pair of streams has been seen once: on 2 November 2026, one NASA video on YouTube, on Windows, with a user-supplied yt-dlp 2026.08.19 and Deno 2.9.7, joined by the person's own FFmpeg (`joined: audio_video`, 97,793,603 bytes). It was a one-off check, not a gate, and is not repeated without the maintainer's word. Not seen: any other site, a hosted runner (YouTube refuses hosted runners with a bot check) and macOS. This page names the public videos the qualification uses, with the licence
+Status (2026-11-02, `0.3.0`): **done as far as a hosted runner can take it, and one run from an ordinary network added a real pair.** A real pair of streams has been seen once: on 2 November 2026, one NASA video on YouTube, on Windows, with a user-supplied yt-dlp 2026.08.19 and Deno 2.9.7, joined by the person's own FFmpeg (`joined: audio_video`, 97,793,603 bytes). It was a one-off check, not a gate, and is not repeated without the maintainer's word. Not seen: any other site, a hosted runner (YouTube refuses hosted runners with a bot check), macOS and Linux. This page names the public videos the qualification uses, with the licence
 of each, states what the hosted run saw, and says what has not been seen. The record of each run is that run's artifact;
 [L-209](../planning/known-limits.md#l-209) states what stays unseen. #409 stays open.
 
@@ -107,5 +107,5 @@ that the person supplied (both checked against their sizes and digests first) an
 session closed, and the tools and logs were deleted.
 
 **This is one video on one site, seen once.** It was a one-off check, not a gate, and it is not repeated without the
-maintainer's word. Not seen: any other site, a hosted runner (YouTube refuses them), and macOS. The hosted
+maintainer's word. Not seen: any other site, a hosted runner (YouTube refuses them), macOS and Linux (hosted Ubuntu met only the bot check, and Linux is the one system where yt-dlp is managed, while this run used user-supplied tools). The hosted
 `youtube` input still passes on the typed `bot_check`, which proves nothing about a pair.
