@@ -40,6 +40,8 @@ fn frame_time(pts: i64) -> MediaTime {
 
 struct FakeVideo {
     facts: VideoStreamFacts,
+    /// Most frames one listing holds before it is cut, as the real reader does.
+    listing_bound: usize,
     listings: AtomicUsize,
     extractions: AtomicUsize,
 }
@@ -53,9 +55,17 @@ impl FakeVideo {
                 displayed: FrameDimensions::new(640, 360)?,
                 duration: MediaTime::from_micros(60 * SECOND),
             },
+            listing_bound: usize::MAX,
             listings: AtomicUsize::new(0),
             extractions: AtomicUsize::new(0),
         })
+    }
+
+    /// A video whose listings hold at most `bound` frames: a denser range is
+    /// cut just before the first unlisted frame and says more may follow.
+    fn cut_after(mut self, bound: usize) -> Self {
+        self.listing_bound = bound;
+        self
     }
 
     fn listing(&self, requested: TimeRange) -> Result<FrameListing, EvidenceMediaError> {
@@ -68,13 +78,30 @@ impl FakeVideo {
         };
         let covered =
             TimeRange::new(requested.start(), end).map_err(|_| EvidenceMediaError::Invalid)?;
-        let frames = (0..FRAMES)
+        let mut frames: Vec<ListedFrame> = (0..FRAMES)
             .map(|pts| ListedFrame {
                 pts,
                 time: frame_time(pts),
             })
             .filter(|frame| frame.time >= covered.start() && frame.time < covered.end())
             .collect();
+        if frames.len() > self.listing_bound {
+            let cut = frames
+                .get(self.listing_bound)
+                .map_or(covered.end(), |frame| frame.time);
+            frames.truncate(self.listing_bound);
+            // A cut before the first frame decides nothing: it covers a
+            // microsecond and lists no frame.
+            let end = if frames.is_empty() {
+                MediaTime::from_micros(covered.start().as_micros() + 1)
+            } else {
+                cut
+            };
+            let cut_range =
+                TimeRange::new(covered.start(), end).map_err(|_| EvidenceMediaError::Invalid)?;
+            return FrameListing::new(cut_range, frames, ListingTail::MoreMayFollow)
+                .map_err(|_| EvidenceMediaError::Invalid);
+        }
         FrameListing::new(covered, frames, tail).map_err(|_| EvidenceMediaError::Invalid)
     }
 }
@@ -723,5 +750,77 @@ async fn a_plan_of_analysed_windows_waits_for_the_others() -> TestResult {
     assert!(!coverage.is_complete());
     assert_eq!(coverage.pending, planned.plan.len());
     assert_eq!(visual.windows().len(), 1, "planning analysed nothing");
+    Ok(())
+}
+
+fn plain_targets(milliseconds: &[u64]) -> Vec<ReadTarget> {
+    milliseconds
+        .iter()
+        .map(|millisecond| ReadTarget {
+            time: MediaTime::from_micros(millisecond * 1_000),
+            candidate: None,
+        })
+        .collect()
+}
+
+/// A listing cut at its frame bound cannot decide the targets past the cut,
+/// so they are listed again from the first of them; they are never recorded as
+/// `unresolved`, which means that no frame is displayed there. The 10 fps
+/// stream holds 25 frames per listing here: 0 to 2.4 s, then the rest.
+#[tokio::test]
+async fn targets_past_a_cut_listing_are_listed_again_not_unresolved() -> TestResult {
+    let plan = plain_targets(&[0, 1_000, 2_000, 3_000, 4_000]);
+    let video = FakeVideo::new()?.cut_after(25);
+    let engine = Scripted::new('1');
+    let extension = read(&plan, None, &video, &engine, 40).await?;
+    assert_eq!(extension.stop, None);
+    assert!(
+        extension.unresolved.is_empty(),
+        "unresolved: {:?}",
+        extension.unresolved
+    );
+    let read_pts: Vec<i64> = extension.frames.iter().map(|f| f.frame.pts).collect();
+    assert_eq!(read_pts, vec![0, 10, 20, 30, 40]);
+    assert_eq!(video.listings.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+/// A target just inside the cut, within the tolerance of the cut frame, is
+/// answered `OutsideListing` too (the frame after it is not listed), so it is
+/// listed again as well; only a target with no frame within tolerance is
+/// really unresolved.
+#[tokio::test]
+async fn a_target_just_before_the_cut_is_listed_again() -> TestResult {
+    let plan = plain_targets(&[0, 2_450, 4_000]);
+    let video = FakeVideo::new()?.cut_after(25);
+    let engine = Scripted::new('1');
+    let extension = read(&plan, None, &video, &engine, 40).await?;
+    assert_eq!(extension.stop, None);
+    assert!(
+        extension.unresolved.is_empty(),
+        "unresolved: {:?}",
+        extension.unresolved
+    );
+    let read_pts: Vec<i64> = extension.frames.iter().map(|f| f.frame.pts).collect();
+    assert_eq!(read_pts, vec![0, 25, 40]);
+    Ok(())
+}
+
+/// A listing that decided nothing for its first target would decide nothing
+/// again, so the call stops (a resource limit of the media tools, the stop
+/// that already means a bound was reached) and leaves every target pending:
+/// it neither spins nor records the targets as unresolved.
+#[tokio::test]
+async fn a_listing_that_decides_nothing_stops_the_call() -> TestResult {
+    let plan = plain_targets(&[1_000, 2_000]);
+    let video = FakeVideo::new()?.cut_after(0);
+    let engine = Scripted::new('1');
+    let extension = read(&plan, None, &video, &engine, 40).await?;
+    assert_eq!(
+        extension.stop,
+        Some(ScreenTextStop::Media(EvidenceMediaError::ResourceLimit))
+    );
+    assert!(extension.frames.is_empty() && extension.unresolved.is_empty());
+    assert_eq!(video.listings.load(Ordering::SeqCst), 1);
     Ok(())
 }

@@ -29,9 +29,20 @@ use vsift_domain::{
 
 use super::{MediaError, parse_seconds_micros, parse_time_base};
 
-/// Hard bound for one frame listing's diagnostics: 1,201 frame lines of
-/// about 250 bytes, with configuration, colour and side-data lines.
+/// Hard bound for one frame listing's diagnostics: up to 1,265 frame lines
+/// (the 1,201 asked for and a small fixed slack more) of about 250 bytes,
+/// with configuration, colour and side-data lines.
 pub const MAX_LISTING_DIAGNOSTIC_BYTES: usize = 1024 * 1024;
+/// Frame lines `showinfo` may log beyond the [`MAX_LISTED_FRAMES`] + 1 that
+/// the listing run's `-frames:v` asks for.
+///
+/// The limit is applied at the output, after the filter graph, so frames
+/// already queued between `showinfo` and the output are logged too: `FFmpeg`
+/// 9.0 logs one more (measured), and the count may differ between builds and
+/// thread settings. A dense range must still be cut and reported as "more may
+/// follow", not rejected as damaged. The slack stays small and fixed, so the
+/// bound on a hostile log is still tight (and the byte bound still applies).
+const LISTING_OVERRUN_SLACK: usize = 64;
 /// Most `ashowinfo` frame lines accepted. The speech and evidence audio
 /// profiles regroup audio into 65,536-sample frames and the ten-second clip
 /// profile logs one line per codec frame, so real output stays far below.
@@ -287,6 +298,8 @@ pub(super) fn normalize(
 /// ([`MediaError::TimeBaseMismatch`] otherwise). When the extra frame was
 /// reached the listing is cut just before it: it then covers the window's
 /// start up to that frame's time, completely, and more frames may follow.
+/// Frames `FFmpeg` logged after the extra one (up to a small fixed slack, see
+/// `LISTING_OVERRUN_SLACK`) are dropped by that cut.
 /// Published for fuzzing like [`parse_frame_showinfo`].
 ///
 /// # Errors
@@ -303,7 +316,7 @@ pub fn parse_frame_listing(
     if stderr.len() > MAX_LISTING_DIAGNOSTIC_BYTES {
         return Err(MediaError::OutputLimit);
     }
-    let log = scan_showinfo(stderr, MAX_LISTED_FRAMES + 1)?;
+    let log = scan_showinfo(stderr, MAX_LISTED_FRAMES + 1 + LISTING_OVERRUN_SLACK)?;
     if !log.frames.is_empty() && log.time_base != Some(window.time_base) {
         return Err(if log.time_base.is_some() {
             MediaError::TimeBaseMismatch

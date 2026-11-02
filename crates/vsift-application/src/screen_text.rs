@@ -14,12 +14,12 @@
 use std::{error::Error, fmt, future::Future, num::NonZeroU32};
 
 use vsift_domain::{
-    Confidence, ConfidenceOrigin, FrameDimensions, FrameRef, FrameSelection, FrameTolerance,
-    ListedFrame, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES, MAX_SCREEN_TEXT_LINES_PER_FRAME,
-    MediaTime, ReadTarget, ScreenText, ScreenTextError, ScreenTextFailure, ScreenTextFrame,
-    ScreenTextIndex, ScreenTextIndexId, ScreenTextIndexParts, ScreenTextLine, ScreenTextLineId,
-    ScreenTextOutcome, ScreenTextProvider, ScreenTextScope, TextRegion, TimeRange,
-    VISUAL_WINDOW_MICROS, VisualCandidateId, VisualCoverageGap, VisualIndex,
+    Confidence, ConfidenceOrigin, FrameDimensions, FrameRef, FrameSelection, FrameSelectionError,
+    FrameTolerance, ListedFrame, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
+    MAX_SCREEN_TEXT_LINES_PER_FRAME, MediaTime, ReadTarget, ScreenText, ScreenTextError,
+    ScreenTextFailure, ScreenTextFrame, ScreenTextIndex, ScreenTextIndexId, ScreenTextIndexParts,
+    ScreenTextLine, ScreenTextLineId, ScreenTextOutcome, ScreenTextProvider, ScreenTextScope,
+    TextRegion, TimeRange, VISUAL_WINDOW_MICROS, VisualCandidateId, VisualCoverageGap, VisualIndex,
     plan_reads_in_analysed_windows, select_frame,
 };
 
@@ -481,6 +481,7 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
                 target.time.as_micros() - first.time.as_micros() > MAX_SHARED_LISTING_MICROS
             })
             .unwrap_or(remaining.len());
+        let whole = remaining;
         let (group, rest) = remaining.split_at(group_end);
         let Some(last) = group.last() else { break };
         if first.time >= stream.duration {
@@ -509,18 +510,36 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
             }
         };
         remaining = rest;
-        for target in group {
+        for (position, target) in group.iter().enumerate() {
             let tolerance = if target.candidate.is_some() {
                 FrameTolerance::EXACT
             } else {
                 FrameTolerance::DEFAULT
             };
-            let Ok(selected) =
-                select_frame(&listing, target.time, FrameSelection::AtOrAfter, tolerance)
-            else {
-                extension.unresolved.push((*target).clone());
-                continue;
-            };
+            let selected =
+                match select_frame(&listing, target.time, FrameSelection::AtOrAfter, tolerance) {
+                    Ok(selected) => selected,
+                    // A dense listing is cut at its frame bound, and a target at
+                    // or near the cut is one the listing cannot decide: frames
+                    // may well be displayed there, so it is not "unresolved".
+                    // The group is split and listed again from this target.
+                    Err(FrameSelectionError::OutsideListing) => {
+                        if position == 0 {
+                            // Nothing was decided, so listing again from here
+                            // would give the same answer: stop, with every
+                            // target left pending.
+                            extension.stop =
+                                Some(ScreenTextStop::Media(EvidenceMediaError::ResourceLimit));
+                        } else {
+                            remaining = whole.get(position..).unwrap_or_default();
+                        }
+                        break;
+                    }
+                    Err(_) => {
+                        extension.unresolved.push((*target).clone());
+                        continue;
+                    }
+                };
             let pts = selected.frame.pts;
             if continued.is_some_and(|index| index.frame_at_pts(pts).is_some()) {
                 match extension.joined.iter_mut().find(|(held, _)| *held == pts) {
@@ -533,6 +552,9 @@ pub async fn read_screen_text_within<X: FrameExtractor, R: ScreenTextReader, C: 
                     None => resolved.push((selected.frame, vec![(*target).clone()])),
                 }
             }
+        }
+        if extension.stop.is_some() {
+            break;
         }
     }
     resolved.sort_by_key(|(frame, _)| frame.pts);
