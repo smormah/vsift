@@ -1,7 +1,6 @@
 # Online video: the opt-in platform qualification (#409)
 
-Status (2026-11-02, `0.3.0`): **done as far as a hosted runner can take it. No real site has given `joined: audio_video`,
-from a hosted runner or from anywhere else.** This page names the public videos the qualification uses, with the licence
+Status (2026-11-02, `0.3.0`): **done as far as a hosted runner can take it, and one run from an ordinary network added a real pair.** A real pair of streams has been seen once: on 2 November 2026, one NASA video on YouTube, on Windows, with a user-supplied yt-dlp 2026.08.19 and Deno 2.9.7, joined by the person's own FFmpeg (`joined: audio_video`, 97,793,603 bytes). It was a one-off check, not a gate, and is not repeated without the maintainer's word. Not seen: any other site, a hosted runner (YouTube refuses hosted runners with a bot check) and macOS. This page names the public videos the qualification uses, with the licence
 of each, states what the hosted run saw, and says what has not been seen. The record of each run is that run's artifact;
 [L-209](../planning/known-limits.md#l-209) states what stays unseen. #409 stays open.
 
@@ -67,7 +66,7 @@ YouTube, the one site that does serve separate streams, met a bot wall from a ho
 
 Dispatch 41444797025 (2026-11-02, head `ebe5dde5`, Ubuntu 24.04), through the managed pair `yt-dlp-2026.08.19-linux-x86_64`
 and `deno-2.9.7-x86_64-linux-gnu`. The record is that run's artifact `online-video-qualification-record` (90 days);
-`pair_seen` is `false` and `problems` is empty. An earlier dispatch (41443956829) failed on a wrong path in the test
+`pair_seen` is `false` (a hosted run) and `problems` is empty. An earlier dispatch (41443956829) failed on a wrong path in the test
 itself, before it read any page, and is not a result.
 
 | Id | Outcome | What it shows |
@@ -81,7 +80,7 @@ itself, before it read any page, and is not a result.
 | R1 | Refused as `playlist` | The playlist case the qualification requires, from a real page |
 
 Seen, then: a page fetched through the managed pair on three sites and written as one file; four typed refusals
-from real pages (`extractor_broken`, `http_status`, `playlist` twice); no link in any output. Not seen: a pair.
+from real pages (`extractor_broken`, `http_status`, `playlist` twice); no link in any output. Not seen from a hosted runner: a pair.
 
 ## Not run, and why
 
@@ -90,12 +89,23 @@ from real pages (`extractor_broken`, `http_status`, `playlist` twice); no link i
 | A private video | No public private page exists; reaching one needs a sign-in, which is never used | `what_may_not_be_fetched_is_refused_with_its_reason` (`ytdlp_info.rs`), the `private` case; `every_phrase_gives_its_typed_reason_and_is_not_echoed` (`page_acquisition.rs`) |
 | A sign-in page | The same: a page that asks for a login is reached only by one with an account | The `needs_auth`, `premium_only` and `subscriber_only` cases of the same test, and the login phrases |
 | A DRM-protected page | No public page is known to a hosted runner that reports DRM without a sign-in | The `Drm` phrases of `YTDLP_PHRASES` in the phrase test |
-| A real pair of streams | See below | `separate_streams_are_joined_and_an_unlisted_id_is_not_kept` and `webm_streams_are_joined_as_matroska` (`page_acquisition.rs`), the verified FFmpeg joining the fake's two streams |
+| A real pair of streams, from a hosted runner | A hosted runner meets YouTube's bot check; see below | `separate_streams_are_joined_and_an_unlisted_id_is_not_kept` and `webm_streams_are_joined_as_matroska` (`page_acquisition.rs`), the verified FFmpeg joining the fake's two streams |
 
-## No real pair has been seen
+## A real pair has been seen once
 
-Joining separate audio and video has run only on the fake yt-dlp and on a local probe with a made-up video. No real
-site has given `joined: audio_video`. The only site known to serve separate streams over https, YouTube, refuses
-hosted runners with a bot check (dispatch 41281919811 on 2026-11-01), and one search of six other pages on
-2026-11-02 found none that offers an audio stream apart from a video stream. A run from an ordinary network is the
-next step; it needs the maintainer's go naming the machine, the file, the link and the size.
+Before 2 November 2026, joining separate audio and video had run only on the fake yt-dlp and on a local probe with a
+made-up video. The only site known to serve separate streams over https, YouTube, refuses hosted runners with a bot
+check (dispatch 41281919811 on 2026-11-01), and one search of six other pages on 2026-11-02 found none that offers an
+audio stream apart from a video stream.
+
+On 2026-11-02 the maintainer allowed one run of `a_nasa_youtube_page_is_joined_through_registered_tools` from an
+ordinary network, on the project's own Windows machine. The information phase came first, with the same fixed
+arguments and no cookies: the plan was a pair, video 401 (https mp4, 94,403,493 bytes) and audio 140 (https m4a,
+3,320,152 bytes), 97,723,645 bytes in all, inside the 200 MB ceiling set for the run. The run then joined them once
+with no retry (`joined: audio_video`, 97,793,603 bytes), through the pinned `yt-dlp.exe` 2026.08.19 and Deno 2.9.7
+that the person supplied (both checked against their sizes and digests first) and the person's own FFmpeg. The
+session closed, and the tools and logs were deleted.
+
+**This is one video on one site, seen once.** It was a one-off check, not a gate, and it is not repeated without the
+maintainer's word. Not seen: any other site, a hosted runner (YouTube refuses them), and macOS. The hosted
+`youtube` input still passes on the typed `bot_check`, which proves nothing about a pair.
