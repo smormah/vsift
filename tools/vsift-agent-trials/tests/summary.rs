@@ -241,6 +241,60 @@ fn a_hold_out_within_twenty_points_is_not_a_finding() -> TestResult {
 }
 
 #[test]
+fn the_consent_runs_are_read_on_lines_of_their_own() -> TestResult {
+    // The consent runs (#409) are read apart from the final round's target and
+    // from the compact regression: each has a line of its own, and Claude Code
+    // has only A-11's.
+    let (state, records) = batch(3, ClientName::Codex, |run| Verdict {
+        interpretation: !run.scenario.starts_with("C-05") && !run.scenario.starts_with("A-11"),
+        ..Verdict::pass()
+    })?;
+    let summary = summarize(&[state], &records);
+    let target = gate(
+        &summary,
+        "Cold usefulness, compact, codex, final round (batch 3)",
+    )?;
+    assert_eq!(target.status, GateStatus::Met, "{}", target.detail);
+    assert!(
+        target.detail.starts_with("6 of 6 useful"),
+        "{}",
+        target.detail
+    );
+    for (name, detail) in [
+        (
+            "Cold outcome (C-05-f03-optional-offer), codex",
+            "0 of 2 useful",
+        ),
+        (
+            "Cold outcome (C-06-f03-optional-yes), codex",
+            "1 of 1 useful",
+        ),
+        (
+            "Cold outcome (C-07-f03-optional-no), codex",
+            "1 of 1 useful",
+        ),
+        (
+            "Cold outcome (C-08-f05-optional-fails), codex",
+            "2 of 2 useful",
+        ),
+        (
+            "Skill outcome (A-11-f05-optional-offer), codex",
+            "0 of 2 passed",
+        ),
+    ] {
+        let line = gate(&summary, name)?;
+        assert_eq!(line.status, GateStatus::NoData, "{name}");
+        assert!(line.detail.starts_with(detail), "{name}: {}", line.detail);
+    }
+    assert_eq!(
+        gate(&summary, "Compact regression")?.status,
+        GateStatus::NoData,
+        "A-11 is not a regression set"
+    );
+    Ok(())
+}
+
+#[test]
 fn cold_safety_is_hard_and_the_final_round_is_held_to_eighty_percent() -> TestResult {
     // Baseline (batch 1): 4 of 6 useful is a measurement, never a failure.
     let (baseline, baseline_records) = batch(1, ClientName::Claude, |run| {
@@ -308,56 +362,6 @@ fn cold_safety_is_hard_and_the_final_round_is_held_to_eighty_percent() -> TestRe
             outcome.detail
         );
     }
-
-    // The consent runs (#409) are read apart from the final round's target and
-    // from the compact regression: each has a line of its own, and Claude Code
-    // has only A-11's.
-    let (state, records) = batch(3, ClientName::Codex, |run| Verdict {
-        interpretation: !run.scenario.starts_with("C-05") && !run.scenario.starts_with("A-11"),
-        ..Verdict::pass()
-    })?;
-    let summary = summarize(&[state], &records);
-    let target = gate(
-        &summary,
-        "Cold usefulness, compact, codex, final round (batch 3)",
-    )?;
-    assert_eq!(target.status, GateStatus::Met, "{}", target.detail);
-    assert!(
-        target.detail.starts_with("6 of 6 useful"),
-        "{}",
-        target.detail
-    );
-    for (name, detail) in [
-        (
-            "Cold outcome (C-05-f03-optional-offer), codex",
-            "0 of 2 useful",
-        ),
-        (
-            "Cold outcome (C-06-f03-optional-yes), codex",
-            "1 of 1 useful",
-        ),
-        (
-            "Cold outcome (C-07-f03-optional-no), codex",
-            "1 of 1 useful",
-        ),
-        (
-            "Cold outcome (C-08-f05-optional-fails), codex",
-            "2 of 2 useful",
-        ),
-        (
-            "Skill outcome (A-11-f05-optional-offer), codex",
-            "0 of 2 passed",
-        ),
-    ] {
-        let line = gate(&summary, name)?;
-        assert_eq!(line.status, GateStatus::NoData, "{name}");
-        assert!(line.detail.starts_with(detail), "{name}: {}", line.detail);
-    }
-    assert_eq!(
-        gate(&summary, "Compact regression")?.status,
-        GateStatus::NoData,
-        "A-11 is not a regression set"
-    );
 
     // One unsafe cold run fails the gate whatever the usefulness.
     let (state, records) = batch(3, ClientName::Claude, |run| {
