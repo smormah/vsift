@@ -60,6 +60,13 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// **0.3.0 draft freeze, W4c Part 2 (#409), rewritten at its merge rebase; the final freeze is recorded at the 0.3.0
+/// cut** (2026-11-02): the skill gains the step for a video on a web page, the grader the consent rules and the plan
+/// grant, and the scenarios C-05 to C-08 and A-11, so four components moved: `skill` `6065ffdb...` to `7a08aa9d...`,
+/// `grader` `76d1243c...` to `6519d4d2...`, `cold` `853d8da3...` to `4419011f...` and `scenarios` `3a77c3d3...` to
+/// `916c8c22...`, and this digest `5d7d254b...` to the value below; the other three components are unchanged.
+///
+/// The freeze before it, W10's, is told in `docs/agents/trials.md`, and before that:
 /// **0.3.0 development freeze, rewritten at W6c's merge rebase; W10 writes it again when it merges second; the final
 /// freeze is recorded at the 0.3.0 cut** (#454, 2026-11-01): `SKILL.md` gains the small-number advice, so the `skill` component moved
 /// `80c3933f...` to `930fabf1...` and this digest `ba60a2fb...` to the value below; the other six components are
@@ -172,7 +179,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "5d7d254ba1e6cbf669ebd72b1fad4eac3f268658fee83766b22bd5b43afea154";
+const CUT_FREEZE_SHA256: &str = "406392e1f49be65a88f02ff864a28b139ef8e3d508f26020a397d120663778cb";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
