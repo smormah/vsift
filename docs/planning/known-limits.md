@@ -5366,7 +5366,7 @@ that week.**
   audio and video has run only on the fake yt-dlp and on a local probe with a made-up video. The one site known to
   serve separate streams over https, YouTube, refuses hosted runners with a bot check (dispatch 41281919811), and one
   information-phase search of six other pages (run 41442126342) found none that offers an audio stream apart from a
-  video stream. Seen from a hosted runner: RESULTS_SEEN. **Not seen:** a pair on any site; a private, sign-in or DRM
+  video stream. Seen from a hosted runner (run 41444797025, the managed pair): a page fetched as one file on three sites (a social site, a PeerTube instance, media.ccc.de) and four typed refusals from real pages (`extractor_broken`, `http_status`, and `playlist` twice). **Not seen:** a pair on any site; a private, sign-in or DRM
   page (they need an account, so only the fake's tests cover them, named on the page); a system proxy on Windows or
   macOS; the `mp4` and `matroska` muxers on hostile files. A run from an ordinary network is the next step for the pair
   and needs the maintainer's go. A pass of `a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check` proves nothing about

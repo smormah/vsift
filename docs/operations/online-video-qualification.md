@@ -57,7 +57,25 @@ read Q1 to Q6 with phase 1's selection. **No page offered a separate audio strea
 YouTube, the one site that does serve separate streams, met a bot wall from a hosted runner on 2026-11-01 (dispatch
 41281919811); it is not searched again here.
 
-## What the qualification run saw (RESULTS)
+## What the qualification run saw
+
+Dispatch 41444797025 (2026-11-02, head `ebe5dde5`, Ubuntu 24.04), through the managed pair `yt-dlp-2026.08.19-linux-x86_64`
+and `deno-2.9.7-x86_64-linux-gnu`. The record is that run's artifact `online-video-qualification-record` (90 days);
+`pair_seen` is `false` and `problems` is empty. An earlier dispatch (41443956829) failed on a wrong path in the test
+itself, before it read any page, and is not a result.
+
+| Id | Outcome | What it shows |
+| --- | --- | --- |
+| Q1 | Refused as `extractor_broken` | The extractor could not parse the page (the same text the search saw); the typed refusal is the right one |
+| Q2 | Fetched, `single_file`, 139,724 bytes | A page on a social site through yt-dlp: the one file the site offers, no audio stream apart |
+| Q3 | Fetched, `single_file`, 19,555,969 bytes | A PeerTube instance: a combined mp4 |
+| Q4 | Fetched, `single_file`, 142,625,911 bytes | media.ccc.de: a combined mp4 |
+| Q5 | Refused as `http_status` | The site answers VSift's own first request with an HTTP error, so the link never reaches yt-dlp (the real-media set records that this site refuses the tool's own requests); the typed refusal is the right one |
+| Q6 | Refused as `playlist` | The generic reader found a list of entries on the page, not one video |
+| R1 | Refused as `playlist` | The playlist case the qualification requires, from a real page |
+
+Seen, then: a page fetched through the managed pair on three sites and written as one file; four typed refusals
+from real pages (`extractor_broken`, `http_status`, `playlist` twice); no link in any output. Not seen: a pair.
 
 ## Not run, and why
 
