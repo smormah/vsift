@@ -247,11 +247,28 @@ On failure read `error.code`, `error.retryable`, `error.retry_after_ms` and
 | `RESOURCE_LIMIT` | Use a smaller range or fewer frames, unless the remediation says there is no room (a session full of evidence): a smaller request cannot help then. Report the gap. |
 | `IDEMPOTENCY_CONFLICT` | You reused an operation id for another request; use a new id. |
 | `INVALID_SOURCE` | The video (or part of it) cannot be read; report it. |
-| `SOURCE_FETCH_FAILED` | The link could not be fetched; local files are not affected. Reason `web_page`: follow "A video on a web page" in SKILL.md. Any other reason: go to REPORT with the gap and code, and put `error.remediation` in your own words. Never fetch the page or the video yourself. |
+| `SOURCE_FETCH_FAILED` | The link could not be fetched; local files are not affected. Reason `web_page`: follow "A video on a web page" below. Any other reason: go to REPORT with the gap and code, and put `error.remediation` in your own words. Never fetch the page or the video yourself. |
 | `STORAGE_IO` | Go to REPORT with the code; do not work around it. Read `error.remediation` first: it often says what really happened (a link was given instead of the file, the drive has no room, the id names no published session), so do not call it damage unless it does. Put that in the gap's note in your own words and briefly: a note holds 600 characters, less than some remediations. |
 | `INTEGRITY_FAILURE`, `INTERNAL`, `UNSUPPORTED_SCHEMA` | Go to REPORT with the code; do not work around it. |
 
 A gap caused by a failure may carry its code in `gaps[].code`.
+
+## A video on a web page
+
+Reading a video from a web page needs an optional part, and adding it is the user's decision alone. When the user asks
+about one, or `ingest --url` refuses a link with reason `web_page`, and `setup check` does not report `online_links` in
+`optional_components` as `installed`, run `vsift setup plan --profile desktop --json` and find `online_links` in its
+`optional_components`.
+
+- If its status is `not_included`, tell the user in one or two plain sentences what it does, its licence, its download
+  size and that each site's terms apply, then ask whether they want it.
+- If it is `unavailable`, tell them that this needs a yt-dlp of their own, that each site's terms apply, and ask whether
+  they have one.
+
+On a yes, give them the command and let them run it (`vsift setup --include web-videos`, or with their own yt-dlp
+`vsift setup configure yt-dlp --executable <executable>`, by its absolute path); you never add it. On a no, ask for the
+video file or its direct link. Then go to REPORT: a `dependency` gap with reason `needs_user_authority`, and the question
+in your prose. Local videos need none of this. VSift's own plan says the same to an agent with no skill.
 
 ## Useful limits of the commands
 

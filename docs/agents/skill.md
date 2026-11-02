@@ -529,7 +529,8 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 
 ## The change for 0.3.0: a video on a web page is the user's decision (ADR 0028, #409; draft, 2026-11-02)
 
-- **`SKILL.md`, in one place:** CHECK_CAPABILITIES gains "A video on a web page". When the user asks about one, or
+- **`references/commands.md`, in one place:** a section "A video on a web page", with one line in `SKILL.md`'s
+  CHECK_CAPABILITIES that points to it, because `SKILL.md` is at its 300-line bound. When the user asks about one, or
   `ingest --url` refuses a link with `web_page`, and `setup check` does not report `online_links` as `installed`, the
   agent reads the plan's `optional_components` and tells the user what the part does, its licence, its size and that
   each site's terms apply, then asks. Where the plan says `unavailable`, it says this needs a yt-dlp of their own and

@@ -702,7 +702,7 @@ evidence goes back to the planner.
 
 *Implementation note, 2026-11-02 (#409's consent step and trials, W4c Part 2; the planner's rulings of the same day):*
 
-- **The skill asks; it never adds.** `SKILL.md`'s CHECK_CAPABILITIES carries the step in one place, and `setup install`
+- **The skill asks; it never adds.** `references/commands.md` carries the step in one place, CHECK_CAPABILITIES points to it, and `setup install`
   stays `never`: on a yes the agent gives the person the command. An agent with no skill follows the plan's
   `operator_decision_required` (section 4.2), which lets it accept after a yes. The description's "streaming URLs"
   wording changed here, as this ADR's Consequences said it would.

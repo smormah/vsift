@@ -76,19 +76,9 @@ vsift setup check --json
   Its result is not an envelope: read `dependencies` (FFmpeg, FFprobe, whisper) and
   `local_asr.verification.status`. FFmpeg and FFprobe are needed for every media step;
   whisper and a verified model only for local speech recognition.
-- If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a `dependency` gap with
-  code `MISSING_CAPABILITY`, VSift's `remediation` quoted in its note and in your prose. Installing or
-  registering tools is the user's decision (`setup configure` runs only with a path the user gives you).
-- **A video on a web page** needs an optional part, and adding it is the user's decision alone. When the user asks
-  about one, or `ingest --url` refuses a link with reason `web_page`, and `setup check` does not report `online_links`
-  in `optional_components` as `installed`, run `vsift setup plan --profile desktop --json` and find `online_links` in
-  its `optional_components`. If its status is `not_included`, tell the user in one or two plain sentences what it does,
-  its licence, its download size and that each site's terms apply, then ask whether they want it. If it is
-  `unavailable`, tell them that this needs a yt-dlp of their own, that each site's terms apply, and ask whether they
-  have one. On a yes, give them the command and let them run it (`vsift setup --include web-videos`, or with their
-  own yt-dlp `vsift setup configure yt-dlp --executable <absolute-path>`); you never add it. On a no, ask for the video
-  file or its direct link. Then go to REPORT: a `dependency` gap with reason `needs_user_authority`, and the question
-  in your prose. Local videos need none of this. VSift's own plan says the same to an agent with no skill.
+- If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a `dependency` gap with code `MISSING_CAPABILITY`,
+  VSift's `remediation` quoted in its note and in your prose. Installing or registering tools is the user's decision (`setup configure` runs only with a path the user gives you).
+- **A video on a web page** needs an optional part that only the user may add: follow "A video on a web page" in [references/commands.md](references/commands.md).
 - **Stop when** the image access and the tool state are recorded.
 
 ### 2. PREPARE
