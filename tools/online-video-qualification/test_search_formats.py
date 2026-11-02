@@ -48,6 +48,12 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(verdict["verdict"], "SINGLE_FILE")
         self.assertEqual(verdict["selected"][0]["format_id"], "c")
 
+    def test_the_size_is_the_sum_when_every_stream_says_it(self) -> None:
+        sized = [{**VIDEO_ONLY, "filesize": 5}, {**AUDIO_ONLY, "filesize_approx": 7}]
+        self.assertEqual(search.classify({"requested_formats": sized})["total_bytes"], 12)
+        unsized = [{**VIDEO_ONLY, "filesize": 5}, AUDIO_ONLY]
+        self.assertIsNone(search.classify({"requested_formats": unsized})["total_bytes"])
+
     def test_a_combined_file_is_one_file(self) -> None:
         self.assertEqual(search.classify(COMBINED)["verdict"], "SINGLE_FILE")
         self.assertEqual(

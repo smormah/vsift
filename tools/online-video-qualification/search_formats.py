@@ -7,7 +7,10 @@ VSift would have chosen: one file, a pair of separate streams, or the reason the
 Nothing is downloaded and no media is written. No cookie, token, sign-in or client trick is
 used; a bot wall or a login wall is reported as it comes and never engineered round.
 
-Usage: search_formats.py <path to the pinned yt-dlp>
+It also reads one video's size before a real fetch: give the link in CANDIDATES and the
+selected formats' `bytes` and `total_bytes` are the size the fetch would take (null when the
+site does not say). Usage: search_formats.py <path to the pinned yt-dlp> [<path to a Deno>]
+Works on Windows, macOS and Linux; the second argument is the runtime some sites need.
 """
 
 from __future__ import annotations
@@ -51,7 +54,6 @@ FIXED_ARGUMENTS = [
     "--no-check-formats",
     "--socket-timeout",
     "30",
-    "--no-js-runtimes",
 ]
 
 MAX_CANDIDATES = 8
@@ -107,8 +109,10 @@ def classify(info: dict) -> dict:
         and any(is_video_only(entry) for entry in selected)
         and any(is_audio_only(entry) for entry in selected)
     )
+    sizes = [entry["bytes"] for entry in chosen]
     return {
         "verdict": "PAIR" if pair else "SINGLE_FILE",
+        "total_bytes": None if None in sizes else sum(sizes),
         "extractor_key": info.get("extractor_key"),
         "type": info.get("_type"),
         "availability": info.get("availability"),
@@ -133,17 +137,27 @@ def available_shapes(info: dict) -> dict:
     return shapes
 
 
-def run_yt_dlp(executable: str, arguments: list[str], home: str) -> subprocess.CompletedProcess:
+def runtime_arguments(runtime: str | None) -> list[str]:
+    """No runtime found on PATH is ever used: none, or exactly the one given."""
+    return ["--no-js-runtimes", *(["--js-runtimes", f"deno:{runtime}"] if runtime else [])]
+
+
+def run_yt_dlp(
+    executable: str, arguments: list[str], home: str, runtime: str | None
+) -> subprocess.CompletedProcess:
     environment = {
         "HOME": home,
         "TMPDIR": home,
         "TEMP": home,
         "TMP": home,
         "YTDLP_NO_PLUGINS": "1",
-        "PATH": "/usr/bin:/bin",
     }
+    if os.name == "nt":
+        environment["SystemRoot"] = os.environ.get("SystemRoot", "")
+    else:
+        environment["PATH"] = "/usr/bin:/bin"
     return subprocess.run(
-        [executable, *FIXED_ARGUMENTS, *arguments],
+        [executable, *FIXED_ARGUMENTS, *runtime_arguments(runtime), *arguments],
         env=environment,
         capture_output=True,
         text=True,
@@ -156,7 +170,7 @@ def one_line(text: str, limit: int = 300) -> str:
     return " ".join(text.split())[:limit]
 
 
-def search_one(executable: str, link: str, home: str) -> dict:
+def search_one(executable: str, link: str, home: str, runtime: str | None) -> dict:
     result: dict = {"link": link}
     try:
         phase_one = run_yt_dlp(
@@ -172,6 +186,7 @@ def search_one(executable: str, link: str, home: str) -> dict:
                 link,
             ],
             home,
+            runtime,
         )
     except subprocess.TimeoutExpired:
         result.update(verdict="TIMEOUT")
@@ -191,7 +206,9 @@ def search_one(executable: str, link: str, home: str) -> dict:
     # The selection found nothing: read the page again without it, to see what is offered.
     if "format is not available" in phase_one.stderr:
         try:
-            plain = run_yt_dlp(executable, ["--simulate", "--dump-single-json", "--", link], home)
+            plain = run_yt_dlp(
+                executable, ["--simulate", "--dump-single-json", "--", link], home, runtime
+            )
         except subprocess.TimeoutExpired:
             return result
         if plain.returncode == 0:
@@ -203,10 +220,11 @@ def search_one(executable: str, link: str, home: str) -> dict:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
+    if len(argv) not in (2, 3):
         print(__doc__)
         return 2
     executable = argv[1]
+    runtime = argv[2] if len(argv) == 3 else None
     links = os.environ.get("CANDIDATES", "").split()
     if not links or len(links) > MAX_CANDIDATES:
         print(f"give between 1 and {MAX_CANDIDATES} candidates")
@@ -219,7 +237,7 @@ def main(argv: list[str]) -> int:
     results = []
     with tempfile.TemporaryDirectory(prefix="vsift-search-") as home:
         for link in links:
-            results.append(search_one(executable, link, home))
+            results.append(search_one(executable, link, home, runtime))
     report = json.dumps(results, indent=2, sort_keys=True)
     print(report)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
