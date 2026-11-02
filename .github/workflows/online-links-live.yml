@@ -28,6 +28,10 @@ on:
         description: Also try one NASA video on YouTube (once for a change to page fetching, and at each re-pin).
         type: boolean
         default: false
+      candidates:
+        description: Information phase only, nothing is downloaded. Up to eight public https video page links, separated by spaces; runs nothing else.
+        type: string
+        default: ''
 
 permissions: {}
 
@@ -38,6 +42,7 @@ concurrency:
 jobs:
   live:
     name: Fetch public-domain NASA video (Ubuntu 24.04)
+    if: github.event_name != 'workflow_dispatch' || inputs.candidates == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -66,7 +71,7 @@ jobs:
   # credentials or personal details.
   page-windows:
     name: A public page through a user-supplied yt-dlp (Windows x64)
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.candidates == ''
     runs-on: windows-2025
     timeout-minutes: 60
     permissions:
@@ -97,7 +102,7 @@ jobs:
 
   page-macos:
     name: A public page through a user-supplied yt-dlp (macOS arm64)
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.candidates == ''
     runs-on: macos-15
     timeout-minutes: 60
     permissions:
@@ -146,3 +151,38 @@ jobs:
           cargo test --release --locked -p vsift-cli --test link_live
           a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check
           -- --ignored --exact --nocapture
+
+  # #409's platform qualification, step 1: which sites serve a real pair of
+  # separate https audio and video streams to a hosted runner? The information
+  # phase only: the pinned yt-dlp reads each page with phase 1's selection and
+  # filter (ADR 0028 section 4.7), and nothing is downloaded. Each candidate is
+  # an https page the project may use (public domain or an open licence, named
+  # in docs/operations/online-video-qualification.md). No cookie, token or
+  # sign-in; a bot wall or a login wall is reported, never engineered round.
+  search:
+    name: Which sites serve a real pair of streams (information phase only)
+    if: github.event_name == 'workflow_dispatch' && inputs.candidates != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CANDIDATES: ${{ inputs.candidates }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp and check its size and digest
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --output "$RUNNER_TEMP/yt-dlp"             "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp")" -eq 40446224
+          echo "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a  $RUNNER_TEMP/yt-dlp" | sha256sum --check
+          chmod 755 "$RUNNER_TEMP/yt-dlp"
+
+      - name: Check the search script
+        run: python3 -m unittest discover -s tools/online-video-qualification -p 'test_*.py'
+
+      - name: Read each candidate's information
+        run: python3 tools/online-video-qualification/search_formats.py "$RUNNER_TEMP/yt-dlp"
