@@ -1,6 +1,6 @@
 ---
 name: vsift
-description: Investigate a local video file (a screen recording, video walkthrough or demo) with the VSift command-line tool and write a grounded, cited handoff. Use when the user asks what a local recording shows or says, or where something happens in it, and wants the answer with timestamps and frames (a bug report is one example). It answers questions about moments and stretches of a recording; a summary or timeline of the whole of a long recording is beyond its budgets. Do not use for streaming URLs, for editing or converting video, or when the vsift command is not installed and the user has not asked for help setting it up.
+description: Investigate a local video file (a screen recording, video walkthrough or demo) with the VSift command-line tool and write a grounded, cited handoff. Use when the user asks what a local recording shows or says, or where something happens in it, and wants the answer with timestamps and frames (a bug report is one example), or asks about a video at a link. It answers questions about moments and stretches of a recording; a summary or timeline of the whole of a long recording is beyond its budgets. Do not use for live streams, for editing or converting video, or when the vsift command is not installed and the user has not asked for help setting it up.
 ---
 
 # VSift video investigation
@@ -79,6 +79,16 @@ vsift setup check --json
 - If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a `dependency` gap with
   code `MISSING_CAPABILITY`, VSift's `remediation` quoted in its note and in your prose. Installing or
   registering tools is the user's decision (`setup configure` runs only with a path the user gives you).
+- **A video on a web page** needs an optional part, and adding it is the user's decision alone. When the user asks
+  about one, or `ingest --url` refuses a link with reason `web_page`, and `setup check` does not report `online_links`
+  in `optional_components` as `installed`, run `vsift setup plan --profile desktop --json` and find `online_links` in
+  its `optional_components`. If its status is `not_included`, tell the user in one or two plain sentences what it does,
+  its licence, its download size and that each site's terms apply, then ask whether they want it. If it is
+  `unavailable`, tell them that this needs a yt-dlp of their own, that each site's terms apply, and ask whether they
+  have one. On a yes, give them the command and let them run it (`vsift setup --include web-videos`, or with their
+  own yt-dlp `vsift setup configure yt-dlp --executable <absolute-path>`); you never add it. On a no, ask for the video
+  file or its direct link. Then go to REPORT: a `dependency` gap with reason `needs_user_authority`, and the question
+  in your prose. Local videos need none of this. VSift's own plan says the same to an agent with no skill.
 - **Stop when** the image access and the tool state are recorded.
 
 ### 2. PREPARE

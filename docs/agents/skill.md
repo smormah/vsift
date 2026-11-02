@@ -527,6 +527,26 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   **Untried:** the workflows, the plugin and the help's pointers by any agent until the cut
   ([L-242](../planning/known-limits.md#l-242)).
 
+## The change for 0.3.0: a video on a web page is the user's decision (ADR 0028, #409; draft, 2026-11-02)
+
+- **`SKILL.md`, in one place:** CHECK_CAPABILITIES gains "A video on a web page". When the user asks about one, or
+  `ingest --url` refuses a link with `web_page`, and `setup check` does not report `online_links` as `installed`, the
+  agent reads the plan's `optional_components` and tells the user what the part does, its licence, its size and that
+  each site's terms apply, then asks. Where the plan says `unavailable`, it says this needs a yt-dlp of their own and
+  that each site's terms apply, and asks. Then it goes to REPORT with a `dependency` gap, reason
+  `needs_user_authority`, because every stop ends in REPORT. The description now says it takes a video at a link and
+  rules out live streams, the one wording change ADR 0028 kept for this freeze.
+- **`setup install` stays `never` (the planner's ruling, 2026-11-02).** With the skill the person runs the command;
+  the agent only gives it to them. Without the skill, the plan's own `operator_decision_required` lets an agent accept
+  a plan after a yes. The skill reads hostile evidence, so it gains no authority here.
+- **`references/commands.md`:** `ingest --url` admits a public video page the user gave, and the failure table gains
+  the `SOURCE_FETCH_FAILED` row it did not have, which points to that step for `web_page`.
+- **The trials:** `A-11-f05-optional-offer` runs this step on both clients, and four cold scenarios run the plan's own
+  instruction ([`trials.md`](trials.md), "Cold-agent mode"). They first run at the `0.3.0` cut;
+  [L-249](../planning/known-limits.md#l-249) says what they do not cover.
+- **The freeze:** the `skill`, `grader`, `scenarios` and `cold` components move once; the draft writes a labelled
+  draft freeze, and it is rewritten at the merge rebase. The fuzz seed and the plugin's copy stay byte-identical.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

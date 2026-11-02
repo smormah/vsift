@@ -21,7 +21,7 @@ fn count(runs: &[vsift_agent_trials::campaign::PlannedRun], kind: RunKind) -> us
 }
 
 #[test]
-fn the_batches_add_up_to_the_plans_76_runs_and_a_reserve_of_12() -> TestResult {
+fn the_batches_add_up_to_the_plans_86_runs_and_a_reserve_of_12() -> TestResult {
     let mut total = 0;
     let mut pilots = 0;
     let mut counted_with_skill = 0;
@@ -42,16 +42,19 @@ fn the_batches_add_up_to_the_plans_76_runs_and_a_reserve_of_12() -> TestResult {
         }
     }
     assert_eq!(pilots, 8, "pilots");
-    assert_eq!(counted_with_skill, 34, "the counted set with the skill");
     assert_eq!(
-        cold, 34,
-        "the cold runs: 12 baseline, 18 final and 4 of C-04 (ADR 0038)"
+        counted_with_skill, 38,
+        "the counted set with the skill and A-11's 4"
     );
-    assert_eq!(total, 76);
+    assert_eq!(
+        cold, 40,
+        "the cold runs: 12 baseline, 18 final, 4 of C-04 (ADR 0038) and 6 of consent (#409)"
+    );
+    assert_eq!(total, 86);
     assert_eq!(
         total + 12,
-        84 + 4,
-        "with the reserve, the plan's 84 runs and C-04's 4"
+        84 + 4 + 10,
+        "with the reserve, the plan's 84 runs, C-04's 4 and consent's 10"
     );
     Ok(())
 }
@@ -122,20 +125,39 @@ fn each_batch_has_the_shape_the_plan_describes() -> TestResult {
                 .all(|run| run.mode == TrialMode::Skill && run.kind == RunKind::Counted)
         );
     }
+    Ok(())
+}
 
+#[test]
+fn batch_three_is_the_cold_round_c_04_and_the_consent_runs() -> TestResult {
     // Batch 3: compact 7 and review 4 cold runs per client, C-04 once in
-    // each tier (ADR 0038, section 5); batch 1 never runs C-04.
-    for client in [ClientName::Claude, ClientName::Codex] {
+    // each tier (ADR 0038, section 5), then the consent runs (#409): A-11 once
+    // in each tier for both clients, and the cold ones on Codex alone, where
+    // the plan offers the part. Batch 1 never runs C-04.
+    for (client, compact, review, cold) in [
+        (ClientName::Claude, 8, 5, 11),
+        (ClientName::Codex, 12, 7, 17),
+    ] {
         let runs = plan(3, client)?;
         assert_eq!(
             runs.iter().filter(|run| run.tier == Tier::Compact).count(),
-            7
+            compact
         );
         assert_eq!(
             runs.iter().filter(|run| run.tier == Tier::Review).count(),
-            4
+            review
         );
-        assert!(runs.iter().all(|run| run.mode == TrialMode::Cold));
+        assert_eq!(
+            runs.iter()
+                .filter(|run| run.mode == TrialMode::Cold)
+                .count(),
+            cold
+        );
+        assert!(
+            runs.iter()
+                .filter(|run| run.mode == TrialMode::Skill)
+                .all(|run| run.scenario == "A-11-f05-optional-offer")
+        );
         for tier in [Tier::Compact, Tier::Review] {
             let outcome = runs
                 .iter()
@@ -191,7 +213,9 @@ fn scenario_file(directory: &str, id: &str) -> std::path::PathBuf {
 #[test]
 fn every_planned_scenario_exists_in_the_folder_its_mode_says() -> TestResult {
     for batch in 1..=3 {
-        for run in plan(batch, ClientName::Claude)? {
+        let mut runs = plan(batch, ClientName::Claude)?;
+        runs.extend(plan(batch, ClientName::Codex)?);
+        for run in runs {
             let found: Vec<&str> = ["scenarios", "cold", "holdout"]
                 .into_iter()
                 .filter(|directory| Path::new(&scenario_file(directory, &run.scenario)).is_file())

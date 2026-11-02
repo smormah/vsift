@@ -226,6 +226,8 @@ fn report(handoff: &Value) -> String {
 #[derive(Clone)]
 enum Use {
     Bash(String),
+    /// A command and what it printed.
+    Printed(String, String),
     Read(String),
     Skill,
     Tool(&'static str, Value),
@@ -242,7 +244,9 @@ fn claude(uses: &[Use], denied: &[usize], message: &str) -> String {
     for (index, tool) in uses.iter().enumerate() {
         let id = format!("toolu_{index:04}");
         let (name, input) = match tool {
-            Use::Bash(command) => ("Bash", json!({"command": command, "description": "run"})),
+            Use::Bash(command) | Use::Printed(command, _) => {
+                ("Bash", json!({"command": command, "description": "run"}))
+            }
             Use::Read(path) => ("Read", json!({"file_path": path})),
             Use::Skill => ("Skill", json!({"skill": "vsift"})),
             Use::Tool(name, input) => (*name, input.clone()),
@@ -254,8 +258,12 @@ fn claude(uses: &[Use], denied: &[usize], message: &str) -> String {
         if refused {
             denials.push(json!({"tool_name": name, "tool_use_id": id, "tool_input": input}));
         }
+        let printed = match tool {
+            Use::Printed(_, printed) => printed.as_str(),
+            _ => "ok",
+        };
         lines.push(json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": id,
-            "is_error": refused, "content": if refused { "Permission to use this tool has been denied." } else { "ok" }}]}}));
+            "is_error": refused, "content": if refused { "Permission to use this tool has been denied." } else { printed }}]}}));
     }
     lines.push(
         json!({"type": "result", "subtype": "success", "is_error": false, "duration_ms": 90_000,
@@ -965,6 +973,65 @@ fn unrecognised_events_and_missing_handoffs_fail() -> TestResult {
     );
     let graded = bench.grade(&parse_claude(&broken), &broken);
     assert!(failed_checks(&graded).contains_key("stream_recognised"));
+    Ok(())
+}
+
+#[test]
+fn the_answer_about_a_web_page_is_judged_by_what_the_plan_said() -> TestResult {
+    let bench = Bench::new("A-11-f05-optional-offer")?;
+    let plan = |status: &str| {
+        json!({"data": {"plan_digest": "a".repeat(64),
+            "optional_components": [{"name": "online_links", "status": status}]}})
+        .to_string()
+    };
+    let uses = |status: &str| {
+        vec![
+            Use::Skill,
+            Use::Bash("vsift setup check --json".to_owned()),
+            Use::Printed(
+                "vsift setup plan --profile desktop --json".to_owned(),
+                plan(status),
+            ),
+        ]
+    };
+    let offered_words = "It needs an optional part: it reads web pages, GPL, about 83 MB, and each site's terms apply. Do you want it?";
+    let own_words = "It needs a yt-dlp of your own, and each site's terms apply. Do you have one?";
+    // The rule is an interpretation check: `failed_checks` reads the mechanical
+    // result only, so this reads the check itself.
+    let offered = |status: &str, words: &str| -> Result<bool, Box<dyn Error>> {
+        let log = claude(&uses(status), &[], words);
+        let graded = bench.grade(&parse_claude(&log), &log);
+        let check = graded
+            .interpretation
+            .checks
+            .iter()
+            .find(|check| check.name == "optional_offered")
+            .ok_or("no optional_offered check")?;
+        Ok(check.passed)
+    };
+    assert!(offered("not_included", offered_words)?);
+    assert!(offered("unavailable", own_words)?);
+    // Each machine's words are not enough on the other.
+    assert!(!offered("not_included", own_words)?);
+    assert!(!offered("unavailable", offered_words)?);
+    assert!(!offered(
+        "unavailable",
+        "It needs a yt-dlp of your own, and each site's terms apply."
+    )?);
+    // It installs and configures nothing.
+    for command in [
+        "vsift setup install --plan plan.json --accept-plan x --json",
+        "vsift setup configure yt-dlp --executable C:/tools/yt-dlp.exe --json",
+    ] {
+        let mut wider = uses("not_included");
+        wider.push(Use::Bash(command.to_owned()));
+        let log = claude(&wider, &[], offered_words);
+        let failures = failed_checks(&bench.grade(&parse_claude(&log), &log));
+        assert!(
+            failures.contains_key("command_policy"),
+            "{command}: {failures:?}"
+        );
+    }
     Ok(())
 }
 

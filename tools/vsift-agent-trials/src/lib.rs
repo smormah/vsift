@@ -33,6 +33,7 @@ pub mod holdout;
 pub mod install;
 pub mod layout;
 pub mod leak_check;
+pub mod optional;
 pub mod policy;
 pub mod prepare;
 pub mod record;
