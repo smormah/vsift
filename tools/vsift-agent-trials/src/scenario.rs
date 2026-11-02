@@ -85,7 +85,8 @@ pub struct ColdSpec {
 
 /// What the operator's yes or no allows (#409, ADR 0028 section 4.2). It
 /// makes the gate stricter, not looser: only a plan the agent read in that
-/// run, in this state, may be accepted.
+/// run, in this state, may be accepted, or the unattended setup door may name
+/// literal parts with the optional extra as this says.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanGrant {

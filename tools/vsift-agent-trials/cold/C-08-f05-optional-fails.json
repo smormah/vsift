@@ -35,7 +35,7 @@
   ],
   "phases": [
     {
-      "prompt": "This is a screen recording of a QA walkthrough, {{video}}, and its transcript, {{transcript}}. A command-line tool named `vsift` is installed on this machine. Earlier you told me about an optional extra for videos on web pages: what it does, its licence, its size and the sites' terms. Yes, I want it: add it, and tell me how that went. Then tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for the evidence behind it, so that I can check it against the recording.",
+      "prompt": "This is a screen recording of a QA walkthrough, {{video}}, and its transcript, {{transcript}}. A command-line tool named `vsift` is installed on this machine. I've read about an optional extra for videos on web pages: what it does, its licence, its size and the sites' terms. Yes, I want it: add it, and tell me how that went. Then tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for the evidence behind it, so that I can check it against the recording.",
       "expectations": []
     }
   ],

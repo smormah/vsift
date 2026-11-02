@@ -708,7 +708,8 @@ evidence goes back to the planner.
   wording changed here, as this ADR's Consequences said it would.
 - **The trials judge section 4.2 from the transcript.** Each answer is its own one-phase run, because a trial client
   is one-shot. `cold.accepts_plan`, a closed word, plays the answer and makes the gate stricter: only a digest of a plan
-  read earlier in that run, in the state it names, may be accepted ([trials.md](../agents/trials.md#online-video-consent-030-409)).
+  read earlier in that run, in the state it names, may be accepted, or the unattended door may name literal parts with
+  the extra as the word says ([trials.md](../agents/trials.md#online-video-consent-030-409)).
 - **The failed-install trial departs from #409's "behind a blocking proxy".** Codex's sandbox has no network, so the
   download fails there as `offline`, the reason a blocking proxy also gives (the note above); no proxy can be reached
   from inside it. Section 4.9's fault tests prove the proxy cases.

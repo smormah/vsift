@@ -27,7 +27,7 @@
   "truth_events": [],
   "phases": [
     {
-      "prompt": "A command-line tool named `vsift` is installed on this machine. Earlier you told me about an optional extra for videos on web pages: what it does, its licence, its size and the sites' terms. Yes, I want it. Get the tool ready for use here, with that extra, and tell me what happened.",
+      "prompt": "A command-line tool named `vsift` is installed on this machine. I've read about an optional extra for videos on web pages: what it does, its licence, its size and the sites' terms. Yes, I want it. Get the tool ready for use here, with that extra, and tell me what happened.",
       "expectations": []
     }
   ],

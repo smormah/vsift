@@ -5603,6 +5603,7 @@ that week.**
   - **a yes or a no is told to a fresh agent.** A trial client is one-shot, so C-06 and C-07 measure obedience to an answer in the prompt. Only C-05 measures telling and asking;
   - **C-08's failure comes from the sandbox, not from a blocking proxy** as #409 asks, because no proxy can be reached from inside it;
   - **the word matching is coarse:** a good sentence in other words fails, and a report that repeats the words passes. A run that saves a plan and pulls out only the digest has not read it and fails the gate, which the raw log shows;
+  - **the unattended setup door is judged from its words.** Naming the parts is the acceptance (ADR 0036), so an agent can pass with a yes or a no without ever reading a plan; the grader reads its `--install` and `--include` and nothing it was told;
   - **none of it has run.** It has been replayed only through the grader's tests.
 - **Evidence:** `tools/vsift-agent-trials/tests/cold_grader.rs`, `tests/grader.rs` and `tests/scenario_sets.rs`; [trials.md](../agents/trials.md#online-video-consent-030-409); the plan's fixtures `setup-plan-optional-offered.txt` and `setup-plan-unavailable.txt`.
 - **Impact: low by the rubric** (a disclosed estimate): the rule is in the plan and the refusal themselves, which contract tests hold, and these trials measure how agents relay it. Nothing here can install anything without an accepted digest.

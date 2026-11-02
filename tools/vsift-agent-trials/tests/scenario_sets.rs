@@ -232,6 +232,21 @@ fn a_consent_prompt_teaches_neither_the_method_nor_the_asking() -> TestResult {
         let result = changed_scenario("C-06-f03-optional-yes.json", prompt(text))?;
         assert!(result.is_err(), "{text}: {result:?}");
     }
+    // A fresh agent is told nothing false about a conversation it never had.
+    for file in [
+        "C-05-f03-optional-offer.json",
+        "C-06-f03-optional-yes.json",
+        "C-07-f03-optional-no.json",
+        "C-08-f05-optional-fails.json",
+    ] {
+        let path = repository()
+            .join("tools/vsift-agent-trials/cold")
+            .join(file);
+        let text = Scenario::load(&path)?.phases[0].prompt.to_ascii_lowercase();
+        for false_memory in ["earlier", "you told me", "you said", "you asked"] {
+            assert!(!text.contains(false_memory), "{file}: {false_memory}");
+        }
+    }
     for text in [
         "Ask me first.",
         "Leave decisions to me.",
