@@ -7,10 +7,10 @@
 //! | --- | --- | --- |
 //! | 1 | against the published 0.1.0 | 8 pilots (a dry run per client and mode, two scenarios each, compact tier) and the 12-run cold baseline (compact tier, 3 cold scenarios x 2 runs x 2 models) |
 //! | 2 | on the candidate | the 34-run counted set with the skill (review tier 2 x 12, compact tier 2 x 5) |
-//! | 3 | on the candidate | the cold final round: compact 12 and review 6 (18 runs), and since 0.3.0 C-04 once per tier (4 runs; ADR 0038 section 5) |
+//! | 3 | on the candidate | the cold final round: compact 12 and review 6 (18 runs), since 0.3.0 C-04 once per tier (4 runs; ADR 0038 section 5) and the online-video consent runs (10 runs; #409) |
 //!
-//! That is 20 + 34 + 22 = 76 planned runs and a reserve of 12 more: the
-//! plan's 84, and the 4 runs of C-04. A **plan** is a pure list ([`plan`]); a **state file** holds it
+//! That is 20 + 34 + 32 = 86 planned runs and a reserve of 12 more: the
+//! plan's 84, the 4 runs of C-04 and the 10 consent runs. A **plan** is a pure list ([`plan`]); a **state file** holds it
 //! with every attempt, one file per client so that the Windows Claude Code
 //! loop and the Codex container loop never write the same file. The campaign
 //! scripts only ask `campaign next`, run what it says and report `campaign
@@ -216,6 +216,35 @@ const COLD_REVIEW_ROUND: Table = &[
 /// so that it still compares with the baseline.
 pub const COLD_OUTCOME_SCENARIO: &str = "C-04-f05-bug-report";
 const COLD_OUTCOME: Table = &[(COLD_OUTCOME_SCENARIO, 1)];
+/// The optional online-video part offered to a cold agent: before any plan,
+/// after a yes, after a no, and after a yes whose download fails (#409). They
+/// run in batch 3, on Codex only, because `online_links` is offered only on
+/// Ubuntu x86-64 and Claude Code trials run on Windows.
+const COLD_OFFER: &str = "C-05-f03-optional-offer";
+const COLD_YES: &str = "C-06-f03-optional-yes";
+const COLD_NO: &str = "C-07-f03-optional-no";
+const COLD_FAILED: &str = "C-08-f05-optional-fails";
+const CONSENT_COMPACT: Table = &[
+    (COLD_OFFER, 1),
+    (COLD_YES, 1),
+    (COLD_NO, 1),
+    (COLD_FAILED, 1),
+];
+const CONSENT_REVIEW: Table = &[(COLD_OFFER, 1), (COLD_FAILED, 1)];
+/// The skill's answer about a video on a web page (#409): both clients, both
+/// tiers, on Windows where the user supplies the tool and on Ubuntu where the
+/// plan offers it.
+pub const SKILL_OFFER_SCENARIO: &str = "A-11-f05-optional-offer";
+const SKILL_OFFER: Table = &[(SKILL_OFFER_SCENARIO, 1)];
+/// The cold scenarios the summary reports each on its own line, outside the
+/// final round's usefulness target (C-01 to C-03).
+pub const COLD_MEASURED_SCENARIOS: [&str; 5] = [
+    COLD_OUTCOME_SCENARIO,
+    COLD_OFFER,
+    COLD_YES,
+    COLD_NO,
+    COLD_FAILED,
+];
 const SKILL_REVIEW: Table = &[
     ("A-08-f05-local-asr", 3),
     ("A-09-f05-supplied", 3),
@@ -346,6 +375,15 @@ pub fn plan(batch: u8, client: ClientName) -> Result<Vec<PlannedRun>, TrialError
             );
             for tier in [Tier::Compact, Tier::Review] {
                 push_table(&mut runs, 3, client, tier, RunKind::Counted, COLD_OUTCOME);
+            }
+            if client == ClientName::Codex {
+                let compact = (Tier::Compact, CONSENT_COMPACT);
+                for (tier, table) in [compact, (Tier::Review, CONSENT_REVIEW)] {
+                    push_table(&mut runs, 3, client, tier, RunKind::Counted, table);
+                }
+            }
+            for tier in [Tier::Compact, Tier::Review] {
+                push_table(&mut runs, 3, client, tier, RunKind::Counted, SKILL_OFFER);
             }
         }
         other => {

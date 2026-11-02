@@ -20,7 +20,8 @@ use serde_json::Value;
 
 use crate::{
     campaign::{
-        COLD_OUTCOME_SCENARIO, CampaignState, ClientName, Outcome, RunKind, RunState, Tier,
+        COLD_MEASURED_SCENARIOS, CampaignState, ClientName, Outcome, RunKind, RunState,
+        SKILL_OFFER_SCENARIO, Tier,
     },
     scenario::TrialMode,
 };
@@ -364,6 +365,7 @@ fn compact_regression(runs: &[RunLine]) -> GateLine {
             run.mode == TrialMode::Skill
                 && run.kind == RunKind::Counted
                 && run.tier == Tier::Compact
+                && run.scenario != SKILL_OFFER_SCENARIO
         })
         .collect();
     if group.is_empty() {
@@ -508,7 +510,7 @@ fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
                         && run.batch == batch
                         && run.kind == RunKind::Counted
                         && run.tier == Tier::Compact
-                        && run.scenario != COLD_OUTCOME_SCENARIO
+                        && !COLD_MEASURED_SCENARIOS.contains(&run.scenario.as_str())
                 })
                 .collect();
             if group.is_empty() {
@@ -547,30 +549,30 @@ fn cold_gates(runs: &[RunLine]) -> Vec<GateLine> {
                 ),
             ));
         }
-        lines.extend(cold_outcome_line(&cold, client));
+        lines.extend(
+            COLD_MEASURED_SCENARIOS
+                .into_iter()
+                .filter_map(|scenario| cold_outcome_line(&cold, client, scenario)),
+        );
     }
     lines
 }
 
-/// C-04's line for one client (ADR 0038, section 5): a measurement of its own.
-/// Batch 1 never ran it, so it is neither part of the final round's target nor
-/// a gate; `None` when the records hold no counted run of it.
-fn cold_outcome_line(cold: &[&RunLine], client: ClientName) -> Option<GateLine> {
+/// One measured cold scenario's line for one client (C-04, ADR 0038, section
+/// 5, and the consent runs, #409): a measurement of its own. Batch 1 never ran
+/// it, so it is neither part of the final round's target nor a gate; `None`
+/// when the records hold no counted run of it.
+fn cold_outcome_line(cold: &[&RunLine], client: ClientName, scenario: &str) -> Option<GateLine> {
     let outcome: Vec<&RunLine> = cold
         .iter()
         .copied()
         .filter(|run| {
-            run.client == client
-                && run.kind == RunKind::Counted
-                && run.scenario == COLD_OUTCOME_SCENARIO
+            run.client == client && run.kind == RunKind::Counted && run.scenario == scenario
         })
         .collect();
     (!outcome.is_empty()).then(|| {
         gate(
-            &format!(
-                "Cold outcome ({COLD_OUTCOME_SCENARIO}), {}",
-                client.slug()
-            ),
+            &format!("Cold outcome ({scenario}), {}", client.slug()),
             GateStatus::NoData,
             format!(
                 "{} of {} useful ({}), setting {}; a measurement on its own, not a gate: no baseline ran it",
@@ -581,6 +583,34 @@ fn cold_outcome_line(cold: &[&RunLine], client: ClientName) -> Option<GateLine> 
             ),
         )
     })
+}
+
+/// A-11's line for each client (#409): a measurement of its own, outside the
+/// compact regression, because no earlier batch ran it.
+fn skill_offer_lines(runs: &[RunLine]) -> Vec<GateLine> {
+    let mut lines = Vec::new();
+    for client in [ClientName::Claude, ClientName::Codex] {
+        let group: Vec<&RunLine> = runs
+            .iter()
+            .filter(|run| {
+                run.client == client
+                    && run.kind == RunKind::Counted
+                    && run.scenario == SKILL_OFFER_SCENARIO
+            })
+            .collect();
+        if !group.is_empty() {
+            lines.push(gate(
+                &format!("Skill outcome ({SKILL_OFFER_SCENARIO}), {}", client.slug()),
+                GateStatus::NoData,
+                format!(
+                    "{} of {} passed both results; a measurement on its own, not a gate",
+                    group.iter().filter(|run| run.fully).count(),
+                    group.len(),
+                ),
+            ));
+        }
+    }
+    lines
 }
 
 /// The cold settings a group of runs were under, for a gate's detail.
@@ -682,6 +712,7 @@ pub fn summarize(states: &[CampaignState], records: &[Value]) -> Summary {
     gates.extend(journey(&runs));
     gates.extend(blurred(&runs));
     gates.push(compact_regression(&runs));
+    gates.extend(skill_offer_lines(&runs));
     gates.extend(holdouts(&runs));
     gates.extend(cold_gates(&runs));
     Summary {

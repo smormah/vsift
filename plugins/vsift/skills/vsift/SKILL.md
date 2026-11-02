@@ -1,6 +1,6 @@
 ---
 name: vsift
-description: Investigate a local video file (a screen recording, video walkthrough or demo) with the VSift command-line tool and write a grounded, cited handoff. Use when the user asks what a local recording shows or says, or where something happens in it, and wants the answer with timestamps and frames (a bug report is one example). It answers questions about moments and stretches of a recording; a summary or timeline of the whole of a long recording is beyond its budgets. Do not use for streaming URLs, for editing or converting video, or when the vsift command is not installed and the user has not asked for help setting it up.
+description: Investigate a local video file (a screen recording, video walkthrough or demo) with the VSift command-line tool and write a grounded, cited handoff. Use when the user asks what a local recording shows or says, or where something happens in it, and wants the answer with timestamps and frames (a bug report is one example), or asks about a video at a link. It answers questions about moments and stretches of a recording; a summary or timeline of the whole of a long recording is beyond its budgets. Do not use for live streams, for editing or converting video, or when the vsift command is not installed and the user has not asked for help setting it up.
 ---
 
 # VSift video investigation
@@ -76,9 +76,9 @@ vsift setup check --json
   Its result is not an envelope: read `dependencies` (FFmpeg, FFprobe, whisper) and
   `local_asr.verification.status`. FFmpeg and FFprobe are needed for every media step;
   whisper and a verified model only for local speech recognition.
-- If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a `dependency` gap with
-  code `MISSING_CAPABILITY`, VSift's `remediation` quoted in its note and in your prose. Installing or
-  registering tools is the user's decision (`setup configure` runs only with a path the user gives you).
+- If FFmpeg or FFprobe is missing, or `vsift` itself does not run, go to REPORT: a `dependency` gap with code `MISSING_CAPABILITY`,
+  VSift's `remediation` quoted in its note and in your prose. Installing or registering tools is the user's decision (`setup configure` runs only with a path the user gives you).
+- **A video on a web page** needs an optional part that only the user may add: follow "A video on a web page" in [references/commands.md](references/commands.md).
 - **Stop when** the image access and the tool state are recorded.
 
 ### 2. PREPARE

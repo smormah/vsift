@@ -43,6 +43,7 @@ use crate::{
     bundle::{BundleIndex, Resolved},
     calls::{Action, GradedCall, ReadScope, classify, vsift_commands},
     handoff::{HandoffSchema, MAX_RESUME_BYTES, PrivateMarkers, text_problems},
+    optional::{offer_problems, offer_was_read},
     policy::{BudgetLimits, CommandClass, CommandPolicy, HANDOFF_CHECK_OPERATION, HELP_OPERATION},
     scenario::{Expectation, ImagePolicy, PeriodBasis, Scenario, Timeline, TranscriptSource},
     shim::ShimUse,
@@ -1064,6 +1065,21 @@ fn expectation_check(
         Expectation::IdentifiersHonest { fixture } => {
             identifier_problems(handoff, fixture, input, &mut problems);
             "identifiers_honest"
+        }
+        Expectation::OptionalOffered {
+            offered,
+            unavailable,
+        } => {
+            let groups = if offer_was_read(input.trace) {
+                offered
+            } else {
+                unavailable
+            };
+            problems = offer_problems(
+                input.trace.final_message.as_deref().unwrap_or_default(),
+                groups,
+            );
+            "optional_offered"
         }
         Expectation::TransientHonest { event } => {
             transient_problems(handoff_value, event, input, context, &mut problems);

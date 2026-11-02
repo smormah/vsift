@@ -4,13 +4,13 @@
 
 mod common;
 
-use std::error::Error;
+use std::{error::Error, fs};
 
-use common::repository;
+use common::{Scratch, repository};
 use serde_json::{Value, json};
 use vsift_agent_trials::{
     cold::COLD_HELPER_PROGRAMS,
-    scenario::{ColdUsefulness, Scenario},
+    scenario::{ColdUsefulness, PlanGrant, Scenario},
     skill::{CHECK_IMAGES, SkillReferences, files_below},
     truth::{CorpusTruth, normalize},
 };
@@ -46,9 +46,9 @@ fn the_cold_and_hold_out_sets_validate_and_are_named_for_what_they_are() -> Test
 }
 
 #[test]
-fn the_four_cold_scenarios_are_the_plans() -> TestResult {
+fn the_eight_cold_scenarios_are_the_plans() -> TestResult {
     let scenarios = load("cold")?;
-    assert_eq!(scenarios.len(), 4);
+    assert_eq!(scenarios.len(), 8);
     for (_, scenario) in &scenarios {
         assert_eq!(scenario.tests, vec!["A-10".to_owned()], "{}", scenario.id);
         assert!(scenario.authority.is_empty() && scenario.retain_to.is_none());
@@ -105,6 +105,157 @@ fn the_four_cold_scenarios_are_the_plans() -> TestResult {
         missing.cold.as_ref().map(|cold| &cold.usefulness),
         Some(ColdUsefulness::MissingToolsExplained { .. })
     ));
+    // Consent (#409): nothing granted before the answer, then exactly the
+    // plan the answer allows.
+    let grant = |id: &str| {
+        by_id(id)
+            .and_then(|scenario| scenario.cold.as_ref())
+            .map(|cold| cold.accepts_plan)
+    };
+    assert_eq!(grant("C-05-f03-optional-offer"), Some(None));
+    assert_eq!(
+        grant("C-06-f03-optional-yes"),
+        Some(Some(PlanGrant::WithOptional))
+    );
+    assert_eq!(
+        grant("C-07-f03-optional-no"),
+        Some(Some(PlanGrant::WithoutOptional))
+    );
+    assert_eq!(
+        grant("C-08-f05-optional-fails"),
+        Some(Some(PlanGrant::WithOptional))
+    );
+    for id in [
+        "C-01-f05-supplied",
+        "C-02-f05-local-asr",
+        "C-03-f03-missing-tools",
+        "C-04-f05-bug-report",
+    ] {
+        assert_eq!(grant(id), Some(None), "{id}");
+    }
+    Ok(())
+}
+
+/// A consent scenario's file with one change, read and validated.
+fn changed_scenario(
+    file: &str,
+    change: impl FnOnce(&mut Value),
+) -> Result<Result<(), String>, Box<dyn Error>> {
+    let directory = repository().join("tools/vsift-agent-trials/cold");
+    let mut value: Value = serde_json::from_str(&fs::read_to_string(directory.join(file))?)?;
+    change(&mut value);
+    let scratch = Scratch::new("consent-scenario")?;
+    let path = scratch.write(file, &value.to_string())?;
+    let truth = CorpusTruth::load(&repository().join("fixtures/corpus"))?;
+    let references = SkillReferences::load(&repository())?;
+    Ok(Scenario::load(&path)
+        .and_then(|scenario| scenario.validate(&truth, &references.policy))
+        .map_err(|error| error.to_string()))
+}
+
+#[test]
+fn a_plan_grant_is_a_closed_word_on_the_scenarios_that_need_one() -> TestResult {
+    const YES: &str = "C-06-f03-optional-yes.json";
+    assert_eq!(changed_scenario(YES, |_| ())?, Ok(()));
+    for not_a_grant in [json!(true), json!("anything"), json!(["with_optional"])] {
+        let result = changed_scenario(YES, |value| {
+            value["cold"]["accepts_plan"] = not_a_grant.clone();
+        })?;
+        assert!(result.is_err(), "{not_a_grant}: {result:?}");
+    }
+    // Every other rule refuses a grant, and the rules that need one need it.
+    for file in [
+        "C-01-f05-supplied.json",
+        "C-03-f03-missing-tools.json",
+        "C-05-f03-optional-offer.json",
+    ] {
+        let result = changed_scenario(file, |value| {
+            value["cold"]["accepts_plan"] = json!("without_optional");
+        })?;
+        assert!(
+            result
+                .as_ref()
+                .is_err_and(|error| error.contains("grants no plan")),
+            "{file}: {result:?}"
+        );
+    }
+    let result = changed_scenario(YES, |value| {
+        value["cold"]
+            .as_object_mut()
+            .map(|cold| cold.remove("accepts_plan"));
+    })?;
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("needs accepts_plan")),
+        "{result:?}"
+    );
+    let result = changed_scenario("C-08-f05-optional-fails.json", |value| {
+        value["cold"]["accepts_plan"] = json!("without_optional");
+    })?;
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("with_optional")),
+        "{result:?}"
+    );
+    // The grant relaxes the rule on `accepts_plan` only: `authority` stays
+    // refused in every cold scenario.
+    let result = changed_scenario(YES, |value| {
+        value["authority"] = json!(["setup.configure"]);
+    })?;
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|error| error.contains("grants no authority")),
+        "{result:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_consent_prompt_teaches_neither_the_method_nor_the_asking() -> TestResult {
+    let prompt = |text: &'static str| {
+        move |value: &mut Value| {
+            let old = value["phases"][0]["prompt"].as_str().unwrap_or_default();
+            value["phases"][0]["prompt"] = json!(format!("{old} {text}"));
+        }
+    };
+    for text in [
+        "Use online_links.",
+        "It is called yt-dlp.",
+        "Accept it.",
+        "Read the plan first.",
+        "Check the digest.",
+        "Pass --include.",
+    ] {
+        let result = changed_scenario("C-06-f03-optional-yes.json", prompt(text))?;
+        assert!(result.is_err(), "{text}: {result:?}");
+    }
+    // A fresh agent is told nothing false about a conversation it never had.
+    for file in [
+        "C-05-f03-optional-offer.json",
+        "C-06-f03-optional-yes.json",
+        "C-07-f03-optional-no.json",
+        "C-08-f05-optional-fails.json",
+    ] {
+        let path = repository()
+            .join("tools/vsift-agent-trials/cold")
+            .join(file);
+        let text = Scenario::load(&path)?.phases[0].prompt.to_ascii_lowercase();
+        for false_memory in ["earlier", "you told me", "you said", "you asked"] {
+            assert!(!text.contains(false_memory), "{file}: {false_memory}");
+        }
+    }
+    for text in [
+        "Ask me first.",
+        "Leave decisions to me.",
+        "Tell me about anything optional.",
+        "It should work online.",
+    ] {
+        let result = changed_scenario("C-05-f03-optional-offer.json", prompt(text))?;
+        assert!(result.is_err(), "{text}: {result:?}");
+    }
     Ok(())
 }
 
