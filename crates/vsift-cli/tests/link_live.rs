@@ -11,10 +11,12 @@
 //! #409), which this test installs into its own folder. On Windows and macOS
 //! that page goes through the pinned yt-dlp the workflow fetches and registers
 //! instead, the only way pages work there. One NASA video on a video site is a
-//! separate, dispatch-only check, skipped below.
+//! separate, dispatch-only check, skipped below. The opt-in platform
+//! qualification (#409) is another: it reads the named list of
+//! `docs/operations/online-video-qualification.md` and keeps a record.
 //!
 //! ```console
-//! cargo test --release --locked -p vsift-cli --test link_live -- --ignored --skip a_nasa_youtube_page --nocapture
+//! cargo test --release --locked -p vsift-cli --test link_live -- --ignored --skip a_nasa_youtube_page --skip the_listed_videos --nocapture
 //! ```
 
 use std::{
@@ -73,6 +75,64 @@ const PINNED_USER_YT_DLP_SHA256: &str =
 #[cfg(target_os = "macos")]
 const PINNED_USER_YT_DLP_SHA256: &str =
     "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202";
+
+/// One page of the qualification: the named list's id, its link (public, with
+/// no token, so naming it is safe), its licence as the page states it, and,
+/// for a refusal case, the one reason it must give.
+struct Listed {
+    id: &'static str,
+    link: &'static str,
+    licence: &'static str,
+    must_be_refused_as: Option<&'static str>,
+}
+
+/// `docs/operations/online-video-qualification.md`, Q1 to Q6 and R1. The
+/// pages are not asserted to succeed: a bot wall, a login wall or a site
+/// change is a result to record. Only a pair joined counts as the real pair.
+const LISTED: [Listed; 7] = [
+    Listed {
+        id: "Q1",
+        link: "https://www.facebook.com/NASA/videos/438313177583525/",
+        licence: "public domain (US government work); the site's terms apply",
+        must_be_refused_as: None,
+    },
+    Listed {
+        id: "Q2",
+        link: "https://www.facebook.com/NASA/videos/645832639583660/",
+        licence: "public domain (US government work); the site's terms apply",
+        must_be_refused_as: None,
+    },
+    Listed {
+        id: "Q3",
+        link: "https://video.blender.org/videos/watch/ac71efff-5e26-440b-8c38-dd1f5b598e02",
+        licence: "Attribution (CC BY), as the instance states",
+        must_be_refused_as: None,
+    },
+    Listed {
+        id: "Q4",
+        link: "https://media.ccc.de/v/matrix-conference-2026-99063-a-year-and-a-half-of-continuwuity",
+        licence: "CC BY-SA 4.0, as the site states",
+        must_be_refused_as: None,
+    },
+    Listed {
+        id: "Q5",
+        link: "https://commons.wikimedia.org/wiki/File:Editing_basics_-_watchlists.webm",
+        licence: "CC BY-SA 3.0, as the file's page states",
+        must_be_refused_as: None,
+    },
+    Listed {
+        id: "Q6",
+        link: "https://www.nasa.gov/video-detail/nhq20230118armd01",
+        licence: "public domain (US government work)",
+        must_be_refused_as: None,
+    },
+    Listed {
+        id: "R1",
+        link: "https://video.blender.org/w/p/cQ4v4uoPbLdnhFrqsEx69m",
+        licence: "Attribution (CC BY), as the instance states; a playlist page",
+        must_be_refused_as: Some("playlist"),
+    },
+];
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
@@ -318,6 +378,46 @@ fn a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check() -> TestResult {
     Ok(())
 }
 
+/// For the one run from an ordinary network that the hosted runners cannot
+/// give (they meet `YouTube`'s bot wall): the user-supplied tools, found through
+/// `setup configure`, and no pass on a refusal. Only `joined: audio_video`
+/// passes, because `a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check`
+/// already passes on the typed refusal and so proves nothing about a pair.
+/// `VSIFT_LIVE_USER_YT_DLP` is the pinned yt-dlp; `VSIFT_LIVE_USER_JS_RUNTIME`
+/// is a Deno the person supplies, which `YouTube` needs.
+#[test]
+#[ignore = "opt-in live check; run by hand from an ordinary network with the maintainer's go, never on this machine's automatic runs"]
+fn a_nasa_youtube_page_is_joined_through_registered_tools() -> TestResult {
+    let tool = env::var("VSIFT_LIVE_USER_YT_DLP").map_err(|_| "set VSIFT_LIVE_USER_YT_DLP")?;
+    let root = OwnedRoot::new()?;
+    let (code, configured) = vsift(
+        &root,
+        &["setup", "configure", "yt-dlp", "--executable", &tool],
+    )?;
+    assert_eq!(code, Some(0), "{configured}");
+    if let Ok(runtime) = env::var("VSIFT_LIVE_USER_JS_RUNTIME") {
+        let (code, configured) = vsift(
+            &root,
+            &["setup", "configure", "js-runtime", "--executable", &runtime],
+        )?;
+        assert_eq!(code, Some(0), "{configured}");
+    }
+    let (code, opened) = vsift(&root, &["ingest", "--url", NASA_YOUTUBE_PAGE])?;
+    println!(
+        "YouTube page: {}",
+        opened["data"].get("origin").unwrap_or(&opened["error"])
+    );
+    assert_eq!(code, Some(0), "no pair was joined: {}", opened["error"]);
+    let origin = &opened["data"]["origin"];
+    assert_eq!(origin["joined"], "audio_video", "{origin}");
+    let session = opened["data"]["session_id"]
+        .as_str()
+        .ok_or("no session id")?;
+    let (code, _) = vsift(&root, &["session", "close", session])?;
+    assert_eq!(code, Some(0));
+    Ok(())
+}
+
 #[test]
 #[ignore = "opt-in live check; reads a public NASA web page; the manual hosted workflow runs it"]
 fn a_public_video_page_is_refused_as_a_web_page() -> TestResult {
@@ -327,5 +427,129 @@ fn a_public_video_page_is_refused_as_a_web_page() -> TestResult {
     assert_eq!(code, Some(3), "{refused}");
     assert_eq!(refused["error"]["code"], "SOURCE_FETCH_FAILED");
     assert_eq!(refused["error"]["reason"], "web_page");
+    Ok(())
+}
+
+/// The version of each installed optional component, as `setup check` reports
+/// it, for the record.
+fn installed_versions(root: &OwnedRoot) -> Result<Value, Box<dyn Error>> {
+    let (code, checked) = vsift(root, &["setup", "check", "--profile", "desktop"])?;
+    assert_eq!(code, Some(0), "{checked}");
+    let components = checked["optional_components"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+        .ok_or("no online_links row")?["components"]
+        .clone();
+    assert!(
+        components.as_array().is_some_and(|list| !list.is_empty()),
+        "no optional component is reported: {checked}"
+    );
+    Ok(components)
+}
+
+/// What one listed page did: fetched (and how it was joined) or refused (and
+/// why). Anything but a fetch or a typed `SOURCE_FETCH_FAILED` is a failure
+/// of `VSift`'s own, and goes in `problems`.
+fn qualify_one(
+    root: &OwnedRoot,
+    item: &Listed,
+    problems: &mut Vec<String>,
+) -> Result<Value, Box<dyn Error>> {
+    let mut entry = serde_json::json!({
+        "id": item.id,
+        "licence": item.licence,
+        "host": item.link.split('/').nth(2).unwrap_or(""),
+    });
+    // An answer that is not JSON must not lose the record of the other pages.
+    let Ok((code, outcome)) = vsift(root, &["ingest", "--url", item.link]) else {
+        entry["outcome"] = "unreadable".into();
+        problems.push(format!("{}: the answer was not JSON", item.id));
+        println!("{} {entry}", item.id);
+        return Ok(entry);
+    };
+    let text = outcome.to_string();
+    if text.contains("https://") {
+        problems.push(format!("{}: a link was printed", item.id));
+    }
+    if code == Some(0) {
+        let data = &outcome["data"];
+        entry["outcome"] = "fetched".into();
+        entry["kind"] = data["origin"]["kind"].clone();
+        entry["provider"] = data["origin"]["provider"].clone();
+        entry["joined"] = data["origin"]["joined"].clone();
+        entry["bytes"] = data["source_bytes"].clone();
+        if let Some(expected) = item.must_be_refused_as {
+            problems.push(format!(
+                "{}: fetched, but must be refused as {expected}",
+                item.id
+            ));
+        }
+        if let Some(session) = data["session_id"].as_str() {
+            let (closed, _) = vsift(root, &["session", "close", session])?;
+            assert_eq!(closed, Some(0));
+        }
+    } else if outcome["error"]["code"] == "SOURCE_FETCH_FAILED" {
+        let reason = outcome["error"]["reason"].as_str().unwrap_or("none");
+        entry["outcome"] = "refused".into();
+        entry["reason"] = reason.into();
+        if item
+            .must_be_refused_as
+            .is_some_and(|expected| expected != reason)
+        {
+            problems.push(format!("{}: refused as {reason}", item.id));
+        }
+    } else {
+        entry["outcome"] = "untyped".into();
+        entry["code"] = outcome["error"]["code"].clone();
+        problems.push(format!(
+            "{}: an untyped failure: {}",
+            item.id, outcome["error"]["code"]
+        ));
+    }
+    println!("{} {entry}", item.id);
+    Ok(entry)
+}
+
+/// #409's opt-in platform qualification: every page of the named list, through
+/// the managed pair, from a hosted runner. The record is the product: yt-dlp
+/// and runtime versions, the date, the outcome of each, and whether a real pair
+/// of streams was ever joined. It holds no link, and the test fails only when
+/// `VSift` itself misbehaves (a link printed, an untyped failure, a refusal case
+/// that gave another reason), never because a site walled the runner.
+#[test]
+#[ignore = "opt-in live check; installs the real yt-dlp and reads the named public pages; the manual hosted workflow runs it with `qualify`"]
+fn the_listed_videos_are_fetched_or_refused_and_recorded() -> TestResult {
+    let root = OwnedRoot::new()?;
+    install_online_links(&root)?;
+    let versions = installed_versions(&root)?;
+    let mut problems = Vec::new();
+    let mut outcomes = Vec::new();
+    for item in &LISTED {
+        outcomes.push(qualify_one(&root, item, &mut problems)?);
+    }
+    let pair_seen = outcomes
+        .iter()
+        .any(|entry| entry["joined"] == "audio_video");
+    let record = serde_json::json!({
+        "record_version": 1,
+        "date": env::var("VSIFT_QUALIFICATION_DATE").unwrap_or_else(|_| String::from("unknown")),
+        "runner": env::consts::OS,
+        "components": versions,
+        "outcomes": outcomes,
+        "pair_seen": pair_seen,
+        "problems": problems,
+    });
+    let text = serde_json::to_string_pretty(&record)?;
+    println!("{text}");
+    if let Ok(path) = env::var("VSIFT_QUALIFICATION_RECORD") {
+        fs::write(
+            path,
+            format!(
+                "{text}
+"
+            ),
+        )?;
+    }
+    assert!(problems.is_empty(), "{problems:?}");
     Ok(())
 }
