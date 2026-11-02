@@ -63,7 +63,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// **0.3.0 draft freeze, W4c Part 2 (#409), rewritten at its merge rebase; the final freeze is recorded at the 0.3.0
 /// cut** (2026-11-02): the skill gains the step for a video on a web page, the grader the consent rules and the plan
 /// grant, and the scenarios C-05 to C-08 and A-11, so four components moved: `skill` `6065ffdb...` to `7a08aa9d...`,
-/// `grader` `76d1243c...` to `6519d4d2...`, `cold` `853d8da3...` to `4419011f...` and `scenarios` `3a77c3d3...` to
+/// `grader` `76d1243c...` to `efe6fd2d...`, `cold` `853d8da3...` to `31204791...` and `scenarios` `3a77c3d3...` to
 /// `916c8c22...`, and this digest `5d7d254b...` to the value below; the other three components are unchanged.
 ///
 /// The freeze before it, W10's, is told in `docs/agents/trials.md`, and before that:
@@ -179,7 +179,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "406392e1f49be65a88f02ff864a28b139ef8e3d508f26020a397d120663778cb";
+const CUT_FREEZE_SHA256: &str = "a66dc22680576e6dc99c903a3b1b71a530290f8c75b3cadcc111dba32a41ed39";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
