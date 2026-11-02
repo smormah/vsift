@@ -59,7 +59,7 @@ Each entry has these fields:
 | [L-011](#l-011) | Evidence on large sources is slow; the first call hashes the whole copy | performance | medium | unscheduled | [#170](https://github.com/smormah/vsift/issues/170) | monitoring |
 | [L-013](#l-013) | Evidence records and transcripts are re-read in full on every call | performance | low | unscheduled | [#171](https://github.com/smormah/vsift/issues/171) | monitoring |
 | [L-014](#l-014) | A session holds at most 384 evidence files (512 artifacts, 128 KiB manifest) | contract/UX | low | unscheduled | none | accepted residual |
-| [L-015](#l-015) | Bursts over more than 20 s of 60 fps video are refused | contract/UX | low | unscheduled | [#172](https://github.com/smormah/vsift/issues/172) | open |
+| [L-015](#l-015) | Bursts over more than 1,200 frames (20 s of 60 fps video) are refused as `outside_listing` | contract/UX | low | unscheduled | [#172](https://github.com/smormah/vsift/issues/172) | open |
 | [L-016](#l-016) | Delivered file paths die with the session; very long Windows paths keep the `\\?\` form | contract/UX | low | unscheduled | none | accepted residual |
 | [L-017](#l-017) | Human mode shows no progress; the worker hosts' event stream is JSON Lines only | contract/UX | low | unscheduled | none | accepted residual |
 | [L-018](#l-018) | Small text in real recordings: 7 to 10 px type, legibility decided by compression; crops never upscaled | visual detection | low | unscheduled | [#173](https://github.com/smormah/vsift/issues/173) | open |
@@ -1267,14 +1267,27 @@ Counts: 1 high, 57 medium, 145 low (203 entries), recounted on 2026-11-02 from t
 
 ### L-015
 
-**Bursts over more than 20 s of 60 fps video are refused.**
+**A burst or a neighbours search over a range denser than one frame listing is refused, not listed in pieces.**
 
 - **What:** one frame listing covers at most 60 s and 1,200 frames. A burst over a range
-  denser than that (60 fps over more than 20 s) is rejected with `outside_listing`
-  rather than listed in pieces. Neighbours search windows of 2, 10 and 29 s, so on a
-  very sparse stream a side can stop with `search_window` although more frames exist.
+  denser than that (60 fps over more than 20 s, 30 fps over more than 40 s) is refused
+  with the typed `outside_listing` (`INVALID_ARGUMENT`, exit 2), whose remediation says
+  the video is too dense there for one listing and asks for a shorter range, rather than
+  listed in pieces. Neighbours search windows of 2, 10 and 29 s, so on a very sparse
+  stream a side can stop with `search_window` although more frames exist.
+- **Fixed in `0.3.0` (F15):** on a real 30 fps recording the same burst answered
+  `INVALID_SOURCE` with "the media tools could not decode that part of the source (it may
+  be damaged or cut short)", which told an agent that a healthy video was damaged. The
+  listing run asks FFmpeg for 1,201 frames with `-frames:v`, but that limit is applied
+  after the filter graph, so FFmpeg 9.0 also logs the next frame (1,202 lines on a 70 s,
+  30 fps file); the reader allowed 1,201 and rejected the log as malformed. The
+  frame-rate pattern does not matter (a constant rate and one with dropped frames both
+  did it); density does. The reader now accepts up to 64 lines past the limit and cuts the
+  listing at the limit as designed. Every caller of a listing shares that reader.
 - **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) section 6 and the
-  PR 2 note ("rejected for now"); [P09 record](p09-evidence-navigation.md) residuals.
+  PR 2 note ("rejected for now"); [P09 record](p09-evidence-navigation.md) residuals; the
+  reader's unit test `frames_logged_after_the_listing_limit_are_cut_not_rejected`; the
+  opt-in `dense_burst_real` (real FFmpeg through the binary, hosted in `P07 local ASR`).
 - **Impact:** agents must split long bursts on high-frame-rate recordings.
 - **Why:** bounded listing per provider run (SEC-05); multi-listing bursts not built.
 - **Mitigation:** typed failure; the stop reason says more may exist.

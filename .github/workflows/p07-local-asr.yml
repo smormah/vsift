@@ -59,6 +59,12 @@ jobs:
       - name: Time anchoring reads real recording-time tags
         run: cargo test --release --locked -p vsift-cli --test time_anchor_real_tags -- --ignored --nocapture
 
+      # L-015: a burst over a range too dense for one frame listing gets
+      # outside_listing on real video, constant and varying rate, never the
+      # "may be damaged" answer (FFmpeg logs a frame past its -frames:v limit).
+      - name: A dense frame burst gets outside_listing
+        run: cargo test --release --locked -p vsift-cli --test dense_burst_real -- --ignored --nocapture
+
       # #469: the media-tool and speech checks in a folder deeper than
       # Windows' MAX_PATH, with the pinned FFmpeg and whisper.cpp.
       - name: Providers in a folder deeper than MAX_PATH (base)
