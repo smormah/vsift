@@ -22,7 +22,10 @@ use std::{
     io::{BufRead, BufReader, Cursor, Write},
     net::TcpListener,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+    },
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -246,13 +249,20 @@ fn refused_acceptance_changes_nothing() -> TestResult {
     Ok(())
 }
 
-/// A local HTTP proxy that answers every request with `407` and counts
-/// the requests that carried credentials.
-fn start_proxy() -> Result<u16, Box<dyn Error>> {
+const PROXY_AUTH_REQUIRED: &[u8] = b"HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"vsift-test\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+const HOST_BLOCKED: &[u8] =
+    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+/// A local HTTP proxy that answers every request with `reply` and counts
+/// the connections it received.
+fn start_answering_proxy(reply: &'static [u8]) -> Result<(u16, Arc<AtomicUsize>), Box<dyn Error>> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
+    let received = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&received);
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
+            counter.fetch_add(1, Ordering::SeqCst);
             thread::spawn(move || {
                 let Ok(clone) = stream.try_clone() else {
                     return;
@@ -263,13 +273,16 @@ fn start_proxy() -> Result<u16, Box<dyn Error>> {
                     line.clear();
                 }
                 let mut stream = stream;
-                let _ = stream.write_all(
-                    b"HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"vsift-test\"\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                );
+                let _ = stream.write_all(reply);
             });
         }
     });
-    Ok(port)
+    Ok((port, received))
+}
+
+/// A local HTTP proxy that answers every request with `407`.
+fn start_proxy() -> Result<u16, Box<dyn Error>> {
+    Ok(start_answering_proxy(PROXY_AUTH_REQUIRED)?.0)
 }
 
 /// D-07, D-10: on the managed target, a proxy that demands authentication
@@ -686,4 +699,289 @@ fn the_plan_shows_installed_components_and_its_acceptance_survives_the_install()
         .output()?;
     assert!(String::from_utf8_lossy(&human.stdout).contains("nothing to install"));
     Ok(())
+}
+
+fn plan_with_online_links(base: &Base) -> Result<(Value, std::process::Output), Box<dyn Error>> {
+    let output = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop"])
+        .args(["--include", "online_links", "--json"])
+        .output()?;
+    assert!(output.status.success(), "setup plan failed");
+    let value = json(&output)?;
+    validate("operation-response.schema.json", &value)?;
+    validate("setup-plan.schema.json", &value)?;
+    Ok((value, output))
+}
+
+/// `setup check --profile desktop --json`, validated.
+fn check_desktop(base: &Base) -> Result<(Option<i32>, Value), Box<dyn Error>> {
+    let output = base
+        .vsift()?
+        .args(["setup", "check", "--profile", "desktop", "--json"])
+        .output()?;
+    let value = json(&output)?;
+    validate("setup-check-response.schema.json", &value)?;
+    Ok((output.status.code(), value))
+}
+
+/// How the optional download is cut off, and what the install must report.
+struct OptionalFault {
+    /// The proxy address in the download's environment.
+    proxy: String,
+    /// Let the development build resolve names, so that an unresolvable
+    /// proxy host is a real lookup failure and not the build's refusal to
+    /// look anything up (`VSIFT_DEV_PUBLISHER_NETWORK`). Safe: the only
+    /// route to a publisher in the environment is the proxy given.
+    resolve_names: bool,
+    /// The typed reason of the first optional component that was fetched.
+    reason: &'static str,
+}
+
+/// The JSON result of the install: a partial success whose core is ready and
+/// whose optional group failed with the reason in `fault`, the first
+/// component fetched and the next one blocked.
+fn assert_partial_install_report(value: &Value, fault: &OptionalFault) -> TestResult {
+    validate("operation-response.schema.json", value)?;
+    validate("setup-install.schema.json", &value["data"])?;
+    assert_eq!(value["status"], "partial", "{value}");
+    assert!(value["error"].is_null(), "{value}");
+    let data = &value["data"];
+    assert_eq!(data["core"], "ready");
+    for component in data["components"].as_array().ok_or("no components")? {
+        assert_eq!(component["status"], "already_current", "{component}");
+    }
+    let optional = data["optional_components"]
+        .as_array()
+        .ok_or("no optional components")?;
+    assert_eq!(optional.len(), 2);
+    for component in optional {
+        assert_eq!(component["status"], "failed", "{component}");
+    }
+    assert_eq!(optional[0]["reason"], fault.reason, "{optional:?}");
+    assert_eq!(optional[0]["step"], "download");
+    assert_eq!(optional[0]["failure_code"], "DOWNLOAD_FAILED");
+    assert_eq!(optional[1]["reason"], "blocked");
+    let groups = data["optional_groups"]
+        .as_array()
+        .ok_or("no optional groups")?;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0]["name"], "online_links");
+    assert_eq!(groups[0]["status"], "not_installed");
+    assert_eq!(groups[0]["reason"], fault.reason);
+    assert_eq!(groups[0]["failure_code"], "DOWNLOAD_FAILED");
+    assert!(
+        groups[0]["next_step"]
+            .as_str()
+            .is_some_and(|text| text.contains("VSift is ready for local videos")),
+        "{}",
+        groups[0]
+    );
+    Ok(())
+}
+
+/// No stage is left in the managed root, and neither optional component is
+/// installed or selected.
+fn assert_nothing_left_behind(base: &Base) -> TestResult {
+    let root = base.managed_root();
+    for entry in fs::read_dir(&root)? {
+        let name = entry?.file_name();
+        assert!(
+            !name.to_string_lossy().starts_with("stage-"),
+            "a stage was left behind"
+        );
+    }
+    let store = ManagedArtifactStore::at(root.clone())?;
+    for component in [ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp] {
+        let selected = store.open_selected_runtime(component.identifier())?;
+        assert!(
+            selected.is_none(),
+            "{} was selected",
+            component.identifier()
+        );
+    }
+    Ok(())
+}
+
+/// ADR 0028 section 4.9, D-07: with the core stand-ins already current, a
+/// `setup install` of a plan that includes `online_links` whose optional
+/// download is cut off by the proxy in `fault` goes through the real
+/// transfer client and ends as a success: exit 0, `core: "ready"`, the
+/// optional group `not_installed` with the typed reason, the credential in
+/// no output, nothing staged, and `setup check --profile desktop` exactly as
+/// before the attempt.
+fn assert_optional_fault_leaves_the_core_ready(fault: &OptionalFault) -> TestResult {
+    let base = Base::new()?;
+    let (plan, output) = plan_with_online_links(&base)?;
+    let digest = plan["data"]["plan_digest"]
+        .as_str()
+        .ok_or("the qualified plan has no digest")?
+        .to_owned();
+    let group = &plan["data"]["optional_components"][0];
+    assert_eq!(group["name"], "online_links");
+    assert_eq!(group["status"], "included", "{group}");
+    assert_eq!(group["actions"].as_array().map_or(0, Vec::len), 2);
+    let plan_path = base.0.join("plan.json");
+    fs::write(&plan_path, &output.stdout)?;
+    for (index, component) in [
+        ManagedComponent::MediaTools,
+        ManagedComponent::WhisperCli,
+        ManagedComponent::WhisperModel,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        publish_stand_in(&base, component, &action_version(&plan, index)?)?;
+    }
+    let (current, _) = plan_with_online_links(&base)?;
+    assert_eq!(
+        current["data"]["plan_digest"].as_str(),
+        Some(digest.as_str())
+    );
+    assert_eq!(action_states(&current), ["current", "current", "current"]);
+
+    // The first check may record what it verified; the baseline is the one
+    // after it, so the comparison below is about the failed install only.
+    check_desktop(&base)?;
+    let (check_status, check_before) = check_desktop(&base)?;
+    let online = |check: &Value| -> Value {
+        check["optional_components"]
+            .as_array()
+            .and_then(|rows| rows.iter().find(|row| row["name"] == "online_links"))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    assert_eq!(online(&check_before)["status"], "not_installed");
+
+    let mut seen_output = String::new();
+    for mode in [&["--json"][..], &[][..]] {
+        let mut command = base.vsift()?;
+        for variable in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
+            command.env(variable, &fault.proxy);
+        }
+        if fault.resolve_names {
+            command.env("VSIFT_DEV_PUBLISHER_NETWORK", "allow");
+        }
+        let install = command
+            .args(["setup", "install", "--plan", path_text(&plan_path)?])
+            .args(["--accept-plan", &digest])
+            .args(mode)
+            .output()?;
+        let stdout = String::from_utf8_lossy(&install.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&install.stderr).into_owned();
+        assert_eq!(install.status.code(), Some(0), "{mode:?}: {stdout}{stderr}");
+        if mode.is_empty() {
+            assert!(stdout.contains("Core: ready"), "{stdout}");
+            assert!(
+                stdout.contains("Optional component online_links: not_installed"),
+                "{stdout}"
+            );
+            assert!(stdout.contains("Status: partial"), "{stdout}");
+            assert!(
+                stdout.contains("optional_component_not_installed"),
+                "{stdout}"
+            );
+        } else {
+            assert_partial_install_report(&json(&install)?, fault)?;
+        }
+        seen_output.push_str(&stdout);
+        seen_output.push_str(&stderr);
+    }
+
+    let (status_after, check_after) = check_desktop(&base)?;
+    assert_eq!(status_after, check_status);
+    assert_eq!(check_after, check_before, "the attempt changed setup check");
+    assert_eq!(online(&check_after)["status"], "not_installed");
+    seen_output.push_str(&check_after.to_string());
+    assert!(
+        !seen_output.contains(SENTINEL),
+        "the credential was printed"
+    );
+    assert!(
+        !seen_output.contains("vsift-user"),
+        "the user name was printed"
+    );
+
+    assert_nothing_left_behind(&base)?;
+    Ok(())
+}
+
+fn proxy_url(host: &str, port: u16) -> String {
+    format!("http://vsift-user:{SENTINEL}@{host}:{port}")
+}
+
+/// ADR 0028 section 4.9: a proxy that answers `407` to the optional
+/// download. The proxy sees the request, and the reason is `proxy_auth`.
+#[test]
+fn a_proxy_demanding_authentication_never_fails_the_core_for_the_optional_download() -> TestResult {
+    if !ubuntu_catalogue_here() {
+        println!("skipped: managed online links are offered on Ubuntu 24.04 x86-64 only");
+        return Ok(());
+    }
+    let (port, received) = start_answering_proxy(PROXY_AUTH_REQUIRED)?;
+    assert_optional_fault_leaves_the_core_ready(&OptionalFault {
+        proxy: proxy_url("127.0.0.1", port),
+        resolve_names: false,
+        reason: "proxy_auth",
+    })?;
+    assert!(
+        received.load(Ordering::SeqCst) > 0,
+        "the proxy was never asked"
+    );
+    Ok(())
+}
+
+/// ADR 0028 section 4.9: a proxy that refuses the tunnel to the publisher's
+/// host, as a firewall that blocks the site does.
+#[test]
+fn a_proxy_blocking_the_host_never_fails_the_core_for_the_optional_download() -> TestResult {
+    if !ubuntu_catalogue_here() {
+        println!("skipped: managed online links are offered on Ubuntu 24.04 x86-64 only");
+        return Ok(());
+    }
+    let (port, received) = start_answering_proxy(HOST_BLOCKED)?;
+    assert_optional_fault_leaves_the_core_ready(&OptionalFault {
+        proxy: proxy_url("127.0.0.1", port),
+        resolve_names: false,
+        reason: "offline",
+    })?;
+    assert!(
+        received.load(Ordering::SeqCst) > 0,
+        "the proxy was never asked"
+    );
+    Ok(())
+}
+
+/// ADR 0028 section 4.9, the issue's "DNS failure": the proxy's own name
+/// cannot be resolved (`.invalid` never resolves, RFC 6761).
+#[test]
+fn an_unresolvable_proxy_never_fails_the_core_for_the_optional_download() -> TestResult {
+    if !ubuntu_catalogue_here() {
+        println!("skipped: managed online links are offered on Ubuntu 24.04 x86-64 only");
+        return Ok(());
+    }
+    assert_optional_fault_leaves_the_core_ready(&OptionalFault {
+        proxy: proxy_url("vsift-no-such-proxy.invalid", 3128),
+        resolve_names: true,
+        reason: "offline",
+    })
+}
+
+/// ADR 0028 section 4.9, the issue's "offline machine": nothing listens at
+/// the proxy's address, so the connection is refused.
+#[test]
+fn a_closed_proxy_port_never_fails_the_core_for_the_optional_download() -> TestResult {
+    if !ubuntu_catalogue_here() {
+        println!("skipped: managed online links are offered on Ubuntu 24.04 x86-64 only");
+        return Ok(());
+    }
+    let port = {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.local_addr()?.port()
+    };
+    assert_optional_fault_leaves_the_core_ready(&OptionalFault {
+        proxy: proxy_url("127.0.0.1", port),
+        resolve_names: false,
+        reason: "offline",
+    })
 }

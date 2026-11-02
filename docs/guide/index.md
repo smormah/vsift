@@ -80,6 +80,7 @@ FFmpeg and FFprobe, the optional speech tools, upgrading and uninstalling. Insta
 
 - [Investigate a recording](investigate-a-recording.md): the whole route for your own video.
 - [Use an existing transcript](use-an-existing-transcript.md): subtitles you already have, and fixing their timing.
+- [Online videos](online-videos.md): a video from a link, what works with nothing extra, the optional part for web pages, and how to add or remove it.
 - [Keep and share evidence](keep-and-share-evidence.md): saving a bundle that outlives the session, and checking one.
 - [Let your agent investigate](let-your-agent-investigate.md): setting up an AI assistant and reading its report.
 - [Clean up and uninstall](clean-up-and-uninstall.md): closing sessions, removing what VSift stored, removing VSift.
