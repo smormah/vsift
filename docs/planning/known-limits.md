@@ -1283,7 +1283,11 @@ Counts: 1 high, 57 medium, 145 low (203 entries), recounted on 2026-11-02 from t
   30 fps file); the reader allowed 1,201 and rejected the log as malformed. The
   frame-rate pattern does not matter (a constant rate and one with dropped frames both
   did it); density does. The reader now accepts up to 64 lines past the limit and cuts the
-  listing at the limit as designed. Every caller of a listing shares that reader.
+  listing at the limit as designed. Every caller of a listing shares that reader. The
+  on-screen text reader (`ocr`, which shares one listing among targets up to 20 s apart)
+  lists again from the first target a cut listing cannot decide, instead of recording
+  it as `unresolved` (no frame displayed there); if a listing decides nothing for its
+  first target, the call stops with `media_failed` and leaves the targets pending.
 - **Evidence:** [ADR 0019](../decisions/0019-evidence-navigation.md) section 6 and the
   PR 2 note ("rejected for now"); [P09 record](p09-evidence-navigation.md) residuals; the
   reader's unit test `frames_logged_after_the_listing_limit_are_cut_not_rejected`; the
