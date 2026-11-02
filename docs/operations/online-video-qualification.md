@@ -40,19 +40,25 @@ that allows this use. The record holds no link with a token.
 | R1 | Blender Showreels, a playlist page (the refusal case) | `https://video.blender.org/w/p/cQ4v4uoPbLdnhFrqsEx69m` | Attribution (CC BY), as the instance states |
 
 The list is also the test's: `LISTED` in `crates/vsift-cli/tests/link_live.rs`. A change to one is a change to both.
+
 ## The search for a real pair of streams (2026-11-02)
 
-One hosted dispatch (run 41442126342, Ubuntu 24.04, yt-dlp 2026.08.19, the information phase only, nothing downloaded)
-read Q1 to Q6 with phase 1's selection. **No page offered a separate audio stream next to a video stream** over https:
+Dispatch 41446335179 (Ubuntu 24.04, yt-dlp 2026.08.19, the information phase only, nothing downloaded; head
+`cd6212a9`) read Q1 to Q6 with phase 1's arguments, selection and live filter, which a unit test keeps equal to
+`page_acquisition.rs`. **No page offered a separate audio stream next to a video stream** over https:
 
-| Id | Result |
-| --- | --- |
-| Q1 | The extractor could not parse the page (`Cannot parse data`); no formats |
-| Q2 | Combined `https` mp4 (2) and one video-only mp4, no audio-only stream: one file |
-| Q3 | Combined `https` mp4 (4) and HLS: one file |
-| Q4 | Combined `https` mp4 and webm, audio-only mp3 and opus only (not the container the selection takes): one file |
-| Q5 | Combined `https` webm (3), one video-only mov: one file |
-| Q6 | A page the generic reader found no video in |
+| Id | Verdict | What phase 1 selected, and what the page offers |
+| --- | --- | --- |
+| Q1 | Refused | The extractor could not parse the page (`Cannot parse data`); no formats |
+| Q2 | One file | Format `hd`, https mp4. Offered: combined https mp4 (2) and one video-only https mp4, with no audio-only stream to pair it with |
+| Q3 | One file | `1080p-1`, https mp4, 19,555,969 bytes. Offered: combined https mp4 (4) and HLS (2) |
+| Q4 | One file | `eng-h264-hd`, https mp4, 142,606,336 bytes. Offered: combined mp4 (2) and webm (4); audio-only only as mp3 and opus, which the selection does not take |
+| Q5 | One file | `source`, https webm, 6,192,962 bytes. Offered: combined https webm (3) and one video-only mov |
+| Q6 | A playlist | The generic reader found a list of entries on the page, not one video |
+
+An earlier search (run 41442126342, head `25814685`) used arguments that differ from phase 1's: it kept
+`--max-downloads` and a live filter that drops a site reporting no status, so its verdicts were defaults and are void.
+Only its lists of offered formats counted, and they agree with the table above.
 
 YouTube, the one site that does serve separate streams, met a bot wall from a hosted runner on 2026-11-01 (dispatch
 41281919811); it is not searched again here.
@@ -67,10 +73,10 @@ itself, before it read any page, and is not a result.
 | Id | Outcome | What it shows |
 | --- | --- | --- |
 | Q1 | Refused as `extractor_broken` | The extractor could not parse the page (the same text the search saw); the typed refusal is the right one |
-| Q2 | Fetched, `single_file`, 139,724 bytes | A page on a social site through yt-dlp: the one file the site offers, no audio stream apart |
+| Q2 | Fetched, `single_file`, 139,724 bytes | A 3.28-second clip on a social site, through yt-dlp: the one file the site offers, no audio stream apart |
 | Q3 | Fetched, `single_file`, 19,555,969 bytes | A PeerTube instance: a combined mp4 |
 | Q4 | Fetched, `single_file`, 142,625,911 bytes | media.ccc.de: a combined mp4 |
-| Q5 | Refused as `http_status` | The site answers VSift's own first request with an HTTP error, so the link never reaches yt-dlp (the real-media set records that this site refuses the tool's own requests); the typed refusal is the right one |
+| Q5 | Refused as `http_status` | The site answers VSift's own first request with an HTTP error, so the link never reaches yt-dlp, although yt-dlp read this same page in the search (the real-media set records that this site refuses the tool's own requests). The refusal is typed, but VSift refuses a page yt-dlp could have fetched; whether to change that is a question for the planner, not settled here |
 | Q6 | Refused as `playlist` | The generic reader found a list of entries on the page, not one video |
 | R1 | Refused as `playlist` | The playlist case the qualification requires, from a real page |
 
