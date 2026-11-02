@@ -60,7 +60,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 draft freeze, W4c Part 2 (#409), rewritten at its merge rebase; the final freeze is recorded at the 0.3.0
+/// **0.3.0 development freeze, written at W4c Part 2's merge rebase (#409); the final freeze is recorded at the 0.3.0
 /// cut** (2026-11-02): the skill gains the step for a video on a web page, the grader the consent rules and the plan
 /// grant, and the scenarios C-05 to C-08 and A-11, so four components moved: `skill` `6065ffdb...` to `e7269b80...`,
 /// `grader` `76d1243c...` to `efe6fd2d...`, `cold` `853d8da3...` to `31204791...` and `scenarios` `3a77c3d3...` to

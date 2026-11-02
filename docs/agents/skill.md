@@ -545,8 +545,8 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The trials:** `A-11-f05-optional-offer` runs this step on both clients, and four cold scenarios run the plan's own
   instruction ([`trials.md`](trials.md), "Cold-agent mode"). They first run at the `0.3.0` cut;
   [L-249](../planning/known-limits.md#l-249) says what they do not cover.
-- **The freeze:** the `skill`, `grader`, `scenarios` and `cold` components move once; the draft writes a labelled
-  draft freeze, and it is rewritten at the merge rebase. The fuzz seed and the plugin's copy stay byte-identical.
+- **The freeze:** the `skill`, `grader`, `scenarios` and `cold` components move once, written at the merge rebase. The
+  fuzz seed and the plugin's copy stay byte-identical.
 
 ## Keeping it in step with the CLI
 
