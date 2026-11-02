@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pathlib
 import unittest
 
 import search_formats as search
@@ -40,13 +41,15 @@ class ClassifyTests(unittest.TestCase):
         verdict = search.classify({"requested_formats": [VIDEO_ONLY, AUDIO_ONLY]})
         self.assertEqual(verdict["verdict"], "PAIR")
 
-    def test_the_selection_is_read_from_the_requested_downloads(self) -> None:
-        pair = {"requested_downloads": [{"requested_formats": [VIDEO_ONLY, AUDIO_ONLY]}]}
-        self.assertEqual(search.classify(pair)["verdict"], "PAIR")
-        single = {"requested_downloads": [COMBINED]}
-        verdict = search.classify(single)
-        self.assertEqual(verdict["verdict"], "SINGLE_FILE")
-        self.assertEqual(verdict["selected"][0]["format_id"], "c")
+    def test_a_page_where_nothing_was_selected_is_not_a_single_file(self) -> None:
+        dropped = {"_type": "video", "extractor_key": "Facebook", "formats": [COMBINED]}
+        verdict = search.classify(dropped)
+        self.assertEqual(verdict["verdict"], "NOTHING_SELECTED")
+        self.assertEqual(verdict["selected"], [])
+
+    def test_a_playlist_is_its_own_verdict(self) -> None:
+        for page in ({"_type": "playlist"}, {"_type": "video", "entries": []}):
+            self.assertEqual(search.classify({**COMBINED, **page})["verdict"], "PLAYLIST")
 
     def test_the_size_is_the_sum_when_every_stream_says_it(self) -> None:
         sized = [{**VIDEO_ONLY, "filesize": 5}, {**AUDIO_ONLY, "filesize_approx": 7}]
@@ -70,6 +73,30 @@ class ClassifyTests(unittest.TestCase):
             shapes,
             {"video-only https mp4": 1, "audio-only https m4a": 1, "combined https mp4": 2},
         )
+
+
+class ProductSyncTests(unittest.TestCase):
+    """The script's arguments are the product's, so its verdicts mean what the product would do."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        source = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "crates/vsift-infrastructure/src/page_acquisition.rs"
+        )
+        cls.product = source.read_text(encoding="utf-8")
+
+    def test_the_selection_and_the_filter_are_the_products(self) -> None:
+        self.assertIn(f'"{search.FORMAT_SELECTION}"', self.product)
+        self.assertIn(f'"{search.MATCH_FILTER}"', self.product)
+
+    def test_every_argument_is_one_the_product_has(self) -> None:
+        for argument in search.FIXED_ARGUMENTS:
+            if argument != search.MATCH_FILTER:
+                self.assertIn(f'"{argument}"', self.product, argument)
+
+    def test_the_arguments_the_note_removed_are_not_here(self) -> None:
+        self.assertNotIn("--max-downloads", search.FIXED_ARGUMENTS)
 
 
 if __name__ == "__main__":

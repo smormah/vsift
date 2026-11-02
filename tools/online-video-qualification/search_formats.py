@@ -10,7 +10,12 @@ used; a bot wall or a login wall is reported as it comes and never engineered ro
 It also reads one video's size before a real fetch: give the link in CANDIDATES and the
 selected formats' `bytes` and `total_bytes` are the size the fetch would take (null when the
 site does not say). Usage: search_formats.py <path to the pinned yt-dlp> [<path to a Deno>]
-Works on Windows, macOS and Linux; the second argument is the runtime some sites need.
+The second argument is the runtime some sites need. It has run only on Linux so far; its
+Windows branch (the environment it passes) is untested.
+
+The arguments are phase 1's, as ADR 0028's note of 2026-11-01 sets them and
+`crates/vsift-infrastructure/src/page_acquisition.rs` has them; a unit test reads that file and
+fails if the selection, the live filter or an argument here is not in it.
 """
 
 from __future__ import annotations
@@ -22,16 +27,18 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-# ADR 0028 section 4.7, "The format and live filter".
+# ADR 0028 section 4.7, "The format and live filter", as the note of 2026-11-01 keeps them.
 FORMAT_SELECTION = (
     "bv*[protocol=https][ext=mp4]+ba[protocol=https][ext=m4a]"
     "/b[protocol=https][ext=mp4]"
     "/bv*[protocol=https][ext=webm]+ba[protocol=https][ext=webm]"
     "/b[protocol=https][ext=webm]"
 )
-MATCH_FILTER = "!is_live & !was_live & live_status!=is_upcoming & live_status!=post_live"
+# `!=?` passes a site that reports no status; plain `!=` is false for it and drops the page.
+MATCH_FILTER = "!is_live & !was_live & live_status!=?is_upcoming & live_status!=?post_live"
 
-# ADR 0028 section 4.7, "The fixed arguments" (the ones that matter to an information read).
+# The note's "Every run" arguments that matter to an information read. No `--max-downloads`:
+# with `--simulate --dump-single-json` it ends in exit 101 and no JSON.
 FIXED_ARGUMENTS = [
     "--ignore-config",
     "--no-plugin-dirs",
@@ -41,7 +48,7 @@ FIXED_ARGUMENTS = [
     "--no-cookies-from-browser",
     "--no-playlist",
     "--no-batch-file",
-    "--max-downloads",
+    "--playlist-items",
     "1",
     "--abort-on-error",
     "--no-exec",
@@ -54,6 +61,11 @@ FIXED_ARGUMENTS = [
     "--no-check-formats",
     "--socket-timeout",
     "30",
+    "--no-progress",
+    "--fixup",
+    "never",
+    "--match-filters",
+    MATCH_FILTER,
 ]
 
 MAX_CANDIDATES = 8
@@ -99,10 +111,29 @@ def describe(entry: dict) -> dict:
 
 
 def classify(info: dict) -> dict:
-    """What phase 1 selected: a pair, one file, or nothing; plus the near misses."""
-    downloads = info.get("requested_downloads") or []
-    first = downloads[0] if downloads else info
-    selected = first.get("requested_formats") or [first]
+    """What phase 1 selected, read as the product reads it.
+
+    A pair is `requested_formats` with one video-only and one audio-only stream; one file is a
+    single `requested_formats` entry or a top-level `format_id`; a playlist is refused; and a
+    page where no format was selected (the live filter dropped it, or nothing matched) is
+    `NOTHING_SELECTED`, never a default.
+    """
+    common = {
+        "extractor_key": info.get("extractor_key"),
+        "type": info.get("_type"),
+        "availability": info.get("availability"),
+        "duration_s": info.get("duration"),
+        "license": info.get("license"),
+    }
+    if info.get("_type") not in (None, "video") or info.get("entries") is not None:
+        return {"verdict": "PLAYLIST", **common, "selected": []}
+    requested = info.get("requested_formats")
+    if requested:
+        selected = requested
+    elif info.get("format_id") and info.get("protocol"):
+        selected = [info]
+    else:
+        return {"verdict": "NOTHING_SELECTED", **common, "selected": []}
     chosen = [describe(entry) for entry in selected]
     pair = (
         len(selected) == 2
@@ -113,11 +144,7 @@ def classify(info: dict) -> dict:
     return {
         "verdict": "PAIR" if pair else "SINGLE_FILE",
         "total_bytes": None if None in sizes else sum(sizes),
-        "extractor_key": info.get("extractor_key"),
-        "type": info.get("_type"),
-        "availability": info.get("availability"),
-        "duration_s": info.get("duration"),
-        "license": info.get("license"),
+        **common,
         "selected": chosen,
     }
 
@@ -175,16 +202,7 @@ def search_one(executable: str, link: str, home: str, runtime: str | None) -> di
     try:
         phase_one = run_yt_dlp(
             executable,
-            [
-                "-f",
-                FORMAT_SELECTION,
-                "--match-filters",
-                MATCH_FILTER,
-                "--simulate",
-                "--dump-single-json",
-                "--",
-                link,
-            ],
+            ["-f", FORMAT_SELECTION, "--simulate", "--dump-single-json", "--", link],
             home,
             runtime,
         )
@@ -202,7 +220,7 @@ def search_one(executable: str, link: str, home: str, runtime: str | None) -> di
         result["offered"] = available_shapes(info)
         return result
     result["verdict"] = "REFUSED"
-    result["error"] = one_line(phase_one.stderr)
+    result["error"] = one_line(phase_one.stderr) or f"exit {phase_one.returncode}, no error text"
     # The selection found nothing: read the page again without it, to see what is offered.
     if "format is not available" in phase_one.stderr:
         try:
