@@ -209,6 +209,8 @@ fn summary(listed: &[Listed], duration_us: u64) -> Value {
         .iter()
         .filter(|change| change.small_regions > 0)
         .count() as u64;
+    let regions: usize = listed.iter().map(|change| change.regions).sum();
+    let small: usize = listed.iter().map(|change| change.small_regions).sum();
     json!({
         "changes": count,
         "per_minute": ratio(count * 60_000_000, duration_us),
@@ -220,7 +222,9 @@ fn summary(listed: &[Listed], duration_us: u64) -> Value {
             regions
         }).collect()),
         "changes_with_regions_left_out": listed.iter().filter(|change| change.regions_left_out > 0).count(),
-        "small_regions": listed.iter().map(|change| change.small_regions).sum::<usize>(),
+        "regions": regions,
+        "small_regions": small,
+        "share_of_regions_small": ratio(small as u64, regions as u64),
         "share_of_changes_with_a_small_region": ratio(with_small, count),
         "largest_region_frame_share": quantiles(listed.iter().map(|change| change.largest_share).collect()),
     })
@@ -400,8 +404,11 @@ async fn measures_screen_changes_on_real_recordings() -> TestResult {
     for item in &items {
         let report = measure_item(item).await?;
         println!(
-            "{}: {}",
+            "{}: calls {} sessions {} seconds {:.1} {}",
             item.id,
+            report["calls"],
+            report["sessions"],
+            report["seconds"].as_f64().unwrap_or_default(),
             serde_json::to_string(&report["summary"])?
         );
         measured.push(report);
@@ -481,6 +488,8 @@ fn the_summary_counts_small_regions_and_missing_ones() {
     assert_eq!(report["changes"], 2);
     assert_eq!(report["per_minute"], 2.0);
     assert_eq!(report["small_regions"], 2);
+    assert_eq!(report["regions"], 3);
+    assert_eq!(report["share_of_regions_small"], 2.0 / 3.0);
     assert_eq!(report["no_region_at_threshold"], 1);
     assert_eq!(report["share_of_changes_with_a_small_region"], 0.5);
 }

@@ -321,6 +321,22 @@ Every choice was accepted as proposed; none went to the maintainer.
   RM10; a higher `tile_pixels` (32 would remove every one seen on F04) is the candidate change before
   the second, as the planner ruled.
 
+## Note of 2026-11-03: the first real-media run, and the thresholds stay
+
+`P14 real media` run 41704516533 (hosted Ubuntu 24.04, mode `changes`, at `1de2c59f`) measured the
+whole of three screen recordings in 396 s. A "small" region has fewer than 32 changed pixels:
+
+| | Changes | A minute | Motion | Regions a change (p50, p90) | Changes with a small region | Small regions | No region |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| RM01 | 22 | 9.7 | 0 | 2, 8 | 36% | 19 | 0 |
+| RM04 | 124 | 24.8 | 62 | 1, 3 | 13% | 19 | 2 |
+| RM10 | 102 | 30.4 | 37 | 1, 4 | 19% | 33 | 0 |
+
+Small regions are a minority and always come after the larger ones; only 3 of 248 changes reached the
+8-region cap. Raising `tile_pixels` to 32 would also drop changes a person may want (a caret, one
+character), which no measurement can tell from codec noise until RM01 and RM10 are labelled. So
+`screen-change-regions-v1` keeps its first values; a later profile may move them with labels.
+
 ## Consequences
 
 - One call answers "what changed between these times" with the frames to look at and where to look.
