@@ -66,13 +66,16 @@ pub fn read_png_pixels(
     sha256: &str,
     dimensions: FrameDimensions,
 ) -> Result<Vec<u8>, PngPixelsError> {
-    let length = std::fs::metadata(path)
-        .map_err(|_| PngPixelsError::Changed)?
-        .len();
-    if u64::try_from(MAX_FRAME_BYTES).is_ok_and(|limit| length > limit) {
+    // Read at most one byte past the bound, so the bound holds even if the
+    // file grew after any earlier look at its size.
+    let limit = u64::try_from(MAX_FRAME_BYTES).map_err(|_| PngPixelsError::TooLarge)?;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|file| file.take(limit.saturating_add(1)).read_to_end(&mut bytes))
+        .map_err(|_| PngPixelsError::Changed)?;
+    if bytes.len() > MAX_FRAME_BYTES {
         return Err(PngPixelsError::TooLarge);
     }
-    let bytes = std::fs::read(path).map_err(|_| PngPixelsError::Changed)?;
     let mut digest = String::with_capacity(64);
     for byte in Sha256::digest(&bytes) {
         digest.push(char::from(HEX[usize::from(byte >> 4)]));

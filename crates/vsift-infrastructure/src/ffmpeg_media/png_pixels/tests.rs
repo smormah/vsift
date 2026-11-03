@@ -202,3 +202,47 @@ fn paeth_follows_the_specification() {
     assert_eq!(paeth(200, 10, 5), 200);
     assert_eq!(paeth(5, 200, 10), 200);
 }
+
+/// The SHA-256 of the 144x90 F04 frame's rgb24 pixels as `FFmpeg`'s own PNG
+/// decoder gives them, the same for each file below:
+///
+/// ```console
+/// ffmpeg -v error -i <file>.png -f rawvideo -pix_fmt rgb24 - | sha256sum
+/// ```
+///
+/// The files were written by `FFmpeg` 9.0 from the synthetic F04 at 10 s, with
+/// the extraction's encoder (`-f image2pipe -vcodec png`):
+///
+/// ```console
+/// ffmpeg -v error -ss 10 -i fixtures/corpus/generated/F04.mp4 -frames:v 1 \
+///   -vf "scale=144:90,format=rgb24" -f image2pipe -vcodec png [-pred avg|up] <file>.png
+/// ```
+///
+/// The default encoder (`-default.png`) filters rows with Sub and Paeth, as
+/// every evidence frame is written; `-pred avg` adds Average and `-pred up`
+/// adds Up. No `FFmpeg` file here uses filter None, which the round trips
+/// above cover.
+const F04_FRAME_RGB24_SHA256: &str =
+    "a2c0a5ba15f3616d2404041bb4188809ec6be32eeb221307882f563ba39221dc";
+
+#[test]
+fn ffmpeg_pngs_decode_to_ffmpeg_s_own_pixels() -> TestResult {
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write as _;
+
+    let dimensions = FrameDimensions::new(144, 90)?;
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/png_pixels");
+    for name in [
+        "F04-frame-144x90-default.png",
+        "F04-frame-144x90-avg.png",
+        "F04-frame-144x90-up.png",
+    ] {
+        let pixels = decode_png_pixels(&std::fs::read(folder.join(name))?, dimensions)?;
+        let mut digest = String::new();
+        for byte in Sha256::digest(&pixels) {
+            write!(digest, "{byte:02x}")?;
+        }
+        assert_eq!(digest, F04_FRAME_RGB24_SHA256, "{name}");
+    }
+    Ok(())
+}

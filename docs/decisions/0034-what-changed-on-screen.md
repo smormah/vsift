@@ -71,12 +71,15 @@ is made.
   the settled frame. A run still moving at its window's end ends at its last candidate, with
   `settled: false`. A page never splits the pair.
 - `first_frame` and `periodic_coverage` candidates are not changes: nothing is compared with them.
-- **A budget that splits a motion run.** A window over its 32 candidates may keep a `motion_start` and
-  drop the `settled_after_motion` that ended its run, or the reverse. A kept `motion_start` alone is a
-  `motion` change whose after is its own frame, `settled: false`. A kept `settled_after_motion` alone
-  is a `motion` change whose before is the frame at its own `change_window.from_us` (the last moving
-  sample), `settled: true`, with `run_start_dropped: true`. Either way the window's
-  `candidate_budget_exhausted` gap counts the dropped one. A test covers both.
+- **A window whose budget dropped candidates never pairs.** Once a window over its 32 candidates has
+  dropped any, a kept `settled_after_motion` may end a later run whose `motion_start` was dropped, and
+  no rule could tell that pairing from a right one. So in such a window each kept motion candidate is a
+  change of its own: a `motion_start` is a `motion` change with `motion: "start"` (after is its own,
+  first moving frame; `settled: false`), and a `settled_after_motion` is a `motion` change with
+  `motion: "end"` (before is the frame at its own `change_window.from_us`, the last moving sample;
+  `settled: true`). The window's `candidate_budget_exhausted` gap counts what was dropped. A test covers
+  both. (The first text of this section paired them and named the second case `run_start_dropped`;
+  `motion: "end"` says the same, and the planner accepted it on 2026-11-03.)
 - **Which changes a range holds:** those whose after frame lies in it. A change's before frame, and a
   motion run's start, may lie before `--from`.
 
@@ -132,7 +135,8 @@ profile, never a silent change.
 With `--crops`, each of a change's two largest regions is cut out of the before frame and the after
 frame through the existing `crop` (the source's own pixels at native size), so a change carries up to
 four crop evidence ids. A call makes at most 16 crops; regions beyond that are listed with their
-rectangle and no crop, and the result says so. Without `--crops` no crop is made.
+rectangle and no crop, and the result says so. Without `--crops` no crop is made. The request carries the choice as a two-value enum, never a
+boolean (AGENTS.md; the planner, 2026-11-03); the command line keeps the flag.
 
 ### 5. The answer
 
@@ -145,10 +149,12 @@ or `from_us` and `reason`). Each change
 
 - `change_id` (`chg_`, a digest of the session, source, stream, index profile, region profile and its
   candidate ids, so it is the same on every call);
-- `kind` (`change` or `motion`), `settled` (motion only), `candidate_ids`, `change_window`;
+- `kind` (`change` or `motion`), `motion` (`run`, `start` or `end`; null for a `change`), `settled`
+  (motion only), `candidate_ids`, `change_window`;
 - `before` and `after`: `evidence_id`, `time_us`, `clock_time` (from the frame evidence record);
-- `comparison` (`compared`, `dimensions_differ`, or why it was not: `session_evidence_budget`,
-  `pixel_budget`, `byte_budget`, `deadline_exceeded`, `cancelled`);
+- `comparison` (`compared`, or `dimensions_differ` when the two frames' displayed sizes differ). A
+  change whose frames could not be taken (the evidence room, the deadline or a cancellation) is not
+  listed: the page stops before it, `partial_reason` says why and `resume` names it (section 6a);
 - `regions`, `regions_left_out`, `changed_area`, `no_region_at_threshold`;
 - with `--crops`, each cropped region's `before_crop` and `after_crop` evidence ids.
 
@@ -210,9 +216,10 @@ listed; coverage counts them in each window's `candidate_budget_exhausted` gap.
 
 `coverage` carries the index's own gaps for the range (`not_analyzed`, `deadline_exceeded`,
 `undecodable`, `no_decoded_frame`, and `candidate_budget_exhausted` with the number of changes it
-dropped), plus `changes_not_compared`, the count of listed changes whose `comparison` is not
-`compared`. The envelope `coverage` is filled as for `candidates`; a result with any gap or uncompared
-change is `partial` with a fixed warning, exit 0.
+dropped). A page that stopped early (section 6a) adds the rest of the searched range, from
+`resume.from_us`, to the envelope's gaps under the stop's reason. Every listed change was compared, so
+there is no count of uncompared changes. The envelope `coverage` is filled as for `candidates`; a
+result with any gap or stop is `partial` with a fixed warning, exit 0.
 
 ### 8. What it never claims
 
@@ -301,11 +308,12 @@ Every choice was accepted as proposed; none went to the maintainer.
   at or after with tolerance 0, or by candidate), so every image is an ordinary evidence record anyone
   can ask for again. A page-wide evidence operation would hold about twice as many changes per session,
   but it would add an operation to the stored evidence records and their published schema; it is not
-  built. Section 6's room figures are the ones that follow: about 95 to 190 changes per session, not
-  180 to 350.
+  built. Section 6's room figures follow from it: about 95 to 190 changes per session, where the first
+  text said 180 to 350.
 - **`comparison` is `compared` or `dimensions_differ`.** A change whose frames were not taken is not
   listed (the page stops before it and `resume` names it), so no listed change is "not compared", and
-  section 7's `changes_not_compared` count is not published.
+  the first text's `changes_not_compared` count is not published (sections 5 and 7 now say so).
+- **No pairing in a window with drops**, and `motion: "end"` instead of `run_start_dropped` (section 2).
 - **Codec noise on the synthetic corpus.** On F04 (H.264), the status edit at 10 s is one 400x48
   region of 7,140 changed pixels, and six more regions of 9 to 25 changed pixels each sit around text
   elsewhere, where the re-encoded frames differ by 32 levels or more in a few pixels. They come after
