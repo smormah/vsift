@@ -4455,7 +4455,8 @@ that week.**
   `crates/vsift-infrastructure/src/ffmpeg_media.rs`) marks such a stream unsupported, so no frame, crop or candidate command decodes it.
 - **Evidence:** the ancestry tool's result of 2026-11-03 over the 85 FFmpeg records published since June (the pull request that added this entry); the two tag tables;
   the hostile cases `mkv-fourcc-huffyuv` and `mkv-fourcc-g2m4` (a Huffyuv and a G2M4 track around a frame of random bytes), which P14 malicious media runs on the
-  candidate `0.2.4-rc.1` (**not run yet**). Whether the probe decodes a frame of these codecs, rather than only opening the decoder, was not observed.
+  candidate `0.2.4-rc.1` (**not run yet**); `crates/vsift-infrastructure/tests/ffmpeg_input_arguments.rs`, which pins the forced
+  `-protocol_whitelist file` and `-f mov` or `-f matroska` of every FFmpeg and FFprobe input. Whether the probe decodes a frame of these codecs, rather than only opening the decoder, was not observed.
 - **Impact: low by the rubric (to be confirmed at review):** the class leaks the FFmpeg child's own memory into pixels. The pixels the probe may decode stay in the child
   (FFprobe writes only the fields VSift asks for), the child holds nothing but the file it reads and its own state, and VSift outputs no pixel of these codecs.
 - **Why:** upstream fixed them on `master` after the 9.0 build was made; the maintainer chose the 9.0 line on 2026-11-03 ([L-144](#l-144)).

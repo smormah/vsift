@@ -31,6 +31,7 @@ a Matroska duration overflow. A machine set up by `0.2.3` or earlier keeps its F
   24.22.1 / npm 11.19.1, the security releases of 2026-10-20, as on `main`; the P14 scan reading's SBOM step reads the published tag from its own worktree, and its tag fetch no
   longer fails silently ([#527](https://github.com/smormah/vsift/issues/527)). L-232 is deleted.
 - **`P06 Ubuntu candidate smoke`** inventories the pinned FFmpeg archive on the runner (`tools/p06_archive_inventory.py ubuntu-ffmpeg`).
+- **A test pins the forced input of every FFmpeg and FFprobe command** (`crates/vsift-infrastructure/tests/ffmpeg_input_arguments.rs`): `-protocol_whitelist file`, then `-f mov` or `-f matroska`, before `-i`, so a file cannot choose its own demuxer, among them the `vapoursynth` one the new build links.
 - **`P14 malicious media`:** three cases: `mp4-pssh-200000` (CVE-2026-107678, [L-144](docs/planning/known-limits.md#l-144)), and a Huffyuv and a G2M4 track in Matroska
   (CVE-2026-120247 and -120243, [L-227](docs/planning/known-limits.md#l-227)).
 - **The register:** [L-227](docs/planning/known-limits.md#l-227) is new (five FFmpeg records of 2026-11-01 the pinned build does not fix; two of their codecs can be named by
