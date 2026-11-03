@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+**The hot fix `0.2.4`, on `release/0.2.x`: the FFmpeg update and the Node.js security releases in CI.** #351 and #272 stay open.
+
+### What changes for you, in plain English
+
+**If you set VSift up on Ubuntu.** A new managed install gets FFmpeg 9.0.2 plus 39 commits, BtbN's month-end build of 2026-10-31 (136 MB to download), in place of
+the build of 2026-08-31. It carries the upstream memory-safety fixes between the two in code VSift runs: the VP8, VP9, H.264, Opus and AAC decoders, the MP4 key atom and
+a Matroska duration overflow. A machine set up by `0.2.3` or earlier keeps its FFmpeg, and `setup check` now says it is older than the reviewed one, until you run
+`setup plan` and `setup install` again. **[#351](https://github.com/smormah/vsift/issues/351) stays open:** upstream's fix for an MP4 with very many `pssh` boxes
+(CVE-2026-107678) is on FFmpeg's development line only, and the maintainer chose the 9.0 release line on 2026-11-03. No command or JSON field changed.
+
+### Changed (what ships)
+
+- **The managed FFmpeg (#272, [L-132](docs/planning/known-limits.md#l-132)):** the catalogue pins `ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz` of
+  `autobuild-2026-10-31-12-59` (136,027,168 bytes, SHA-256 `6046d673…28d5`, the publisher's digest; `bin/ffmpeg` and `bin/ffprobe` from the hosted inventory), revision
+  `ubuntu-24.04-x86_64-2026-11-03-r4`, version banners `n9.0.2-39-g7adfbe40dc-20261031`, stop of new plans 2028-10-01 (the build is kept to about 2028-10-31). The build of
+  2026-08-31 is listed as superseded for security fixes.
+- **Two reviewed bounds raised, each only as far as that archive needs:** `MAX_XZ_ARCHIVE_BYTES` from 128 MiB to 130 MiB (136,314,880; the archive is 136,027,168) and the
+  FFmpeg tar stream cap from 400,000,000 to 450,000,000 (the stream is about 444.1 MB). Each has a test at the new bound.
+
+### Tests, CI, tooling and the work record (nothing that ships changes)
+
+- **Node.js in CI and the publish job ([#526](https://github.com/smormah/vsift/issues/526)):** 22.23.3 to 22.23.4, and the publish job's 24.21.0 / npm 11.19.0 to
+  24.22.1 / npm 11.19.1, the security releases of 2026-10-20, as on `main`; the P14 scan reading's SBOM step reads the published tag from its own worktree, and its tag fetch no
+  longer fails silently ([#527](https://github.com/smormah/vsift/issues/527)). L-232 is deleted.
+- **`P06 Ubuntu candidate smoke`** inventories the pinned FFmpeg archive on the runner (`tools/p06_archive_inventory.py ubuntu-ffmpeg`).
+- **`P14 malicious media`:** three cases: `mp4-pssh-200000` (CVE-2026-107678, [L-144](docs/planning/known-limits.md#l-144)), and a Huffyuv and a G2M4 track in Matroska
+  (CVE-2026-120247 and -120243, [L-227](docs/planning/known-limits.md#l-227)).
+- **The register:** [L-227](docs/planning/known-limits.md#l-227) is new (five FFmpeg records of 2026-11-01 the pinned build does not fix; two of their codecs can be named by
+  a file VSift ingests); [L-122](docs/planning/known-limits.md#l-122), [L-132](docs/planning/known-limits.md#l-132) and [L-144](docs/planning/known-limits.md#l-144) are read
+  against the new build (L-144 is still not fixed; it is re-checked at the November month-end build for `0.3.0`).
+
 
 ## [0.2.3] - 2026-10-25
 

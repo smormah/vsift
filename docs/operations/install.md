@@ -359,12 +359,14 @@ vsift setup check                                  # each tool now reports [mana
 - **The plan** is read-only and lists, for each component still needed, the publisher, the
   exact address, the exact size, the SHA-256, the licence and notice link, and every file
   it will install. The three components are the FFmpeg and FFprobe build from BtbN
-  FFmpeg-Builds (113 MB), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
+  FFmpeg-Builds (136 MB; FFmpeg 9.0.2 plus 39 commits, the month-end build of
+  2026-10-31), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
   release's binaries are under its build release `b5454`) and the multilingual `base`
-  model from the whisper.cpp model repository (148 MB): about 272 MB in three downloads.
-  `0.2.2` and earlier install whisper.cpp v1.9.2; after an upgrade, a managed install
-  keeps the version it has until you run `setup plan` and `setup install` again, which
-  then installs v1.9.5 and selects it. Keep at least 1 GB of disk free while installing (a cautious figure,
+  model from the whisper.cpp model repository (148 MB): about 295 MB in three downloads.
+  `0.2.3` and earlier install the FFmpeg build of 2026-08-31, and `0.2.2` and earlier
+  whisper.cpp v1.9.2; after an upgrade, a managed install keeps the version it has, and
+  `setup check` says it is older than the reviewed one, until you run `setup plan` and
+  `setup install` again, which then install the reviewed version and select it. Keep at least 1 GB of disk free while installing (a cautious figure,
   not a measurement; the plan has the exact sizes). Licence information is disclosure, not
   legal clearance.
 - **The digest** is the plan's own fingerprint: copy the `Plan digest:` line of the plan
