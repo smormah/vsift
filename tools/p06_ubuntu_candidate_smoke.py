@@ -31,16 +31,16 @@ from p06_windows_candidate_smoke import (
 
 FFMPEG_URL = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-08-31-13-27/"
-    "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz"
+    "autobuild-2026-10-31-12-59/"
+    "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz"
 )
 WHISPER_URL = (
     "https://github.com/ggml-org/whisper.cpp/releases/download/"
     "b5454/whisper-bin-ubuntu-x64.tar.gz"
 )
 ARCHIVES = {
-    "ffmpeg": (FFMPEG_URL, 113_372_924,
-               "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf"),
+    "ffmpeg": (FFMPEG_URL, 136_027_168,
+               "6046d6731b26f58887e953561551d254a6eec9fbca4100dfeab56e19af8328d5"),
     "whisper": (WHISPER_URL, 10_364_195,
                 "a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c"),
 }
