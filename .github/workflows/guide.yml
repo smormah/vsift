@@ -75,7 +75,7 @@ jobs:
       - name: Set up the pinned Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22.23.3"
+          node-version: "22.23.4"
           package-manager-cache: false
 
       # The tests remove every folder they make in the temporary folder (#423):
@@ -159,7 +159,7 @@ jobs:
       - name: Set up the pinned Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22.23.3"
+          node-version: "22.23.4"
           package-manager-cache: false
 
       - name: Build the command-line tool

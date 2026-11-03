@@ -48,7 +48,7 @@ defaults:
     shell: bash
 
 env:
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.4"
   CARGO_DENY_VERSION: "0.20.2"
 
 jobs:
@@ -117,9 +117,14 @@ jobs:
           set -euo pipefail
           gh release download "v${VERSION}" --repo "${GITHUB_REPOSITORY}" \
             --pattern "vsift-${VERSION}-x86_64-unknown-linux-gnu.cdx.json" --dir "${RUNNER_TEMP}/scan"
-          git fetch --depth 1 origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}" || true
-          git checkout --quiet "v${VERSION}" -- Cargo.lock Cargo.toml 2>/dev/null || true
-          cargo metadata --locked --filter-platform x86_64-unknown-linux-gnu --format-version 1 > "${RUNNER_TEMP}/scan/metadata.json"
+          # The published release's whole workspace goes in a tree of its own: the
+          # tag's Cargo.toml and Cargo.lock over the checked-out crates failed as
+          # soon as a crate on main named a dependency the tag's workspace lacks.
+          # The manifest path leaves the toolchain file of this checkout in force.
+          git fetch --depth 1 origin "refs/tags/v${VERSION}:refs/tags/v${VERSION}"
+          git worktree add --detach "${RUNNER_TEMP}/published-workspace" "refs/tags/v${VERSION}"
+          cargo metadata --locked --manifest-path "${RUNNER_TEMP}/published-workspace/Cargo.toml" \
+            --filter-platform x86_64-unknown-linux-gnu --format-version 1 > "${RUNNER_TEMP}/scan/metadata.json"
           node tools/p14-campaigns/scan-inventory.cjs \
             --sbom "${RUNNER_TEMP}/scan/vsift-${VERSION}-x86_64-unknown-linux-gnu.cdx.json" \
             --metadata "${RUNNER_TEMP}/scan/metadata.json" | tee "${RUNNER_TEMP}/scan/inventory.json"
