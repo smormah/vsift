@@ -1149,7 +1149,7 @@ mod tests {
         Ok(())
     }
 
-    /// The v1.9.2 managed install of `0.2.2` and earlier and the FFmpeg of
+    /// The v1.9.2 managed install of `0.2.2` and earlier and the `FFmpeg` of
     /// `0.2.3` and earlier are named, with their security reason, and nothing
     /// the catalogue pins now is superseded.
     #[test]
@@ -1192,7 +1192,7 @@ mod tests {
         Ok(())
     }
 
-    /// The 0.2.4 re-pin raised two reviewed bounds for the FFmpeg archive of
+    /// The `0.2.4` re-pin raised two reviewed bounds for the `FFmpeg` archive of
     /// 2026-10-31 (`n9.0.2-39`), each only as far as that archive needs: the XZ
     /// compressed ceiling and the tar stream cap.
     #[test]

@@ -17,7 +17,7 @@ use crate::{
 
 /// Hard limit on compressed XZ bytes read from a verified artifact.
 ///
-/// 130 MiB since `0.2.4`: the reviewed FFmpeg archive of 2026-10-31
+/// 130 MiB since `0.2.4`: the reviewed `FFmpeg` archive of 2026-10-31
 /// (`n9.0.2-39`) is 136,027,168 bytes, above the earlier 128 MiB. The limit is
 /// raised only as far as that archive needs (a whole MiB above it); each
 /// artifact is still read only up to its own pinned size.
@@ -392,20 +392,26 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         const REVIEWED_FFMPEG_ARCHIVE_BYTES: u64 = 136_027_168;
         // The archive fits, with less than one MiB to spare: the raise is no larger than it needs.
-        assert_eq!(MAX_XZ_ARCHIVE_BYTES, 136_314_880);
+        assert_eq!(super::MAX_XZ_ARCHIVE_BYTES, 136_314_880);
         assert_eq!(
-            MAX_XZ_ARCHIVE_BYTES.checked_sub(REVIEWED_FFMPEG_ARCHIVE_BYTES),
+            super::MAX_XZ_ARCHIVE_BYTES.checked_sub(REVIEWED_FFMPEG_ARCHIVE_BYTES),
             Some(287_712)
         );
         let xz = fixture()?;
         assert!(
-            inspect_xz_tar_inventory(Cursor::new(&xz), MAX_XZ_ARCHIVE_BYTES, 10_000, bounds()?, &[])
-                .is_ok()
+            inspect_xz_tar_inventory(
+                Cursor::new(&xz),
+                super::MAX_XZ_ARCHIVE_BYTES,
+                10_000,
+                bounds()?,
+                &[]
+            )
+            .is_ok()
         );
         assert_eq!(
             inspect_xz_tar_inventory(
                 Cursor::new(&xz),
-                MAX_XZ_ARCHIVE_BYTES + 1,
+                super::MAX_XZ_ARCHIVE_BYTES + 1,
                 10_000,
                 bounds()?,
                 &[]
