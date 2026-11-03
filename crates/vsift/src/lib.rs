@@ -115,6 +115,7 @@ mod managed;
 mod pages;
 mod prepare;
 mod progress;
+mod screen_changes;
 mod screen_text;
 mod search;
 mod sessions;
@@ -162,6 +163,10 @@ pub use prepare::{
     RecognitionShare, VISUAL_BATCH_WINDOWS,
 };
 pub use progress::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
+pub use screen_changes::{
+    ScreenChangeItem, ScreenChangeResume, ScreenChangeResumeReason, ScreenChangesRequest,
+    ScreenChangesResults,
+};
 pub use screen_text::{
     DEFAULT_OCR_THREADS, OCR_RUNNER_NAME, OcrError, ScreenTextRange, ScreenTextRequest,
     ScreenTextResults, ScreenTextWindows,
@@ -215,6 +220,11 @@ pub use vsift_application::{
 pub use vsift_application::{
     CandidateQueryError, MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError,
     VisualSamplingError,
+};
+/// Screen-change values that appear in this API (ADR 0034).
+pub use vsift_application::{
+    ComparedChange, DEFAULT_SCREEN_CHANGE_PAGE, MAX_SCREEN_CHANGE_PAGE, ScreenChangeQueryError,
+    ScreenChangeStop, TakenFrame,
 };
 /// Managed-installation values that appear in this API (P13).
 pub use vsift_application::{
@@ -299,6 +309,12 @@ pub use vsift_domain::{
     VISUAL_SAMPLE_INTERVAL_MICROS, VISUAL_WINDOW_MICROS, VisualCandidate, VisualCandidateId,
     VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexId,
     VisualIndexProfile, VisualIndexWindow, VisualWindow, VisualWindowOutcome,
+};
+/// Screen-change values that appear in this API (ADR 0034).
+pub use vsift_domain::{
+    ChangeRegion, FrameComparison, MAX_CHANGE_REGIONS, MotionPart, PlannedScreenChange,
+    RegionComparison, SCREEN_CHANGE_JOIN_DISTANCE, SCREEN_CHANGE_PIXEL_LEVEL, SCREEN_CHANGE_TILE,
+    SCREEN_CHANGE_TILE_PIXELS, ScreenChangeId, ScreenChangeKind, ScreenChangeProfile,
 };
 pub use vsift_domain::{ClockId, ClockStatementError, GapId};
 /// Search values that appear in this API.

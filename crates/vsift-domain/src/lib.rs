@@ -18,6 +18,7 @@ mod pagination;
 mod progress;
 mod provisioning;
 mod retry;
+mod screen_change;
 mod screen_text;
 mod search;
 mod session;
@@ -87,9 +88,9 @@ pub use evidence::{
 };
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
-    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, ScreenTextIndexId,
-    ScreenTextLineId, SessionId, SourceId, SourceSegmentId, TranscriptRevisionId,
-    TranscriptSegmentId, VisualCandidateId, VisualIndexId,
+    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, ScreenChangeId,
+    ScreenTextIndexId, ScreenTextLineId, SessionId, SourceId, SourceSegmentId,
+    TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
 pub use job::{
     JobKind, JobMode, JobState, JobTransitionError, MAX_FIRST_WINDOW_MICROS, PrepareStream,
@@ -111,6 +112,12 @@ pub use provisioning::{
 pub use retry::{
     AttemptFailure, Jitter, MAX_AUTOMATIC_RETRIES, MAX_JOB_ATTEMPTS, POISON_THRESHOLD,
     RETRY_BASE_DELAY, RETRY_MAX_DELAY, RetryClass, RetryDecision, RetryPolicy, poisoned_chunk,
+};
+pub use screen_change::{
+    ChangeRegion, FrameComparison, MAX_CHANGE_REGIONS, MotionPart, PlannedScreenChange,
+    RegionComparison, RgbPixels, SCREEN_CHANGE_JOIN_DISTANCE, SCREEN_CHANGE_PIXEL_LEVEL,
+    SCREEN_CHANGE_TILE, SCREEN_CHANGE_TILE_PIXELS, ScreenChangeError, ScreenChangeKind,
+    ScreenChangeProfile, compare_frames, plan_screen_changes,
 };
 pub use screen_text::{
     DEFAULT_READ_PERIOD_MICROS, MAX_PROVIDER_LABEL_BYTES, MAX_READ_PERIOD_MICROS,

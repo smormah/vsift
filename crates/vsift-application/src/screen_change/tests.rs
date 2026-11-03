@@ -1,0 +1,464 @@
+use std::{future::Future, sync::Mutex};
+
+use vsift_domain::{
+    CursorError, EvidenceId, FrameComparison, FrameDimensions, MediaTime, SessionId, SourceId,
+    TimeRange, VISUAL_BLOCKS, VisualCandidateId, VisualHash, VisualIndex, VisualIndexProfile,
+    VisualSample, VisualWindow,
+};
+
+use super::{
+    FrameRefusal, ScreenChangeError, ScreenChangeFrames, ScreenChangePageRequest,
+    ScreenChangeQueryError, ScreenChangeStop, TakenFrame, compare_screen_changes, first_unanalysed,
+    page_screen_changes, screen_change_id, screen_change_page_limit,
+};
+use crate::visual::{
+    ExtendVisualIndexRequest, VisualIndexScope, VisualSampler, VisualSamplingError,
+    extend_visual_index, visual_coverage_gaps,
+};
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const EXPIRES: u64 = 2_000_000_000_000_000;
+const NOW: u64 = 1_000_000_000_000_000;
+const SECOND: u64 = 1_000_000;
+
+/// A dialog shown from 5 s to 9 s of every minute: two changes a minute.
+struct DialogSampler;
+
+impl VisualSampler for DialogSampler {
+    fn window_samples(
+        &self,
+        window: VisualWindow,
+    ) -> impl Future<Output = Result<Vec<VisualSample>, VisualSamplingError>> + Send {
+        let mut samples = Vec::new();
+        let mut time = window.lead_in_start().as_micros();
+        while time < window.range().end().as_micros() {
+            let level = if (5 * SECOND..9 * SECOND).contains(&(time % (60 * SECOND))) {
+                90
+            } else {
+                40
+            };
+            samples.push(VisualSample::from_parts(
+                MediaTime::from_micros(time),
+                [level; VISUAL_BLOCKS],
+                VisualHash::from_bits(u64::from(level)),
+            ));
+            time += SECOND / 2;
+        }
+        std::future::ready(Ok(samples))
+    }
+}
+
+struct Fixture {
+    session: SessionId,
+    source: SourceId,
+    dimensions: FrameDimensions,
+    duration: MediaTime,
+}
+
+impl Fixture {
+    fn new(duration_minutes: u64) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            session: SessionId::parse("ses_0123456789abcdef")?,
+            source: SourceId::from_sha256(DIGEST)?,
+            dimensions: FrameDimensions::new(64, 32)?,
+            duration: MediaTime::from_micros(duration_minutes * 60 * SECOND),
+        })
+    }
+
+    fn scope(&self) -> VisualIndexScope<'_> {
+        VisualIndexScope {
+            session_id: &self.session,
+            source_id: &self.source,
+            stream_index: 0,
+            displayed_dimensions: self.dimensions,
+            duration: self.duration,
+            profile: VisualIndexProfile::R0,
+        }
+    }
+
+    /// A call without a cursor: analyses at most thirty windows of `range`.
+    async fn extend(
+        &self,
+        previous: Option<&VisualIndex>,
+        range: TimeRange,
+    ) -> Result<VisualIndex, Box<dyn std::error::Error>> {
+        let extension = extend_visual_index(
+            ExtendVisualIndexRequest {
+                scope: self.scope(),
+                previous,
+                range,
+            },
+            &DialogSampler,
+        )
+        .await?;
+        Ok(match (extension.revision, previous) {
+            (Some(revision), _) => revision,
+            (None, Some(previous)) => previous.clone(),
+            (None, None) => return Err("nothing analysed".into()),
+        })
+    }
+}
+
+fn range(from_seconds: u64, to_seconds: u64) -> Result<TimeRange, Box<dyn std::error::Error>> {
+    Ok(TimeRange::new(
+        MediaTime::from_micros(from_seconds * SECOND),
+        MediaTime::from_micros(to_seconds * SECOND),
+    )?)
+}
+
+fn request(
+    range: TimeRange,
+    limit: u16,
+    cursor: Option<String>,
+    crops: bool,
+) -> Result<ScreenChangePageRequest, Box<dyn std::error::Error>> {
+    Ok(ScreenChangePageRequest {
+        range,
+        limit: screen_change_page_limit(Some(limit))?,
+        cursor,
+        crops,
+    })
+}
+
+/// Pages `range` of `index` to the end of its analysed part.
+fn every_page(
+    fixture: &Fixture,
+    index: &VisualIndex,
+    range: TimeRange,
+    limit: u16,
+) -> Result<(Vec<MediaTime>, usize), Box<dyn std::error::Error>> {
+    let mut afters = Vec::new();
+    let mut pages = 0;
+    let mut cursor = None;
+    loop {
+        let page = page_screen_changes(
+            &fixture.session,
+            index,
+            &request(range, limit, cursor, false)?,
+            NOW,
+        )?;
+        pages += 1;
+        afters.extend(page.changes.iter().map(|change| change.after));
+        match (page.later, page.changes.last()) {
+            (0, _) | (_, None) => return Ok((afters, pages)),
+            (_, Some(last)) => {
+                cursor = Some(page.cursor_after(&fixture.session, last, EXPIRES)?.encode());
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_range_over_thirty_windows_is_paged_to_its_end_then_resumed() -> TestResult {
+    // Forty minutes: one call analyses thirty windows; the pages reach the end
+    // of what it analysed, `resume` names the first window still to analyse,
+    // and a fresh call from there lists the rest. Every change appears once.
+    let fixture = Fixture::new(40)?;
+    let whole = range(0, 40 * 60)?;
+    let index = fixture.extend(None, whole).await?;
+    let (first, pages) = every_page(&fixture, &index, whole, 20)?;
+    assert_eq!(first.len(), 60, "two changes in each of thirty minutes");
+    assert_eq!(pages, 3);
+    let gaps = visual_coverage_gaps(Some(&index), fixture.duration, whole, None);
+    let resume = first_unanalysed(&gaps).ok_or("no resume point")?;
+    assert_eq!(resume, MediaTime::from_micros(30 * 60 * SECOND));
+
+    let rest = TimeRange::new(resume, whole.end())?;
+    let index = fixture.extend(Some(&index), rest).await?;
+    let (second, _) = every_page(&fixture, &index, rest, 20)?;
+    assert_eq!(second.len(), 20);
+    let gaps = visual_coverage_gaps(Some(&index), fixture.duration, whole, None);
+    assert_eq!(first_unanalysed(&gaps), None);
+
+    let mut all = first;
+    all.extend(second);
+    let mut unique = all.clone();
+    unique.dedup();
+    assert_eq!(unique.len(), 80);
+    assert!(all.windows(2).all(|pair| pair.first() < pair.get(1)));
+    assert_eq!(all.first(), Some(&MediaTime::from_micros(5 * SECOND)));
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_cursor_is_bound_to_the_page_size_crops_and_window_states() -> TestResult {
+    let fixture = Fixture::new(3)?;
+    let first_minute = range(0, 60)?;
+    let index = fixture.extend(None, range(0, 60)?).await?;
+    let page = page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 120)?, 1, None, false)?,
+        NOW,
+    )?;
+    let last = page.changes.last().ok_or("a change")?;
+    let cursor = page.cursor_after(&fixture.session, last, EXPIRES)?.encode();
+    let rejected = |result: Result<_, ScreenChangeQueryError>| {
+        matches!(
+            result,
+            Err(ScreenChangeQueryError::Cursor(CursorError::WrongQuery))
+        )
+    };
+    assert!(rejected(page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 120)?, 2, Some(cursor.clone()), false)?,
+        NOW,
+    )));
+    assert!(rejected(page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 120)?, 1, Some(cursor.clone()), true)?,
+        NOW,
+    )));
+    assert!(rejected(page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(first_minute, 1, Some(cursor.clone()), false)?,
+        NOW,
+    )));
+    // A window of the range analysed since rejects it.
+    let extended = fixture.extend(Some(&index), range(60, 120)?).await?;
+    assert!(rejected(page_screen_changes(
+        &fixture.session,
+        &extended,
+        &request(range(0, 120)?, 1, Some(cursor.clone()), false)?,
+        NOW,
+    )));
+    // The same query continues.
+    let next = page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 120)?, 1, Some(cursor), false)?,
+        NOW,
+    )?;
+    assert_eq!(
+        next.changes.first().map(|change| change.after),
+        Some(MediaTime::from_micros(9 * SECOND))
+    );
+    Ok(())
+}
+
+#[test]
+fn a_page_holds_one_to_twenty_changes() {
+    assert_eq!(
+        screen_change_page_limit(None).map(|limit| limit.get()),
+        Ok(10)
+    );
+    assert!(screen_change_page_limit(Some(0)).is_err());
+    assert!(screen_change_page_limit(Some(21)).is_err());
+    assert_eq!(
+        screen_change_page_limit(Some(20)).map(|limit| limit.get()),
+        Ok(20)
+    );
+}
+
+#[tokio::test]
+async fn a_change_id_is_stable_and_names_its_candidates() -> TestResult {
+    let fixture = Fixture::new(2)?;
+    let index = fixture.extend(None, range(0, 120)?).await?;
+    let page = page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 120)?, 20, None, false)?,
+        NOW,
+    )?;
+    let ids = page
+        .changes
+        .iter()
+        .map(|change| screen_change_id(&fixture.session, &index, change))
+        .collect::<Result<Vec<_>, _>>()?;
+    let again = page
+        .changes
+        .iter()
+        .map(|change| screen_change_id(&fixture.session, &index, change))
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(ids, again);
+    assert_eq!(ids.len(), 4);
+    let mut distinct = ids.clone();
+    distinct.sort();
+    distinct.dedup();
+    assert_eq!(distinct.len(), 4);
+    assert!(ids.iter().all(|id| id.as_str().starts_with("chg_")));
+    Ok(())
+}
+
+#[derive(Debug, PartialEq)]
+enum PortError {
+    Failed,
+    Pixels,
+}
+
+impl std::fmt::Display for PortError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Failed => "the stand-in failed",
+            Self::Pixels => "a pixel buffer did not match its frame",
+        })
+    }
+}
+
+impl std::error::Error for PortError {}
+
+impl From<ScreenChangeError> for PortError {
+    fn from(_: ScreenChangeError) -> Self {
+        Self::Pixels
+    }
+}
+
+/// A port that has room for `room` frames, stops after `stop_after` frames,
+/// and draws every after frame with a changed corner.
+struct StandIn {
+    room: usize,
+    stop_after: Option<(usize, ScreenChangeStop)>,
+    fail_at: Option<usize>,
+    taken: Mutex<usize>,
+    dimensions: FrameDimensions,
+}
+
+impl StandIn {
+    fn new(room: usize) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            room,
+            stop_after: None,
+            fail_at: None,
+            taken: Mutex::new(0),
+            dimensions: FrameDimensions::new(32, 32)?,
+        })
+    }
+
+    fn take(&self, time: MediaTime, after: bool) -> Result<TakenFrame, FrameRefusal<PortError>> {
+        let mut taken = self
+            .taken
+            .lock()
+            .map_err(|_| FrameRefusal::Failed(PortError::Failed))?;
+        if self.fail_at == Some(*taken) {
+            return Err(FrameRefusal::Failed(PortError::Failed));
+        }
+        if *taken >= self.room {
+            return Err(FrameRefusal::NoRoom);
+        }
+        *taken += 1;
+        let kind = if after { 1 } else { 0 };
+        Ok(TakenFrame {
+            evidence_id: EvidenceId::parse(format!("evd_{kind}{:031}", time.as_micros()))
+                .map_err(|_| FrameRefusal::Failed(PortError::Failed))?,
+            time,
+            dimensions: self.dimensions,
+        })
+    }
+}
+
+impl ScreenChangeFrames for StandIn {
+    type Error = PortError;
+
+    fn stop(&self) -> Option<ScreenChangeStop> {
+        let taken = self.taken.lock().map_or(0, |taken| *taken);
+        self.stop_after
+            .filter(|(after, _)| taken >= *after)
+            .map(|(_, stop)| stop)
+    }
+
+    fn before_frame(
+        &self,
+        at: MediaTime,
+    ) -> impl Future<Output = Result<TakenFrame, FrameRefusal<PortError>>> + Send {
+        std::future::ready(self.take(at, false))
+    }
+
+    fn after_frame(
+        &self,
+        candidate: &VisualCandidateId,
+    ) -> impl Future<Output = Result<TakenFrame, FrameRefusal<PortError>>> + Send {
+        let serial = candidate
+            .as_str()
+            .trim_start_matches("vcd_")
+            .parse::<u64>()
+            .unwrap_or(0);
+        std::future::ready(self.take(MediaTime::from_micros(serial), true))
+    }
+
+    fn pixels(&self, frame: &TakenFrame) -> Result<Vec<u8>, PortError> {
+        let mut pixels = vec![0_u8; 32 * 32 * 3];
+        if frame.evidence_id.as_str().starts_with("evd_1")
+            && let Some(corner) = pixels.get_mut(..16 * 3)
+        {
+            corner.fill(255);
+        }
+        Ok(pixels)
+    }
+}
+
+fn planned(
+    count: u64,
+) -> Result<Vec<vsift_domain::PlannedScreenChange>, Box<dyn std::error::Error>> {
+    (1..=count)
+        .map(|serial| {
+            Ok(vsift_domain::PlannedScreenChange {
+                kind: vsift_domain::ScreenChangeKind::Change,
+                candidates: vec![VisualCandidateId::parse(format!("vcd_{serial:032}"))?],
+                window_ordinal: 0,
+                before: MediaTime::from_micros(serial * 10),
+                after: MediaTime::from_micros(serial * 10 + 5),
+            })
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn each_change_is_compared_from_its_two_frames() -> TestResult {
+    let port = StandIn::new(100)?;
+    let page = compare_screen_changes(&port, &planned(3)?).await?;
+    assert_eq!(page.stop, None);
+    assert_eq!(page.changes.len(), 3);
+    for change in &page.changes {
+        let FrameComparison::Compared(regions) = &change.comparison else {
+            return Err("not compared".into());
+        };
+        assert_eq!(regions.regions.len(), 1);
+        assert_eq!(
+            regions.regions.first().map(|region| region.changed_pixels),
+            Some(16)
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_full_session_stops_the_page_at_the_last_change_with_both_frames() -> TestResult {
+    // Room for five frames: two changes, then the third's after frame does
+    // not fit, so the third is not listed.
+    let port = StandIn::new(5)?;
+    let page = compare_screen_changes(&port, &planned(4)?).await?;
+    assert_eq!(page.changes.len(), 2);
+    assert_eq!(page.stop, Some(ScreenChangeStop::SessionEvidenceBudget));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_deadline_or_cancellation_stops_the_page() -> TestResult {
+    for stop in [
+        ScreenChangeStop::DeadlineExceeded,
+        ScreenChangeStop::Cancelled,
+    ] {
+        let mut port = StandIn::new(100)?;
+        port.stop_after = Some((2, stop));
+        let page = compare_screen_changes(&port, &planned(4)?).await?;
+        assert_eq!(page.changes.len(), 1);
+        assert_eq!(page.stop, Some(stop));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn any_other_failure_fails_the_call() -> TestResult {
+    let mut port = StandIn::new(100)?;
+    port.fail_at = Some(3);
+    assert_eq!(
+        compare_screen_changes(&port, &planned(4)?).await,
+        Err(PortError::Failed)
+    );
+    Ok(())
+}

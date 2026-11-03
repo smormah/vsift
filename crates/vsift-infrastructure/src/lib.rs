@@ -129,10 +129,11 @@ pub use ffmpeg_media::{
     ImageRegion, MAX_AUDIO_BYTES, MAX_DIAGNOSTIC_BYTES, MAX_FRAME_BYTES, MAX_IMAGES_PER_RUN,
     MAX_LISTING_DIAGNOSTIC_BYTES, MAX_LISTING_RANGE_MICROS, MAX_PROBE_BYTES, MAX_SPEECH_PCM_BYTES,
     MAX_SPEECH_PCM_MICROS, MAX_VISUAL_DIAGNOSTIC_BYTES, MAX_VISUAL_SAMPLE_BYTES,
-    MAX_WAV_CLIP_MICROS, MediaError, MediaProviderConformance, ObservedFrameTime, RawGrayFrame,
-    VisualSamplingWindow, WAV_HEADER_BYTES, WAV_SAMPLE_RATE, max_frames_per_run,
-    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_png_sequence, parse_visual_samples, wav_from_pcm_s16le_mono,
+    MAX_WAV_CLIP_MICROS, MediaError, MediaProviderConformance, ObservedFrameTime, PngPixelsError,
+    RawGrayFrame, VisualSamplingWindow, WAV_HEADER_BYTES, WAV_SAMPLE_RATE, decode_png_pixels,
+    max_frames_per_run, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_png_sequence, parse_visual_samples, read_png_pixels,
+    wav_from_pcm_s16le_mono,
 };
 pub use filesystem_session_store::{
     BundleDestinationRefusal, BundleSourcePolicy, BundleStatus, CleanOutcome,
