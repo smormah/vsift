@@ -16,7 +16,12 @@ use crate::{
 };
 
 /// Hard limit on compressed XZ bytes read from a verified artifact.
-pub const MAX_XZ_ARCHIVE_BYTES: u64 = 134_217_728;
+///
+/// 130 MiB since `0.2.4`: the reviewed FFmpeg archive of 2026-10-31
+/// (`n9.0.2-39`) is 136,027,168 bytes, above the earlier 128 MiB. The limit is
+/// raised only as far as that archive needs (a whole MiB above it); each
+/// artifact is still read only up to its own pinned size.
+pub const MAX_XZ_ARCHIVE_BYTES: u64 = 136_314_880;
 const XZ_MEMORY_LIMIT_KIB: u32 = 131_072;
 const INPUT_BUFFER_BYTES: usize = 16 * 1024;
 
@@ -379,6 +384,40 @@ mod tests {
             inspect_xz_tar_inventory(Cursor::new(&xz), 4, 10_000, bounds()?, &[]),
             Err(XzTarInventoryError::CompressedInputTooLarge)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn the_compressed_ceiling_admits_the_reviewed_ffmpeg_archive_and_nothing_above_itself()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const REVIEWED_FFMPEG_ARCHIVE_BYTES: u64 = 136_027_168;
+        // The archive fits, with less than one MiB to spare: the raise is no larger than it needs.
+        assert_eq!(MAX_XZ_ARCHIVE_BYTES, 136_314_880);
+        assert_eq!(
+            MAX_XZ_ARCHIVE_BYTES.checked_sub(REVIEWED_FFMPEG_ARCHIVE_BYTES),
+            Some(287_712)
+        );
+        let xz = fixture()?;
+        assert!(
+            inspect_xz_tar_inventory(Cursor::new(&xz), MAX_XZ_ARCHIVE_BYTES, 10_000, bounds()?, &[])
+                .is_ok()
+        );
+        assert_eq!(
+            inspect_xz_tar_inventory(
+                Cursor::new(&xz),
+                MAX_XZ_ARCHIVE_BYTES + 1,
+                10_000,
+                bounds()?,
+                &[]
+            ),
+            Err(XzTarInventoryError::InvalidCompressedLimit)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_truncation_and_trailing_input() -> Result<(), Box<dyn std::error::Error>> {
+        let xz = fixture()?;
         let truncated = &xz[..xz.len() - 4];
         assert!(
             inspect_xz_tar_inventory(Cursor::new(truncated), 10_000, 10_000, bounds()?, &[])
