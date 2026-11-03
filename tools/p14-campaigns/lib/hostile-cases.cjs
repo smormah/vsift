@@ -99,6 +99,28 @@ async function mkvWithPng({ claimedWidth, claimedHeight, imageWidth, imageHeight
   return ebml.file([ebml.info(1000), ebml.element(ebml.IDS.tracks, trackEntry), ebml.cluster(1, image)]);
 }
 
+/**
+ * `count` protection-system boxes (`pssh`, version 0, no key ids, no data), each 32 bytes. The `mov` demuxer keeps
+ * every one in a list that FFmpeg's builds before its fix of 2026-10-19 free by recursion, one stack frame per box
+ * (CVE-2026-107678, #351, L-144): the case measures what that does to VSift's child, not assumes it.
+ */
+function psshBoxes(count) {
+  const payload = Buffer.alloc(24);
+  payload.fill(0x11, 4, 20);
+  const boxes = [];
+  for (let index = 0; index < count; index += 1) boxes.push(mp4.make('pssh', payload));
+  return boxes;
+}
+
+/** A Matroska file whose one video track names a codec by its Video for Windows tag, around one frame of seeded random bytes. */
+function mkvWithFourcc(fourcc, seed) {
+  const random = new Random(seed);
+  const frame = Buffer.alloc(4096);
+  for (let index = 0; index < frame.length; index += 1) frame[index] = random.int(256);
+  const trackEntry = ebml.track({ number: 1, type: 1, codec: 'V_MS/VFW/FOURCC', width: 64, height: 64, codecPrivate: ebml.bitmapInfo(64, 64, fourcc) });
+  return ebml.file([ebml.info(1000), ebml.element(ebml.IDS.tracks, trackEntry), ebml.cluster(1, frame)]);
+}
+
 /** Nested unknown-sized clusters: each opens another and never closes. */
 function mkvNestedUnknown(depth) {
   let body = Buffer.alloc(0);
@@ -163,6 +185,7 @@ function cases(context) {
 
   // Container nesting and huge metadata.
   add({ id: 'mp4-nested-5000', group: 'nesting', file: 'mp4-nested-5000.mp4', description: 'an unknown box nested 5,000 deep inside the movie box', build: () => edited(base, (boxes) => mp4.appendChild(mp4.find(boxes, ['moov']), mp4.make('udta', mp4.nestedBytes('free', 5000)))), ops: ['ingest', 'candidates'] });
+  add({ id: 'mp4-pssh-200000', group: 'nesting', file: 'mp4-pssh-200000.mp4', description: '200,000 protection-system boxes in the movie box, a list FFmpeg frees by recursion before its fix (CVE-2026-107678)', build: () => edited(base, (boxes) => { const moov = mp4.find(boxes, ['moov']); for (const box of psshBoxes(200000)) mp4.appendChild(moov, box); }), ops: ['ingest', 'candidates'] });
   add({ id: 'mp4-nested-trak-300', group: 'nesting', file: 'mp4-nested-trak-300.mp4', description: 'track boxes nested 300 deep inside the movie box', build: () => edited(base, (boxes) => mp4.appendChild(mp4.find(boxes, ['moov']), mp4.make('trak', mp4.nestedBytes('trak', 300)))), ops: ['ingest', 'candidates'] });
   add({ id: 'mp4-metadata-32mib', group: 'metadata', file: 'mp4-metadata-32mib.mp4', description: 'a 32 MiB title in the movie box', build: () => edited(base, (boxes) => mp4.appendChild(mp4.find(boxes, ['moov']), metadataBox(32 * MIB))), ops: ['ingest', 'candidates'] });
   add({ id: 'mp4-free-512mib', group: 'metadata', file: 'mp4-free-512mib.mp4', description: 'a 512 MiB free-space box after the movie (a large file of nothing)', build: () => Buffer.concat([base, Buffer.from([0x20, 0, 0, 0]), Buffer.from('free'), Buffer.alloc(512 * MIB - 8)]), ops: ['ingest'] });
@@ -202,6 +225,10 @@ function cases(context) {
   add({ id: 'mkv-png-16384', group: 'bomb', file: 'mkv-png-16384.mkv', description: 'a 16384 by 16384 grayscale image frame (268 megapixels) that is a quarter of a megabyte on disk', build: () => mkvWithPng({ claimedWidth: 16384, claimedHeight: 16384, imageWidth: 16384, imageHeight: 16384 }), expect: 'refused' });
   add({ id: 'mkv-png-3999', group: 'bomb', file: 'mkv-png-3999.mkv', description: 'a 3999 by 3999 image frame (15.99 megapixels, inside the limit) that compresses a thousand to one', build: () => mkvWithPng({ claimedWidth: 3999, claimedHeight: 3999, imageWidth: 3999, imageHeight: 3999 }), ops: ['ingest', 'candidates', 'frame'] });
   add({ id: 'mkv-png-liar', group: 'bomb', file: 'mkv-png-liar.mkv', description: 'a track that says 64 by 64 around an image that says 30000 by 30000 (900 MB decoded)', build: () => mkvWithPng({ claimedWidth: 64, claimedHeight: 64, imageWidth: 30000, imageHeight: 30000 }), ops: ['ingest', 'candidates', 'frame'] });
+  // Decoders outside the frame allow-list that a container can name (CVE-2026-120243 and -120247, read for 0.2.4): the probe may
+  // open them; the frame and audio commands must refuse the stream, never decode it.
+  add({ id: 'mkv-fourcc-huffyuv', group: 'streams', file: 'mkv-fourcc-huffyuv.mkv', description: 'a Huffyuv video track (by its Video for Windows tag) around one frame of random bytes', build: () => mkvWithFourcc('HFYU', 'hfyu') });
+  add({ id: 'mkv-fourcc-g2m4', group: 'streams', file: 'mkv-fourcc-g2m4.mkv', description: 'a G2M4 video track (by its Video for Windows tag) around one frame of random bytes', build: () => mkvWithFourcc('G2M4', 'g2m4') });
   add({ id: 'mkv-audio-absurd', group: 'declared', file: 'mkv-audio-absurd.mkv', description: 'an audio track of 255 channels at 3.4e38 Hz', build: () => ebml.file([ebml.info(1000), ebml.element(ebml.IDS.tracks, ebml.track({ number: 1, type: 2, codec: 'A_PCM/INT/LIT', sampleRate: 3.4e38, channels: 255 })), ebml.cluster(1, Buffer.alloc(256))]), ops: ['ingest', 'audio', 'recognise'] });
 
   // Size: a file above the limit, and one that does not fit the disk. These two cases are about which answer the
