@@ -3819,7 +3819,7 @@ that week.**
 - **Existing installs are not moved by themselves.** A managed FFmpeg that verifies stays selected after a new pin. Since `0.2.4`
   the catalogue names the build of 2026-08-31 as superseded for security fixes, so `setup check` on a machine set up by `0.2.3` or
   earlier says its FFmpeg is older than the reviewed one, and `setup plan` and `setup install` then install the new build and select it
-  (the mechanism `0.2.3` added for whisper.cpp; the two-version lifecycle is tested with stand-in files, not with the two real builds).
+  (the mechanism `0.2.3` added for whisper.cpp; `P13 managed smoke` run 41700245272 upgraded a real `0.2.2` install this way on 2026-11-03).
   A new pin therefore reaches a machine only when its owner runs the install again. When a pinned asset disappears, existing installs
   keep working (local, hash-checked on use, no network needed for `list`, `check`, `rollback`, `remove` or `repair`) and only a
   fresh `setup install` of a release that names it fails (`DOWNLOAD_FAILED`).

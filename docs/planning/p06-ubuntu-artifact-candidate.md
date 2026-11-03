@@ -513,18 +513,39 @@ record fixed in the earlier build is fixed in this one; it adds CVE-2026-107660 
 allows only the `file` protocol); CVE-2026-107675 to -107677, CVE-2026-107678 (L-144) and the five records of 2026-11-01
 ([L-227](known-limits.md#l-227)) are fixed on `master` only.
 
-**The build recipe.** The `configuration` line the hosted smoke records is compared with the shipped build's in the evidence below.
-A complete compiled-component source and licence inventory is still not claimed (the catalogue's trust limit says so).
+**The build recipe.** The `configuration` line the hosted smoke recorded (run 41699004066) differs from the shipped build's (run
+39162404765) by exactly the three components the review of 2026-10-04 found: `--enable-librsvg`, `--enable-lcms2` and
+`--enable-vapoursynth` (and the `--extra-version` date); 99 options against 96. librsvg brings GLib, Cairo, Pango and a Rust runtime
+into the static binary. VSift reaches none of them (it forces `-f mov` or `-f matroska`, allows only the `file` protocol and builds
+its own filter graphs), but it is more third-party code in a binary whose compiled-component source and licence inventory is still
+not claimed (the catalogue's trust limit says so). **The maintainer's acceptance of the recipe is open.**
 
 **Retention and the stop date.** Month-end, kept to about 2028-10-31; the catalogue stops issuing new plans on 2028-10-01.
 
 **Existing installs.** The build of 2026-08-31 is listed as superseded for security fixes, so `setup check` on a machine set up by
 `0.2.3` or earlier says its FFmpeg is older than the reviewed one, and `setup plan` and `setup install` then install the new build.
 
-**Hosted evidence on the re-pin's branch:** to be recorded from the dispatches of `P06 Ubuntu candidate smoke`, `P13 managed smoke`
-and `P07 local ASR` on the branch's head.
+**Hosted evidence on the re-pin's branch (2026-11-03):**
 
-**Not shown:** an upgrade of a machine that has the 2026-08-31 managed install (the two-version lifecycle is tested with stand-in
-files only); a crafted file against the new build (the hostile-media campaign on the candidate, with the `pssh` and decoder cases);
+- `P06 Ubuntu candidate smoke` [41699004066](https://github.com/smormah/vsift/actions/runs/41699004066), passed: the inventory of both
+  archives, the Rust layout check of the real FFmpeg archive through the production staging (73 entries, the three selected files),
+  and F01 through the new build: FFmpeg and FFprobe report `n9.0.2-39-g7adfbe40dc-20261031`, media operations and model-backed
+  inference passed (inference 1.80 s; 0.90 s with the earlier build in run 39162404765, one run each), largest child peak RSS
+  291,240 KiB (291,604 before).
+- `P13 managed smoke` [41699009267](https://github.com/smormah/vsift/actions/runs/41699009267): the pinned smoke before activation, the
+  install through the CLI and the kill-and-rerun install stage passed. **The real upgrade from `0.2.2` failed, for a reason the re-pin
+  intends:** `setup check` of this build on a machine `0.2.2` set up named its FFmpeg (`n9.0.1-11-ge47273f4d9-20260831`) as superseded
+  for security fixes beside its whisper.cpp v1.9.2, and the test expected the whisper.cpp update alone. The test now checks both
+  updates, both activations and both previous versions.
+- `P13 managed smoke` [41700245272](https://github.com/smormah/vsift/actions/runs/41700245272), on the corrected test, passed, all four
+  jobs. **The real upgrade from `0.2.2`:** its own install (`[ok] FFmpeg … n9.0.1-11-ge47273f4d9-20260831`), this build's `setup check`
+  naming both `[update, security] ffmpeg_ffprobe` and `[update, security] whisper_cli`, then `setup plan` and `setup install` activating
+  the new FFmpeg and whisper.cpp v1.9.5 (the model already current), `[ok] FFmpeg … n9.0.2-39-g7adfbe40dc-20261031`, no update left, both
+  earlier versions kept as previous, and a transcription on the upgraded tools.
+- `P07 local ASR` [41699014254](https://github.com/smormah/vsift/actions/runs/41699014254), Ubuntu 24.04 and Windows Server 2025, passed
+  (on Windows the tools are the job's own, not the catalogue's). **Accuracy on Ubuntu is identical to the earlier build's** (the
+  whisper.cpp re-pin's run 39163129897): `base` clean WER 3.25%, F08 61.53%; `base_q5_1` 4.06% and 46.15%; no unexpected miss.
+
+**Not shown:** a crafted file against the new build (the hostile-media campaign on the candidate, with the `pssh` and decoder cases);
 the candidate's dated scan reading. The Windows candidate smoke and the agent-trial container keep the 2026-08-31 build on this
 branch (Windows has no managed install in `0.2.x`; the forward-port to `main` moves the Windows pin too).
