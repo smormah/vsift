@@ -23,7 +23,7 @@
 //! ```console
 //! VSIFT_REAL_MEDIA_DIR=<the fetched items> VSIFT_SCREEN_CHANGES_OUT=<file.json> \
 //!   [VSIFT_REAL_MEDIA_ITEMS="RM01 RM04 RM10"] \
-//!   cargo test --release -p vsift --locked --test real_media_screen_changes \
+//!   cargo test -p vsift --locked --test real_media_screen_changes \
 //!   -- --ignored --exact measures_screen_changes_on_real_recordings --nocapture
 //! ```
 

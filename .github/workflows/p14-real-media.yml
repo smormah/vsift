@@ -204,10 +204,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/report"
+          # Not --release: the engine crate's test dependencies enable the
+          # fault-injection features, which refuse a release build.
           VSIFT_REAL_MEDIA_DIR="$RUNNER_TEMP/real-media" \
           VSIFT_REAL_MEDIA_ITEMS="$ITEMS" \
           VSIFT_SCREEN_CHANGES_OUT="$RUNNER_TEMP/report/screen-changes.json" \
-            cargo test --release -p vsift --locked --test real_media_screen_changes \
+            cargo test -p vsift --locked --test real_media_screen_changes \
             -- --ignored --exact measures_screen_changes_on_real_recordings --nocapture \
             | tee "$RUNNER_TEMP/report/screen-changes.txt"
           { echo '## What changed on screen'; echo; echo '```'; grep -E '^RM[0-9]+: ' "$RUNNER_TEMP/report/screen-changes.txt" || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
