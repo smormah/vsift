@@ -163,10 +163,7 @@ pub use prepare::{
     RecognitionShare, VISUAL_BATCH_WINDOWS,
 };
 pub use progress::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
-pub use screen_changes::{
-    ScreenChangeItem, ScreenChangeResume, ScreenChangeResumeReason, ScreenChangesRequest,
-    ScreenChangesResults,
-};
+pub use screen_changes::{ScreenChangeItem, ScreenChangesRequest, ScreenChangesResults};
 pub use screen_text::{
     DEFAULT_OCR_THREADS, OCR_RUNNER_NAME, OcrError, ScreenTextRange, ScreenTextRequest,
     ScreenTextResults, ScreenTextWindows,
@@ -224,7 +221,7 @@ pub use vsift_application::{
 /// Screen-change values that appear in this API (ADR 0034).
 pub use vsift_application::{
     ComparedChange, DEFAULT_SCREEN_CHANGE_PAGE, MAX_SCREEN_CHANGE_PAGE, ScreenChangeQueryError,
-    ScreenChangeStop, TakenFrame,
+    ScreenChangeResume, ScreenChangeResumeReason, ScreenChangeStop, TakenFrame,
 };
 /// Managed-installation values that appear in this API (P13).
 pub use vsift_application::{

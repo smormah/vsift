@@ -7,8 +7,9 @@ use vsift_domain::{
 };
 
 use super::{
-    FrameRefusal, ScreenChangeError, ScreenChangeFrames, ScreenChangePageRequest,
-    ScreenChangeQueryError, ScreenChangeStop, TakenFrame, compare_screen_changes, first_unanalysed,
+    ComparedPage, FrameRefusal, PageContinuation, ScreenChangeError, ScreenChangeFrames,
+    ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeResume, ScreenChangeResumeReason,
+    ScreenChangeStop, TakenFrame, compare_screen_changes, first_unanalysed, page_continuation,
     page_screen_changes, screen_change_id, screen_change_page_limit,
 };
 use crate::visual::{
@@ -84,13 +85,22 @@ impl Fixture {
         previous: Option<&VisualIndex>,
         range: TimeRange,
     ) -> Result<VisualIndex, Box<dyn std::error::Error>> {
+        self.extend_with(previous, range, &DialogSampler).await
+    }
+
+    async fn extend_with(
+        &self,
+        previous: Option<&VisualIndex>,
+        range: TimeRange,
+        sampler: &impl VisualSampler,
+    ) -> Result<VisualIndex, Box<dyn std::error::Error>> {
         let extension = extend_visual_index(
             ExtendVisualIndexRequest {
                 scope: self.scope(),
                 previous,
                 range,
             },
-            &DialogSampler,
+            sampler,
         )
         .await?;
         Ok(match (extension.revision, previous) {
@@ -459,6 +469,164 @@ async fn any_other_failure_fails_the_call() -> TestResult {
     assert_eq!(
         compare_screen_changes(&port, &planned(4)?).await,
         Err(PortError::Failed)
+    );
+    Ok(())
+}
+
+/// Motion runs: three changing samples, then a settled screen. In the first
+/// minute one run every 12 s, which the budget keeps whole; in the second one
+/// every 3 s, about forty candidates, which a window's budget of 32 cannot keep.
+struct RunsSampler;
+
+impl RunsSampler {
+    fn level(time: u64) -> u8 {
+        let period = if time < 60 * SECOND { 12 } else { 3 } * SECOND;
+        // The sample's place in its period: 0, 1, 2 and 3 move, the rest hold.
+        let step = (time % period) / (SECOND / 2);
+        u8::try_from(40 + 20 * step.min(3)).unwrap_or(u8::MAX)
+    }
+}
+
+impl VisualSampler for RunsSampler {
+    fn window_samples(
+        &self,
+        window: VisualWindow,
+    ) -> impl Future<Output = Result<Vec<VisualSample>, VisualSamplingError>> + Send {
+        let mut samples = Vec::new();
+        let mut time = window.lead_in_start().as_micros();
+        while time < window.range().end().as_micros() {
+            let level = Self::level(time);
+            samples.push(VisualSample::from_parts(
+                MediaTime::from_micros(time),
+                [level; VISUAL_BLOCKS],
+                VisualHash::from_bits(u64::from(level)),
+            ));
+            time += SECOND / 2;
+        }
+        std::future::ready(Ok(samples))
+    }
+}
+
+#[tokio::test]
+async fn a_window_whose_budget_dropped_candidates_never_pairs_a_run() -> TestResult {
+    use vsift_domain::{MotionPart, ScreenChangeKind, VisualWindowOutcome, plan_screen_changes};
+
+    let fixture = Fixture::new(2)?;
+    let index = fixture
+        .extend_with(None, range(0, 120)?, &RunsSampler)
+        .await?;
+    let dropped = |ordinal| match index
+        .window(ordinal)
+        .map(vsift_domain::VisualIndexWindow::outcome)
+    {
+        Some(VisualWindowOutcome::Analysed {
+            dropped_candidates, ..
+        }) => Some(*dropped_candidates),
+        _ => None,
+    };
+    assert_eq!(dropped(0), Some(0));
+    assert!(dropped(1).is_some_and(|count| count > 0));
+    let kinds = |from, to| -> Result<Vec<ScreenChangeKind>, Box<dyn std::error::Error>> {
+        Ok(plan_screen_changes(&index, range(from, to)?)
+            .iter()
+            .map(|change| change.kind)
+            .collect())
+    };
+    let whole = kinds(0, 60)?;
+    assert_ne!(whole, Vec::new());
+    assert!(
+        whole
+            .iter()
+            .all(|kind| *kind == ScreenChangeKind::Motion(MotionPart::Run))
+    );
+    let budgeted = kinds(60, 120)?;
+    assert_ne!(budgeted, Vec::new());
+    assert!(
+        budgeted
+            .iter()
+            .all(|kind| *kind != ScreenChangeKind::Motion(MotionPart::Run)),
+        "{budgeted:?}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_stopped_page_resumes_at_its_first_change_not_listed() -> TestResult {
+    let fixture = Fixture::new(3)?;
+    let index = fixture.extend(None, range(0, 180)?).await?;
+    let page = page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 180)?, 4, None, false)?,
+        NOW,
+    )?;
+    let afters: Vec<MediaTime> = page.changes.iter().map(|change| change.after).collect();
+    assert_eq!(afters.len(), 4);
+    let port = StandIn::new(100)?;
+    let full = compare_screen_changes(&port, &page.changes).await?;
+    let one = ComparedPage {
+        changes: full.changes.iter().take(1).cloned().collect(),
+        stop: Some(ScreenChangeStop::SessionEvidenceBudget),
+    };
+    assert_eq!(
+        page_continuation(&page, &one, &[]),
+        PageContinuation::Resume(ScreenChangeResume {
+            from: afters[1],
+            reason: ScreenChangeResumeReason::SessionEvidenceBudget,
+        })
+    );
+    let none = ComparedPage {
+        changes: Vec::new(),
+        stop: Some(ScreenChangeStop::DeadlineExceeded),
+    };
+    assert_eq!(
+        page_continuation(&page, &none, &[]),
+        PageContinuation::Resume(ScreenChangeResume {
+            from: afters[0],
+            reason: ScreenChangeResumeReason::DeadlineExceeded,
+        })
+    );
+    // A whole page with more after it continues by cursor, never by resume.
+    assert_eq!(
+        page_continuation(&page, &full, &[]),
+        PageContinuation::Next(&page.changes[3])
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_last_page_resumes_at_the_first_window_still_to_analyse() -> TestResult {
+    let fixture = Fixture::new(3)?;
+    let index = fixture.extend(None, range(0, 60)?).await?;
+    let whole = range(0, 180)?;
+    let page = page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(whole, 20, None, false)?,
+        NOW,
+    )?;
+    let port = StandIn::new(100)?;
+    let compared = compare_screen_changes(&port, &page.changes).await?;
+    let gaps = visual_coverage_gaps(Some(&index), fixture.duration, whole, None);
+    assert_eq!(
+        page_continuation(&page, &compared, &gaps),
+        PageContinuation::Resume(ScreenChangeResume {
+            from: MediaTime::from_micros(60 * SECOND),
+            reason: ScreenChangeResumeReason::NotAnalyzed,
+        })
+    );
+    let analysed = fixture.extend(Some(&index), whole).await?;
+    let gaps = visual_coverage_gaps(Some(&analysed), fixture.duration, whole, None);
+    let page = page_screen_changes(
+        &fixture.session,
+        &analysed,
+        &request(whole, 20, None, false)?,
+        NOW,
+    )?;
+    let compared = compare_screen_changes(&port, &page.changes).await?;
+    assert_eq!(
+        page_continuation(&page, &compared, &gaps),
+        PageContinuation::Done
     );
     Ok(())
 }

@@ -218,6 +218,96 @@ pub fn dropped_changes(gaps: &[VisualCoverageGap]) -> u64 {
         .sum()
 }
 
+/// Why a fresh call must go on where this one stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScreenChangeResumeReason {
+    /// The pages reached the end of the analysed part of the range; a fresh
+    /// call analyses from there.
+    NotAnalyzed,
+    /// The session's evidence room is full; a fresh call in a new session.
+    SessionEvidenceBudget,
+    /// The call's deadline passed.
+    DeadlineExceeded,
+    /// The caller cancelled.
+    Cancelled,
+}
+
+impl ScreenChangeResumeReason {
+    /// Published identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::NotAnalyzed => "not_analyzed",
+            Self::SessionEvidenceBudget => "session_evidence_budget",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    const fn after(stop: ScreenChangeStop) -> Self {
+        match stop {
+            ScreenChangeStop::SessionEvidenceBudget => Self::SessionEvidenceBudget,
+            ScreenChangeStop::DeadlineExceeded => Self::DeadlineExceeded,
+            ScreenChangeStop::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+/// Where and why a fresh call continues (ADR 0034 section 6a).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScreenChangeResume {
+    /// The `--from` of the fresh call.
+    pub from: MediaTime,
+    /// Why this call did not go on.
+    pub reason: ScreenChangeResumeReason,
+}
+
+/// How the pages of a range go on after this one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PageContinuation<'a> {
+    /// More changes of the analysed part follow: a cursor after this change.
+    Next(&'a PlannedScreenChange),
+    /// A fresh call goes on from here.
+    Resume(ScreenChangeResume),
+    /// The range is answered to its end.
+    Done,
+}
+
+/// Decides how the pages go on (ADR 0034 section 6a).
+///
+/// A page that stopped early resumes at the after time of its first change
+/// not listed, never with a cursor, because the session cannot take the next
+/// page. A page that ended normally gives a cursor while changes of the
+/// analysed part follow; at the end of them it resumes at the first window
+/// still to analyse, if any.
+#[must_use]
+pub fn page_continuation<'a>(
+    page: &'a ScreenChangePage,
+    compared: &ComparedPage,
+    gaps: &[VisualCoverageGap],
+) -> PageContinuation<'a> {
+    if let Some(stop) = compared.stop {
+        return page.changes.get(compared.changes.len()).map_or(
+            PageContinuation::Done,
+            |first_not_listed| {
+                PageContinuation::Resume(ScreenChangeResume {
+                    from: first_not_listed.after,
+                    reason: ScreenChangeResumeReason::after(stop),
+                })
+            },
+        );
+    }
+    match page.changes.last() {
+        Some(last) if page.later > 0 => PageContinuation::Next(last),
+        _ => first_unanalysed(gaps).map_or(PageContinuation::Done, |from| {
+            PageContinuation::Resume(ScreenChangeResume {
+                from,
+                reason: ScreenChangeResumeReason::NotAnalyzed,
+            })
+        }),
+    }
+}
+
 /// A frame the port took for a change.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TakenFrame {

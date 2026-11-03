@@ -22,10 +22,11 @@ use std::{
 };
 
 use vsift_application::{
-    ComparedChange, EvidenceMediaError, ScreenChangeFrameRefusal, ScreenChangeFrames,
-    ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeStop, SessionStorageError,
-    TakenFrame, analysed_ranges, clip_to_source, compare_screen_changes, first_unanalysed,
-    page_screen_changes, screen_change_id, screen_change_page_limit, visual_coverage_gaps,
+    ComparedChange, EvidenceMediaError, PageContinuation, ScreenChangeFrameRefusal,
+    ScreenChangeFrames, ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeResume,
+    ScreenChangeStop, SessionStorageError, TakenFrame, analysed_ranges, clip_to_source,
+    compare_screen_changes, page_continuation, page_screen_changes, screen_change_id,
+    screen_change_page_limit, visual_coverage_gaps,
 };
 use vsift_domain::{
     EvidenceId, EvidenceItem, FrameSelection, MediaTime, ScreenChangeError, ScreenChangeId,
@@ -62,51 +63,6 @@ pub struct ScreenChangesRequest {
     pub cursor: Option<String>,
     /// Stops analysis at its next window and the frames at their next one.
     pub cancellation: Cancellation,
-}
-
-/// Where a fresh call continues when this one could not answer its range to
-/// the end.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ScreenChangeResumeReason {
-    /// The pages reached the end of the analysed part of the range; a fresh
-    /// call analyses from there.
-    NotAnalyzed,
-    /// The session's evidence room is full; a fresh call in a new session.
-    SessionEvidenceBudget,
-    /// The call's deadline passed.
-    DeadlineExceeded,
-    /// The caller cancelled.
-    Cancelled,
-}
-
-impl ScreenChangeResumeReason {
-    /// Published identifier.
-    #[must_use]
-    pub const fn identifier(self) -> &'static str {
-        match self {
-            Self::NotAnalyzed => "not_analyzed",
-            Self::SessionEvidenceBudget => "session_evidence_budget",
-            Self::DeadlineExceeded => "deadline_exceeded",
-            Self::Cancelled => "cancelled",
-        }
-    }
-
-    const fn after(stop: ScreenChangeStop) -> Self {
-        match stop {
-            ScreenChangeStop::SessionEvidenceBudget => Self::SessionEvidenceBudget,
-            ScreenChangeStop::DeadlineExceeded => Self::DeadlineExceeded,
-            ScreenChangeStop::Cancelled => Self::Cancelled,
-        }
-    }
-}
-
-/// Where and why a fresh call continues (ADR 0034 section 6a).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ScreenChangeResume {
-    /// The `--from` of the fresh call.
-    pub from: MediaTime,
-    /// Why this call did not go on.
-    pub reason: ScreenChangeResumeReason,
 }
 
 /// One listed change.
@@ -299,37 +255,19 @@ impl Engine {
             .lifetime()
             .expires_at_unix_seconds()
             .saturating_mul(MICROS_PER_SECOND);
-        let (next_cursor, resume) = match compared.stop {
-            Some(stop) => (
+        let (next_cursor, resume) = match page_continuation(&page, &compared, &gaps) {
+            PageContinuation::Next(last) => (
+                Some(
+                    page.cursor_after(&request.session, last, expires_at)
+                        .map_err(|error| {
+                            EngineError::ScreenChangeQuery(ScreenChangeQueryError::Cursor(error))
+                        })?
+                        .encode(),
+                ),
                 None,
-                page.changes
-                    .get(compared.changes.len())
-                    .map(|first_not_listed| ScreenChangeResume {
-                        from: first_not_listed.after,
-                        reason: ScreenChangeResumeReason::after(stop),
-                    }),
             ),
-            None => match (page.later, page.changes.last()) {
-                (later, Some(last)) if later > 0 => (
-                    Some(
-                        page.cursor_after(&request.session, last, expires_at)
-                            .map_err(|error| {
-                                EngineError::ScreenChangeQuery(ScreenChangeQueryError::Cursor(
-                                    error,
-                                ))
-                            })?
-                            .encode(),
-                    ),
-                    None,
-                ),
-                _ => (
-                    None,
-                    first_unanalysed(&gaps).map(|from| ScreenChangeResume {
-                        from,
-                        reason: ScreenChangeResumeReason::NotAnalyzed,
-                    }),
-                ),
-            },
+            PageContinuation::Resume(resume) => (None, Some(resume)),
+            PageContinuation::Done => (None, None),
         };
         let changes = compared
             .changes
