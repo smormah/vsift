@@ -220,6 +220,8 @@ search), `frame_showinfo` (the
 single-frame and first-audio-sample diagnostics readers), `frame_listing` (a frame
 listing's diagnostics against a fixed 60 s window), `png_sequence` (the PNG sequence
 walker; the input is an image count, a width and height, then the output),
+`png_pixels` (the pixel decoder `changes` compares two stored frames with, ADR 0034;
+the input is a width and height, then one PNG),
 `evidence_record` (the stored evidence record), `crop_rect` (an outer crop against
 a 1440x900 frame, a line feed and an inner crop, parsed and composed), `mountinfo`
 (a `/proc/self/mountinfo` table through the durable-profile check, which must give one

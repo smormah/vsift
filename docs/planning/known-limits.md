@@ -5660,3 +5660,18 @@ that week.**
 4. **Periodic sweep.** At each packet close, re-read the sources this register was built
    from (the work record and status, qualification records, ADR notes, threat model
    residuals, the CLI contract and open issues) and reconcile.
+
+### L-211
+
+**`changes` lists only what the visual index kept, compares only what one session has room for, and finds regions with first thresholds (ADR 0034, 0.3.0).**
+
+- **What:** `changes` reads its changes from the visual index (ADR 0018) and compares each one's two exact frames. Four things stay outside it:
+  - a change the index never saw is not listed: something that came and went within half a second (2 Hz sampling), or that its 128x72 grid misses (one character is seen 19% of the time on RM10), and every change a window's 32-candidate budget dropped (on RM03, 115 in 19 minutes; coverage counts them as `candidate_budget_exhausted`);
+  - each frame is one `frame get`, so a change takes 2 to 4 of the session's 384 evidence slots and a session answers about 95 to 190 changes; a busier range stops with `session_evidence_budget` and `resume` names where a new session continues (about 3 to 6 minutes of a recording as busy as RM03);
+  - regions use first thresholds (32 levels, 4 changed pixels in a 16x16 tile, tiles one tile apart joined, 8 regions); on the synthetic F04 the re-encoded text around a real edit adds regions of 9 to 25 changed pixels after it, and a change smaller than the thresholds has `no_region_at_threshold`;
+  - a change is compared with the frame at the start of its change window, so slow drift, which the index measures against an earlier sample, may show no region; and the regions are not stored, so a kept bundle carries the frames but not the regions, and `bundle search` does not search changes.
+- **Evidence:** ADR 0034 sections 2, 3, 6 and its note of 2026-11-03; the `screen_change` tests of `vsift-domain` and `vsift-application`; `engine_screen_changes` (F04, opt-in with FFmpeg).
+- **Impact: medium by the rubric** (a change can be missing from the list, and the list says so only through the index's coverage).
+- **Mitigation:** read `coverage.gaps` and `resume`; look at the before and after frames, which are the evidence, rather than at the regions alone; for a busy recording, ask about a shorter range.
+- **Next step:** the hosted real-media run measures the noise regions and change counts on RM01, RM04 and RM10; the thresholds move before the second run if they must. A page-wide evidence operation would double a session's room.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.

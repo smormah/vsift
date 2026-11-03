@@ -168,14 +168,15 @@ not (section 10).
   200 megapixels, 256 MiB and the 120 s deadline, which apply to the call as they do to a burst.
 - **Regions:** 8 per change. **Crops:** 16 per call, with `--crops` only.
 - **Session room.** What a page costs, checked in the code (`vsift/src/evidence.rs`,
-  `EvidenceCall::known_media`, `find_reusable_record`): a page repeated with the same request is
-  reused and takes no slot; otherwise it takes one slot for its evidence record and one per frame the
-  session does not hold yet, since a frame already held "takes no new slot". So a page of 10 changes
-  takes 11 to 21 slots, depending on how many frames consecutive changes share, and a session's 384
-  slots hold about 180 to 350 changes with frames. A page stops at the last change whose frames fit,
-  ends `partial` with `session_evidence_budget`, has no `next_cursor` (that session has no room for
-  the next page), and gives `resume` (section 6a). If not even the first change fits, the call is
-  `RESOURCE_LIMIT` with `frame get`'s remediation (retain the session, open a new one with `ingest`).
+  `EvidenceCall::known_media`, `find_reusable_record`) and as built (note of 2026-11-03 below): each
+  frame is taken by one `frame get`. A request repeated exactly is reused and takes no slot; any other
+  takes one slot for its evidence record and one for its image unless the session already holds that
+  image. So a change takes 2 to 4 slots (2 when its before frame is the previous change's after
+  frame), and a session's 384 slots hold about 95 to 190 changes with frames. A page stops at the last
+  change whose frames fit, ends `partial` with `session_evidence_budget`, has no `next_cursor` (that
+  session has no room for the next page), and gives `resume` (section 6a). If not even the first
+  change fits, the call is `RESOURCE_LIMIT` with `frame get`'s remediation (retain the session, open a
+  new one with `ingest`).
 - **Four hours:** past the indexed four hours there are no changes, as there are no candidates, and
   coverage says so.
 
@@ -200,8 +201,8 @@ not (section 10).
   from it, listing every change once.
 
 **A recording as busy as RM03** (about 30 changes a minute): a 100-second question such as 12:30 to
-14:10 is about 50 changes, five pages and 50 to 100 frames, inside one session. The whole of RM03 is
-not: one session answers about 6 to 12 minutes of it, then stops with `session_evidence_budget` and
+14:10 is about 50 changes, five pages and 100 to 200 slots, inside one session. The whole of RM03 is
+not: one session answers about 3 to 6 minutes of it, then stops with `session_evidence_budget` and
 gives `resume` for a new session. The 115 changes RM03's index drops at its per-window budget are never
 listed; coverage counts them in each window's `candidate_budget_exhausted` gap.
 
@@ -293,6 +294,24 @@ Every choice was accepted as proposed; none went to the maintainer.
 7. `change_id` is published but not citable in `handoff check` in 0.3.0. **Accepted**, with the citing
    rule of section 5.
 8. The skill mentions `changes` in one line. **Accepted** (section 12).
+
+## Note of 2026-11-03: what the build found
+
+- **One `frame get` per frame.** Slice 1 takes each frame through `frame get` (at the sample's own time,
+  at or after with tolerance 0, or by candidate), so every image is an ordinary evidence record anyone
+  can ask for again. A page-wide evidence operation would hold about twice as many changes per session,
+  but it would add an operation to the stored evidence records and their published schema; it is not
+  built. Section 6's room figures are the ones that follow: about 95 to 190 changes per session, not
+  180 to 350.
+- **`comparison` is `compared` or `dimensions_differ`.** A change whose frames were not taken is not
+  listed (the page stops before it and `resume` names it), so no listed change is "not compared", and
+  section 7's `changes_not_compared` count is not published.
+- **Codec noise on the synthetic corpus.** On F04 (H.264), the status edit at 10 s is one 400x48
+  region of 7,140 changed pixels, and six more regions of 9 to 25 changed pixels each sit around text
+  elsewhere, where the re-encoded frames differ by 32 levels or more in a few pixels. They come after
+  the real region, which is the largest. The first hosted dispatch measures them on RM01, RM04 and
+  RM10; a higher `tile_pixels` (32 would remove every one seen on F04) is the candidate change before
+  the second, as the planner ruled.
 
 ## Consequences
 

@@ -184,6 +184,14 @@ bench = false
 required-features = ["libfuzzer"]
 
 [[bin]]
+name = "png_pixels"
+path = "fuzz_targets/png_pixels.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
 name = "evidence_record"
 path = "fuzz_targets/evidence_record.rs"
 test = false
