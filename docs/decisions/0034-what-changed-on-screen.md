@@ -337,6 +337,20 @@ Small regions are a minority and always come after the larger ones; only 3 of 24
 character), which no measurement can tell from codec noise until RM01 and RM10 are labelled. So
 `screen-change-regions-v1` keeps its first values; a later profile may move them with labels.
 
+## Note of 2026-11-03: the second real-media run
+
+Run 41706729159 (at `af0d5534`) listed exactly the same changes as the first, and added what a run
+costs. Whole recordings in 478 s:
+
+| | Calls | Sessions | Seconds | Seconds a call | Regions | Share of regions small |
+| --- | --- | --- | --- | --- | --- | --- |
+| RM01 | 2 | 1 | 49.7 | 24.9 | 74 | 26% |
+| RM04 | 7 | 2 | 211.4 | 30.2 | 211 | 9% |
+| RM10 | 6 | 2 | 217.3 | 36.2 | 207 | 16% |
+
+RM04 (5 minutes, 124 changes) and RM10 (3:21, 102 changes) each filled one session's evidence room and
+went on in a second from `resume`, as section 6a says. The thresholds stay.
+
 ## Consequences
 
 - One call answers "what changed between these times" with the frames to look at and where to look.
