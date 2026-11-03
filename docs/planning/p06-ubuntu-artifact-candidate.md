@@ -516,9 +516,28 @@ allows only the `file` protocol); CVE-2026-107675 to -107677, CVE-2026-107678 (L
 **The build recipe.** The `configuration` line the hosted smoke recorded (run 41699004066) differs from the shipped build's (run
 39162404765) by exactly the three components the review of 2026-10-04 found: `--enable-librsvg`, `--enable-lcms2` and
 `--enable-vapoursynth` (and the `--extra-version` date); 99 options against 96. librsvg brings GLib, Cairo, Pango and a Rust runtime
-into the static binary. VSift reaches none of them (it forces `-f mov` or `-f matroska`, allows only the `file` protocol and builds
-its own filter graphs), but it is more third-party code in a binary whose compiled-component source and licence inventory is still
-not claimed (the catalogue's trust limit says so). **The maintainer's acceptance of the recipe is open.**
+into the static binary. It is more third-party code in a binary whose full compiled-component source and licence inventory is still
+not claimed (the catalogue's trust limit says so); the three additions are reviewed here. **The maintainer's acceptance of the recipe
+is open.**
+
+*The three added components* (read on 2026-11-03 from BtbN's scripts at `5031c6f1` (`scripts.d/45-lcms2.sh`,
+`scripts.d/50-librsvg/*.sh`, `scripts.d/50-vapoursynth.sh`), the projects' licence files at those commits and FFmpeg's source at
+`7adfbe40dcde`, through `gh api` and the projects' raw files; nothing was downloaded as a build and nothing was run):
+
+| Component | What BtbN builds | Licence | Can VSift reach it? |
+| --- | --- | --- | --- |
+| **librsvg** (FFmpeg's `librsvg` SVG decoder) | [GNOME/librsvg](https://github.com/GNOME/librsvg) `0c074d0a` (2.63.4), static, with `cargo vendor` of its `Cargo.lock` (361 packages, the Rust crates; their licences were not read one by one) | LGPL-2.1-or-later | **No.** The decoder is `AV_CODEC_ID_SVG`; neither the `mov` tag tables (`isom_tags.c`), the Video for Windows table (`riff.c`) nor Matroska's (`matroska.c`) names that codec, and the image demuxers that would are not enabled |
+| what librsvg pulls in | [GLib](https://github.com/GNOME/glib) `50b938a3` (2.91.0, LGPL-2.1); [Cairo](https://gitlab.freedesktop.org/cairo/cairo) `74755964` (LGPL-2.1 or MPL-1.1); [Pango](https://github.com/GNOME/pango) `68e981d2` (1.58.2, LGPL-2.0); [pixman](https://gitlab.freedesktop.org/pixman/pixman) `e7fd4414` (0.46.5, MIT); [libffi](https://github.com/libffi/libffi) `bc553867` (3.8.0, MIT); [PCRE2](https://github.com/PCRE2Project/pcre2) `be940c4e` (10.50, BSD-3-Clause with the PCRE2 exception). FreeType, Fontconfig, HarfBuzz, FriBidi, libxml2 and zlib were in the earlier build already | as listed | **No:** reached only through the SVG decoder |
+| **lcms2** (ICC colour profiles) | [Little-CMS](https://github.com/mm2/Little-CMS) `1112313b` (2.20), static | MIT | **No.** FFmpeg uses it in `libavcodec/decode.c` only when a caller sets `-flags2 +icc_profiles`, and in the `iccdetect` and `iccgen` filters; VSift's arguments set no `flags2`, and its filter graphs are its own (`select`, `trim`, `format`, `crop`, `scale`, `showinfo`, and `aresample` and `asetnsamples` for audio), none of them the ICC filters |
+| **vapoursynth** (FFmpeg's `vapoursynth` demuxer) | [VapourSynth](https://github.com/vapoursynth/vapoursynth) tag `R81`: **the headers only**; no VapourSynth code is compiled in. FFmpeg loads `libvapoursynth-script` at run time (`dlopen` in `libavformat/vapoursynth.c`) when the demuxer is selected | LGPL-2.1 | **No.** Every FFmpeg and FFprobe call VSift makes forces the demuxer and the protocol: `-protocol_whitelist file` and `-f` with `mov` or `matroska` (`SourceContainer::demuxer`, `crates/vsift-infrastructure/src/source_snapshot.rs`) in `crates/vsift-infrastructure/src/ffmpeg_media.rs` (the probe, lines 210 to 218; the frame, crop and audio requests, lines 308 to 310, 523 to 525 and 590 to 592) and `ffmpeg_media/evidence.rs` (`evidence_request`, lines 510 to 512). No unit test pins that argument list; the malicious-media campaign's `playlist-hls`, `concat-script` and `sdp-text` cases (other formats named `.mp4` or `.mkv`) show a file that is not the forced container being refused |
+
+**Timing.** P06's F01 model-backed inference took 1.80 s against 0.90 s with the earlier build (one run each; 1.70 s on the 2026-10-04
+candidate, also a binary of about 142 MB). `P07 local ASR`'s real-time factors on Ubuntu are unchanged (`base` 0.251 against 0.248,
+`base_q5_1` 0.295 against 0.294; run 41699014254 against 39163129897), so recognition is not slower. The P06 figure is one cold run that
+likely includes paging in the larger static FFmpeg (about 140 MB against 116 MB); it was not measured further.
+
+**The supersession reason** (`security_fixes` for the build of 2026-08-31) was ruled by the planner on 2026-11-03: the 112 commits carry
+memory-safety fixes in decoders and demuxers VSift runs for supported streams.
 
 **Retention and the stop date.** Month-end, kept to about 2028-10-31; the catalogue stops issuing new plans on 2028-10-01.
 
