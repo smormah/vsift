@@ -1,6 +1,9 @@
 # ADR 0034: What changed on screen between two times
 
-- Status: **Proposed**, 2026-11-03. Nothing is built until the planner accepts it.
+- Status: **Proposed**; accepted by the planner on 2026-11-03 with three changes and three additions,
+  which this text includes (continuation, sections 6a and 6; the evidence room, section 6; the
+  decoder's memory, section 3; a budget that splits a motion run, section 2; citing, section 5; the
+  fuzz target, section 3). The planner ruled every choice at the end; none went to the maintainer.
 - Date: 2026-11-03
 - Refines: [ADR 0018](0018-visual-candidate-index-and-transcript-search.md) (the visual index and
   `candidates`) and [ADR 0019](0019-evidence-navigation.md) (exact frames and crops). It meets
@@ -56,9 +59,10 @@ own; it is not in slice 1.
 
 ### 2. What a change is
 
-The changes of a range are read from the visual index, which the call first extends exactly as
+The changes of a range are read from the visual index, which a call without a cursor first extends as
 `candidates` does (the same use case: missing windows in ascending order, at most 30 per call, the
-rest `not_analyzed`). No second analysis of the video is made.
+rest `not_analyzed`; a call with a cursor never analyses, section 6a). No second analysis of the video
+is made.
 
 - A `visual_change` candidate is one change: **before** is the frame displayed at its
   `change_window.from_us`, **after** is the candidate's own frame.
@@ -67,6 +71,14 @@ rest `not_analyzed`). No second analysis of the video is made.
   the settled frame. A run still moving at its window's end ends at its last candidate, with
   `settled: false`. A page never splits the pair.
 - `first_frame` and `periodic_coverage` candidates are not changes: nothing is compared with them.
+- **A budget that splits a motion run.** A window over its 32 candidates may keep a `motion_start` and
+  drop the `settled_after_motion` that ended its run, or the reverse. A kept `motion_start` alone is a
+  `motion` change whose after is its own frame, `settled: false`. A kept `settled_after_motion` alone
+  is a `motion` change whose before is the frame at its own `change_window.from_us` (the last moving
+  sample), `settled: true`, with `run_start_dropped: true`. Either way the window's
+  `candidate_budget_exhausted` gap counts the dropped one. A test covers both.
+- **Which changes a range holds:** those whose after frame lies in it. A change's before frame, and a
+  motion run's start, may lie before `--from`.
 
 Both frames are actual decoded frames that the index sampled, extracted exactly as `frame get` does
 (the same extraction, profile `p09-r0-v1`, identities and reuse), so the before and after images of
@@ -80,10 +92,20 @@ engine, no new crate, no second decode:
 
 1. **Pixels.** The infrastructure decodes each stored frame artifact, after checking it against its
    SHA-256: the PNG chunks are walked as today, `IDAT` is inflated with `flate2` (already a dependency)
-   into exactly `height * (1 + 3 * width)` bytes, never more, and the five PNG row filters are undone.
-   Only what our own extraction writes is accepted (8-bit RGB, no interlace, the frame's displayed
-   size). The decoder is a provider-output parser, so it is published for fuzzing beside the PNG
-   walker (ADR 0016 decision 6).
+   to exactly `height * (1 + 3 * width)` bytes, never more (a stream that ends early or runs on is
+   refused), and the five PNG row filters are undone. Only what our own extraction writes is accepted
+   (8-bit RGB, no interlace, the frame's displayed size).
+   - **Size refused before inflating.** The header is read first; a frame over 16,000,000 pixels (the
+     extraction's own `MAX_FRAME_PIXELS`) or a file over 64 MiB (`MAX_FRAME_BYTES`) is refused with
+     `RESOURCE_LIMIT` before any inflate. A test covers the refusal.
+   - **Peak memory.** The two frames of one change are compared one pair at a time, never a page's
+     frames together: the two stored files (at most 64 MiB each) and two decoded RGB buffers of at most
+     48 MB each (16 megapixels times 3), so at most about 230 MiB for a 16-megapixel pair and about
+     15 MB for a 1920x1080 one. The 200-megapixel and 256 MiB bounds of section 6 are evidence bounds,
+     not this.
+   - **Fuzzing, in slice 1.** The decoder is a provider-output parser, so a fuzz target is published
+     beside the PNG walker (ADR 0016 decision 6), seeded with a PNG extracted from a generated synthetic
+     fixture, never a private recording.
 2. **Changed pixels.** A pixel changed when any of its R, G and B differs by at least 32 levels.
 3. **Changed tiles.** The frame is cut into 16x16 tiles of displayed pixels (smaller at the right and
    bottom edges). A tile changed when it holds at least 4 changed pixels, so isolated compression noise
@@ -117,7 +139,8 @@ rectangle and no crop, and the result says so. Without `--crops` no crop is made
 `data` (`changes-data.schema.json`, example `changes.json`): `session_id`, the requested `range`,
 `index` (as `candidates` reports it), `profile` (`screen-change-regions-v1` with its thresholds),
 `coverage`, `changes`, `frames` (each distinct `frame_evidence` record of the page, once), `files` (as
-the frame commands deliver them), `partial_reason` and `next_cursor`. Each change
+the frame commands deliver them), `partial_reason`, `next_cursor`, and `resume` (section 6a: `null`,
+or `from_us` and `reason`). Each change
 (`screen-change.schema.json`, a published record):
 
 - `change_id` (`chg_`, a digest of the session, source, stream, index profile, region profile and its
@@ -131,7 +154,11 @@ the frame commands deliver them), `partial_reason` and `next_cursor`. Each chang
 
 `--events jsonl` streams the page's `frame_evidence` records, then one `screen_change` record per
 change (key `change_id`), then the terminal event. A readable view prints one line per change (time,
-regions as `x,y wxh`, the two frame files).
+regions as `x,y wxh`, the two frame files and their evidence ids).
+
+**Citing.** The help, the guide page and the readable view tell the reader to cite a change by its
+before and after `evidence_id`s, which `handoff check` knows, and never by `change_id`, which it does
+not (section 10).
 
 ### 6. Bounds
 
@@ -140,18 +167,43 @@ regions as `x,y wxh`, the two frame files).
 - **Page:** 1 to 20 changes, 10 by default: at most 40 frames, within `frame get`'s 100 frames,
   200 megapixels, 256 MiB and the 120 s deadline, which apply to the call as they do to a burst.
 - **Regions:** 8 per change. **Crops:** 16 per call, with `--crops` only.
-- **Session room:** a page stops at the last change whose frames fit the session's evidence room, ends
-  `partial` with `session_evidence_budget`, and its `next_cursor` continues from there in the same
-  session or, once retained, after a new `ingest`. The first change not fitting is `RESOURCE_LIMIT`
-  with `frame get`'s remediation. 384 slots hold about 180 changes with frames.
+- **Session room.** What a page costs, checked in the code (`vsift/src/evidence.rs`,
+  `EvidenceCall::known_media`, `find_reusable_record`): a page repeated with the same request is
+  reused and takes no slot; otherwise it takes one slot for its evidence record and one per frame the
+  session does not hold yet, since a frame already held "takes no new slot". So a page of 10 changes
+  takes 11 to 21 slots, depending on how many frames consecutive changes share, and a session's 384
+  slots hold about 180 to 350 changes with frames. A page stops at the last change whose frames fit,
+  ends `partial` with `session_evidence_budget`, has no `next_cursor` (that session has no room for
+  the next page), and gives `resume` (section 6a). If not even the first change fits, the call is
+  `RESOURCE_LIMIT` with `frame get`'s remediation (retain the session, open a new one with `ingest`).
 - **Four hours:** past the indexed four hours there are no changes, as there are no candidates, and
   coverage says so.
 
+### 6a. Continuation
+
+- **A call with a cursor never analyses**, as for `candidates`: only a call without one extends the
+  index (at most 30 windows), then pages the analysed part.
+- **The cursor** (`CursorToken`, as for `candidates`) is bound to the session and its expiry at issue,
+  the source, the stream, the index profile, the region profile, the range, `--limit`, `--crops`, the
+  state of every window the range touches (not analysed, undecodable, or its candidate identities), and
+  the page's last change. Any other value, or a window in the range analysed since, is
+  `INVALID_ARGUMENT`, never a silent restart.
+- **`resume`** says where a fresh call (a new `--from`, no cursor) continues when this one cannot:
+  `{from_us, reason}`. `from_us` is the after time of the first change not listed, or the start of the
+  first unanalysed window when that comes first. `reason` is `not_analyzed` (the pages reached the end
+  of the analysed part; a fresh call analyses from there), `session_evidence_budget` (a fresh call in a
+  new session, after `ingest`), `deadline_exceeded` or `cancelled`. It is `null` when the range is
+  answered to its end. A page with more changes after it in the analysed part has a `next_cursor`
+  instead.
+- **A test** pages a range over 30 windows to its end on a generated fixture, in the synthetic or fault
+  suite (never real media or load): the pages, then `resume` with `not_analyzed`, then a fresh call
+  from it, listing every change once.
+
 **A recording as busy as RM03** (about 30 changes a minute): a 100-second question such as 12:30 to
-14:10 is about 50 changes, five pages and about 100 frames, inside one session. The whole of RM03 is
-not: one session answers about six minutes of it, then stops with `session_evidence_budget` and says
-where to continue. The 115 changes RM03's index drops at its per-window budget are never listed;
-coverage counts them in each window's `candidate_budget_exhausted` gap.
+14:10 is about 50 changes, five pages and 50 to 100 frames, inside one session. The whole of RM03 is
+not: one session answers about 6 to 12 minutes of it, then stops with `session_evidence_budget` and
+gives `resume` for a new session. The 115 changes RM03's index drops at its per-window budget are never
+listed; coverage counts them in each window's `candidate_budget_exhausted` gap.
 
 ### 7. Coverage: what was not compared, and why
 
@@ -215,25 +267,32 @@ broken by a code.
 ### 12. Slices
 
 1. **Slice 1:** the changes and their regions, with exact before and after frames, `--json`,
-   `--events jsonl` and readable text, schemas, contract tests, `cli-v1.md`, guide reference, records.
+   `--events jsonl` and readable text, the pixel decoder and its fuzz target, continuation and
+   `resume`, schemas, contract tests, `cli-v1.md`, guide reference, records.
 2. **Slice 2:** `--crops`.
-3. **Optional:** the skill's one line in `references/commands.md` (planner's choice, under the freeze
-   rules of `v030-rules.md`).
+3. **The skill:** one line in `references/commands.md`, the story's only skill edit, under the freeze
+   rules of `v030-rules.md` (a draft freeze labelled as such, rewritten at the merge rebase).
 
-## Choices for the planner and the maintainer
+## Choices, as the planner ruled them (2026-11-03)
 
-1. A new command `changes`, not a mode of `candidates`.
-2. A motion run is one change (before the motion, after it settles), not two.
+Every choice was accepted as proposed; none went to the maintainer.
+
+1. A new command `changes`, not a mode of `candidates`. **Accepted.**
+2. A motion run is one change (before the motion, after it settles), not two. **Accepted.**
 3. Before is the frame at the change window's start (the tightest bracket), not the previous listed
-   screen; slow drift may then show no region (`no_region_at_threshold`).
+   screen; slow drift may then show no region (`no_region_at_threshold`). **Accepted.**
 4. Regions are computed from the stored PNGs by a new decoder in the infrastructure, not from a second
-   FFmpeg decode as raw grey. The decoder is new code reading untrusted bytes; the second decode would
-   cost an FFmpeg run per page and compare pixels that are not the cited images.
-5. The first thresholds: 32 levels, 4 pixels per 16x16 tile, one-tile bridging, 8 regions.
-6. A busy recording stops at the session's evidence room (about 180 changes) rather than listing
-   changes without frames.
-7. `change_id` is published but not citable in `handoff check` in 0.3.0.
-8. Whether the skill mentions `changes`.
+   FFmpeg decode as raw grey: comparing the cited images is the point. **Accepted**, with the bounded
+   inflate, the SHA-256 checked first and the fuzz target (section 3).
+5. The first thresholds: 32 levels, 4 pixels per 16x16 tile, one-tile bridging, 8 regions, as first
+   values of a versioned profile. **Accepted.** The first hosted dispatch reports the noise floor on
+   RM01, RM04 and RM10; if they must move, they move before the second dispatch and the pull request
+   says so.
+6. A busy recording stops at the session's evidence room rather than listing changes without frames.
+   **Accepted**, with `resume` (section 6a).
+7. `change_id` is published but not citable in `handoff check` in 0.3.0. **Accepted**, with the citing
+   rule of section 5.
+8. The skill mentions `changes` in one line. **Accepted** (section 12).
 
 ## Consequences
 
