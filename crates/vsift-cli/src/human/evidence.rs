@@ -1,5 +1,5 @@
-//! `candidates`, `frame get/neighbours/burst`, `crop` and `audio` (P13 PR
-//! 2b).
+//! `candidates`, `changes`, `frame get/neighbours/burst`, `crop` and `audio`
+//! (P13 PR 2b; `changes` from ADR 0034).
 //!
 //! None of these results carries evidence text: candidates are times,
 //! counts and hashes, and frames, crops and clips are files. What they do
@@ -17,8 +17,9 @@ use super::{
     time::{push_clock, push_range, push_span},
     transcript::{count, push_next_page},
     view::{
-        AudioData, AudioEvidence, CandidatesPage, ClocksResult, DeliveredFile, Envelope, FrameData,
-        FrameEvidence, Range, ScreenClockView, ScreenTextResult, Selection, VisualCandidate,
+        AudioData, AudioEvidence, CandidatesCoverage, CandidatesPage, ChangeFrame, ChangesPage,
+        ClocksResult, DeliveredFile, Envelope, FrameData, FrameEvidence, Range, ScreenChange,
+        ScreenClockView, ScreenTextResult, Selection, VisualCandidate, VisualIndex,
     },
 };
 
@@ -292,58 +293,13 @@ pub(super) fn candidates(envelope: &Envelope<CandidatesPage>) -> Result<Rendered
     text.push_fixed("Visual candidates of session ")
         .push_value(&page.session_id)
         .end_line();
-    let index = &page.index;
-    text.push_fixed("Index: ")
-        .push_value(&index.index_id)
-        .push_fixed(" (revision ")
-        .push_unsigned(index.number)
-        .push_fixed(", ")
-        .push_value(&index.profile)
-        .push_fixed(", video length ");
-    push_clock(&mut text, index.duration_us);
-    text.push_fixed(")").end_line();
-    text.push_fixed("Range: ");
-    push_range(&mut text, page.range);
-    text.end_line();
-    let coverage = &page.coverage;
-    text.push_fixed("Searched: ");
-    push_range(&mut text, coverage.searched_range);
-    text.end_line();
-    if coverage.analyzed.is_empty() {
-        text.push_fixed("Analysed: nothing yet").end_line();
-    } else {
-        text.push_fixed("Analysed:").end_line();
-        for range in &coverage.analyzed {
-            text.push_fixed("  ");
-            push_range(&mut text, *range);
-            text.end_line();
-        }
-    }
-    if !coverage.gaps.is_empty() {
-        text.push_fixed("Not covered (no candidates there):")
-            .end_line();
-    }
-    for gap in &coverage.gaps {
-        text.push_fixed("  ");
-        push_range(
-            &mut text,
-            Range {
-                from_us: gap.from_us,
-                to_us: gap.to_us,
-            },
-        );
-        text.push_fixed(": ").push_value(&gap.reason);
-        if gap.dropped_candidates > 0 {
-            text.push_fixed(", ")
-                .push_unsigned(gap.dropped_candidates)
-                .push_fixed(" change candidates dropped");
-        }
-        text.end_line();
-    }
-    if coverage.ranges_truncated {
-        text.push_fixed("Range lists are cut at 100 each; use --json for the full coverage.")
-            .end_line();
-    }
+    push_index_and_coverage(
+        &mut text,
+        &page.index,
+        page.range,
+        &page.coverage,
+        "Not covered (no candidates there):",
+    );
     text.push_fixed("Candidates on this page: ")
         .push_unsigned(count(page.items.len()))
         .end_line();
@@ -368,6 +324,191 @@ pub(super) fn candidates(envelope: &Envelope<CandidatesPage>) -> Result<Rendered
     push_next_page(&mut text, page.next_cursor.as_deref());
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// Written after the changes of a `changes` page: how to cite one (ADR 0034
+/// section 5). `handoff check` knows the frames' ids, not a change's.
+const CITE_CHANGES_NOTE: &str = "Cite a change by its before and after evidence ids (evd_...), \
+     never by its change id: those frames are what a reader checks.";
+
+/// `changes`: one page of screen changes, each with where the screen
+/// differs and its two frames, and what the index covers.
+pub(super) fn changes(envelope: &Envelope<ChangesPage>) -> Result<RenderedText, TooLarge> {
+    let page = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Screen changes of session ")
+        .push_value(&page.session_id)
+        .end_line();
+    push_index_and_coverage(
+        &mut text,
+        &page.index,
+        page.range,
+        &page.coverage,
+        "Not covered (no changes listed there):",
+    );
+    let profile = &page.profile;
+    text.push_fixed("Regions: ")
+        .push_value(&profile.identifier)
+        .push_fixed(" (a pixel differs when a colour moves ")
+        .push_unsigned(profile.pixel_level)
+        .push_fixed(" levels or more; a ")
+        .push_unsigned(profile.tile)
+        .push_fixed("x")
+        .push_unsigned(profile.tile)
+        .push_fixed(" tile differs with ")
+        .push_unsigned(profile.tile_pixels)
+        .push_fixed(" such pixels)")
+        .end_line();
+    text.push_fixed("Changes on this page: ")
+        .push_unsigned(count(page.changes.len()))
+        .end_line();
+    let mut paths = PathNotes::default();
+    for change in &page.changes {
+        push_change(&mut text, change);
+        for (label, frame) in [("  Before: ", &change.before), ("  After: ", &change.after)] {
+            push_change_frame(&mut text, label, frame);
+            paths.push_files_of(&mut text, &frame.evidence_id, &page.files);
+        }
+    }
+    if !page.changes.is_empty() {
+        text.blank_line();
+        text.push_fixed(CITE_CHANGES_NOTE).end_line();
+    }
+    paths.push_notes(&mut text);
+    if let Some(reason) = &page.partial_reason {
+        text.push_fixed("Stopped early: ")
+            .push_value(reason)
+            .push_fixed(" (the changes above are complete; their frames are committed evidence)")
+            .end_line();
+    }
+    if let Some(resume) = &page.resume {
+        text.push_fixed("Continue with a new call without --cursor, from --from ")
+            .push_unsigned(resume.from_us)
+            .push_fixed(" (")
+            .push_value(&resume.reason)
+            .push_fixed(")")
+            .end_line();
+    }
+    push_next_page(&mut text, page.next_cursor.as_deref());
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes a change's line: when, what kind, and where the frames differ,
+/// largest region first; then the index's bracket.
+fn push_change(text: &mut TerminalText, change: &ScreenChange) {
+    text.blank_line();
+    push_clock(text, change.after.time_us);
+    text.push_fixed("  ").push_value(&change.kind);
+    if let Some(motion) = &change.motion {
+        text.push_fixed(" (").push_value(motion);
+        if change.settled == Some(true) {
+            text.push_fixed(", settled");
+        }
+        text.push_fixed(")");
+    }
+    text.push_fixed("  ");
+    if change.comparison != "compared" {
+        text.push_fixed("not compared: ")
+            .push_value(&change.comparison);
+    } else if change.no_region_at_threshold {
+        text.push_fixed("no region at the threshold");
+    } else {
+        text.push_fixed("regions ");
+        for (position, region) in change.regions.iter().enumerate() {
+            if position > 0 {
+                text.push_fixed("; ");
+            }
+            text.push_unsigned(region.x)
+                .push_fixed(",")
+                .push_unsigned(region.y)
+                .push_fixed(" ")
+                .push_unsigned(region.width)
+                .push_fixed("x")
+                .push_unsigned(region.height);
+        }
+        if change.regions_left_out > 0 {
+            text.push_fixed(", and ")
+                .push_unsigned(change.regions_left_out)
+                .push_fixed(" more");
+        }
+    }
+    text.end_line();
+    text.push_fixed("  Changed after ");
+    push_clock(text, change.change_window.from_us);
+    text.push_fixed(" and at or before ");
+    push_clock(text, change.change_window.to_us);
+    text.end_line();
+}
+
+/// Writes one of a change's frames: its evidence id and time.
+fn push_change_frame(text: &mut TerminalText, label: &'static str, frame: &ChangeFrame) {
+    text.push_fixed(label)
+        .push_value(&frame.evidence_id)
+        .push_fixed(" at ");
+    push_clock(text, frame.time_us);
+    text.end_line();
+}
+
+/// Writes the index a page was read from, the requested and searched
+/// ranges, what is analysed and every typed gap, under `not_covered`: the
+/// same for `candidates` and `changes`, whose coverage is the index's.
+fn push_index_and_coverage(
+    text: &mut TerminalText,
+    index: &VisualIndex,
+    range: Range,
+    coverage: &CandidatesCoverage,
+    not_covered: &'static str,
+) {
+    text.push_fixed("Index: ")
+        .push_value(&index.index_id)
+        .push_fixed(" (revision ")
+        .push_unsigned(index.number)
+        .push_fixed(", ")
+        .push_value(&index.profile)
+        .push_fixed(", video length ");
+    push_clock(text, index.duration_us);
+    text.push_fixed(")").end_line();
+    text.push_fixed("Range: ");
+    push_range(text, range);
+    text.end_line();
+    text.push_fixed("Searched: ");
+    push_range(text, coverage.searched_range);
+    text.end_line();
+    if coverage.analyzed.is_empty() {
+        text.push_fixed("Analysed: nothing yet").end_line();
+    } else {
+        text.push_fixed("Analysed:").end_line();
+        for range in &coverage.analyzed {
+            text.push_fixed("  ");
+            push_range(text, *range);
+            text.end_line();
+        }
+    }
+    if !coverage.gaps.is_empty() {
+        text.push_fixed(not_covered).end_line();
+    }
+    for gap in &coverage.gaps {
+        text.push_fixed("  ");
+        push_range(
+            text,
+            Range {
+                from_us: gap.from_us,
+                to_us: gap.to_us,
+            },
+        );
+        text.push_fixed(": ").push_value(&gap.reason);
+        if gap.dropped_candidates > 0 {
+            text.push_fixed(", ")
+                .push_unsigned(gap.dropped_candidates)
+                .push_fixed(" change candidates dropped");
+        }
+        text.end_line();
+    }
+    if coverage.ranges_truncated {
+        text.push_fixed("Range lists are cut at 100 each; use --json for the full coverage.")
+            .end_line();
+    }
 }
 
 /// Writes one candidate: its identity, time and reasons, then its span and

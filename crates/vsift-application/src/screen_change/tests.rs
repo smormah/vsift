@@ -244,13 +244,13 @@ async fn the_cursor_is_bound_to_the_page_size_crops_and_window_states() -> TestR
 #[test]
 fn a_page_holds_one_to_twenty_changes() {
     assert_eq!(
-        screen_change_page_limit(None).map(|limit| limit.get()),
+        screen_change_page_limit(None).map(vsift_domain::PageLimit::get),
         Ok(10)
     );
     assert!(screen_change_page_limit(Some(0)).is_err());
     assert!(screen_change_page_limit(Some(21)).is_err());
     assert_eq!(
-        screen_change_page_limit(Some(20)).map(|limit| limit.get()),
+        screen_change_page_limit(Some(20)).map(vsift_domain::PageLimit::get),
         Ok(20)
     );
 }
@@ -341,7 +341,7 @@ impl StandIn {
             return Err(FrameRefusal::NoRoom);
         }
         *taken += 1;
-        let kind = if after { 1 } else { 0 };
+        let kind = u8::from(after);
         Ok(TakenFrame {
             evidence_id: EvidenceId::parse(format!("evd_{kind}{:031}", time.as_micros()))
                 .map_err(|_| FrameRefusal::Failed(PortError::Failed))?,

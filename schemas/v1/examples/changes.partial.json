@@ -1,0 +1,187 @@
+{
+  "command": "changes",
+  "coverage": {
+    "gaps": [
+      "9000000-150000000"
+    ],
+    "reasons": [
+      "not_analyzed",
+      "undecodable",
+      "session_evidence_budget"
+    ],
+    "truncated": true
+  },
+  "data": {
+    "changes": [
+      {
+        "after": {
+          "evidence_id": "evd_b1c55458c576b1ef8a331e41bc416154",
+          "time_us": 5000000
+        },
+        "before": {
+          "evidence_id": "evd_19f028101801357fd7d3e82e830615e3",
+          "time_us": 4500000
+        },
+        "candidate_ids": [
+          "vcd_d0a47607c893a97b6e9d4893ac51daca"
+        ],
+        "change_id": "chg_7b05e43a496f18b1f2d3619540d03b13",
+        "change_window": {
+          "from_us": 4500000,
+          "to_us": 5000000
+        },
+        "changed_area": {
+          "changed_pixels": 201344,
+          "height": 380,
+          "width": 640,
+          "x": 400,
+          "y": 260
+        },
+        "comparison": "compared",
+        "kind": "change",
+        "motion": null,
+        "no_region_at_threshold": false,
+        "regions": [
+          {
+            "changed_pixels": 201344,
+            "height": 380,
+            "width": 640,
+            "x": 400,
+            "y": 260
+          }
+        ],
+        "regions_left_out": 0,
+        "settled": null
+      }
+    ],
+    "coverage": {
+      "analyzed": [
+        {
+          "from_us": 0,
+          "to_us": 60000000
+        }
+      ],
+      "gaps": [
+        {
+          "dropped_candidates": 0,
+          "from_us": 60000000,
+          "reason": "undecodable",
+          "to_us": 120000000
+        },
+        {
+          "dropped_candidates": 0,
+          "from_us": 120000000,
+          "reason": "not_analyzed",
+          "to_us": 150000000
+        }
+      ],
+      "ranges_truncated": false,
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 150000000
+      }
+    },
+    "files": [
+      {
+        "evidence_id": "evd_19f028101801357fd7d3e82e830615e3",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-8ba126c63bb4441558622336853364d3653e6dfbceef02abc6fc2509b830c5fb.png"
+      },
+      {
+        "evidence_id": "evd_b1c55458c576b1ef8a331e41bc416154",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-c503b56c9c080ec908bc33ad80e25543c48ea6f978499d51c0396f5ba4bbd504.png"
+      }
+    ],
+    "frames": [
+      {
+        "crop": null,
+        "evidence_id": "evd_19f028101801357fd7d3e82e830615e3",
+        "frame": {
+          "height": 900,
+          "pts": 69120,
+          "time_base_denominator": 15360,
+          "time_base_numerator": 1,
+          "time_us": 4500000,
+          "width": 1440
+        },
+        "image": {
+          "bytes": 52500,
+          "height": 900,
+          "media_type": "image/png",
+          "sha256": "8ba126c63bb4441558622336853364d3653e6dfbceef02abc6fc2509b830c5fb",
+          "width": 1440
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_b1c55458c576b1ef8a331e41bc416154",
+        "frame": {
+          "height": 900,
+          "pts": 76800,
+          "time_base_denominator": 15360,
+          "time_base_numerator": 1,
+          "time_us": 5000000,
+          "width": 1440
+        },
+        "image": {
+          "bytes": 53000,
+          "height": 900,
+          "media_type": "image/png",
+          "sha256": "c503b56c9c080ec908bc33ad80e25543c48ea6f978499d51c0396f5ba4bbd504",
+          "width": 1440
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      }
+    ],
+    "index": {
+      "coverage_interval_us": 10000000,
+      "duration_us": 150000000,
+      "index_id": "vix_5278827a5eb80d85a88983f2e69a5cba",
+      "number": 1,
+      "profile": "r0-visual-v1",
+      "sample_interval_us": 500000,
+      "window_us": 60000000
+    },
+    "next_cursor": null,
+    "partial_reason": "session_evidence_budget",
+    "profile": {
+      "identifier": "screen-change-regions-v1",
+      "join_distance": 2,
+      "max_regions": 8,
+      "pixel_level": 32,
+      "tile": 16,
+      "tile_pixels": 4
+    },
+    "range": {
+      "from_us": 0,
+      "to_us": 150000000
+    },
+    "resume": {
+      "from_us": 9000000,
+      "reason": "session_evidence_budget"
+    },
+    "session_id": "ses_0123456789abcdef0123456789abcdef"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "partial",
+  "warnings": [
+    "Part of the requested range has no screen changes listed because it is not analysed yet, could not be analysed, or changed more often than the index keeps; coverage lists each gap and its reason. Run changes again without --cursor (from resume.from_us when it is set) to continue not_analyzed and deadline_exceeded parts.",
+    "The page stopped before its last change (partial_reason says why): the changes listed are complete and their frames are committed evidence, but there is no next_cursor. resume.from_us is where a fresh call without --cursor continues; after session_evidence_budget, keep this session with session retain and continue in a new session opened with ingest."
+  ]
+}

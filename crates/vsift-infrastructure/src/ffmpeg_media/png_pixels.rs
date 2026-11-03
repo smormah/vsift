@@ -178,8 +178,8 @@ fn unfilter(filter: u8, row: &mut [u8], above: &[u8]) -> Result<(), PngPixelsErr
         3 => {
             for index in 0..row.len() {
                 let left = left_of(row, index);
-                let average = (u16::from(left) + u16::from(byte(above, index))) / 2;
-                add(row, index, u8::try_from(average).unwrap_or(u8::MAX));
+                // The PNG Average filter: floor((left + up) / 2).
+                add(row, index, left.midpoint(byte(above, index)));
             }
         }
         4 => {

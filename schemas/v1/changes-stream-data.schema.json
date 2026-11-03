@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/changes-stream-data.schema.json",
+  "title": "VSift changes JSON Lines terminal data v1",
+  "description": "The data member of the complete or partial terminal result that ends a changes --events jsonl stream (0.3.0, ADR 0034). It is the page of changes-data.schema.json without its frames and changes: those were the preceding evidence events, first the frames (record_type frame_evidence, in order of first use), then the changes (record_type screen_change, in time order), and record_count says how many events there were. Pass next_cursor back with the same session, range and --limit to stream the next page; resume says where a fresh call continues when this one could not go on.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "range",
+    "index",
+    "profile",
+    "coverage",
+    "record_count",
+    "files",
+    "partial_reason",
+    "next_cursor",
+    "resume"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "range": { "$ref": "candidates-data.schema.json#/$defs/range" },
+    "index": { "$ref": "candidates-data.schema.json#/$defs/index" },
+    "profile": { "$ref": "changes-data.schema.json#/$defs/profile" },
+    "coverage": { "$ref": "candidates-data.schema.json#/$defs/coverage" },
+    "record_count": { "type": "integer", "minimum": 0, "maximum": 60 },
+    "files": { "$ref": "changes-data.schema.json#/$defs/files" },
+    "partial_reason": { "$ref": "changes-data.schema.json#/$defs/partial_reason" },
+    "next_cursor": { "$ref": "candidates-data.schema.json#/$defs/next_cursor" },
+    "resume": { "$ref": "changes-data.schema.json#/$defs/resume" }
+  }
+}

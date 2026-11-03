@@ -106,6 +106,9 @@ pub enum CommandName {
     SkillShow,
     /// `clocks` (ADR 0029, stage 2): find the clocks on a session's screen.
     Clocks,
+    /// `changes` (ADR 0034): what changed on screen between two times, with
+    /// the exact frames before and after each change.
+    Changes,
 }
 
 impl CommandName {
@@ -114,7 +117,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 45] = [
+    pub const ALL: [Self; 46] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -160,6 +163,7 @@ impl CommandName {
         Self::SkillShow,
         Self::BundleSearch,
         Self::Clocks,
+        Self::Changes,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -206,6 +210,7 @@ impl CommandName {
             Self::SkillStatus => "skill.status",
             Self::SkillShow => "skill.show",
             Self::Clocks => "clocks",
+            Self::Changes => "changes",
             Self::Ocr => "ocr",
             Self::OcrSearch => "ocr.search",
             Self::JobStart => "job.start",
@@ -269,6 +274,7 @@ impl CommandName {
             Self::SkillShow => 42,
             Self::BundleSearch => 43,
             Self::Clocks => 44,
+            Self::Changes => 45,
         }
     }
 }

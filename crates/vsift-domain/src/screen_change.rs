@@ -336,9 +336,13 @@ impl TileGrid {
             .zip(after.bytes.chunks_exact(row_bytes));
         for (y, (line_before, line_after)) in (0_u32..).zip(lines) {
             let tile_row = y / SCREEN_CHANGE_TILE;
-            let pixels = line_before.chunks_exact(3).zip(line_after.chunks_exact(3));
+            let pixels = line_before
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .zip(line_after.as_chunks::<3>().0);
             for (x, (pixel_before, pixel_after)) in (0_u32..).zip(pixels) {
-                if pixel_changed(pixel_before, pixel_after)
+                if pixel_changed(*pixel_before, *pixel_after)
                     && let Some(count) =
                         counts.get_mut(tile_index(columns, x / SCREEN_CHANGE_TILE, tile_row))
                 {
@@ -500,11 +504,11 @@ impl TileBox {
     }
 }
 
-fn pixel_changed(before: &[u8], after: &[u8]) -> bool {
+fn pixel_changed(before: [u8; 3], after: [u8; 3]) -> bool {
     before
         .iter()
         .zip(after)
-        .any(|(left, right)| left.abs_diff(*right) >= SCREEN_CHANGE_PIXEL_LEVEL)
+        .any(|(left, right)| left.abs_diff(right) >= SCREEN_CHANGE_PIXEL_LEVEL)
 }
 
 fn tile_count(columns: u32, rows: u32) -> usize {

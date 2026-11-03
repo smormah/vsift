@@ -5,8 +5,8 @@ Status: published v1 boundary. Every command of the namespace table below is ope
 install` since P13 PR 4, the managed lifecycle commands since PR 6), foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
-`candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
-and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
+`candidates` (P08 visual candidates), `changes` (0.3.0, what changed on screen), `frame get`,
+`frame neighbours`, `frame burst`, `crop` and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
 recoverable jobs), `job run`, `job batch` and `session init-workspace` (P11 worker host),
 `bundle validate` and `handoff check` (P13 PR 5). Since P13 PR 6 no command answers
 `COMMAND_NOT_IMPLEMENTED`: the code stays in the v1 failure taxonomy (a command reserved
@@ -47,12 +47,13 @@ kernel attests the strict worker controls, and otherwise the command answers
 and isolation").
 
 **Interruption (P10 PR 3).** While a long command runs (`ingest`, `transcript
-retranscribe`, `candidates`, `ocr`, `frame get/neighbours/burst`, `crop`, `audio`, `job
-resume`, `watch`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
+retranscribe`, `candidates`, `changes`, `ocr`, `frame get/neighbours/burst`, `crop`, `audio`,
+`job resume`, `watch`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
 (Windows) cancels it: it stops at its next boundary (a provider process is stopped, on
 Unix with `SIGTERM` to its process group and a kill after 5 s, on Windows at once) and
 writes its one documented terminal result: `CANCELLED` (exit 6), or the `partial`
-result of `candidates`, `ocr` and the evidence commands, which commit what they finished. A
+result of `candidates`, `changes`, `ocr` and the evidence commands, which commit what they
+finished. A
 second interruption kills running providers without the graceful wait; either way the
 process exits only after every provider it started has been reaped, within the
 supervisor's 5 s + 5 s budget. An `ingest` copy is checked every 64 KiB; a
@@ -84,6 +85,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
+| `changes` | Bounded pages of what changed on screen in a range: each change's exact before and after frames as frame evidence, and the rectangles where they differ; analyses missing windows first, as `candidates` does | 0.3.0 (ADR 0034); slice 1, without `--crops` |
 | `clocks` | Opt-in, bounded, resumable: finds the clocks in what `ocr` read and how each moves against the video; only `--screen-zone` and `--accept-gap`, on the user's word, change a clock time | 0.3.0 (ADR 0029, stage 2) |
 | `ocr`, `ocr search` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `ocr search` pages it with frame, time and region, with or without a transcript, and `search`'s first page shows it beside the transcript | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
@@ -3167,6 +3169,145 @@ is retained as historical v1 evidence. An abbreviated current response follows.
 }
 ```
 
+### 0.3.0 `changes`: what changed on screen
+
+```console
+vsift changes ses_0123456789abcdef --from 0 --to 14000000 --json
+vsift changes ses_0123456789abcdef --from 750000000 --to 850000000 --limit 20 --json
+vsift changes ses_0123456789abcdef --from 0 --to 14000000 --events jsonl
+```
+
+`changes <session> --from <us> --to <us> [--limit 1..20] [--cursor <token>]` pages the screen
+changes of the session's video whose after frame lies in the half-open range, 10 per page by
+default ([ADR 0034](../decisions/0034-what-changed-on-screen.md)). It answers "what changed on
+the screen between these two times" in one call: each change is a moment the visual index saw
+the screen change, with the exact frame before and after it and the rectangles where those two
+frames differ. It is evidence, not interpretation. Times are position times in microseconds,
+as every other command takes them; a range that runs past the end of the video is clipped to
+it, and one that starts at or after the end is `INVALID_ARGUMENT`. This is slice 1: `--crops`
+(ADR 0034 section 4) is not part of the grammar yet.
+
+**What a change is.** The changes are read from the visual index of `candidates` (above), which
+a call without `--cursor` first extends exactly as `candidates` does (missing windows in
+ascending order, at most 30 per call, the rest `not_analyzed`); no second analysis of the video
+is made. A `visual_change` candidate is one change (`kind` `change`): before is the frame at its
+`change_window.from_us`, after is the candidate's own frame. A `motion_start` and the
+`settled_after_motion` that ends its run are one change (`kind` `motion`, `motion` `run`,
+`settled` true); a run still moving at its window's end, or whose end the window's 32-candidate
+budget dropped, is `motion` `start` with `settled` false; a `settled_after_motion` whose start
+was dropped is `motion` `end`, before being the last moving sample. `first_frame` and
+`periodic_coverage` candidates are not changes. A page never splits a pair. Both frames are
+actual decoded frames the index sampled, taken by `frame get` (the same extraction, profile
+`p09-r0-v1`, identities and reuse), so each is an ordinary `frame_evidence` record; consecutive
+changes often share a frame, which is taken and listed once.
+
+**Result.** `data` ([`changes-data.schema.json`](../../schemas/v1/changes-data.schema.json),
+examples [`changes.json`](../../schemas/v1/examples/changes.json) and
+[`changes.partial.json`](../../schemas/v1/examples/changes.partial.json)) holds `session_id`,
+the requested `range`, `index` (as `candidates` reports it), `profile`, `coverage`, `changes`,
+`frames` (each distinct `frame_evidence` record the changes cite, once, in order of first use,
+exactly as the frame commands publish it, `clock_time` included when the session has a time
+anchor), `files` (one `{evidence_id, media_type, path}` per frame, in frame order, as the frame
+commands deliver them: the absolute path of the committed session artifact, valid while the
+session exists), `partial_reason`, `next_cursor` and `resume`. Each change is a published
+`screen_change` record ([`screen-change.schema.json`](../../schemas/v1/screen-change.schema.json)):
+`change_id` (`chg_`, a digest of the session, source, stream, index profile, region profile and
+its candidates, the same on every call), `kind`, `motion` and `settled` (null for `change`),
+`candidate_ids`, `change_window` (the index's bracket: the screen changed after `from_us` and at
+or before `to_us`), `before` and `after` (`evidence_id`, the frame's actual `time_us` and, with
+an anchor, the frame record's own `clock_time`), `comparison`, `regions`, `regions_left_out`,
+`changed_area` and `no_region_at_threshold`.
+
+**Regions (profile `screen-change-regions-v1`).** The two stored PNG frames are compared pixel
+by pixel, one pair at a time, after each is checked against its SHA-256. A pixel changed when
+any of its R, G and B differs by at least 32 levels (`profile.pixel_level`); a 16x16 tile of
+displayed pixels (`profile.tile`, smaller at the right and bottom edges) changed when it holds at
+least 4 changed pixels (`profile.tile_pixels`); changed tiles at most 2 tiles apart, diagonally
+too, join one region (`profile.join_distance`). Each region is the bounding rectangle of its
+tiles, clipped to the frame, in displayed pixels: the space `crop --rect` takes. A change lists at
+most 8 regions (`profile.max_regions`), the largest by `changed_pixels` first; `regions_left_out`
+counts the rest and `changed_area` is the rectangle around every changed tile with all their
+changed pixels, so nothing is lost silently. When the index saw a change but the two frames differ
+nowhere at the threshold (a change below it, or slow drift), `regions` is empty, `changed_area`
+null and `no_region_at_threshold` true; the change is still listed. Frames of different
+displayed sizes are not compared: `comparison` is `dimensions_differ` and `regions` empty. The
+thresholds are part of the profile: changing one is a new profile, never a silent change. Codec
+noise around text can add small regions of a few pixels; they come after the real one, which is
+the largest (ADR 0034's note of 2026-11-03).
+
+**Bounds.** A page holds 1 to 20 changes, so at most 40 frames, within `frame get`'s bounds and
+its 120 s deadline for the frames of the call. Every frame is taken by one `frame get`: a
+request repeated exactly is reused and takes no evidence slot; any other takes one slot for its
+record and one for its image unless the session already holds that image. A change therefore
+takes 2 to 4 of a session's 384 evidence slots (2 when its before frame is the previous change's
+after frame), and a session holds about 95 to 190 changes with their frames. Past the indexed
+four hours there are no changes, as there are no candidates, and coverage says so. Regions are
+recomputed from the stored frames on every call and are not stored.
+
+**Continuation and resume.** Pass `next_cursor` back with the same session, range and `--limit`.
+A call with a cursor never analyses anything. The cursor is bound to the session and its expiry
+at issue, the source, stream, index profile, region profile, range, `--limit`, the state of every
+window the range touches and the page's last change; any other value, a forged cursor, or a
+window in the range analysed since it was issued is `INVALID_ARGUMENT`, never a silent restart.
+`resume` says where a fresh call (a new `--from`, no cursor) continues when this one cannot:
+`{"from_us", "reason"}`, with `from_us` the after time of the first change not listed, or the
+start of the first window still to analyse. `reason` is `not_analyzed` (the pages reached the
+end of the analysed part; a fresh call analyses from there), `session_evidence_budget` (the
+session has no room for the next change's frames: keep it with `session retain`, then open a
+new session with `ingest` and continue there), `deadline_exceeded` or `cancelled`. It is null
+when the range is answered to its end or when `next_cursor` continues it. A page that stopped
+on the session's room, the deadline or a cancellation lists the changes before the stop with
+their committed frames, names the stop in `partial_reason`, has no `next_cursor` and gives
+`resume`. If not even the first change's frames fit, the call is `RESOURCE_LIMIT` with
+`frame get`'s remediation; a deadline or cancellation before the first change, with nothing
+analysed, is `DEADLINE_EXCEEDED` or `CANCELLED`.
+
+**Coverage.** `coverage` is the index's for the range, the same shape and rules as `candidates`
+(`searched_range`, `analyzed`, `gaps` with `reason` and `dropped_candidates`, and
+`ranges_truncated`); the changes a window's budget dropped are never listed, and its
+`candidate_budget_exhausted` gap counts them. The envelope `coverage` is filled as for
+`candidates`, with the part of the range a stopped page left unlisted (from `resume.from_us` to
+the end of the searched range) added to its `gaps` and the stop's identifier after the gap
+reasons. A result with any gap or a stop has status `partial` and exits 0, with the fixed
+warning `Part of the requested range has no screen changes listed because ...` for gaps and
+`The page stopped before its last change ...` for a stop.
+
+**What it never claims.** What a change means: no "dialog", "typed" or "scrolled"; regions are
+rectangles of pixels that differ, never interface elements, windows or text. That nothing else
+changed: differences under the thresholds are not reported, and a cursor or one character is
+often below the index's own 128x72 grid and never becomes a change. That nothing changed
+between samples: the index samples at 2 Hz, so something that came and went within half a
+second may be missing. When exactly it changed: only after `change_window.from_us` and at or
+before `change_window.to_us`.
+
+**Citing.** Cite a change by its before and after `evidence_id`s, which `handoff check` knows,
+never by its `change_id`, which it does not (ADR 0034 section 10). The help, the guide and the
+readable view say so.
+
+**Evidence stream.** `changes --events jsonl` writes the page's frames as `frame_evidence`
+evidence events (key `evidence_id`, in order of first use), then one `screen_change` evidence
+event per change (key `change_id`, in time order), then one terminal event whose data
+([`changes-stream-data.schema.json`](../../schemas/v1/changes-stream-data.schema.json), example
+[`changes.events.jsonl`](../../schemas/v1/examples/changes.events.jsonl)) is the page without its
+`changes` and `frames`, plus `record_count` (the number of evidence events), with the same
+`status`, warnings and envelope `coverage` as `--json`. `screen_change` is a new value of an
+evidence event's `record_type` (additive). Stream rules are those of `transcript get` (above).
+
+**Failures** use existing codes only. `INVALID_ARGUMENT` for an empty or reversed range, a range
+starting at or after the video's end, a rejected cursor (remediation: pass back only the
+`next_cursor` of the previous page with the same session, `--from`, `--to` and `--limit`, or run
+`changes` without `--cursor`), a cursor for a session with no visual index yet (remediation: run
+`changes` without `--cursor` first), a video with no video stream and a closed or expired
+session; `--limit 0`, `--limit 21` and a missing `--from` or `--to` are parse errors.
+`MISSING_CAPABILITY` when FFmpeg or FFprobe is missing to analyse a window (the `candidates`
+remediation) or to take a frame (the `frame get` remediation). `RESOURCE_LIMIT` when not even the
+first change's frames fit the session (`frame get`'s remediation: retain the session, open a new
+one with `ingest`) or a stored frame is over the decoder's 16,000,000 pixels or 64 MiB.
+`INTEGRITY_FAILURE` when a stored frame no longer matches its digest or does not decode. `BUSY`
+(with the remediation and `retry_after_ms` 2000 of the evidence commands), `DEADLINE_EXCEEDED`
+and `CANCELLED` as for `candidates` and `frame get`, and `INVALID_SOURCE` or `UNSUPPORTED_SCHEMA`
+as they do.
+
 ### P13 `handoff check`
 
 `vsift handoff check [--file <absolute-path>] [--session <session>]` checks an agent's
@@ -3749,9 +3890,9 @@ any release, and it is not part of v1. Agents and scripts use `--json` (the agen
 skill requires it) or `--events jsonl`. In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
-`transcript get`, `search`, `candidates`, the frame commands, `crop` and `audio` evidence
-events precede it (see "Evidence stream", "P08 transcript search", "P08 visual
-candidates", "P09 frames" and "P09 crops and audio clips" above);
+`transcript get`, `search`, `candidates`, `changes`, the frame commands, `crop` and `audio`
+evidence events precede it (see "Evidence stream", "P08 transcript search", "P08 visual
+candidates", "P09 frames", "P09 crops and audio clips" and "0.3.0 `changes`" above);
 `transcript retranscribe` and `job resume` write `progress` events before it, each as
 it happens (P11 PR 1); every other command writes the terminal event alone. The
 terminal event's `sequence` is always the number of events before it. stderr is
@@ -3811,7 +3952,9 @@ PR 2a rendered `setup check`, `setup plan`, `setup configure`, `setup configure-
 `ingest`, `session list/status/renew/close/retain/clean/init-workspace`, `transcript
 get`, `transcript retranscribe`, `search`, `bundle validate`, every failure and
 rejected command lines; `bundle search` (0.3.0) renders its hits, then every recording's coverage. PR 2b renders `candidates` (the index, the analysed ranges and
-typed gaps, then each candidate's time, span, reasons and change), `frame
+typed gaps, then each candidate's time, span, reasons and change), `changes` (0.3.0: the
+same index and coverage, then one line per change with its time, kind and regions as `x,y
+wxh`, its before and after frames with their files, and how to cite it), `frame
 get/neighbours/burst` and `crop` (the request, the burst plan or the neighbours' stops,
 each selection's requested and actual time, then each item with its image facts and
 file), `audio` (the same for the clip), `job status` and `job cancel` (the job's state,

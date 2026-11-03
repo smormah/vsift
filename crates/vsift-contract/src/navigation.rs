@@ -35,9 +35,9 @@ use std::{error::Error, fmt, path::Path};
 use serde::Serialize;
 use vsift_domain::{
     AUDIO_CLIP_SAMPLE_RATE, BurstExtent, EvidenceDetail, EvidenceId, EvidenceItem,
-    EvidenceMediaKind, EvidenceOperation, EvidenceRecord, EvidenceRequest, EvidenceSelection,
-    EvidenceSubject, FrameRef, FrameSelectionError, NeighbourStop, PartialReason, SourceCheck,
-    TimeAnchors,
+    EvidenceMediaKind, EvidenceOperation, EvidenceProfile, EvidenceRecord, EvidenceRequest,
+    EvidenceSelection, EvidenceSubject, FrameRef, FrameSelectionError, NeighbourStop,
+    PartialReason, SourceCheck, SourceId, TimeAnchors,
 };
 
 use crate::{
@@ -380,6 +380,17 @@ pub(crate) const fn media_type(kind: EvidenceMediaKind) -> &'static str {
     }
 }
 
+impl FileData {
+    /// Presents one delivered image or clip.
+    pub(crate) fn of(file: &DeliveredEvidenceFile<'_>) -> Result<Self, EvidencePresentationError> {
+        Ok(Self {
+            evidence_id: file.evidence_id.as_str().to_owned(),
+            media_type: media_type(file.kind),
+            path: delivered_path_text(file.path).ok_or(EvidencePresentationError::NonUtf8Path)?,
+        })
+    }
+}
+
 /// The delivered files, checked to be one per item in item order.
 pub(crate) fn files_data(
     record: &EvidenceRecord,
@@ -396,12 +407,7 @@ pub(crate) fn files_data(
             if file.evidence_id != item.id() || file.kind != item.media().kind() {
                 return Err(EvidencePresentationError::FileMismatch);
             }
-            Ok(FileData {
-                evidence_id: item.id().as_str().to_owned(),
-                media_type: media_type(file.kind),
-                path: delivered_path_text(file.path)
-                    .ok_or(EvidencePresentationError::NonUtf8Path)?,
-            })
+            FileData::of(file)
         })
         .collect()
 }
@@ -527,6 +533,18 @@ impl FrameEvidenceData {
     /// Presents one frame or crop item of `record`, with the clock time of
     /// its frame from `anchors`; `None` for an audio clip.
     fn new(record: &EvidenceRecord, item: &EvidenceItem, anchors: &TimeAnchors) -> Option<Self> {
+        Self::of_item(record.source_id(), record.profile(), item, anchors)
+    }
+
+    /// Presents one frame or crop item of `source` extracted under
+    /// `profile`, without the record that committed it: `changes` lists
+    /// the frames of several `frame get` records once each (ADR 0034).
+    pub(crate) fn of_item(
+        source: &SourceId,
+        profile: EvidenceProfile,
+        item: &EvidenceItem,
+        anchors: &TimeAnchors,
+    ) -> Option<Self> {
         let (kind, frame, crop) = match item.subject() {
             EvidenceSubject::Frame(frame) => ("frame", frame, None),
             EvidenceSubject::Crop { frame, region } => (
@@ -547,7 +565,7 @@ impl FrameEvidenceData {
         let dimensions = item.subject().image_dimensions()?;
         Some(Self {
             evidence_id: item.id().as_str().to_owned(),
-            source_id: record.source_id().as_str().to_owned(),
+            source_id: source.as_str().to_owned(),
             stream_index: frame.stream_index,
             kind,
             frame: FrameRefData::new(frame),
@@ -559,7 +577,7 @@ impl FrameEvidenceData {
                 sha256: item.media().sha256().as_str().to_owned(),
                 bytes: item.media().bytes(),
             },
-            profile: record.profile().identifier(),
+            profile: profile.identifier(),
             tool_fingerprint: item
                 .tool_fingerprint()
                 .map(|fingerprint| fingerprint.as_str().to_owned()),

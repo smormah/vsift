@@ -9,13 +9,13 @@ use super::{PngPixelsError, decode_png_pixels, paeth};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+fn chunk(kind: [u8; 4], data: &[u8]) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&u32::try_from(data.len()).unwrap_or(u32::MAX).to_be_bytes());
-    bytes.extend_from_slice(kind);
+    bytes.extend_from_slice(&kind);
     bytes.extend_from_slice(data);
     let mut crc = Crc::new();
-    crc.update(kind);
+    crc.update(&kind);
     crc.update(data);
     bytes.extend_from_slice(&crc.sum().to_be_bytes());
     bytes
@@ -29,12 +29,12 @@ fn png(width: u32, height: u32, stream: &[u8], part: usize) -> Vec<u8> {
     header.extend_from_slice(&height.to_be_bytes());
     header.extend_from_slice(&[8, 2, 0, 0, 0]);
     let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
-    bytes.extend(chunk(b"IHDR", &header));
-    bytes.extend(chunk(b"tEXt", b"Software\0test"));
+    bytes.extend(chunk(*b"IHDR", &header));
+    bytes.extend(chunk(*b"tEXt", b"Software\0test"));
     for piece in stream.chunks(part.max(1)) {
-        bytes.extend(chunk(b"IDAT", piece));
+        bytes.extend(chunk(*b"IDAT", piece));
     }
-    bytes.extend(chunk(b"IEND", &[]));
+    bytes.extend(chunk(*b"IEND", &[]));
     bytes
 }
 
@@ -57,7 +57,7 @@ fn filtered(filter: u8, row: &[u8], above: &[u8]) -> Vec<u8> {
             let prediction = match filter {
                 1 => left,
                 2 => up,
-                3 => u8::try_from((u16::from(left) + u16::from(up)) / 2).unwrap_or(0),
+                3 => left.midpoint(up),
                 4 => paeth(left, up, up_left),
                 _ => 0,
             };

@@ -65,7 +65,7 @@ fn rect(region: &ChangeRegion) -> (u32, u32, u32, u32) {
 fn identical_frames_have_no_region() -> TestResult {
     let pixels = frame(64, 48, 100);
     let result = compared(64, 48, &pixels, &pixels)?;
-    assert!(result.regions.is_empty());
+    assert_eq!(result.regions, Vec::new());
     assert_eq!(result.changed_area, None);
     assert_eq!(result.regions_left_out, 0);
     Ok(())
@@ -82,10 +82,8 @@ fn a_channel_must_move_by_the_threshold() -> TestResult {
     assert_eq!(compared(32, 32, &before, &at)?.regions.len(), 1);
     // One channel alone is enough.
     let mut red = before.clone();
-    for pixel in red.chunks_exact_mut(3).take(4) {
-        if let Some(channel) = pixel.first_mut() {
-            *channel = 200;
-        }
+    for pixel in red.as_chunks_mut::<3>().0.iter_mut().take(4) {
+        pixel[0] = 200;
     }
     assert_eq!(compared(32, 32, &before, &red)?.regions.len(), 1);
     Ok(())

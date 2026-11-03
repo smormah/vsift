@@ -1,0 +1,267 @@
+{
+  "command": "changes",
+  "coverage": {
+    "gaps": [],
+    "reasons": [],
+    "truncated": false
+  },
+  "data": {
+    "changes": [
+      {
+        "after": {
+          "evidence_id": "evd_e76b0ba2cfed51de1754ec765cde09d0",
+          "time_us": 7000000
+        },
+        "before": {
+          "evidence_id": "evd_7a5a35385615baa32671b075aa98a79c",
+          "time_us": 6500000
+        },
+        "candidate_ids": [
+          "vcd_fbb831bd6b49f04e68404bd037c56024"
+        ],
+        "change_id": "chg_0a34002fc1252a517a669883e8bf4a59",
+        "change_window": {
+          "from_us": 6500000,
+          "to_us": 7000000
+        },
+        "changed_area": {
+          "changed_pixels": 1041600,
+          "height": 772,
+          "width": 1440,
+          "x": 0,
+          "y": 64
+        },
+        "comparison": "compared",
+        "kind": "change",
+        "motion": null,
+        "no_region_at_threshold": false,
+        "regions": [
+          {
+            "changed_pixels": 1041600,
+            "height": 772,
+            "width": 1440,
+            "x": 0,
+            "y": 64
+          }
+        ],
+        "regions_left_out": 0,
+        "settled": null
+      },
+      {
+        "after": {
+          "evidence_id": "evd_aa215186ae35ab01bd72d555ab931075",
+          "time_us": 10000000
+        },
+        "before": {
+          "evidence_id": "evd_803980fbf0baa735c3289faad5a28bdf",
+          "time_us": 9500000
+        },
+        "candidate_ids": [
+          "vcd_976605f7a2e46f20ba31a4f18deb6819"
+        ],
+        "change_id": "chg_3c67c25b2852cde5404b3cb7d8ecf0dc",
+        "change_window": {
+          "from_us": 9500000,
+          "to_us": 10000000
+        },
+        "changed_area": {
+          "changed_pixels": 7165,
+          "height": 240,
+          "width": 1184,
+          "x": 224,
+          "y": 384
+        },
+        "comparison": "compared",
+        "kind": "change",
+        "motion": null,
+        "no_region_at_threshold": false,
+        "regions": [
+          {
+            "changed_pixels": 7140,
+            "height": 48,
+            "width": 400,
+            "x": 1008,
+            "y": 384
+          },
+          {
+            "changed_pixels": 25,
+            "height": 16,
+            "width": 32,
+            "x": 224,
+            "y": 608
+          }
+        ],
+        "regions_left_out": 0,
+        "settled": null
+      }
+    ],
+    "coverage": {
+      "analyzed": [
+        {
+          "from_us": 0,
+          "to_us": 14000000
+        }
+      ],
+      "gaps": [],
+      "ranges_truncated": false,
+      "searched_range": {
+        "from_us": 0,
+        "to_us": 14000000
+      }
+    },
+    "files": [
+      {
+        "evidence_id": "evd_7a5a35385615baa32671b075aa98a79c",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-a68ff83ab0ab68846d3ed628d83b416f59ddbedef5180762ecffe845d95e4e20.png"
+      },
+      {
+        "evidence_id": "evd_e76b0ba2cfed51de1754ec765cde09d0",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ec355f93e399d5da23913c01dcefac7cf80ec3aa9f2b324b67e1711a7cfa6a81.png"
+      },
+      {
+        "evidence_id": "evd_803980fbf0baa735c3289faad5a28bdf",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-e116ab9c11a5fdbea1abc05a2748034f4d34cee7b92ef3aa5dead97468f88f76.png"
+      },
+      {
+        "evidence_id": "evd_aa215186ae35ab01bd72d555ab931075",
+        "media_type": "image/png",
+        "path": "/vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-85365076b85a44af6ffec5a63b5f95b0d673197ce2b716915986144438e1453d.png"
+      }
+    ],
+    "frames": [
+      {
+        "crop": null,
+        "evidence_id": "evd_7a5a35385615baa32671b075aa98a79c",
+        "frame": {
+          "height": 900,
+          "pts": 99840,
+          "time_base_denominator": 15360,
+          "time_base_numerator": 1,
+          "time_us": 6500000,
+          "width": 1440
+        },
+        "image": {
+          "bytes": 54500,
+          "height": 900,
+          "media_type": "image/png",
+          "sha256": "a68ff83ab0ab68846d3ed628d83b416f59ddbedef5180762ecffe845d95e4e20",
+          "width": 1440
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_e76b0ba2cfed51de1754ec765cde09d0",
+        "frame": {
+          "height": 900,
+          "pts": 107520,
+          "time_base_denominator": 15360,
+          "time_base_numerator": 1,
+          "time_us": 7000000,
+          "width": 1440
+        },
+        "image": {
+          "bytes": 55000,
+          "height": 900,
+          "media_type": "image/png",
+          "sha256": "ec355f93e399d5da23913c01dcefac7cf80ec3aa9f2b324b67e1711a7cfa6a81",
+          "width": 1440
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_803980fbf0baa735c3289faad5a28bdf",
+        "frame": {
+          "height": 900,
+          "pts": 145920,
+          "time_base_denominator": 15360,
+          "time_base_numerator": 1,
+          "time_us": 9500000,
+          "width": 1440
+        },
+        "image": {
+          "bytes": 57500,
+          "height": 900,
+          "media_type": "image/png",
+          "sha256": "e116ab9c11a5fdbea1abc05a2748034f4d34cee7b92ef3aa5dead97468f88f76",
+          "width": 1440
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      },
+      {
+        "crop": null,
+        "evidence_id": "evd_aa215186ae35ab01bd72d555ab931075",
+        "frame": {
+          "height": 900,
+          "pts": 153600,
+          "time_base_denominator": 15360,
+          "time_base_numerator": 1,
+          "time_us": 10000000,
+          "width": 1440
+        },
+        "image": {
+          "bytes": 58000,
+          "height": 900,
+          "media_type": "image/png",
+          "sha256": "85365076b85a44af6ffec5a63b5f95b0d673197ce2b716915986144438e1453d",
+          "width": 1440
+        },
+        "kind": "frame",
+        "profile": "p09-r0-v1",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "stream_index": 0,
+        "tool_fingerprint": "5f2d8f0c0e7b4f3a9a1c6d2e8b7a6f5e4d3c2b1a09f8e7d6c5b4a39281706f5e"
+      }
+    ],
+    "index": {
+      "coverage_interval_us": 10000000,
+      "duration_us": 14000000,
+      "index_id": "vix_5278827a5eb80d85a88983f2e69a5cba",
+      "number": 1,
+      "profile": "r0-visual-v1",
+      "sample_interval_us": 500000,
+      "window_us": 60000000
+    },
+    "next_cursor": null,
+    "partial_reason": null,
+    "profile": {
+      "identifier": "screen-change-regions-v1",
+      "join_distance": 2,
+      "max_regions": 8,
+      "pixel_level": 32,
+      "tile": 16,
+      "tile_pixels": 4
+    },
+    "range": {
+      "from_us": 0,
+      "to_us": 14000000
+    },
+    "resume": null,
+    "session_id": "ses_0123456789abcdef0123456789abcdef"
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": "2026-09-25T00:00:00Z",
+    "mode": "ephemeral"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

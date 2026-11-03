@@ -202,6 +202,18 @@ These files are the machine-readable public v1 boundary:
 - `candidates-stream-data.schema.json` â the `data` member of the terminal event that
   ends a `candidates --events jsonl` stream: the page without its items, with
   `record_count` (P08);
+- `changes-data.schema.json` - the `data` member of a complete or partial `changes` result
+  (0.3.0, ADR 0034): the requested `range`, the `index` and `coverage` as `candidates` reports
+  them, the region `profile` (`screen-change-regions-v1` and its thresholds), the `changes` as
+  `screen-change.schema.json` records in time order, each distinct `frame_evidence` record they
+  cite in `frames`, one delivered file per frame in `files`, `partial_reason`, `next_cursor`
+  and `resume`. Its envelope `coverage` is `truncated`, and its status `partial`, exactly when
+  there is a gap or the page stopped; `changes-stream-data.schema.json` is the terminal data of
+  `changes --events jsonl`: the page without `changes` and `frames`, with `record_count`;
+- `screen-change.schema.json` - one screen change, a published evidence record (record type
+  `screen_change`, key `change_id`): its kind, the index's `change_window`, the `evidence_id`
+  and time of the frame before and after it, and the rectangles where those two frames differ.
+  A change is cited by its two `evidence_id`s, never by `change_id`;
 - `transcript-get-brief-data.schema.json`, `search-brief-data.schema.json` and
   `candidates-brief-data.schema.json` - the `data` of `transcript get`, `search` and
   `candidates` asked for with `--view brief` (0.2.1, #365 and #367): the full answer's own
@@ -300,13 +312,15 @@ from 0: for `transcript.get`, one `evidence` event per segment and then one
 `terminal` event; for `search`, one `evidence` event per matching segment (the same
 `transcript_segment` records, in rank order) and then one `terminal` event; for
 `candidates`, one `evidence` event per candidate (`visual_candidate` records, in time
-order) and then one `terminal` event; for `frame.get`, `frame.neighbours`,
+order) and then one `terminal` event; for `changes`, one `frame_evidence` event per distinct
+frame of the page, then one `screen_change` event per change, then one `terminal` event; for
+`frame.get`, `frame.neighbours`,
 `frame.burst` and `crop`, one `evidence` event per item (`frame_evidence` records, in the
 result's item order) and then one `terminal` event; for `audio`, one `audio_evidence`
 event and then one `terminal` event; for `transcript.retranscribe` and `job.resume`,
 `progress` events (P11) and then one `terminal` event; for every other command, the
 terminal event alone. Dispatch on `event`; the terminal event's `sequence` and, for `transcript.get`,
-`search`, `candidates` and the frame commands, its `record_count` equal the number of evidence events
+`search`, `candidates`, `changes` and the frame commands, its `record_count` equal the number of evidence events
 before it. The exact consumer
 rules (upsert keys, end of stream, paging) are in the CLI contract.
 
@@ -429,6 +443,13 @@ yet, so it is `partial` with both gaps. All three are checked by `vsift-contract
 `candidates_contract`, the stream byte for byte. `bundle-visual-index-record.json` is
 F02's stored index record, checked by `vsift-infrastructure`'s `visual_index_store`
 tests, which also validate the records of a real retained bundle.
+`changes.json`, `changes.events.jsonl` and `changes.partial.json` (0.3.0, ADR 0034) page
+synthetic visual indexes with written-out regions and stand-in frame digests: a 14 s,
+1440x900 recording whose screen changes at 7 s and 10 s (the second a status edit of one row),
+complete, as a result and as a stream; and a 150 s recording with an undecodable and a
+not-analysed window whose page stopped on the session's evidence room after its first change,
+`partial` with `resume`. They are checked by `vsift-contract`'s `screen_changes_contract`, the
+stream byte for byte; `changes_cli_contract` runs the binary.
 `ocr.json`, `ocr.partial.json` and `search.screen-text.json` (0.3.0, ADR 0030) read a
 synthetic 15 s video every 5 s plus one visual candidate at 6 s, built by `vsift-contract`'s
 `screen_text_contract`: the complete read of all four planned frames, a call stopped by its

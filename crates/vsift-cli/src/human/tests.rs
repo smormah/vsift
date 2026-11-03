@@ -1247,6 +1247,12 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "candidates.partial.json",
             "candidates-partial",
         ),
+        (CommandName::Changes, "changes.json", "changes"),
+        (
+            CommandName::Changes,
+            "changes.partial.json",
+            "changes-partial",
+        ),
         (CommandName::FrameGet, "frame-get.json", "frame-get"),
         (
             CommandName::FrameNeighbours,
@@ -1368,6 +1374,7 @@ fn only_setup_check_and_rejected_command_lines_have_no_result_renderer() -> Test
         CommandName::SetupRemove,
         CommandName::SetupRepair,
         CommandName::Candidates,
+        CommandName::Changes,
         CommandName::FrameGet,
         CommandName::Crop,
         CommandName::Audio,

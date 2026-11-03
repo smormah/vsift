@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/screen-change.schema.json",
+  "title": "VSift screen change record v1",
+  "description": "One published screen_change evidence record (changes, ADR 0034): a moment the visual index saw the screen change, the exact frame before and after it, and the rectangles where those two frames differ under the profile screen-change-regions-v1. The frames are ordinary frame_evidence records, listed in the page's frames and delivered in its files. Cite a change by its before and after evidence_id, never by change_id, which handoff check does not know. A change says which pixels differ between two frames; it never says what the change means, that nothing else changed, or exactly when it changed (only after change_window.from_us and at or before change_window.to_us). Times are integer microseconds on the normalized source timeline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "change_id",
+    "kind",
+    "motion",
+    "settled",
+    "candidate_ids",
+    "change_window",
+    "before",
+    "after",
+    "comparison",
+    "regions",
+    "regions_left_out",
+    "changed_area",
+    "no_region_at_threshold"
+  ],
+  "properties": {
+    "change_id": {
+      "description": "The change's identity: a digest of the session, source, stream, index profile, region profile and its candidates, the same on every call.",
+      "type": "string",
+      "pattern": "^chg_[a-z0-9]{16,64}$"
+    },
+    "kind": {
+      "description": "change: one sampled change of screen (a visual_change candidate). motion: a run of three or more changing samples, or part of one.",
+      "enum": ["change", "motion"]
+    },
+    "motion": {
+      "description": "For kind motion, which part of the run the change stands for: run (before it moved, after it settled), start (a motion_start without the candidate that ended its run: after is its first moving frame) or end (a settled_after_motion whose run start the window's budget dropped: before is the last moving frame). null for kind change.",
+      "oneOf": [{ "type": "null" }, { "enum": ["run", "start", "end"] }]
+    },
+    "settled": {
+      "description": "For kind motion, whether the after frame is a settled screen (true for run and end, false for start). null for kind change.",
+      "oneOf": [{ "type": "null" }, { "type": "boolean" }]
+    },
+    "candidate_ids": {
+      "description": "The visual candidates the change stands for, in time order: one, or two for a whole motion run.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "items": { "type": "string", "pattern": "^vcd_[a-z0-9]{16,64}$" }
+    },
+    "change_window": {
+      "description": "The index's bracket: the screen changed after the sampled frame at from_us and at or before the one at to_us.",
+      "$ref": "#/$defs/window"
+    },
+    "before": { "$ref": "#/$defs/frame" },
+    "after": { "$ref": "#/$defs/frame" },
+    "comparison": {
+      "description": "compared: the two frames have the same displayed size and were compared. dimensions_differ: they do not (a stream whose size changes), so nothing was compared and regions is empty.",
+      "enum": ["compared", "dimensions_differ"]
+    },
+    "regions": {
+      "description": "The largest rectangles where the frames differ, by changed_pixels, at most profile.max_regions. Each is the bounding rectangle of joined changed tiles in displayed pixels, clipped to the frame: the space crop --rect takes.",
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/region" }
+    },
+    "regions_left_out": {
+      "description": "Regions found beyond those listed.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "changed_area": {
+      "description": "The rectangle around every changed tile, with every changed pixel of them, so nothing is silently lost; null when the frames differ nowhere at the threshold or were not compared.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/region" }]
+    },
+    "no_region_at_threshold": {
+      "description": "true when the index saw a change but the two compared frames differ nowhere at the profile's thresholds (a change below them, or slow drift); the change is still listed.",
+      "type": "boolean"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "change" } }, "required": ["kind"] },
+      "then": {
+        "properties": {
+          "motion": { "type": "null" },
+          "settled": { "type": "null" },
+          "candidate_ids": { "maxItems": 1 }
+        }
+      },
+      "else": {
+        "properties": {
+          "motion": { "type": "string" },
+          "settled": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "comparison": { "const": "dimensions_differ" } },
+        "required": ["comparison"]
+      },
+      "then": {
+        "properties": {
+          "regions": { "maxItems": 0 },
+          "regions_left_out": { "const": 0 },
+          "changed_area": { "type": "null" },
+          "no_region_at_threshold": { "const": false }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_us", "to_us"],
+      "properties": {
+        "from_us": { "type": "integer", "minimum": 0 },
+        "to_us": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "frame": {
+      "description": "One of the change's two frames: an actual decoded frame the index sampled, extracted as frame get extracts it. evidence_id names its frame_evidence record in the page's frames; time_us is its actual time; clock_time is the record's own, absent when the session has no time anchor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "time_us"],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/evidence_id" },
+        "time_us": { "type": "integer", "minimum": 0 },
+        "clock_time": { "$ref": "time-anchor.schema.json#/$defs/clock_time" }
+      }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height", "changed_pixels"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "changed_pixels": {
+          "description": "Changed pixels in the rectangle's changed tiles.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

@@ -232,6 +232,10 @@ impl Engine {
             .map_err(|error| self.name_running_transcription(&session, error))
     }
 
+    #[allow(
+        clippy::too_many_lines,
+        reason = "The stage order is the contract; keep it visible in one place"
+    )]
     async fn page_screen_changes(
         &self,
         request: ScreenChangesRequest,

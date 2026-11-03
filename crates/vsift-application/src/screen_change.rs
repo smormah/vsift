@@ -286,6 +286,11 @@ pub trait ScreenChangeFrames: Send + Sync {
 
     /// The 8-bit RGB pixels of a frame taken by this port, checked against
     /// the stored image's digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns the port's error for a stored image that changed, does not
+    /// decode, or is larger than any extracted frame.
     fn pixels(&self, frame: &TakenFrame) -> Result<Vec<u8>, Self::Error>;
 }
 
