@@ -2425,6 +2425,11 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
           "date": "2026-11-04",
           "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-13, the dated reading."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "Acceptance by the maintainer, 2026-11-04: the question put to them was \"Do you accept the security scan reading for 0.2.4?\" and they answered \"Yes, accept it\". It is the acceptance of the dated reading of 2026-11-04 (docs/planning/p14-scan-reading-2026-11-04.md) and of the hosted P14 scan reading 41841081635 on the tag, for 0.2.4-rc.1 and the stable 0.2.4 cut from it. It accepts the reading as it stands: the two new observations (the libaribb24 records, the worker image pin) stay as the planner ruled them, with no issue, and L-227 stays amended to seven records on its labelled inference. It changes no pass rule and no other item."
         }
       ],
       "issues": [272, 322, 351, 399, 400],
