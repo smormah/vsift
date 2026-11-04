@@ -5345,6 +5345,334 @@ that week.**
 - **Next step:** run the set on macOS when a faster hosted macOS runner exists, or when a reviewed whisper.cpp build for macOS is pinned and measured on a real Mac.
 - **Owner:** R1. **Issue:** [#520](https://github.com/smormah/vsift/issues/520). **Status:** monitoring. **Review:** when a faster hosted macOS runner exists.
 
+### L-212
+
+**`bundle search` (`0.3.0`, ADR 0035) reads only the bundles a person names, and what it finds is a lead, not a citation.**
+
+- **What:**
+  - a kept recording exists only as a retained bundle, and nothing records where a bundle went, so a person must name the folders; a bundle moved or forgotten is not searched, and a result cannot say what was not named;
+  - a session still open in the root is not searched, even if it was retained: the bundle is;
+  - a hit has no frame at hand, and `handoff check --session` cannot resolve its ids: a revision's identity is derived from its session, so the same video with the same transcript, opened again, has other ids (`a_hits_id_does_not_resolve_in_a_session_opened_to_cite_it`). To look at a moment or cite it, a person or an agent opens the source with `ingest` (the bundle's `source.media`, or the original, whose SHA-256 the `source_id` names) and cites from that session;
+  - no hit has a clock time until bundles carry time anchors ([L-210](#l-210));
+  - one call opens at most 64 bundles and reads at most 1 GiB of manifests and records, and every page reads them all again; bundles left out are named, and a caller names them in another call, so hits of two calls are not ranked together. A folder of more than 4,096 entries is refused;
+  - a bundle copied without its private permissions is left out as `not_private`, which on Windows is what a copy does: it takes the permissions of its new folder. A move within a drive keeps them;
+  - a record's digest is only as good as the manifest, which is not signed, as for `bundle validate`; and search does not read the source, the frames or the evidence records, so damage there is `bundle validate`'s to find;
+  - speed is measured only on transcript-only bundles: about 200 ms a page over 64 bundles of 1,200 cues each (hosted run 41079426645); bundles with on-screen text, or at the record limits, are not measured.
+- **Evidence:** ADR 0035; `crates/vsift-application/src/bundle_search.rs` and its tests; `bundle_search_cli_contract`; `bundle_search_contract`.
+- **Impact: low by the rubric** (a disclosed estimate): every result lists what each recording could give and names what it left out, and nothing is hidden behind the status.
+- **Mitigation:** one folder of bundles is one path; the human view and the skill line both say a hit is a lead.
+- **Next step:** P18's catalogue can answer "every kept session" with no folder named, and an index belongs there if larger bundles show one is needed. `vsift <video> --keep` (W6h) gives the action a bundle of its own; what that leaves is [L-244](#l-244).
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+### L-210
+
+**A clock time (time anchoring, `0.3.0`, ADR 0029) is only as true as the anchor it comes from, and stage 1 has three sources, all at the start of the timeline.**
+
+- **What:** `clock_time` and `time_anchor` come from the operator's `--recorded-at`, the recording app's local-time tag or the container's UTC creation time, in that order. Each is a claim, not a measurement:
+  - the container's `creation_time` (confidence `medium`) is often the time a tool encoded or remuxed the file, and some devices write the end of the recording, so it can be minutes or hours from the start; when it disagrees with another anchor by more than two seconds the session says `conflicting`, but alone it says `single`;
+  - a recorder's tag is the recorder's own clock: a phone or camera whose clock was wrong gives a wrong time with confidence `high`;
+  - a local time with no zone names no instant, and a UTC time with no zone gives no local time; VSift never guesses the zone;
+  - a recording cut or paused in the middle has one anchor at its start, so clock times after the cut are wrong by the length of the gap. `clocks` detects such a gap where a clock is in view, and marks each item after it with `segment`, but a detected gap changes no value until a person accepts it with `--accept-gap`, because it may be a change of machine; a cut with no clock in view is still silent ([L-213](#l-213));
+  - the tags are read only when the media tools are set up and already verified: the first ingest after setting them up, before `setup check` or any media command has run, reads none;
+  - no file modification time is used (the time of a copy or download for most files a person is sent), and an online provider's upload date is not a recording time;
+  - what the operator stated and the file's tags said are fixed when the session opens: `clocks` adds only the screen's anchors, and `--recorded-at` cannot be added to an open session;
+  - a release before `0.3.0` reads a session that stores anchors as damaged (the trade-off of [L-044](#l-044)).
+- **Evidence:** ADR 0029; `crates/vsift-domain/src/time_anchor.rs` (the plausibility window and the comparison rule); `time_anchor_cli_contract`; the opt-in `time_anchor_real_tags`.
+- **Impact: low by the rubric** (a disclosed estimate): every clock time names its source and confidence, and the summary says when the sources disagree.
+- **Mitigation:** an operator who knows the start states it with `--recorded-at`, which wins over the file's tags; `session status --json` lists every anchor so a reader can judge.
+- **Next step:** stage 2 (clocks visible on screen, built on OCR): anchors at other positions, cross-checks and cut detection. The maintainer decided on 2026-10-23 that anchors in bundles and worker requests come with stage 2, so this entry stays open until then.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+### L-209
+
+**A public page's fetch runs yt-dlp: its connections are its own, and sites break it (ADR 0028, #409; added 2026-11-01).**
+
+- **What:** VSift checks only the link's name before yt-dlp starts: section 3's rules, and no host written as an
+  address or internal name. yt-dlp's own connections (its resolving, its redirects, its media hosts) have no address
+  policy: a public name that later resolves inward is not stopped, and a page, a redirect or a format URL can send it
+  to any address VSift would have refused, unseen. Only formats that yt-dlp reports as
+  `https` are selected, and what it writes is checked, but its requests are not. A proxy from the environment is
+  handed to it; `HTTP_PROXY` is not, so anything it fetches over plain HTTP goes direct.
+  **A system proxy is not seen.** With no proxy option, yt-dlp asks Python for the proxies; Python reads the
+  environment and, only if that holds none, the Windows registry or the macOS system settings. So a user-supplied
+  yt-dlp on Windows or macOS (the only way pages work there) can use a system proxy when no proxy variable is set,
+  though VSift's own first request does not. `through_proxy` is then false: the origin has no
+  `address_check: "proxy_resolved"` although a proxy carried the fetch. An origin without `address_check` means only
+  that no proxy variable was handed over, never that the connection was direct. This was read in yt-dlp's source
+  and Python's, and has not been run. On Linux, Python reads only the environment.
+  **The link is on yt-dlp's command line,** in both phases: other local users can read it in the process list while
+  yt-dlp runs, and it can hold a signed token or an unlisted video's id. Section 5's "never stored, printed or logged"
+  is about VSift's own output, and `--url -` keeps the link off VSift's command line only. Joining separate audio and
+  video is VSift's first use of FFmpeg's `mp4` and `matroska` muxers, and no campaign has yet aimed hostile files at
+  them. Sites change, so a managed
+  yt-dlp can stop working between VSift releases until a re-pin (`extractor_broken`); a user's yt-dlp is the user's to
+  keep current, and is run though nobody here reviewed it. A site that answers VSift's first request with an HTTP
+  error is refused as `http_status` and never reaches yt-dlp, because only a `web_page` answer is routed there.
+  Six refusal phrases are text a site or a proxy writes, so no check notices when one changes: the two for
+  `bot_check`, the two for a channel's members, the one for a terminated account and the one for a proxy's `407`. Only
+  `bot_check` has a live check, dispatched once for a change and at each re-pin. A site that rewords one falls to a broader reason.
+- **Seen, and not seen (the platform qualification, 2026-11-02;
+  [`online-video-qualification.md`](../operations/online-video-qualification.md)):**
+  **a real pair has been seen once, and nowhere else:** on 2 November 2026, one NASA video on YouTube, on Windows,
+  with a user-supplied yt-dlp 2026.08.19 and Deno 2.9.7, joined by the person's own FFmpeg (`joined: audio_video`,
+  97,793,603 bytes), in a one-off check the maintainer allowed, not a gate and not repeated without their word.
+  Before that, joining separate audio and video had run only on the fake yt-dlp and on a local probe with a
+  made-up video. No hosted runner has seen a pair. The one site known to
+  serve separate streams over https, YouTube, refuses hosted runners with a bot check (dispatch 41281919811), and one
+  information-phase search of six other pages (run 41446335179, with phase 1's own arguments) found none that offers an audio stream apart from a
+  video stream. Seen from a hosted runner (run 41444797025, the managed pair): a page fetched as one file on three sites (a social site, a PeerTube instance, media.ccc.de) and four typed refusals from real pages (`extractor_broken`, `http_status`, and `playlist` twice). One of them, `http_status` on a Wikimedia page, is VSift's own first request being refused by a site that yt-dlp reads without trouble, so VSift refuses a page yt-dlp could have fetched. **Not seen:** a pair on any other site, on a hosted runner, on macOS or on Linux (hosted Ubuntu met only the bot check; Linux is where yt-dlp is managed, and this run used user-supplied tools); a private, sign-in or DRM
+  page (they need an account, so only the fake's tests cover them, named on the page); a system proxy on Windows or
+  macOS; the `mp4` and `matroska` muxers on hostile files. A pass of `a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check` proves nothing about
+  a pair, because it passes on the typed refusal: only `joined: audio_video` counts.
+- **Evidence:** `crates/vsift-infrastructure/src/page_acquisition.rs`, `crates/vsift-infrastructure/tests/page_acquisition.rs`;
+  `urllib.request.getproxies()` in yt-dlp's `YoutubeDL.py`, at the pinned tag `2026.08.19`.
+- **Plan:** a signed component manifest refreshed between releases is `1.0`'s (ADR 0028 section 4.1). The address
+  limit and the link on the command line stay while yt-dlp is an external process.
+
+### L-208
+
+**`ingest --url` through a proxy from the environment cannot check the address the proxy connects to (ADR 0028, #407; added 2026-10-21).**
+
+- **What:** without a proxy, VSift resolves the link's host itself and connects only to the public addresses it
+  checked, so a link cannot reach a private, loopback, link-local or metadata address, even by DNS rebinding.
+  When `HTTPS_PROXY` or `ALL_PROXY` names a proxy (and `NO_PROXY` does not exclude the host), the proxy resolves
+  the name and opens the connection, so VSift cannot see or check the address. It then refuses only hosts written as
+  a non-public address and internal-looking names (one label, `localhost`, `.local`, `.localhost`, `.internal`,
+  `.lan`, `.home.arpa`, `.corp`, `.intranet`), on the link and on every redirect (since review RV-3, 2026-10-22),
+  follows the proxy, and records `address_check: "proxy_resolved"` in the session's origin.
+  `NO_PROXY` is matched by host name only (a host, a domain it is under, or `*`); a wildcard inside an entry, an
+  address, a range or a port is not read, so such an entry sends its host through the proxy (troubleshooting says
+  which forms work). A public-looking name that the proxy's resolver maps to an internal address is reached
+  through the proxy.
+- **Evidence:** `crates/vsift-infrastructure/src/link_acquisition.rs` (`environment_proxy`, `is_internal_name`);
+  `link_transfer`'s `through_a_proxy_the_origin_says_the_proxy_resolved_the_name` and
+  `through_a_proxy_a_redirect_to_an_internal_name_is_refused`.
+- **Impact: low by the rubric** (needs a proxy that reaches internal hosts and a chosen link): the proxy is the
+  organisation's own control point, and the origin says the address was not checked.
+- **Why:** the maintainer's decision of 2026-10-21: organisations need their proxy, and refusing every proxied
+  fetch would make the feature unusable there.
+- **Mitigation:** `NO_PROXY` for internal domains; an organisation that does not want VSift to fetch links behind
+  its proxy can turn the feature off once #409's organisation policy exists.
+- **Next step:** with #409, an administrator allowlist or policy file that `ingest --url` honours.
+- **Owner:** unscheduled. **Issue:** [#407](https://github.com/smormah/vsift/issues/407). **Status:** open.
+  **Review:** pending.
+
+### L-228
+
+**The TLS test certificates of the link-transfer fixtures expire on 2029-01-19 (ADR 0028, #407; added 2026-10-22).**
+
+- **What:** `link_transfer` serves a committed server certificate from a local HTTPS server and trusts a committed
+  test root. The server certificate is valid for 820 days because macOS refuses more than 825, even for a root the
+  test trusts itself, so it expires on 2029-01-19. From then on the `link_transfer` tests fail with a TLS failure on
+  every system until the certificates are regenerated. Production code is not affected.
+- **Evidence:** `crates/vsift-infrastructure/tests/fixtures/tls/README.md` (why 820 days, and the commands);
+  `crates/vsift-infrastructure/tests/link_transfer.rs`.
+- **Impact: low by the rubric:** a bounded, dated maintenance cost in tests only; nothing a user meets.
+- **Why:** a certificate valid for 100 years, as the first version was, passes on Windows but not on macOS. Making the
+  certificates at test time would need a new dependency used only by tests, which the planner rejected on 2026-10-22.
+- **Mitigation:** the expiry date is in the fixtures README and here.
+- **Next step:** before 2028-12, regenerate the root and the server certificate with the commands in the fixtures
+  README (`openssl req -x509 ...` for the root, then `openssl req` and `openssl x509 -req ... -days 820` for the
+  server certificate), run `link_transfer`, and commit the three files.
+- **Owner:** maintenance, before 2028-12. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-234
+
+**`vsift <video>` writes at most 180 frames, because each frame takes two of the session's 384 evidence slots; a run that finds fewer slots writes fewer and says so. Above that, the frames are spread evenly over the video and the other changes are listed without one (ADR 0037, 0.3.0, 2026-10-28).**
+
+- **What:** `watch` counts every screen change `candidates` returns and lists the settled screens among them in `<name>-vsift/screen-changes.txt` (the first frame, each screen once motion settles, and a change at least 5 s after the one listed before it; since the second pull request, ADR 0037's settled-screens amendment), and writes a PNG for at most 180 of the listed ones. **What the cap guarantees:** each frame is a `frame get`, which stores two evidence artifacts in the run's session (the PNG and its record), and a session holds at most 384 evidence artifacts within its 512. 180 frames take 360, and before the first frame `watch` measures the room the session has left (the smaller of the evidence sub-budget and the 512 slots, which a very long transcription's parts and the visual index also use) and writes at most half of it. So a run never fails for lack of room; it writes fewer frames instead, and `data.frames` and the finish screen say how many. Should the session still refuse a frame for room (a backstop), the frames stop there, every settled screen stays listed, `data.frames_stopped_for_room` is `true`, the outcome is `partial`, and the list and the finish screen say so. With more listed changes than frames, the frames written are spread evenly over them and each other one is listed, on its own line, with `no frame (evidence room)`. **Measured (hosted run 40791259684, 2026-10-29):** RM03, a 19-minute talk, lists 183 settled screens of 589 changes found, so 180 have their frame and 3 are listed with `no frame (evidence room)`; RM01, RM04 and RM10 (screen recordings) list 15 of 26, 48 of 138 and 31 of 108, every one with its frame. The list holds the changes `candidates` returns, so a change its per-window budget left out is not listed either (existing `candidates` behaviour).
+- **Evidence:**
+  - The "before" run of `P14 real media` ([run 40595722898](https://github.com/smormah/vsift/actions/runs/40595722898), `v030/watch` at `e317271c`, main plus docs only): RM03, a 19:16 talk, has 576 screen changes (29.9 a minute; 115 more were dropped by the per-window budget in 14 windows); RM10, a 3:21 screen recording, has 106 (31.6 a minute). At about 30 changes a minute, a 19-minute talk gets one frame about every 6 s and a 48-minute meeting about one every 16 s. Finding the changes cost about 1.7 s a minute of video on the 4-CPU runner, against about 17 s a minute of transcription.
+  - The "after" run ([run 40677125255](https://github.com/smormah/vsift/actions/runs/40677125255), `67a058e4`, a bound of 200): RM10 passed (108 frames in 99.4 s); RM03 failed with `RESOURCE_LIMIT` after 482.7 s, on its 193rd frame, which is how this bound was found.
+  - The opt-in engine test `more_changes_than_the_session_has_room_for_still_finish` reproduces that failure without real media and passes with the fix; the engine's unit tests of the frame step (`a_session_out_of_room_ends_the_frames_not_the_run`) pin the backstop with a fake that runs out of room. `the_frame_cap_fits_a_fresh_sessions_evidence_room` and the domain test `the_frames_never_need_more_room_than_the_session_has` pin the relation, and `frames_are_spread_evenly_above_the_bound` the spread.
+- **The settled-screens rule's cost (amended 2026-10-28, the planner's condition):** a screen shown for less than 5 s after a listed one is not listed unless motion settles on it (a dialog that flashes up 3 s after a click, for example), and the run closes its session, so the changes left out are kept nowhere. The list's header says both whenever the rule left changes out, and gives the commands that show every change: `vsift ingest <video>`, then `vsift candidates <session> --from 0 --to <the end in microseconds, written in>`.
+- **Impact: low by the rubric** (a disclosed bound): every settled screen is listed with its time, reason and id, the count of every change found is given, and any of them can be fetched with `frame get` in a session of its own; the bound keeps the folder to a few hundred megabytes.
+- **Mitigation:** the list names each change without a frame, so a person sees where to look; `vsift ingest` and `frame get --candidate` fetch any frame.
+- **Next step:** the settled-screens list makes the cap bind far less often; its measurement on RM01, RM03, RM04 and RM10 is the second pull request's hosted run, after which the cap is confirmed or changed. More frames than one session holds would need a second session or fewer records per frame.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-235
+
+**`vsift <video>` lists screen changes for the first four hours of a video only (ADR 0037, 0.3.0, 2026-10-28).**
+
+- **What:** the visual index covers at most four hours (ADR 0033 section 1), so for a longer video `screen-changes.txt` and `data.frames` cover the first four hours, `data.screen_changes_beyond_bound` is `true`, `data.outcome` is `partial`, the list's header and the finish screen say so. The transcript covers the whole video.
+- **Evidence:** ADR 0037 section 4; `crates/vsift/src/watch.rs` (`beyond_visual_bound`); `watch-data.schema.json`, which holds a run past the bound to `partial` (`watch_contract`).
+- **Impact: low by the rubric** (a disclosed bound): the outputs say what is missing; recordings over four hours are rare among the ones a person asks about.
+- **Mitigation:** `vsift ingest` and `candidates --from --to` over a later range, in a session of its own.
+- **Next step:** lift with the visual index's own bound.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-236
+
+**The ids in the files `vsift <video>` writes name items of a session the run closes: they say which run made the files, but cannot be looked up afterwards (ADR 0037, 0.3.0, 2026-10-28).**
+
+- **What:** `<name>.txt` names the transcript revision (`trv_`) and session (`ses_`), `screen-changes.txt` the visual index revision (`vix_`), each change (`vcd_`) and each frame's evidence item (`evd_`), and `--json` all of them and the `job_`. The run closes the session when everything is written (ADR 0037 decision 4), so no command can resolve those ids afterwards, and the same video watched again gives a new session and new ids. The headers say so in plain words. The hashes are different: the video's SHA-256 and each frame's SHA-256 can be checked by anyone, any time, with any hashing tool.
+- **Evidence:** ADR 0037 section 4; `render_transcript` and `render_screen_changes` in `crates/vsift-infrastructure/src/watch_output.rs` and their tests; the engine test that the session is closed after a run (`engine_watch`).
+- **Impact: low by the rubric** (a disclosed property of a person's output, not of evidence an assistant cites): an assistant cites evidence from the session commands, which keep their sessions; `watch` is never an assistant's to run.
+- **Mitigation:** to cite evidence that can be checked with VSift later, use the session commands and `session retain`.
+- **Next step:** a later `--keep-session` (ADR 0037 decision 4) would keep the ids resolvable for the session's life.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-237
+
+**A file held open by another program on Windows, or not writable, is not updated while `vsift <video>` runs, and its final write fails after 30 s; a hard stop can leave a temporary file (ADR 0037 section 7, 0.3.0, 2026-10-29).**
+
+- **What:** `<name>.txt` and `<name>.srt` grow while the job runs: each update is a whole snapshot written to an exclusive temporary file in the same folder and moved over the claimed name. Windows refuses that move while another program holds the file open without delete sharing (some editors and viewers lock what they show). The update is then skipped and tried at the next one, at most every 10 s. The final write tries for 30 s; if the file is still held, the run fails with `STORAGE_IO` and the file keeps its last snapshot, whose first line says the run stopped with an error and the file will not be finished. macOS and Linux replace an open file without refusing, and a reader there keeps the version it opened. Windows reports a file that is not writable the same way as a held one, so a read-only file also waits 30 s and fails with the same remediation, which names both causes.
+- **A temporary file left behind:** a hard stop (power loss, the process killed) between writing the temporary file and moving it leaves a hidden `.<name>.<random>.vsift-partial` beside the outputs. It is VSift's and safe to delete; VSift never cleans the person's folder on its own.
+- **Evidence:** `replace_claimed` in `crates/vsift-infrastructure/src/watch_output.rs`; the Windows test `a_file_held_open_skips_the_snapshot_and_fails_the_final_write` (a handle opened without delete sharing).
+- **Impact: low by the rubric** (a person's output file, not evidence an assistant cites; nothing is lost: the session's transcript is whole and the failure names the kind of file).
+- **Mitigation:** close the file in the other program, or open it in one that does not lock it, before the run ends; a failed final write leaves the session closed as after any failure, so run the command again with `--output <folder>`.
+- **Next step:** none planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-238
+
+**The cue-word workflows find items by searching English cue words within their budget, so an item far from every cue word can be missed (ADR 0038 section 2, 0.3.0, 2026-10-29).**
+
+- **What:** `findings.md` and `demo-backlog.md` (on `standard`), and `bug-report.md` and `logs-by-clock.md` (on `compact`), search a short list of literal cue words per kind of item ("error", "should", "why" and so on) and read about 15 s around each hit. They do not read the whole transcript: `standard`'s 80 calls cannot hold a long recording, and a summary of a whole long recording is out of the skill's scope (#368). Search matches whole normalised words, so a cue word finds no other form of itself ("fail" does not find "failed"), and the cue words are English, so a recording in another language finds little or nothing. An item said without any cue word, or only shown on screen, is found only if it falls in a window read for another hit.
+- **Evidence:** ADR 0038 section 2 and its slice 2 implementation note; the workflow files in `skills/vsift/workflows/`; the search matching rules in `cli-v1.md` ("P08 transcript search").
+- **Impact: low by the rubric** (nothing wrong is presented as found: every item cites what was said or shown, and the report lists each stretch it did not read as a `transcript` gap with reason `not_inspected` and ends `partial`, so a reader knows what was not looked at).
+- **Mitigation:** the user names the stretch or the words to look for; meeting notes and workshop specs read the whole transcript instead (the `read_through` profile, ADR 0038 D1, in a later pull request); a person reads the gaps.
+- **Next step:** measure the workflows in the agent trials at the 0.3.0 cut; cue words for other languages are not planned.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-239
+
+**No command takes a clock time, so the logs-by-clock workflow finds a log line's moment by subtraction, and a log line is never citable evidence (ADR 0038 section 2, 0.3.0, 2026-10-29).**
+
+- **What:** VSift reports clock times on its results (`clock_time`, ADR 0029) but takes only source time in microseconds. The agent subtracts `time_anchor.recording_start` from each log time, on the same clock and zone, and reads a window of about 10 s either side. It then cites only segments and frames whose own `clock_time` VSift returned in that window, so a wrong subtraction or zone shows as a mismatch rather than a false match. A log file is not VSift evidence: handoff v1 has no citation for it, so a log line is quoted (the least text, never a secret or personal data) in the report's prose only, as untrusted data, and an instruction found in a log line is listed in the Markdown's "Untrusted instructions observed" but cannot be in the JSON's `untrusted_instructions`, whose entries need a citation. Without a start time from the user or the file's own tag there are no clock times, and the workflow asks for one.
+- **Evidence:** ADR 0038 section 2 and its slice 2 implementation note; `skills/vsift/workflows/logs-by-clock.md`; `references/safety.md`, "Log files"; ADR 0029.
+- **Impact: low by the rubric** (the match is checked against VSift's own clock times, and the log text is never presented as evidence; a file's own tag can be the time it was encoded, which the workflow reports with the anchor's `confidence`).
+- **Mitigation:** give the recording's start time (`ingest --recorded-at`); a log in the same zone as the recording's start. A detected gap ([L-213](#l-213)) changes no value, so the subtraction stays right unless a person accepted one; after that, `recording_start` alone no longer gives the window, and the workflow's check shows a mismatch rather than a false match. Since ADR 0029's note of 2026-10-31 a citation can state its clock time and `handoff check --session` holds it ([L-245](#l-245)); the log line itself is still not evidence.
+- **Next step:** a command that takes a clock time, and a citation for a user's log file, are not planned for 0.3.0. Taken to the planner's intake on 2026-10-30.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-243
+
+**The read-through workflows read at most 120 pages of 25 segments (about two hours), need a long-context model, and hold at most 50 items (ADR 0038 section 2, the maintainer's D1, 0.3.0, 2026-10-29).**
+
+- **What:** `meeting-notes.md` and `workshop-spec.md` read the whole transcript under the `read_through` profile: pages of 25 segments with `--view brief`, at most 120 pages and 200 tool calls. At about 5 s a segment, 120 pages are about two hours (58 pages); supplied subtitles with 2.5 s cues fill about 116. A longer recording, or a transcript of more than 3,000 segments, is read up to the ceiling and the rest is a gap. Two hours of brief pages are roughly 0.5 to 1.4 million characters of tool output, which only a model with a long context window holds; a compact model is told to use the cue-word method instead ([L-238](#l-238)). The handoff holds at most 50 claims, so a meeting with more items ends `partial` with the count left out in a gap's note.
+- **Not measured:** the 25-segment page through any client. The page sizes (18,000 to 28,000 characters for 25, 35,000 to 57,000 for 50) are the 0.2.1 measurements, and the cut at about 43,000 characters is one client's.
+- **Evidence:** ADR 0038 section 2 (the `read_through` table and why pages are 25) and its implementation note; `references/budgets.md`; `vsift_contract::READ_THROUGH_BUDGET`; the guard's `the_read_through_profile_is_budgets_md`.
+- **Impact: low by the rubric** (nothing is presented as read that was not: the report says "read all" only when the last page's cursor was null, nothing was `partial` and any transcription had succeeded, and every unread stretch is a gap).
+- **Mitigation:** name a stretch; a client known not to cut long answers may ask for pages of 50 as a recorded override; a person reads the gaps.
+- **Next step:** measure a long read in the agent trials at or after the 0.3.0 cut.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-240
+
+**A Claude Code plugin added from the repository's `main` can carry a newer skill than the installed `vsift` (ADR 0038 section 4, 0.3.0, 2026-10-29).**
+
+- **What:** the repository is a Claude Code plugin marketplace, and `/plugin marketplace add smormah/vsift` without a tag follows `main`. Between releases `main`'s skill can name a command or member the installed release does not have, and the plugin's manifest states no version, so Claude Code takes whatever the source holds. The docs say to add the marketplace at the tag of the installed release (`smormah/vsift#v<version>`), which pins it.
+- **Evidence:** ADR 0038 section 4; `.claude-plugin/marketplace.json` and `plugins/vsift/.claude-plugin/plugin.json`; the governance rule `claude_plugin.rs`; Claude Code's install documentation for the `#ref` form (read 2026-10-29).
+- **Impact: low by the rubric** (a disclosed setup choice, not evidence an assistant cites): an older binary refuses a command it does not know with a typed `INVALID_ARGUMENT` or usage error, which the skill already handles, so no wrong evidence follows; the person gets a refusal, not a wrong answer.
+- **Mitigation:** add the marketplace at the release tag; `vsift --version` names it.
+- **Next step:** none planned; a plugin that checks the binary's version would need a hook, which the plugin rule refuses.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-241
+
+**`vsift skill install` knows the skill folders of eight named clients, as each client's own documentation gave them on 2026-10-28; a client that moves or renames its folder is not followed until a new release (ADR 0038 section 3).**
+
+- **What:** `--client` takes `claude-code` (`.claude/skills/`) and `codex`, `copilot`, `cursor`, `gemini-cli`, `opencode`, `goose` and `amp` (`.agents/skills/`), below the home folder or a `--project` folder. The catalogue is a domain value (`AgentClient`, `SkillLayout`) built into the binary. Another client that reads the `SKILL.md` format is not named, and a named client that changes where it looks is followed only by a release that changes the catalogue.
+- **Evidence:** ADR 0038's Context (the table and the documentation each row was confirmed from); `crates/vsift-domain/src/agent_skill.rs` and its tests; `crates/vsift-cli/tests/skill_cli_contract.rs`.
+- **Impact: low by the rubric** (a person can still copy the folder by hand, as `docs/agents/skill.md` describes, and `vsift skill status` shows what is where).
+- **Mitigation:** the manual copy; `skill status`; the documentation names each client's documentation page.
+- **Next step:** check the eight pages at each release cut and amend the catalogue when one moves.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-244
+
+**`vsift <video> --keep` (`0.3.0`, ADR 0037, amendment of 2026-10-30) keeps less than a session could hold, and checks its name without holding it.**
+
+- **What:**
+  - the bundle holds the transcript and the frames. The video is not copied in, so looking at a moment means opening the original with `ingest`;
+  - on-screen text is not read, because the action does not run `ocr`: `bundle search` says so per recording, and a word shown only on screen is not found;
+  - a bundle is named after the video's stem, each `:` made `-`, so two videos with one stem cannot share a folder, and the second is refused before any work. A stem a bundle's folder may not have on any system, a Windows device name such as `aux.v2`, is refused too;
+  - the name is checked before any work and not held during the run, because `retain_bundle` must create the folder itself (ADR 0013). Whatever takes the name meanwhile is never replaced, and that run ends as a failed write;
+  - a failed write leaves the session open for about a day unused, with VSift's private copy of the video, and may leave an incomplete folder at the name, which `bundle validate` rejects and `bundle search` counts as skipped. VSift never deletes a caller-selected export (ADR 0013), so a person removes it;
+  - in that case the `<stem>.txt` header's "closed when this run finished", written before the bundle, is untrue until the session ends;
+  - the option is not recorded in the job, so dropping it on a rerun keeps nothing.
+- **Evidence:** ADR 0037's amendment; `run_watch` and its tests in `crates/vsift-application/src/watch`; `check_bundle_destination`; `prepare_keep`'s tests; `engine_watch`, which needs FFmpeg and runs in the `Nightly` workflow on Ubuntu, not in the pull-request gate.
+- **Impact: low by the rubric** (a disclosed estimate): nothing is replaced, a failed write is stated in the result and the finish screen with the command that recovers it, and every search states what each recording could give.
+- **Mitigation:** the guide and the help say what is kept. `session retain` with `--include-source` after `vsift ingest` keeps the video too, and `ocr` before it keeps on-screen text.
+- **Next step:** section 10's `--include on-screen-text` brings on-screen text into the bundle with no change here.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-242
+
+**The workflows, the plugin, the install command and the help's pointers to them are untried by agents until the 0.3.0 cut (ADR 0038 section 5, 0.3.0, 2026-10-29).**
+
+- **What:** ADR 0038 ships six workflow files, a Claude Code plugin with one command per workflow, `vsift skill install`, `status` and `show`, `handoff skeleton`, and a "ready-made outcomes" paragraph in `vsift --help` that names the workflows and `vsift skill show workflows/<name>.md`. Tests hold every command they name to the CLI's parser and class, the plugin's copy to the skill byte for byte and the examples to `handoff check`, but no agent has followed any of them: no trial ran between their merge and the cut, by the 0.3.0 rule that batches run at the cut. The cold scenario C-04 ("Write a bug report, with times, from this recording", on F05 with its transcript) first runs in batch 3 at the cut, once per tier and client; batch 1's baseline never ran it, so the summary reports it on its own, outside the 80% usefulness target, and not as a change from the baseline.
+- **Evidence:** ADR 0038 sections 2 to 5 and their implementation notes; `docs/agents/trials.md`, "Cold-agent mode"; `tools/vsift-agent-trials/cold/C-04-f05-bug-report.json`; `vsift_agent_trials::campaign::plan` (batch 3).
+- **Impact: low by the rubric** (the commands are the ones the skill already classes and the guard holds; what is unmeasured is whether agents choose them, not whether they are safe).
+- **Mitigation:** the cold round at the 0.3.0 cut (C-01 to C-04) and batch 2's skill-guided runs; `handoff check` on every report.
+- **Next step:** read C-04 and the skill-guided runs at the cut; a scenario per workflow is a later decision, because each one changes a frozen component.
+- **Owner:** the 0.3.0 cut. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-245
+
+**`handoff check --session` holds only the structured clock time, and only in an open session (ADR 0029, note of 2026-10-31, 0.3.0).**
+
+- **What:** a citation can state `clock_time`, and the check compares it as exact text with what VSift returns for that item now. Four things stay outside that:
+  - a time written in a claim's `statement` or in the report's Markdown is not read, so it can disagree with the citation beside it;
+  - a session that is closed, expired or not found cannot be read, so nothing is compared, as for identities;
+  - without `--session` only the schema applies, so a time with no zone stated as an instant passes, in the right form;
+  - where a value differs and the session's clock record has changed around the item (a confirmed zone, an accepted gap, or for `segment` any gap), the check cannot tell a report that went stale from one that was wrong. `clock_time_may_be_stale` says neither, and a made-up time gets it too.
+- **Evidence:** ADR 0029 decisions 24 to 28; `vsift_contract::HandoffSessionRecords`; the `clock_times` tests of `vsift-contract`; `clocks_cli_contract` and `evidence_cli_contract`.
+- **Impact: low by the rubric** (the time a tool would read is checked, every refusal is an error with the same action, and the workflow tells the agent to write only the time the citation states).
+- **Mitigation:** check with `--session` before the session closes; write a time in the prose only as the citation states it.
+- **Next step:** none planned. A stamp in the report was rejected, because an agent has nothing to copy it from.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-247
+
+**A yt-dlp and a JavaScript runtime that the user registers (`setup configure yt-dlp`, `js-runtime`, ADR 0028 section 4.6, `0.3.0`) are not reviewed, and `setup check` runs them.**
+
+- **What:**
+  - nothing pins or reviews a registered file: it may be any version of any program. `setup check` runs each once with the fixed version request (`--ignore-config --no-plugin-dirs --version` for yt-dlp, `--version` for the runtime), an environment of nothing but a private temporary and home folder and the tool's fixed variables (and, on Windows, `SystemRoot`, which a one-file Python build needs there), 4 KiB of output and what is left of the deadline all tool checks share (30 seconds at most each, and nothing started once it has passed), and reports the first line (64 printable ASCII bytes, in the shape the tool prints) and the file's SHA-256. A program that behaves differently from a real yt-dlp or Deno on those arguments is still run by the person who registered it;
+  - the runtime is Deno only: a runtime whose line does not begin `deno ` is reported as not usable;
+  - a registered yt-dlp is used instead of a managed one on every host, with the registered runtime or with none, never the managed Deno; a registered runtime without a registered yt-dlp is unused, and the check says so;
+  - every `setup check` re-reads and hashes both files (up to 512 MiB each; yt-dlp is about 40 MB and Deno about 96 MB), as every managed lookup re-hashes its version (L-087);
+  - keeping a registered tool current is the user's job: sites change and an old yt-dlp fails with `extractor_broken` (ADR 0028 section 4.8). Only a managed one is replaced by a newer reviewed pin with a VSift release;
+  - nothing proves the registered yt-dlp's own network behaviour, which is outside VSift's address policy for any yt-dlp (L-209).
+- **Evidence:** ADR 0028's implementation note of 2026-11-01; `identify_user_online_tool` and its tests in `crates/vsift-infrastructure/src/user_online_tool.rs`; `setup_configure_online_tools_cli_contract`; the contract tests in `setup_optional_contract`.
+- **Impact: low by the rubric** (a disclosed estimate): registering is the user's explicit act, as for FFmpeg or the OCR runner; the run is bounded and sends no URL; what is reported carries its lower trust (`source: "user_managed"`).
+- **Mitigation:** the plan's and the guide's wording say a supplied file is not reviewed; `setup configure` itself runs nothing; the managed pair on Ubuntu 24.04 is the reviewed alternative.
+- **Next step:** decided with the acquisition half: a registered tool is not pinned by digest. A person updates their own yt-dlp as a matter of course, so a pin would report every ordinary update as a change. Each fetch identifies the file again, and each origin records the digest read when it was identified for that fetch; nothing holds the file between that read and the run, and it is the user's own file.
+- **Owner:** unscheduled. **Issue:** none. **Status:** open. **Review:** pending.
+
+### L-248
+
+**VSift does not fetch the captions of a public video page in `0.3.0`: ADR 0028 has no design for them, and #409's captions paragraph and its open decision are carried by one issue.**
+
+- **What:**
+  - `vsift ingest --url <page>` fetches the video only; it asks yt-dlp for no captions and imports none;
+  - a person who has the captions can give them with `vsift ingest --url <link> --transcript <file>`, or import them afterwards, as for any supplied transcript ([use an existing transcript](../guide/use-an-existing-transcript.md));
+  - #409's acceptance list asked the platform qualification for a captions import; it has no captions line, because there is nothing to qualify.
+- **Evidence:** ADR 0028's note of 2026-11-01 (captions); the planner's ruling of 2026-11-01 in the brief for W4c.
+- **Impact: low by the rubric** (a disclosed estimate): the video and its local transcription work without captions, and a supplied transcript covers the case by hand.
+- **Mitigation:** the guide's "Online videos" page does not promise captions.
+- **Next step:** the issue "Platform captions for public pages" holds the design questions: WebVTT through the existing supplied-transcript path labelled as platform-provided (author-uploaded or automatically generated), never silently preferred over local transcription, a small versioned extension of transcript provenance, and whether automatically generated captions are offered at all.
+- **Owner:** unscheduled. **Issue:** [#564](https://github.com/smormah/vsift/issues/564). **Status:** open. **Review:** pending.
+
+### L-249
+
+**The trials of online-video consent are narrower than #409's wording, and they first run at the `0.3.0` cut.**
+
+- **What:**
+  - **Claude Code never sees the plan's offer.** `online_links` is offered only on Ubuntu x86-64 and Claude Code trials run on Windows, where the plan says `unavailable`. C-05 to C-08 run on Codex alone. The skill's answer is tried on both clients: A-11 runs on Windows too, and that is the trial of the user-supplied wording. So #409's named-client line is met by Codex for the offer and by both clients for the skill's answer;
+  - **no trial reaches the `web_page` trigger.** Codex's sandbox has no network, so `ingest --url` answers `offline` there, and the published binary refuses a local server. A-11 is started by the user's question, not by that refusal;
+  - **no trial shows a successful agent-run install of the group.** The sandbox's network is off, so C-06's install fails after the acceptance, and C-07's too;
+  - **a yes or a no is told to a fresh agent.** A trial client is one-shot, so C-06 and C-07 measure obedience to an answer in the prompt. Only C-05 measures telling and asking;
+  - **C-08's failure comes from the sandbox, not from a blocking proxy** as #409 asks, because no proxy can be reached from inside it;
+  - **the word matching is coarse:** a good sentence in other words fails, and a report that repeats the words passes. A run that saves a plan and pulls out only the digest has not read it and fails the gate, which the raw log shows;
+  - **the unattended setup door is judged from its words.** Naming the parts is the acceptance (ADR 0036), so an agent can pass with a yes or a no without ever reading a plan; the grader reads its `--install` and `--include` and nothing it was told;
+  - **none of it has run.** It has been replayed only through the grader's tests.
+- **Evidence:** `tools/vsift-agent-trials/tests/cold_grader.rs`, `tests/grader.rs` and `tests/scenario_sets.rs`; [trials.md](../agents/trials.md#online-video-consent-030-409); the plan's fixtures `setup-plan-optional-offered.txt` and `setup-plan-unavailable.txt`.
+- **Impact: low by the rubric** (a disclosed estimate): the rule is in the plan and the refusal themselves, which contract tests hold, and these trials measure how agents relay it. Nothing here can install anything without an accepted digest.
+- **Mitigation:** every consent run is reported on a line of its own, and the maintainer reads every cold run's raw log before a claim is made. The proxy cases have real fault tests (ADR 0028 section 4.9).
+- **Next step:** read the runs at the `0.3.0` cut in batch 3. A Claude Linux host, or a network inside the trial, would close the first three; neither is planned.
+- **Owner:** `0.3.0` cut. **Issue:** [#409](https://github.com/smormah/vsift/issues/409). **Status:** open. **Review:** pending.
+
 ## Review workflow
 
 1. **Review.** For each entry the maintainer sets its **Review** line to one of:
