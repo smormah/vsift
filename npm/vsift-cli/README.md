@@ -18,35 +18,34 @@ or Bun 1.2 or later, runs the launcher.
 
 ## Which version you get
 
-**Version 0.2.3 is the patch release after 0.2.2**, and the commands above, without a tag, install it: it
-replaces 0.2.2 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release and 0.2.1
-(2026-10-15) and 0.2.2 (2026-10-18) the ones before this. It has not been announced. Yarn 4 holds back a version for a day after it is
-published, so Yarn users get 0.2.3 a day after the publish (the installation guide has the setting that lets it through).
+**Version 0.2.4 is the hot fix of 0.2.3**, and the commands above, without a tag, install it: it
+replaces 0.2.3 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release and 0.2.1
+(2026-10-15), 0.2.2 (2026-10-18) and 0.2.3 (2026-10-25) the ones before this. It has not been announced. Yarn 4 holds back a version for a day after it is
+published, so Yarn users get 0.2.4 a day after the publish (the installation guide has the setting that lets it through).
 
-The dist-tag `next` is for release candidates and you do not need it: it names `0.2.3-rc.1`,
-the release candidate that 0.2.3 was built from, or a later candidate or release. The older
-candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, as `0.2.3-rc.1` is once 0.2.3 is published. The release candidates of
-the hot fix 0.2.4 (the first is `0.2.4-rc.1`) go to `next` when they are published and never to `latest`; they re-pin FFmpeg to a newer reviewed build. The release candidates of
-later releases go to `next` when they are published and never to `latest`.
+The dist-tag `next` is for release candidates and you do not need it: it names `0.2.4-rc.1`,
+the release candidate that 0.2.4 was built from, or a later candidate or release. The older
+candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, as `0.2.4-rc.1` is once 0.2.4 is published.
+The release candidates of later releases go to `next` when they are published and never to `latest`.
 
-## What changed since 0.2.2
+## What changed since 0.2.3
 
-The changelog has the detail. In short: on Windows a long per-user folder or session root no longer makes every
-media command fail with a missing-tool answer, and every folder VSift makes private is created with its security
-descriptor; where two pieces of a local transcription meet, a sentence the recogniser wrote twice no longer hides
-what the next piece heard, the rule that removes repeated words compares every overlapping pair, and every
-stretch where words could not be placed is listed and a search says so; whisper.cpp moves from v1.9.2 to v1.9.5 for
-a new managed install on Ubuntu, and `vsift setup check` says when a managed tool is older than the version this
-release reviewed. Words can still be missing or repeated where pieces meet. No command or JSON field was removed;
-the changes to the answers are additive. The agent skill did not change.
+The changelog has the detail. In short: a new managed install on Ubuntu gets a newer, reviewed FFmpeg (9.0.2 plus 39
+commits, a build of 2026-10-31, in place of the build of 2026-08-31), which carries the upstream memory-safety fixes
+made since in code VSift runs (the VP8, VP9, H.264, Opus and AAC decoders, the MP4 key atom and a Matroska duration
+overflow). A machine set up by 0.2.3 or earlier keeps its FFmpeg, and `vsift setup check` says it is older than the
+reviewed one until you run `vsift setup plan` and `vsift setup install` again. **One flaw is not fixed:** an MP4 with
+very many `pssh` boxes (CVE-2026-107678) can keep FFmpeg busy; the fix is on FFmpeg's development line only, and
+VSift's time bound ends the work after about 15 seconds without fixing the flaw. No command or JSON field changed. The agent skill did not change.
 
 ## What was not tried
 
-0.2.3 is built from the same source as the release candidate `0.2.3-rc.1` and differs from it
+0.2.4 is built from the same source as the release candidate `0.2.4-rc.1` and differs from it
 only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners, on a
-synthetic corpus and a synthetic voice and, for the joins between pieces of a transcription, on a handful of real
-recordings; the executables of 0.2.3 itself are checked after its publish. The agent skill is unchanged, so its trials were not run again; in the earlier trials without the skill, a smaller model often stated the right facts without citing the
-identifiers VSift returned for them (the help is to say how; the agent skill does). The accuracy set with noisy speech was not run on hosted macOS runners. Two things were not tried before this release, and it ships without them:
+synthetic corpus and a synthetic voice; **only the checks that the new FFmpeg touches were run on it** (the install and upgrade checks, the managed install, the hostile-media set,
+the local speech recognition accuracy set and the dependency scan), and nine other evidence items were waived by the maintainer for this release only, among them the stress, the
+compatibility and the agent-trial runs, which run in the next window. The executables of 0.2.4 itself are checked after its publish. The accuracy set with noisy speech was not run on hosted macOS runners. The agent skill is unchanged, so its trials were not run again; in the earlier trials without the skill, a smaller model often stated the right facts without citing the
+identifiers VSift returned for them (the help is to say how; the agent skill does). Two things were not tried before this release, and it ships without them:
 
 - **Windows Smart App Control, SmartScreen and macOS Gatekeeper** have not been seen reacting
   to VSift, and no machine without a developer's tools has installed this package. The

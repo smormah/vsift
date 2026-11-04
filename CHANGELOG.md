@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-04
+
+**This is the hot fix of `0.2.3`: the stable commit is `0.2.4-rc.1` with a different version number.** It is cut in this change, on the release branch `release/0.2.x`, and is **not tagged or published here**: when the maintainer publishes it, it goes to npm under `latest` (`latest` moves from `0.2.3` to `0.2.4` on all four packages, so `npm install vsift-cli` with no tag installs it; `next` stays `0.2.4-rc.1`, because only the maintainer's own command moves it) and it is not announced. It is the same source as the accepted candidate `0.2.4-rc.1` (published 2026-11-04, tag `v0.2.4-rc.1` at `d44d71532967`), so everything listed under `[0.2.4-rc.1]` below is in it, and nothing else. The maintainer's steps are a planning page, [`release-0.2.4-stable-steps.md`](docs/planning/release-0.2.4-stable-steps.md) (`release.md` may not change before the tag, 6.8; it is folded in after the publish).
+
+### What changes for you since 0.2.3, in plain English
+
+**If you set VSift up on Ubuntu.** A new managed install gets FFmpeg 9.0.2 plus 39 commits, BtbN's month-end build of 2026-10-31 (136 MB to download), in place of the build of 2026-08-31. It carries the upstream memory-safety fixes made since in code VSift runs: the VP8, VP9, H.264, Opus and AAC decoders, the MP4 key atom and a Matroska duration overflow. A machine set up by `0.2.3` or earlier keeps its FFmpeg, and `setup check` says it is older than the reviewed one until you run `setup plan` and `setup install` again. No command or JSON field changed, and the agent skill did not change.
+
+**What is not fixed.** [#351](https://github.com/smormah/vsift/issues/351) stays open: upstream's fix for an MP4 with very many `pssh` boxes (CVE-2026-107678) is on FFmpeg's development line only, and the 9.0 line the maintainer chose does not have it; in the hostile-media run the file was ended by VSift's own 15-second time bound, which contains the flaw and does not fix it. Five other FFmpeg records of 2026-11-01 are not fixed by the pinned build either ([L-227](docs/planning/known-limits.md#l-227)). #272 stays open.
+
+### What has not been shown
+
+Nine of the twenty evidence items are `waived`, so not passes, for this release: seven by the maintainer's decisions of 2026-11-04 for `0.2.4` only (RQ-07, RQ-08, RQ-09, RQ-11, RQ-12, RQ-15 and RQ-16) and two that carry their standing waivers (RQ-14, RQ-17). In addition, the two long-run dispatches of RQ-04 (`P14 compatibility` and `P14 local upgrade` on the tag) are waived inside an item that is `passed` on runs of all its three parts. The ledger's completeness check cannot see the limits of a waiver; the decisions' texts do ([`release-0.2.4.md`](docs/planning/release-0.2.4.md), "The maintainer's decisions of 2026-11-04").
+
+- **A hot fix runs only the checks the change touches.** The fuzzing hour, the stress, load, power-loss, durability and runbook-walk runs and both agent-trial batches were not made on this release; they run in the next release window. The skill and the agent-trial freeze are unchanged.
+- **Known issues of this release, none in what a user runs.** The noisy-speech accuracy set is not run on hosted macOS runners, because the test suite outgrew that runner (#520, #576; known limit L-230, on `main`): the set is gated on Ubuntu and Windows by `P07 local ASR`, and macOS is evidenced by a `P14 journeys` run on the published candidate with a newer test driver, which is not the candidate's own tag run. One stress repetition in 20,100 (#519, [L-231](docs/planning/known-limits.md#l-231), a known issue of `0.2.3`) is not re-run.
+- **The re-pin is shown on Ubuntu only.** The Windows catalogue is `main`'s alone (#573): `0.2.4` re-pins Ubuntu only.
+- **The standing waivers carry:** the strict worker profile is not claimed to contain a hostile decoder ([L-068](docs/planning/known-limits.md#l-068)), and **Windows Smart App Control, SmartScreen, a true clean-machine install and macOS Gatekeeper were not tried, and no one has run VSift on a Mac** ([L-143](docs/planning/known-limits.md#l-143)).
+- **The fix is shown by tests and hosted runs, not by field use.** Every accuracy figure is from a synthetic corpus and a synthetic voice. No platform is "supported" and the claims rung is still `candidate`.
+
+### What this cut itself does
+
+- **The version** is `0.2.4` in the five files that hold it (`Cargo.toml`, `Cargo.lock`, `fuzz/Cargo.toml`, `fuzz/Cargo.lock`, `npm/vsift-cli/package.json`), and only there; each is the `0.2.4-rc.1` file with the version text replaced (`Cargo.lock`: the nine lines of the workspace crates; `fuzz/Cargo.lock`: five).
+- **The two shipped documents** are rewritten: the launcher's README (the page npm shows) and the installation guide say that `0.2.4` replaces `0.2.3` under `latest`, what changed, and what was not tried. The guide's first page names the release `0.2.4` and the candidate it was built from.
+- **`vsift-release candidate-delta` was run** against `v0.2.4-rc.1` (commit `d44d71532967bb512bc92d328995e1c9e6f40a05`): only version strings, the two shipped documents and the work record differ, nothing is refused. **No `release_delta` is written into the ledger by this change:** the commit it names does not exist before the merge.
+- **`SECURITY.md`, the root README and `docs/agents/` are not changed:** 6.8 refuses them on the release branch, and the records change to `main` after the publish brings them up to date. The plan page [`release-0.2.4.md`](docs/planning/release-0.2.4.md) is not changed here either; its corrections go to `main` with those records.
+
 ## [0.2.4-rc.1] - 2026-11-04
 
 **This is a release candidate, under qualification.** It is the first candidate for `0.2.4`, the hot fix of `0.2.3`, made on `release/0.2.x` outside the weekly window ([`docs/operations/release.md`](docs/operations/release.md) 6.18, "A hot fix"; its steps are 6.22, its plan [`docs/planning/release-0.2.4.md`](docs/planning/release-0.2.4.md)). It is `0.2.3` plus the change below and nothing else: the version strings, the plan, the runbook section and the evidence ledger are the only things its cut adds. It goes to npm `next` when it is published and is never `latest`; `0.2.3` stays `latest` until `0.2.4` is published. Nothing is announced.
