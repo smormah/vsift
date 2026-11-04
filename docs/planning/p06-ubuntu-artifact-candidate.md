@@ -467,8 +467,8 @@ names v1.9.2: those are frozen trial inputs and move with the next freeze.
 The hot fix `0.2.4` ([#272](https://github.com/smormah/vsift/issues/272), [L-132](known-limits.md#l-132); #351 stays open,
 [L-144](known-limits.md#l-144)). This section is the review of the new FFmpeg bytes, in the form of the reviews above, and the
 catalogue on `release/0.2.x` pins them (revision `ubuntu-24.04-x86_64-2026-11-03-r4`, for `0.2.4`; the published releases up to
-`0.2.3` keep the build of 2026-08-31). whisper.cpp and the models are unchanged. **The maintainer has not accepted the two raised
-bounds or the build's recipe yet.**
+`0.2.3` keep the build of 2026-08-31). whisper.cpp and the models are unchanged. **The maintainer accepted the build on 2026-11-04**
+("Accept the build"): the two raised bounds and the three components the recipe added.
 
 **Which line.** BtbN's release `autobuild-2026-10-31-12-59` (published 2026-10-31T12:59:47Z; the next is 2026-11-01, so it is
 October's last and is kept for two years, to about 2028-10-31) carries the `linux64-lgpl` variant on three lines: `master`
@@ -517,8 +517,8 @@ allows only the `file` protocol); CVE-2026-107675 to -107677, CVE-2026-107678 (L
 39162404765) by exactly the three components the review of 2026-10-04 found: `--enable-librsvg`, `--enable-lcms2` and
 `--enable-vapoursynth` (and the `--extra-version` date); 99 options against 96. librsvg brings GLib, Cairo, Pango and a Rust runtime
 into the static binary. It is more third-party code in a binary whose full compiled-component source and licence inventory is still
-not claimed (the catalogue's trust limit says so); the three additions are reviewed here. **The maintainer's acceptance of the recipe
-is open.**
+not claimed (the catalogue's trust limit says so); the three additions are reviewed here. **The maintainer accepted the recipe with
+the build on 2026-11-04** ("Accept the build").
 
 *The three added components* (read on 2026-11-03 from BtbN's scripts at `5031c6f1` (`scripts.d/45-lcms2.sh`,
 `scripts.d/50-librsvg/*.sh`, `scripts.d/50-vapoursynth.sh`), the projects' licence files at those commits and FFmpeg's source at
