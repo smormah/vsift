@@ -1332,7 +1332,7 @@ mod tests {
     #[tokio::test]
     async fn unavailable_managed_targets_give_typed_manual_guidance()
     -> Result<(), Box<dyn std::error::Error>> {
-        // 2030-11, after the reviewed catalogue's 2028-08-01 stop-new-plans boundary.
+        // 2030-11, after the reviewed catalogue's 2028-10-01 stop-new-plans boundary.
         const AFTER_CATALOGUE_EXPIRY: u64 = 1_920_000_000;
         let schema = setup_plan_schema()?;
         let validator = jsonschema::validator_for(&schema)?;

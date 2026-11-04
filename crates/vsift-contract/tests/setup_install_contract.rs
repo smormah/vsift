@@ -62,7 +62,7 @@ fn component(
     stage: Option<StageDisposal>,
 ) -> ComponentInstallReport {
     let version = match component {
-        ManagedComponent::MediaTools => "n9.0.1-11-ge47273f4d9-20260831",
+        ManagedComponent::MediaTools => "n9.0.2-39-g7adfbe40dc-20261031",
         ManagedComponent::WhisperCli => "whisper.cpp-v1.9.2-ubuntu-x64",
         ManagedComponent::WhisperModel => "whisper-base-multilingual-80da2d8",
         ManagedComponent::JsRuntimeDeno => "deno-2.9.7-x86_64-linux-gnu",

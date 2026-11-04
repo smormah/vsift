@@ -56,8 +56,8 @@ fn superseded_whisper(reason: SupersessionReason) -> ManagedUpdate {
 
 fn response(updates: &[ManagedUpdate]) -> Result<Value, Box<dyn std::error::Error>> {
     let details = [
-        "ffmpeg version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2000-2026 the FFmpeg developers",
-        "ffprobe version n9.0.1-11-ge47273f4d9-20260831 Copyright (c) 2007-2026 the FFmpeg developers",
+        "ffmpeg version n9.0.2-39-g7adfbe40dc-20261031 Copyright (c) 2000-2026 the FFmpeg developers",
+        "ffprobe version n9.0.2-39-g7adfbe40dc-20261031 Copyright (c) 2007-2026 the FFmpeg developers",
         "whisper.cpp v1.9.2 (reviewed build)",
     ];
     let diagnosis = RuntimeDiagnosis {

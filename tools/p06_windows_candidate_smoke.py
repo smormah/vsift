@@ -24,8 +24,8 @@ import zipfile
 
 FFMPEG_URL = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-08-31-13-27/"
-    "ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip"
+    "autobuild-2026-10-31-12-59/"
+    "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip"
 )
 WHISPER_URL = (
     "https://github.com/ggml-org/whisper.cpp/releases/download/"
@@ -39,8 +39,8 @@ MODEL_URL = (
 ARCHIVES = {
     "ffmpeg": (
         FFMPEG_URL,
-        147_007_942,
-        "2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56",
+        168_715_328,
+        "9d37c564e0d01c18cde184a079fa6ef04d7d2783ada41da81d04165cc8f1a650",
     ),
     "whisper": (
         WHISPER_URL,
@@ -52,8 +52,8 @@ MODEL_SIZE = 147_951_465
 MODEL_HASH = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
 FFMPEG_FILES = {
     "LICENSE.txt": (7_651, "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"),
-    "bin/ffmpeg.exe": (114_400_768, "63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6"),
-    "bin/ffprobe.exe": (114_198_528, "1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879"),
+    "bin/ffmpeg.exe": (132_190_720, "d03c858a130cae1382902925d9f46eb15d7de42e025d34cc29b7ddca6cfb4c62"),
+    "bin/ffprobe.exe": (131_990_016, "61d1eef897bfa42306ac4ab36afc6adce23cccce577bda88b84c06d44e1b9183"),
 }
 WHISPER_FILES = {
     "whisper-cli.exe": (479_744, "331dba46d6427105d2b802cdbc7eae916ea1c5abf9b0d3b5cfe460d8db8e4366"),
