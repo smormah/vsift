@@ -412,7 +412,7 @@ fn crop_item(parent: &EvidenceItem, rect: CropRect) -> Built<EvidenceItem> {
     Ok(EvidenceItem::new(EvidenceItemParts {
         id: EvidenceId::parse(format!("evd_{}", identity.get(..32).ok_or("short digest")?))?,
         subject: EvidenceSubject::Crop {
-            frame: frame.clone(),
+            frame: *frame,
             region: CropRegion {
                 parent: parent.id().clone(),
                 rect,

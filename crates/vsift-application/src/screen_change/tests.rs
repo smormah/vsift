@@ -821,7 +821,7 @@ async fn changes_without_regions_have_no_crops() -> TestResult {
     let mut page = compare_screen_changes(&port, &planned(3)?).await?;
     let summary = crop_screen_changes(&port, &mut page.changes).await?;
     assert_eq!(summary, super::CropSummary::default());
-    assert!(port.crops_asked().is_empty());
+    assert_eq!(port.crops_asked(), Vec::new());
     assert!(page.changes.iter().all(|change| change.crops.is_empty()));
     // Frames of different sizes were never compared, so they have no regions.
     let mut different = page.changes.clone();
@@ -830,7 +830,7 @@ async fn changes_without_regions_have_no_crops() -> TestResult {
     }
     let summary = crop_screen_changes(&port, &mut different).await?;
     assert_eq!(summary.made, 0);
-    assert!(port.crops_asked().is_empty());
+    assert_eq!(port.crops_asked(), Vec::new());
     Ok(())
 }
 

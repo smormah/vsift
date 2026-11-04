@@ -6,9 +6,10 @@
 //! recording, whose order 1017 changes status at 10 s while every other cell
 //! stays as it was (`fixtures/corpus/manifest.json`, F04-E04):
 //!
-//! A second opt-in test generates a 12 s 720p video with FFmpeg whose two boxes
-//! appear and disappear together every second, so every change has two
-//! regions and one call reaches the 16-crop bound of `--crops`.
+//! A second opt-in test generates a 12 s video at 1280 by 720 with `FFmpeg`
+//! whose two boxes appear and disappear together, so every change has two
+//! regions, consecutive changes share a frame and repeat crops, and one call
+//! reaches the 16-crop bound of `--crops`.
 //!
 //! `cargo test -p vsift --locked --test engine_screen_changes -- --ignored`
 
@@ -299,7 +300,7 @@ async fn f04_a_status_change_is_one_small_region_between_two_exact_frames() -> T
             FrameDimensions::new(largest.rect.width(), largest.rect.height())?
         );
     }
-    assert_crops_follow_frames(&cropped)?;
+    assert_crops_follow_frames(&cropped);
     Ok(())
 }
 
@@ -318,7 +319,7 @@ fn item_dimensions(
 
 /// The page's whole frames come first and its crops after them, each with
 /// one file, in the same order.
-fn assert_crops_follow_frames(results: &ScreenChangesResults) -> TestResult {
+fn assert_crops_follow_frames(results: &ScreenChangesResults) {
     let frames = results.frames();
     assert_eq!(frames.len(), results.files().len());
     let is_crop = |item: &EvidenceItem| matches!(item.subject(), EvidenceSubject::Crop { .. });
@@ -332,7 +333,6 @@ fn assert_crops_follow_frames(results: &ScreenChangesResults) -> TestResult {
     ids.sort_unstable();
     ids.dedup();
     assert_eq!(ids.len(), frames.len());
-    Ok(())
 }
 
 /// Generates 12 s of a 1280x720 screen whose two boxes, far apart (more
@@ -467,7 +467,7 @@ async fn one_call_reaches_the_sixteen_crop_bound() -> TestResult {
                 .all(vsift::RegionCrops::is_complete)
         );
     }
-    assert_crops_follow_frames(&cropped)?;
+    assert_crops_follow_frames(&cropped);
     // The after frame of one change is the before frame of the next, so the
     // after crop of a region is that change's before crop of it: one record,
     // named twice, listed once and counted twice in `made`.
