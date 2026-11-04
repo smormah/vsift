@@ -15,6 +15,10 @@
 //! 4. A page stops at the first change whose frames do not fit the session's
 //!    evidence room, the call's deadline or a cancellation; `resume` then
 //!    says where a fresh call continues.
+//! 5. With crops, and only once the whole page is compared, each listed
+//!    change's two largest regions are cut out of its two frames with `crop`
+//!    (at most 16 crops a call). A crop stop is reported in the crop summary
+//!    alone: it never changes which changes are listed or how the pages go on.
 
 use std::{
     sync::Mutex,
@@ -22,15 +26,15 @@ use std::{
 };
 
 use vsift_application::{
-    ComparedChange, EvidenceMediaError, PageContinuation, ScreenChangeFrameRefusal,
-    ScreenChangeFrames, ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeResume,
-    ScreenChangeStop, SessionStorageError, TakenFrame, analysed_ranges, clip_to_source,
-    compare_screen_changes, page_continuation, page_screen_changes, screen_change_id,
-    screen_change_page_limit, visual_coverage_gaps,
+    ComparedChange, CropSummary, EvidenceMediaError, PageContinuation, ScreenChangeCrops,
+    ScreenChangeFrameRefusal, ScreenChangeFrames, ScreenChangePageRequest, ScreenChangeQueryError,
+    ScreenChangeResume, ScreenChangeStop, SessionStorageError, TakenFrame, analysed_ranges,
+    clip_to_source, compare_screen_changes, crop_screen_changes, page_continuation,
+    page_screen_changes, screen_change_id, screen_change_page_limit, visual_coverage_gaps,
 };
 use vsift_domain::{
-    EvidenceId, EvidenceItem, FrameSelection, MediaTime, ScreenChangeError, ScreenChangeId,
-    SessionId, TimeRange, VisualCandidateId, VisualCoverageGap, VisualIndex,
+    CropRect, EvidenceId, EvidenceItem, FrameSelection, MediaTime, ScreenChangeError,
+    ScreenChangeId, SessionId, TimeRange, VisualCandidateId, VisualCoverageGap, VisualIndex,
 };
 use vsift_infrastructure::{PngPixelsError, read_png_pixels};
 
@@ -38,7 +42,10 @@ use crate::{
     candidates::CandidatesRange,
     engine::Engine,
     error::EngineError,
-    evidence::{EvidenceFile, FrameGetRequest, FrameTarget},
+    evidence::{
+        CropEvidenceRequest, CropRectangle, EvidenceFile, EvidenceResults, FrameGetRequest,
+        FrameTarget,
+    },
     sessions::SessionSnapshot,
     verification::Cancellation,
 };
@@ -61,6 +68,9 @@ pub struct ScreenChangesRequest {
     /// Opaque continuation token from the previous page of the same range.
     /// A call with a cursor never analyses anything.
     pub cursor: Option<String>,
+    /// Whether the changes' two largest regions are cropped from their
+    /// frames (ADR 0034 section 4); the cursor is bound to it.
+    pub crops: ScreenChangeCrops,
     /// Stops analysis at its next window and the frames at their next one.
     pub cancellation: Cancellation,
 }
@@ -89,6 +99,7 @@ pub struct ScreenChangesResults {
     analysed: Vec<TimeRange>,
     gaps: Vec<VisualCoverageGap>,
     stop: Option<ScreenChangeStop>,
+    crops: Option<CropSummary>,
 }
 
 impl ScreenChangesResults {
@@ -164,6 +175,12 @@ impl ScreenChangesResults {
     pub const fn stop(&self) -> Option<ScreenChangeStop> {
         self.stop
     }
+
+    /// What the call's cropping made, when crops were asked for.
+    #[must_use]
+    pub const fn crops(&self) -> Option<CropSummary> {
+        self.crops
+    }
 }
 
 impl Engine {
@@ -222,7 +239,7 @@ impl Engine {
                 range: requested,
                 limit,
                 cursor: request.cursor.clone(),
-                crops: false,
+                crops: request.crops,
             },
             now_micros,
         )
@@ -234,7 +251,7 @@ impl Engine {
             deadline: Instant::now() + FRAMES_DEADLINE,
             taken: Mutex::new(Vec::new()),
         };
-        let compared = compare_screen_changes(&port, &page.changes).await?;
+        let mut compared = compare_screen_changes(&port, &page.changes).await?;
         if compared.changes.is_empty() && !page.changes.is_empty() {
             match compared.stop {
                 Some(ScreenChangeStop::SessionEvidenceBudget) => {
@@ -249,6 +266,14 @@ impl Engine {
                 _ => {}
             }
         }
+        // Crops come only now, after every listed change has its frames, so
+        // a crop never costs a change its place on the page.
+        let crops = match request.crops {
+            ScreenChangeCrops::NoCrops => None,
+            ScreenChangeCrops::LargestRegions => {
+                Some(crop_screen_changes(&port, &mut compared.changes).await?)
+            }
+        };
         let gaps = visual_coverage_gaps(Some(&index), index.duration(), requested, indexed.stop);
         let expires_at = indexed
             .status
@@ -296,6 +321,7 @@ impl Engine {
             analysed,
             gaps,
             stop: compared.stop,
+            crops,
         })
     }
 }
@@ -308,6 +334,21 @@ struct EngineFrames<'a> {
     deadline: Instant,
     /// Each frame taken, once, in order of first use.
     taken: Mutex<Vec<(EvidenceItem, EvidenceFile)>>,
+}
+
+/// The refusal an evidence call's failure is for this call: no room, a stop,
+/// or a failure of the call.
+fn refusal(error: EngineError) -> ScreenChangeFrameRefusal<EngineError> {
+    match error {
+        EngineError::EvidenceBudgetExhausted => ScreenChangeFrameRefusal::NoRoom,
+        EngineError::EvidenceMedia(EvidenceMediaError::Deadline) => {
+            ScreenChangeFrameRefusal::Stopped(ScreenChangeStop::DeadlineExceeded)
+        }
+        EngineError::EvidenceMedia(EvidenceMediaError::Cancelled) => {
+            ScreenChangeFrameRefusal::Stopped(ScreenChangeStop::Cancelled)
+        }
+        error => ScreenChangeFrameRefusal::Failed(error),
+    }
 }
 
 impl EngineFrames<'_> {
@@ -323,34 +364,40 @@ impl EngineFrames<'_> {
                 cancellation: self.cancellation.clone(),
             })
             .await
-            .map_err(|error| match error {
-                EngineError::EvidenceBudgetExhausted => ScreenChangeFrameRefusal::NoRoom,
-                EngineError::EvidenceMedia(EvidenceMediaError::Deadline) => {
-                    ScreenChangeFrameRefusal::Stopped(ScreenChangeStop::DeadlineExceeded)
-                }
-                EngineError::EvidenceMedia(EvidenceMediaError::Cancelled) => {
-                    ScreenChangeFrameRefusal::Stopped(ScreenChangeStop::Cancelled)
-                }
-                error => ScreenChangeFrameRefusal::Failed(error),
-            })?;
+            .map_err(refusal)?;
         let mismatch = || ScreenChangeFrameRefusal::Failed(EngineError::EvidenceAssembly);
-        let item = results.record().items().first().ok_or_else(mismatch)?;
+        let item = self
+            .keep(&results)
+            .map_err(ScreenChangeFrameRefusal::Failed)?;
+        let dimensions = item.subject().image_dimensions().ok_or_else(mismatch)?;
+        Ok(TakenFrame {
+            evidence_id: item.id().clone(),
+            time: item.subject().actual_time(),
+            dimensions,
+        })
+    }
+
+    /// Keeps the one item of an evidence call and its file, once, in order of
+    /// first use, and returns the item.
+    fn keep(&self, results: &EvidenceResults) -> Result<EvidenceItem, EngineError> {
+        let item = results
+            .record()
+            .items()
+            .first()
+            .ok_or(EngineError::EvidenceAssembly)?;
         let file = results
             .files()
             .iter()
             .find(|file| file.evidence_id() == item.id())
-            .ok_or_else(mismatch)?;
-        let dimensions = item.subject().image_dimensions().ok_or_else(mismatch)?;
-        let frame = TakenFrame {
-            evidence_id: item.id().clone(),
-            time: item.subject().actual_time(),
-            dimensions,
-        };
-        let mut taken = self.taken.lock().map_err(|_| mismatch())?;
+            .ok_or(EngineError::EvidenceAssembly)?;
+        let mut taken = self
+            .taken
+            .lock()
+            .map_err(|_| EngineError::EvidenceAssembly)?;
         if !taken.iter().any(|(known, _)| known.id() == item.id()) {
             taken.push((item.clone(), file.clone()));
         }
-        Ok(frame)
+        Ok(item.clone())
     }
 
     fn into_frames(self) -> (Vec<EvidenceItem>, Vec<EvidenceFile>) {
@@ -405,6 +452,34 @@ impl ScreenChangeFrames for EngineFrames<'_> {
         candidate: &VisualCandidateId,
     ) -> Result<TakenFrame, ScreenChangeFrameRefusal<EngineError>> {
         self.take(FrameTarget::Candidate(candidate.clone())).await
+    }
+
+    async fn crop(
+        &self,
+        frame: &TakenFrame,
+        rect: CropRect,
+    ) -> Result<EvidenceId, ScreenChangeFrameRefusal<EngineError>> {
+        // `crop` itself: the parent is the frame's evidence item and the
+        // rectangle the region's, in the same displayed pixels, so the crop
+        // is the source's own pixels and an ordinary crop record.
+        let results = self
+            .engine
+            .crop(CropEvidenceRequest {
+                session: self.session.clone(),
+                parent: frame.evidence_id.clone(),
+                rect: CropRectangle {
+                    x: rect.x(),
+                    y: rect.y(),
+                    width: rect.width(),
+                    height: rect.height(),
+                },
+                cancellation: self.cancellation.clone(),
+            })
+            .await
+            .map_err(refusal)?;
+        self.keep(&results)
+            .map(|item| item.id().clone())
+            .map_err(ScreenChangeFrameRefusal::Failed)
     }
 
     fn pixels(&self, frame: &TakenFrame) -> Result<Vec<u8>, EngineError> {

@@ -333,6 +333,26 @@ fn an_indexed_range_without_changes_is_complete_and_needs_no_tool() -> TestResul
     for member in ["partial_reason", "next_cursor", "resume"] {
         assert_eq!(data[member], Value::Null, "{member}");
     }
+    // Without --crops there is no crops member at all (slice 1's answer).
+    assert!(data.get("crops").is_none());
+
+    // With --crops the same range says it made none, and is still complete.
+    let cropped = vsift(
+        &root,
+        &changes(&session, "0", "20000000", &["--crops", "--json"]),
+    )?;
+    assert_eq!(cropped.status.code(), Some(0));
+    let cropped = json(&cropped)?;
+    assert_eq!(cropped["status"], "complete");
+    assert_eq!(cropped["warnings"], serde_json::json!([]));
+    assert_eq!(
+        cropped["data"]["crops"],
+        serde_json::json!({"limit": 16, "made": 0, "regions_without_crop": 0, "stop": null})
+    );
+    let readable = vsift(&root, &changes(&session, "0", "20000000", &["--crops"]))?;
+    assert_eq!(readable.status.code(), Some(0));
+    let text = String::from_utf8(readable.stdout)?;
+    assert!(text.contains("Crops: 0 made, at most 16 a call;"), "{text}");
 
     let events = vsift(
         &root,

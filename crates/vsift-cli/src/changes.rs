@@ -87,6 +87,7 @@ async fn run(
     arguments: ChangesArguments,
     cancellation: &Cancellation,
 ) -> Result<ScreenChangesResults, CommandFailure> {
+    let crops = arguments.crops();
     engine
         .screen_changes(ScreenChangesRequest {
             session: arguments.session,
@@ -96,6 +97,7 @@ async fn run(
             },
             limit: arguments.limit,
             cursor: arguments.cursor,
+            crops,
             cancellation: cancellation.clone(),
         })
         .await
@@ -154,6 +156,7 @@ fn presentation<'a>(
         gaps: results.gaps(),
         stop: results.stop(),
         time_anchors: results.session().time_anchors(),
+        crops: results.crops(),
     }
 }
 

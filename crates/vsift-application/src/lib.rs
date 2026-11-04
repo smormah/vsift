@@ -134,12 +134,13 @@ pub use provisioning::{
     smoke_before_activation,
 };
 pub use screen_change::{
-    ComparedChange, ComparedPage, DEFAULT_SCREEN_CHANGE_PAGE,
-    FrameRefusal as ScreenChangeFrameRefusal, MAX_SCREEN_CHANGE_PAGE, PageContinuation,
-    ScreenChangeFrames, ScreenChangePage, ScreenChangePageRequest, ScreenChangeQueryError,
-    ScreenChangeResume, ScreenChangeResumeReason, ScreenChangeStop, TakenFrame,
-    compare_screen_changes, dropped_changes, first_unanalysed, page_continuation,
-    page_screen_changes, screen_change_id, screen_change_page_limit,
+    CROPPED_REGIONS_PER_CHANGE, ComparedChange, ComparedPage, CropStop, CropSummary,
+    DEFAULT_SCREEN_CHANGE_PAGE, FrameRefusal as ScreenChangeFrameRefusal, MAX_CROPS_PER_CALL,
+    MAX_SCREEN_CHANGE_PAGE, PageContinuation, RegionCrops, ScreenChangeCrops, ScreenChangeFrames,
+    ScreenChangePage, ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeResume,
+    ScreenChangeResumeReason, ScreenChangeStop, TakenFrame, compare_screen_changes,
+    crop_screen_changes, dropped_changes, first_unanalysed, page_continuation, page_screen_changes,
+    screen_change_id, screen_change_page_limit,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

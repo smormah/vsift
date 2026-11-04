@@ -1,17 +1,20 @@
 use std::{future::Future, sync::Mutex};
 
 use vsift_domain::{
-    CursorError, EvidenceId, FrameComparison, FrameDimensions, MediaTime, SessionId, SourceId,
-    TimeRange, VISUAL_BLOCKS, VisualCandidateId, VisualHash, VisualIndex, VisualIndexProfile,
-    VisualSample, VisualWindow,
+    CropRect, CursorError, EvidenceId, FrameComparison, FrameDimensions, MediaTime, SessionId,
+    SourceId, TimeRange, VISUAL_BLOCKS, VisualCandidateId, VisualHash, VisualIndex,
+    VisualIndexProfile, VisualSample, VisualWindow,
 };
 
 use super::{
-    ComparedPage, FrameRefusal, PageContinuation, ScreenChangeError, ScreenChangeFrames,
-    ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeResume, ScreenChangeResumeReason,
-    ScreenChangeStop, TakenFrame, compare_screen_changes, first_unanalysed, page_continuation,
-    page_screen_changes, screen_change_id, screen_change_page_limit,
+    ComparedPage, CropStop, FrameRefusal, MAX_CROPS_PER_CALL, PageContinuation, ScreenChangeCrops,
+    ScreenChangeError, ScreenChangeFrames, ScreenChangePageRequest, ScreenChangeQueryError,
+    ScreenChangeResume, ScreenChangeResumeReason, ScreenChangeStop, TakenFrame,
+    compare_screen_changes, crop_screen_changes, first_unanalysed, page_continuation,
+    page_screen_changes, screen_change_id, screen_change_page_limit, screen_change_query_digest,
 };
+use crate::transcript::sha256_hex;
+use crate::visual::candidate_query_digest;
 use crate::visual::{
     ExtendVisualIndexRequest, VisualIndexScope, VisualSampler, VisualSamplingError,
     extend_visual_index, visual_coverage_gaps,
@@ -122,7 +125,7 @@ fn request(
     range: TimeRange,
     limit: u16,
     cursor: Option<String>,
-    crops: bool,
+    crops: ScreenChangeCrops,
 ) -> Result<ScreenChangePageRequest, Box<dyn std::error::Error>> {
     Ok(ScreenChangePageRequest {
         range,
@@ -146,7 +149,7 @@ fn every_page(
         let page = page_screen_changes(
             &fixture.session,
             index,
-            &request(range, limit, cursor, false)?,
+            &request(range, limit, cursor, ScreenChangeCrops::NoCrops)?,
             NOW,
         )?;
         pages += 1;
@@ -200,7 +203,7 @@ async fn the_cursor_is_bound_to_the_page_size_crops_and_window_states() -> TestR
     let page = page_screen_changes(
         &fixture.session,
         &index,
-        &request(range(0, 120)?, 1, None, false)?,
+        &request(range(0, 120)?, 1, None, ScreenChangeCrops::NoCrops)?,
         NOW,
     )?;
     let last = page.changes.last().ok_or("a change")?;
@@ -214,19 +217,34 @@ async fn the_cursor_is_bound_to_the_page_size_crops_and_window_states() -> TestR
     assert!(rejected(page_screen_changes(
         &fixture.session,
         &index,
-        &request(range(0, 120)?, 2, Some(cursor.clone()), false)?,
+        &request(
+            range(0, 120)?,
+            2,
+            Some(cursor.clone()),
+            ScreenChangeCrops::NoCrops
+        )?,
         NOW,
     )));
     assert!(rejected(page_screen_changes(
         &fixture.session,
         &index,
-        &request(range(0, 120)?, 1, Some(cursor.clone()), true)?,
+        &request(
+            range(0, 120)?,
+            1,
+            Some(cursor.clone()),
+            ScreenChangeCrops::LargestRegions
+        )?,
         NOW,
     )));
     assert!(rejected(page_screen_changes(
         &fixture.session,
         &index,
-        &request(first_minute, 1, Some(cursor.clone()), false)?,
+        &request(
+            first_minute,
+            1,
+            Some(cursor.clone()),
+            ScreenChangeCrops::NoCrops
+        )?,
         NOW,
     )));
     // A window of the range analysed since rejects it.
@@ -234,14 +252,19 @@ async fn the_cursor_is_bound_to_the_page_size_crops_and_window_states() -> TestR
     assert!(rejected(page_screen_changes(
         &fixture.session,
         &extended,
-        &request(range(0, 120)?, 1, Some(cursor.clone()), false)?,
+        &request(
+            range(0, 120)?,
+            1,
+            Some(cursor.clone()),
+            ScreenChangeCrops::NoCrops
+        )?,
         NOW,
     )));
     // The same query continues.
     let next = page_screen_changes(
         &fixture.session,
         &index,
-        &request(range(0, 120)?, 1, Some(cursor), false)?,
+        &request(range(0, 120)?, 1, Some(cursor), ScreenChangeCrops::NoCrops)?,
         NOW,
     )?;
     assert_eq!(
@@ -272,7 +295,7 @@ async fn a_change_id_is_stable_and_names_its_candidates() -> TestResult {
     let page = page_screen_changes(
         &fixture.session,
         &index,
-        &request(range(0, 120)?, 20, None, false)?,
+        &request(range(0, 120)?, 20, None, ScreenChangeCrops::NoCrops)?,
         NOW,
     )?;
     let ids = page
@@ -318,25 +341,43 @@ impl From<ScreenChangeError> for PortError {
     }
 }
 
-/// A port that has room for `room` frames, stops after `stop_after` frames,
-/// and draws every after frame with a changed corner.
+/// A port that has room for `room` frames and crops, stops after
+/// `stop_after` of them, and draws every after frame with `regions` changed
+/// blocks along the top row, four tiles apart so none join: block `i` starts
+/// at x = 64 * i and has 16 - i changed pixels, so the first is the largest.
 struct StandIn {
     room: usize,
     stop_after: Option<(usize, ScreenChangeStop)>,
     fail_at: Option<usize>,
     taken: Mutex<usize>,
     dimensions: FrameDimensions,
+    regions: u32,
+    crops: Mutex<Vec<(EvidenceId, CropRect)>>,
 }
 
 impl StandIn {
     fn new(room: usize) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_regions(room, 1)
+    }
+
+    fn with_regions(room: usize, regions: u32) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             room,
             stop_after: None,
             fail_at: None,
             taken: Mutex::new(0),
-            dimensions: FrameDimensions::new(32, 32)?,
+            dimensions: FrameDimensions::new(256, 32)?,
+            regions,
+            crops: Mutex::new(Vec::new()),
         })
+    }
+
+    /// The crops asked for, in order: each one's parent and rectangle.
+    fn crops_asked(&self) -> Vec<(EvidenceId, CropRect)> {
+        self.crops
+            .lock()
+            .map(|crops| crops.clone())
+            .unwrap_or_default()
     }
 
     fn take(&self, time: MediaTime, after: bool) -> Result<TakenFrame, FrameRefusal<PortError>> {
@@ -391,13 +432,55 @@ impl ScreenChangeFrames for StandIn {
     }
 
     fn pixels(&self, frame: &TakenFrame) -> Result<Vec<u8>, PortError> {
-        let mut pixels = vec![0_u8; 32 * 32 * 3];
-        if frame.evidence_id.as_str().starts_with("evd_1")
-            && let Some(corner) = pixels.get_mut(..16 * 3)
-        {
-            corner.fill(255);
+        let width = usize::try_from(self.dimensions.width()).map_err(|_| PortError::Pixels)?;
+        let height = usize::try_from(self.dimensions.height()).map_err(|_| PortError::Pixels)?;
+        let mut pixels = vec![0_u8; width * height * 3];
+        if frame.evidence_id.as_str().starts_with("evd_1") {
+            for block in 0..usize::try_from(self.regions).map_err(|_| PortError::Pixels)? {
+                let start = block * 64 * 3;
+                let end = start + (16 - block) * 3;
+                pixels
+                    .get_mut(start..end)
+                    .ok_or(PortError::Pixels)?
+                    .fill(255);
+            }
         }
         Ok(pixels)
+    }
+
+    fn crop(
+        &self,
+        frame: &TakenFrame,
+        rect: CropRect,
+    ) -> impl Future<Output = Result<EvidenceId, FrameRefusal<PortError>>> + Send {
+        std::future::ready(self.cut(frame, rect))
+    }
+}
+
+impl StandIn {
+    fn cut(
+        &self,
+        frame: &TakenFrame,
+        rect: CropRect,
+    ) -> Result<EvidenceId, FrameRefusal<PortError>> {
+        let mut taken = self
+            .taken
+            .lock()
+            .map_err(|_| FrameRefusal::Failed(PortError::Failed))?;
+        if self.fail_at == Some(*taken) {
+            return Err(FrameRefusal::Failed(PortError::Failed));
+        }
+        if *taken >= self.room {
+            return Err(FrameRefusal::NoRoom);
+        }
+        *taken += 1;
+        let mut crops = self
+            .crops
+            .lock()
+            .map_err(|_| FrameRefusal::Failed(PortError::Failed))?;
+        crops.push((frame.evidence_id.clone(), rect));
+        EvidenceId::parse(format!("evd_2{:031}", crops.len()))
+            .map_err(|_| FrameRefusal::Failed(PortError::Failed))
     }
 }
 
@@ -557,7 +640,7 @@ async fn a_stopped_page_resumes_at_its_first_change_not_listed() -> TestResult {
     let page = page_screen_changes(
         &fixture.session,
         &index,
-        &request(range(0, 180)?, 4, None, false)?,
+        &request(range(0, 180)?, 4, None, ScreenChangeCrops::NoCrops)?,
         NOW,
     )?;
     let afters: Vec<MediaTime> = page.changes.iter().map(|change| change.after).collect();
@@ -602,7 +685,7 @@ async fn the_last_page_resumes_at_the_first_window_still_to_analyse() -> TestRes
     let page = page_screen_changes(
         &fixture.session,
         &index,
-        &request(whole, 20, None, false)?,
+        &request(whole, 20, None, ScreenChangeCrops::NoCrops)?,
         NOW,
     )?;
     let port = StandIn::new(100)?;
@@ -620,13 +703,206 @@ async fn the_last_page_resumes_at_the_first_window_still_to_analyse() -> TestRes
     let page = page_screen_changes(
         &fixture.session,
         &analysed,
-        &request(whole, 20, None, false)?,
+        &request(whole, 20, None, ScreenChangeCrops::NoCrops)?,
         NOW,
     )?;
     let compared = compare_screen_changes(&port, &page.changes).await?;
     assert_eq!(
         page_continuation(&page, &compared, &gaps),
         PageContinuation::Done
+    );
+    Ok(())
+}
+
+/// Slice 1 bound its boolean as the words `crops` and `no-crops`; the enum
+/// binds exactly the same material, so a cursor issued before crops existed
+/// still continues.
+#[tokio::test]
+async fn the_cursor_digest_binds_the_words_slice_one_bound() -> TestResult {
+    let fixture = Fixture::new(1)?;
+    let whole = range(0, 60)?;
+    let index = fixture.extend(None, whole).await?;
+    for (crops, word) in [
+        (ScreenChangeCrops::NoCrops, "no-crops"),
+        (ScreenChangeCrops::LargestRegions, "crops"),
+    ] {
+        let candidates = candidate_query_digest(&index, whole)?;
+        let slice_one = format!(
+            "vsift.screen-changes.v1\n{}\nscreen-change-regions-v1\n7\n{word}",
+            candidates.as_str()
+        );
+        let digest = screen_change_query_digest(&index, &request(whole, 7, None, crops)?)?;
+        assert_eq!(digest.as_str(), sha256_hex(slice_one.as_bytes()));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn each_change_crops_its_two_largest_regions_before_then_after() -> TestResult {
+    let port = StandIn::with_regions(100, 3)?;
+    let mut page = compare_screen_changes(&port, &planned(2)?).await?;
+    let summary = crop_screen_changes(&port, &mut page.changes).await?;
+    assert_eq!(summary.made, 8);
+    assert_eq!(summary.regions_without_crop, 0);
+    assert_eq!(summary.stop, None);
+    let asked = port.crops_asked();
+    let parents: Vec<&str> = asked.iter().map(|(parent, _)| parent.as_str()).collect();
+    let xs: Vec<u32> = asked.iter().map(|(_, rect)| rect.x()).collect();
+    // Page order; the largest region (x 0) then the next (x 64); before then
+    // after; the third region is never cropped.
+    assert_eq!(xs, [0, 0, 64, 64, 0, 0, 64, 64]);
+    for (pair, change) in parents.chunks(4).zip(&page.changes) {
+        assert_eq!(
+            pair,
+            [
+                change.before.evidence_id.as_str(),
+                change.after.evidence_id.as_str(),
+                change.before.evidence_id.as_str(),
+                change.after.evidence_id.as_str(),
+            ]
+        );
+    }
+    for change in &page.changes {
+        let FrameComparison::Compared(found) = &change.comparison else {
+            return Err("not compared".into());
+        };
+        assert_eq!(found.regions.len(), 3);
+        assert_eq!(change.crops.len(), 2);
+        assert!(change.crops.iter().all(super::RegionCrops::is_complete));
+        for (index, region) in found.regions.iter().take(2).enumerate() {
+            assert_eq!(
+                asked.get(2 * index).map(|(_, rect)| *rect),
+                Some(region.rect)
+            );
+        }
+    }
+    // The page itself is untouched.
+    assert_eq!(page.stop, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_call_makes_at_most_sixteen_crops() -> TestResult {
+    let port = StandIn::with_regions(100, 2)?;
+    let mut page = compare_screen_changes(&port, &planned(5)?).await?;
+    let summary = crop_screen_changes(&port, &mut page.changes).await?;
+    assert_eq!(summary.made, MAX_CROPS_PER_CALL);
+    assert_eq!(port.crops_asked().len(), MAX_CROPS_PER_CALL);
+    // Four changes have both regions cropped; the fifth's two keep their
+    // rectangles with no crop.
+    assert_eq!(summary.regions_without_crop, 2);
+    assert_eq!(summary.stop, Some(CropStop::CropLimit));
+    assert!(!CropStop::CropLimit.is_interrupted());
+    let last = page.changes.last().ok_or("a change")?;
+    assert_eq!(last.crops.len(), 2);
+    assert!(
+        last.crops
+            .iter()
+            .all(|crops| crops.before.is_none() && crops.after.is_none())
+    );
+    assert_eq!(page.stop, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn exactly_sixteen_crops_is_no_stop() -> TestResult {
+    let port = StandIn::with_regions(100, 2)?;
+    let mut page = compare_screen_changes(&port, &planned(4)?).await?;
+    let summary = crop_screen_changes(&port, &mut page.changes).await?;
+    assert_eq!(summary.made, MAX_CROPS_PER_CALL);
+    assert_eq!(summary.regions_without_crop, 0);
+    assert_eq!(summary.stop, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn changes_without_regions_have_no_crops() -> TestResult {
+    let port = StandIn::with_regions(100, 0)?;
+    let mut page = compare_screen_changes(&port, &planned(3)?).await?;
+    let summary = crop_screen_changes(&port, &mut page.changes).await?;
+    assert_eq!(summary, super::CropSummary::default());
+    assert!(port.crops_asked().is_empty());
+    assert!(page.changes.iter().all(|change| change.crops.is_empty()));
+    // Frames of different sizes were never compared, so they have no regions.
+    let mut different = page.changes.clone();
+    for change in &mut different {
+        change.comparison = FrameComparison::DimensionsDiffer;
+    }
+    let summary = crop_screen_changes(&port, &mut different).await?;
+    assert_eq!(summary.made, 0);
+    assert!(port.crops_asked().is_empty());
+    Ok(())
+}
+
+/// The room, the deadline and a cancellation stop the cropping and are
+/// reported in the summary alone: the page's own stop, and so its status and
+/// how it continues, stay what the comparison made them.
+#[tokio::test]
+async fn a_crop_stop_leaves_the_page_untouched() -> TestResult {
+    let fixture = Fixture::new(3)?;
+    let index = fixture.extend(None, range(0, 180)?).await?;
+    let plan = page_screen_changes(
+        &fixture.session,
+        &index,
+        &request(range(0, 180)?, 3, None, ScreenChangeCrops::LargestRegions)?,
+        NOW,
+    )?;
+    let without = compare_screen_changes(&StandIn::with_regions(100, 2)?, &plan.changes).await?;
+    let expected = page_continuation(&plan, &without, &[]);
+    assert!(matches!(expected, PageContinuation::Next(_)));
+    // Three changes take six frames; the stops come after three crops.
+    for (room, stop_after, stop) in [
+        (9, None, CropStop::SessionEvidenceBudget),
+        (
+            100,
+            Some((9, ScreenChangeStop::DeadlineExceeded)),
+            CropStop::DeadlineExceeded,
+        ),
+        (
+            100,
+            Some((9, ScreenChangeStop::Cancelled)),
+            CropStop::Cancelled,
+        ),
+    ] {
+        let mut port = StandIn::with_regions(room, 2)?;
+        port.stop_after = stop_after;
+        let mut page = compare_screen_changes(&port, &plan.changes).await?;
+        assert_eq!(page.stop, None);
+        let summary = crop_screen_changes(&port, &mut page.changes).await?;
+        assert_eq!(summary.stop, Some(stop));
+        assert!(stop.is_interrupted());
+        assert_eq!(summary.made, 3);
+        // The first region is whole, the second has its before crop only,
+        // and the four of the next two changes have none.
+        assert_eq!(summary.regions_without_crop, 5);
+        let first = page.changes.first().ok_or("a change")?;
+        assert!(
+            first
+                .crops
+                .first()
+                .is_some_and(super::RegionCrops::is_complete)
+        );
+        assert!(
+            first
+                .crops
+                .get(1)
+                .is_some_and(|crops| crops.before.is_some() && crops.after.is_none())
+        );
+        assert_eq!(page.stop, None);
+        assert_eq!(page.changes.len(), 3);
+        assert_eq!(page_continuation(&plan, &page, &[]), expected);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn any_other_crop_failure_fails_the_call() -> TestResult {
+    let mut port = StandIn::with_regions(100, 1)?;
+    port.fail_at = Some(4);
+    let mut page = compare_screen_changes(&port, &planned(2)?).await?;
+    assert_eq!(
+        crop_screen_changes(&port, &mut page.changes).await,
+        Err(PortError::Failed)
     );
     Ok(())
 }

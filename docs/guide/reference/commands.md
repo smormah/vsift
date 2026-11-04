@@ -1258,6 +1258,9 @@ Options:
 
           [default: process-only]
 
+      --crops
+          Also cut each change's two largest regions out of its before and after frames, at native size: at most 16 crops a call, each a crop evidence item. Pass it again with --cursor
+
   -h, --help
           Print help (see a summary with '-h')
 
@@ -1266,6 +1269,8 @@ Examples:
     Each change in the first 5:00: where on the screen, and its two frames
   vsift changes <session> --from 90000000 --to 100000000 --limit 5 --json
     The same from 1:30 to 1:40, five changes a page, for a script
+  vsift changes <session> --from 90000000 --to 100000000 --crops
+    The same, with each change's two largest regions cut out of both frames
 
 Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md#what-changed-between-two-times
 ```

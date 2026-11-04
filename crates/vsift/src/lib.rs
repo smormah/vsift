@@ -213,15 +213,17 @@ pub use vsift_application::{
     SpecialFileKind, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
     TranscriptQueryError, UnusableChunk, UnusableChunks,
 };
+/// Screen-change values that appear in this API (ADR 0034).
+pub use vsift_application::{
+    CROPPED_REGIONS_PER_CHANGE, ComparedChange, CropStop, CropSummary, DEFAULT_SCREEN_CHANGE_PAGE,
+    MAX_CROPS_PER_CALL, MAX_SCREEN_CHANGE_PAGE, RegionCrops, ScreenChangeCrops,
+    ScreenChangeQueryError, ScreenChangeResume, ScreenChangeResumeReason, ScreenChangeStop,
+    TakenFrame,
+};
 /// Visual-candidate values that appear in this API.
 pub use vsift_application::{
     CandidateQueryError, MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError,
     VisualSamplingError,
-};
-/// Screen-change values that appear in this API (ADR 0034).
-pub use vsift_application::{
-    ComparedChange, DEFAULT_SCREEN_CHANGE_PAGE, MAX_SCREEN_CHANGE_PAGE, ScreenChangeQueryError,
-    ScreenChangeResume, ScreenChangeResumeReason, ScreenChangeStop, TakenFrame,
 };
 /// Managed-installation values that appear in this API (P13).
 pub use vsift_application::{

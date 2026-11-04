@@ -207,12 +207,15 @@ These files are the machine-readable public v1 boundary:
   them, the region `profile` (`screen-change-regions-v1` and its thresholds), the `changes` as
   `screen-change.schema.json` records in time order, each distinct `frame_evidence` record they
   cite in `frames`, one delivered file per frame in `files`, `partial_reason`, `next_cursor`
-  and `resume`. Its envelope `coverage` is `truncated`, and its status `partial`, exactly when
-  there is a gap or the page stopped; `changes-stream-data.schema.json` is the terminal data of
+  and `resume`; with `--crops`, the crops follow the frames in `frames` and `files` and `crops`
+  says how many were made and why cropping stopped. Its envelope `coverage` is `truncated`, and
+  its status `partial`, exactly when there is a gap or the page stopped (a crop stop never makes
+  it partial); `changes-stream-data.schema.json` is the terminal data of
   `changes --events jsonl`: the page without `changes` and `frames`, with `record_count`;
 - `screen-change.schema.json` - one screen change, a published evidence record (record type
   `screen_change`, key `change_id`): its kind, the index's `change_window`, the `evidence_id`
-  and time of the frame before and after it, and the rectangles where those two frames differ.
+  and time of the frame before and after it, and the rectangles where those two frames differ
+  (with `--crops`, the two largest name their `before_crop` and `after_crop`).
   A change is cited by its two `evidence_id`s, never by `change_id`;
 - `transcript-get-brief-data.schema.json`, `search-brief-data.schema.json` and
   `candidates-brief-data.schema.json` - the `data` of `transcript get`, `search` and
@@ -448,7 +451,8 @@ synthetic visual indexes with written-out regions and stand-in frame digests: a 
 1440x900 recording whose screen changes at 7 s and 10 s (the second a status edit of one row),
 complete, as a result and as a stream; and a 150 s recording with an undecodable and a
 not-analysed window whose page stopped on the session's evidence room after its first change,
-`partial` with `resume`. They are checked by `vsift-contract`'s `screen_changes_contract`, the
+`partial` with `resume`; `changes.crops.json` is the 14 s page asked for with `--crops`, its six
+crops listed after its four frames. They are checked by `vsift-contract`'s `screen_changes_contract`, the
 stream byte for byte; `changes_cli_contract` runs the binary.
 `ocr.json`, `ocr.partial.json` and `search.screen-text.json` (0.3.0, ADR 0030) read a
 synthetic 15 s video every 5 s plus one visual candidate at 6 s, built by `vsift-contract`'s

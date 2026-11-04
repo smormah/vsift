@@ -19,9 +19,19 @@
 //!
 //! A change is cited by its before and after `evidence_id`s, never by its
 //! `change_id`, which `handoff check` does not know (ADR 0034 section 5).
+//!
+//! With `--crops` (ADR 0034 section 4), each listed change's two largest
+//! regions name the crops cut out of its two frames, the crops are listed
+//! with the frames after the whole frames, and `data.crops` says how many
+//! were made and why cropping stopped. Without `--crops` none of that is
+//! present, so the answer is slice 1's byte for byte. A crop stop never makes
+//! the result partial: status, coverage, `partial_reason` and `resume` stay
+//! about the listing (the planner's ruling of 2026-11-04).
 
 use serde::Serialize;
-use vsift_application::{ComparedChange, ScreenChangeStop};
+use vsift_application::{
+    ComparedChange, CropSummary, MAX_CROPS_PER_CALL, RegionCrops, ScreenChangeStop,
+};
 use vsift_domain::{
     ChangeRegion, EvidenceItem, EvidenceProfile, FrameComparison, MAX_CHANGE_REGIONS, MediaTime,
     SCREEN_CHANGE_JOIN_DISTANCE, SCREEN_CHANGE_PIXEL_LEVEL, SCREEN_CHANGE_TILE,
@@ -44,6 +54,11 @@ pub const CHANGES_COVERAGE_WARNING: &str = "Part of the requested range has no s
 
 /// Fixed warning of a `changes` page that stopped before its last change.
 pub const CHANGES_STOPPED_WARNING: &str = "The page stopped before its last change (partial_reason says why): the changes listed are complete and their frames are committed evidence, but there is no next_cursor. resume.from_us is where a fresh call without --cursor continues; after session_evidence_budget, keep this session with session retain and continue in a new session opened with ingest.";
+
+/// Fixed warning of a `changes --crops` call that stopped cropping for the
+/// session's evidence room, the deadline or a cancellation. The listing is
+/// whole, so the status stays as the listing sets it.
+pub const CHANGES_CROPS_STOPPED_WARNING: &str = "Cropping stopped before every listed change's largest regions were cropped (crops.stop says why): the changes, their frames and regions are complete, and regions without a crop keep their rectangle. Run the same call again to continue the crops, since frames and crops already made are reused; after session_evidence_budget, keep this session with session retain and crop in a new session opened with ingest, or use crop --rect on the frames listed.";
 
 /// Remediation when a `changes` cursor is rejected.
 pub const CHANGES_CURSOR_REMEDIATION: &str = "The cursor does not continue a page of this changes request: it belongs to another session, range or --limit, it has expired, or a window of its range was analysed after it was issued. Nothing was changed. Pass back only the next_cursor of the previous page with the same session, --from, --to and --limit, or run changes without --cursor.";
@@ -105,6 +120,9 @@ pub struct ScreenChangesPresentation<'a> {
     /// The session's clock-time anchors, from which every frame's
     /// `clock_time` is derived (ADR 0029).
     pub time_anchors: &'a TimeAnchors,
+    /// What the call's cropping made, when crops were asked for; `None`
+    /// without `--crops`.
+    pub crops: Option<CropSummary>,
 }
 
 /// The region rule and its thresholds (`screen-change-regions-v1`).
@@ -164,6 +182,49 @@ impl RegionData {
     }
 }
 
+/// A listed region: its rectangle and, with `--crops`, the crops cut from
+/// the change's two frames, each present only when it was made.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct ListedRegionData {
+    #[serde(flatten)]
+    region: RegionData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    before_crop: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    after_crop: Option<String>,
+}
+
+impl ListedRegionData {
+    fn new(region: &ChangeRegion, crops: Option<&RegionCrops>) -> Self {
+        let id = |crop: Option<&vsift_domain::EvidenceId>| crop.map(|id| id.as_str().to_owned());
+        Self {
+            region: RegionData::new(region),
+            before_crop: id(crops.and_then(|crops| crops.before.as_ref())),
+            after_crop: id(crops.and_then(|crops| crops.after.as_ref())),
+        }
+    }
+}
+
+/// What a `--crops` call's cropping made (`data.crops`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+struct CropsData {
+    limit: usize,
+    made: usize,
+    regions_without_crop: usize,
+    stop: Option<&'static str>,
+}
+
+impl CropsData {
+    fn of(summary: CropSummary) -> Self {
+        Self {
+            limit: MAX_CROPS_PER_CALL,
+            made: summary.made,
+            regions_without_crop: summary.regions_without_crop,
+            stop: summary.stop.map(vsift_application::CropStop::identifier),
+        }
+    }
+}
+
 /// One published `screen_change` record.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ScreenChangeData {
@@ -176,7 +237,7 @@ pub struct ScreenChangeData {
     before: ChangeFrameData,
     after: ChangeFrameData,
     comparison: &'static str,
-    regions: Vec<RegionData>,
+    regions: Vec<ListedRegionData>,
     regions_left_out: u32,
     changed_area: Option<RegionData>,
     no_region_at_threshold: bool,
@@ -208,7 +269,12 @@ impl ScreenChangeData {
         {
             FrameComparison::Compared(found) => (
                 "compared",
-                found.regions.iter().map(RegionData::new).collect(),
+                found
+                    .regions
+                    .iter()
+                    .enumerate()
+                    .map(|(index, region)| ListedRegionData::new(region, compared.crops.get(index)))
+                    .collect(),
                 found.regions_left_out,
                 found.changed_area.as_ref().map(RegionData::new),
                 found.regions.is_empty(),
@@ -260,6 +326,7 @@ struct PageSummary {
     partial_reason: Option<&'static str>,
     next_cursor: Option<String>,
     resume: Option<ResumeData>,
+    crops: Option<CropsData>,
 }
 
 impl PageSummary {
@@ -277,6 +344,7 @@ impl PageSummary {
                 from_us: resume.from.as_micros(),
                 reason: resume.reason,
             }),
+            crops: page.crops.map(CropsData::of),
         })
     }
 }
@@ -338,6 +406,9 @@ pub struct ScreenChangesData {
     partial_reason: Option<&'static str>,
     next_cursor: Option<String>,
     resume: Option<ResumeData>,
+    /// Present only with `--crops`, so a call without it is slice 1's answer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    crops: Option<CropsData>,
 }
 
 /// Data of the terminal event that ends a `changes` evidence stream: the
@@ -355,6 +426,9 @@ pub struct ScreenChangesStreamData {
     partial_reason: Option<&'static str>,
     next_cursor: Option<String>,
     resume: Option<ResumeData>,
+    /// Present only with `--crops`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    crops: Option<CropsData>,
 }
 
 /// Completes a `changes` response with its lifecycle, its coverage and, for
@@ -383,6 +457,16 @@ fn finish(
     if page.stop.is_some() {
         response = response.with_warnings(&[CHANGES_STOPPED_WARNING]);
     }
+    // A crop stop adds a warning and nothing else: the status, coverage and
+    // continuation stay the listing's. The 16-crop bound is published, so it
+    // needs none.
+    if page
+        .crops
+        .and_then(|crops| crops.stop)
+        .is_some_and(vsift_application::CropStop::is_interrupted)
+    {
+        response = response.with_warnings(&[CHANGES_CROPS_STOPPED_WARNING]);
+    }
     response
 }
 
@@ -410,6 +494,7 @@ pub fn screen_changes_response(
         partial_reason: summary.partial_reason,
         next_cursor: summary.next_cursor,
         resume: summary.resume,
+        crops: summary.crops,
     };
     let response = OperationResponse::complete(CommandName::Changes.identifier(), &data)?;
     Ok(finish(response, page, lifecycle))
@@ -421,7 +506,7 @@ pub fn screen_changes_response(
 /// first use, then its changes as `screen_change` events, in time order,
 /// numbered from 0; the terminal event follows with the next sequence number
 /// and carries everything else. A page holds at most 20 changes and 40
-/// frames, so the stream is bounded.
+/// frames, and with `--crops` 16 crops more, so the stream is bounded.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScreenChangesEvidenceStream {
     records: Vec<EvidenceEventResponse>,
@@ -466,6 +551,7 @@ impl ScreenChangesEvidenceStream {
             partial_reason: summary.partial_reason,
             next_cursor: summary.next_cursor,
             resume: summary.resume,
+            crops: summary.crops,
         };
         let result = finish(
             OperationResponse::complete(command.identifier(), &data)?,

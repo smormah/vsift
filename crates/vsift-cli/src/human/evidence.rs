@@ -17,9 +17,10 @@ use super::{
     time::{push_clock, push_range, push_span},
     transcript::{count, push_next_page},
     view::{
-        AudioData, AudioEvidence, CandidatesCoverage, CandidatesPage, ChangeFrame, ChangesPage,
-        ClocksResult, DeliveredFile, Envelope, FrameData, FrameEvidence, Range, ScreenChange,
-        ScreenClockView, ScreenTextResult, Selection, VisualCandidate, VisualIndex,
+        AudioData, AudioEvidence, CandidatesCoverage, CandidatesPage, ChangeFrame,
+        ChangeRegionView, ChangesPage, ClocksResult, DeliveredFile, Envelope, FrameData,
+        FrameEvidence, Range, ScreenChange, ScreenClockView, ScreenTextResult, Selection,
+        VisualCandidate, VisualIndex,
     },
 };
 
@@ -369,12 +370,40 @@ pub(super) fn changes(envelope: &Envelope<ChangesPage>) -> Result<RenderedText, 
             push_change_frame(&mut text, label, frame);
             paths.push_files_of(&mut text, &frame.evidence_id, &page.files);
         }
+        for region in &change.regions {
+            for (label, crop) in [
+                ("  Crop of the before frame, ", &region.before_crop),
+                ("  Crop of the after frame, ", &region.after_crop),
+            ] {
+                if let Some(crop) = crop {
+                    text.push_fixed(label);
+                    push_rectangle(&mut text, region);
+                    text.push_fixed(": ").push_value(crop).end_line();
+                    paths.push_files_of(&mut text, crop, &page.files);
+                }
+            }
+        }
     }
     if !page.changes.is_empty() {
         text.blank_line();
         text.push_fixed(CITE_CHANGES_NOTE).end_line();
     }
     paths.push_notes(&mut text);
+    if let Some(crops) = &page.crops {
+        text.push_fixed("Crops: ")
+            .push_unsigned(crops.made)
+            .push_fixed(" made, at most ")
+            .push_unsigned(crops.limit)
+            .push_fixed(" a call; ")
+            .push_unsigned(crops.regions_without_crop)
+            .push_fixed(" of the two largest regions of each change without a crop");
+        if let Some(stop) = &crops.stop {
+            text.push_fixed(" (cropping stopped: ")
+                .push_value(stop)
+                .push_fixed(")");
+        }
+        text.end_line();
+    }
     if let Some(reason) = &page.partial_reason {
         text.push_fixed("Stopped early: ")
             .push_value(reason)
@@ -419,13 +448,7 @@ fn push_change(text: &mut TerminalText, change: &ScreenChange) {
             if position > 0 {
                 text.push_fixed("; ");
             }
-            text.push_unsigned(region.x)
-                .push_fixed(",")
-                .push_unsigned(region.y)
-                .push_fixed(" ")
-                .push_unsigned(region.width)
-                .push_fixed("x")
-                .push_unsigned(region.height);
+            push_rectangle(text, region);
         }
         if change.regions_left_out > 0 {
             text.push_fixed(", and ")
@@ -439,6 +462,18 @@ fn push_change(text: &mut TerminalText, change: &ScreenChange) {
     text.push_fixed(" and at or before ");
     push_clock(text, change.change_window.to_us);
     text.end_line();
+}
+
+/// Writes a region as `x,y widthxheight`, the form `crop --rect` reads
+/// with commas.
+fn push_rectangle(text: &mut TerminalText, region: &ChangeRegionView) {
+    text.push_unsigned(region.x)
+        .push_fixed(",")
+        .push_unsigned(region.y)
+        .push_fixed(" ")
+        .push_unsigned(region.width)
+        .push_fixed("x")
+        .push_unsigned(region.height);
 }
 
 /// Writes one of a change's frames: its evidence id and time.

@@ -239,8 +239,14 @@ the change means. Small differences are not reported: a pixel counts when a colo
 16 by 16 tile only with 4 such pixels, so a moving cursor or one changed character may not show. The index looks at
 the screen twice a second, so something that came and went in under half a second may be missing.
 
+Add `--crops` to have VSift cut each change's two largest regions out of both frames for you, at full size, so
+you can look at just the part that changed. Each crop is evidence of its own (`evd_…`, with its file), listed under
+its change; a call makes at most 16, and the rest of the regions keep their rectangle. The second region is often a
+few pixels of compression noise around the first, so its crop can look almost empty.
+
 A page holds 10 changes (`--limit` takes 1 to 20); page on with `--cursor` as for `candidates`. Every frame takes
-room in the session (it holds 384 evidence items, about 95 to 190 changes with their frames). When the session is
+room in the session (it holds 384 evidence items, about 95 to 190 changes with their frames, or about 50 to 110
+with `--crops` on every page). When the session is
 full the page stops, says `session_evidence_budget`, and tells you the `--from` to continue with in a new session.
 When you report a change, cite its two `evd_` ids.
 

@@ -40,9 +40,9 @@ use std::{
 use serde_json::{Value, json};
 use vsift::{
     Cancellation, CandidatesRange, Engine, EngineConfig, EnginePorts, FrameComparison,
-    HostIsolation, IngestRequest, ManagedRootLocation, ScreenChangeKind, ScreenChangeResumeReason,
-    ScreenChangesRequest, ScreenChangesResults, SessionId, SessionRootLocation,
-    UserConfigurationLocation,
+    HostIsolation, IngestRequest, ManagedRootLocation, ScreenChangeCrops, ScreenChangeKind,
+    ScreenChangeResumeReason, ScreenChangesRequest, ScreenChangesResults, SessionId,
+    SessionRootLocation, UserConfigurationLocation,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -339,6 +339,7 @@ async fn measure_item(item: &Item) -> Built<Value> {
                 },
                 limit: Some(20),
                 cursor: cursor.take(),
+                crops: ScreenChangeCrops::NoCrops,
                 cancellation: Cancellation::new(),
             })
             .await?;

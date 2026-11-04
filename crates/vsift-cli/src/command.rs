@@ -1076,6 +1076,23 @@ pub(crate) struct ChangesArguments {
     /// range and --limit; a call with a cursor never analyses anything.
     #[arg(long, hide_short_help = true)]
     pub cursor: Option<String>,
+    /// Also cut each change's two largest regions out of its before and
+    /// after frames, at native size: at most 16 crops a call, each a crop
+    /// evidence item. Pass it again with --cursor.
+    #[arg(long)]
+    pub crops: bool,
+}
+
+impl ChangesArguments {
+    /// The engine's crop choice this flag names: the flag is a boolean only
+    /// here, at the edge of the command line.
+    pub(crate) const fn crops(&self) -> vsift::ScreenChangeCrops {
+        if self.crops {
+            vsift::ScreenChangeCrops::LargestRegions
+        } else {
+            vsift::ScreenChangeCrops::NoCrops
+        }
+    }
 }
 
 /// Which candidates `candidates --omit` leaves out (#367).

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/changes-data.schema.json",
   "title": "VSift changes data v1",
-  "description": "The data member of a complete or partial changes result (0.3.0, ADR 0034): one bounded page of the screen changes whose after frame lies in the requested range, in time order, as published screen-change records. A call without a cursor first analyses the range's missing 60 s windows as candidates does (at most 30 per call); index names the revision the changes were read from, and coverage is the index's own, as candidates reports it. Each change cites its two frames by evidence_id: frames lists each distinct frame_evidence record of the page once, in order of first use, and files delivers each frame's image as the absolute path of the committed session artifact, valid while the session exists. Cite a change by its before and after evidence_id, never by change_id. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty or partial_reason is set. Pass next_cursor back with the same session, range and --limit to continue; it never analyses anything. When this call could not go on (partial_reason set, or the pages reached the end of the analysed part), resume says where a fresh call without --cursor continues.",
+  "description": "The data member of a complete or partial changes result (0.3.0, ADR 0034): one bounded page of the screen changes whose after frame lies in the requested range, in time order, as published screen-change records. A call without a cursor first analyses the range's missing 60 s windows as candidates does (at most 30 per call); index names the revision the changes were read from, and coverage is the index's own, as candidates reports it. Each change cites its two frames by evidence_id: frames lists each distinct frame_evidence record of the page once, in order of first use, and files delivers each frame's image as the absolute path of the committed session artifact, valid while the session exists. Cite a change by its before and after evidence_id, never by change_id. With --crops, the page's crops follow its whole frames in frames and files, the regions they cut name them, and crops says how many were made; without --crops neither crops nor any crop is present. A crop stop never makes the result partial. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty or partial_reason is set. Pass next_cursor back with the same session, range and --limit to continue; it never analyses anything. When this call could not go on (partial_reason set, or the pages reached the end of the analysed part), resume says where a fresh call without --cursor continues.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,17 +33,37 @@
       "items": { "$ref": "screen-change.schema.json" }
     },
     "frames": {
-      "description": "Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them.",
+      "description": "Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them. With --crops, the crops the regions name follow, as crop publishes them, in the order they were made: at most 40 frames and, with --crops, 16 crops.",
       "type": "array",
-      "maxItems": 40,
+      "maxItems": 56,
       "items": { "$ref": "frame-evidence.schema.json" }
     },
     "files": { "$ref": "#/$defs/files" },
     "partial_reason": { "$ref": "#/$defs/partial_reason" },
     "next_cursor": { "$ref": "candidates-data.schema.json#/$defs/next_cursor" },
-    "resume": { "$ref": "#/$defs/resume" }
+    "resume": { "$ref": "#/$defs/resume" },
+    "crops": { "$ref": "#/$defs/crops" }
   },
   "$defs": {
+    "crops": {
+      "description": "Present only with --crops (ADR 0034 section 4): what the call's cropping made. Each listed change's first two regions are cropped from its before and after frame, in page order, only after every listed change has its frames, so cropping never changes which changes are listed. made counts the crops listed (reused ones included); regions_without_crop counts those first-two regions that lack their before or after crop. stop is null when every such region has both crops; crop_limit when the call made limit crops and more regions remained (a published bound, no warning); session_evidence_budget, deadline_exceeded or cancelled when cropping stopped early, with a fixed warning: run the same call again to continue the crops, or after session_evidence_budget crop in a new session. A crop stop never makes the result partial: status, coverage, partial_reason and resume stay about the listing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "made", "regions_without_crop", "stop"],
+      "properties": {
+        "limit": { "const": 16 },
+        "made": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "regions_without_crop": { "type": "integer", "minimum": 0, "maximum": 40 },
+        "stop": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "enum": ["crop_limit", "session_evidence_budget", "deadline_exceeded", "cancelled"]
+            }
+          ]
+        }
+      }
+    },
     "profile": {
       "description": "The versioned rule that finds regions. A pixel changed when any of its R, G and B differs by at least pixel_level; a tile of tile x tile displayed pixels changed when it holds at least tile_pixels changed pixels; changed tiles at most join_distance tiles apart join one region; at most max_regions regions are listed per change. Changing a threshold is a new profile.",
       "type": "object",
@@ -66,9 +86,9 @@
       }
     },
     "files": {
-      "description": "One delivered file per frame, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.",
+      "description": "One delivered file per frame, and with --crops per crop, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.",
       "type": "array",
-      "maxItems": 40,
+      "maxItems": 56,
       "items": { "$ref": "frame-data.schema.json#/$defs/files/items" }
     },
     "partial_reason": {
