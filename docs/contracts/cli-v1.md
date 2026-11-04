@@ -3273,13 +3273,16 @@ crop. A call makes at most 16 crops; regions past that keep their rectangle and 
 
 - a listed region carries `before_crop` and `after_crop` (evidence ids), each present only when
   that crop was made (a stop can leave a region with its before crop alone);
-- `frames` lists the crops after the page's whole frames, in the order they were made, and
-  `files` delivers one file per crop in the same order, so `frames` and `files` hold at most 56
+- `frames` lists the crops after the page's whole frames, each distinct crop record once, in the
+  order they were first named, and `files` delivers one file per crop in the same order, so `frames` and `files` hold at most 56
   items with `--crops` (40 without); the stream writes them as `frame_evidence` events before the
   `screen_change` events, and `record_count` is at most 76;
 - `data.crops` is `{"limit": 16, "made", "regions_without_crop", "stop"}`: `made` counts the
-  crops listed, `regions_without_crop` the first-two regions without their before or after crop,
-  and `stop` is `null`, `crop_limit` (the call made 16 and more regions remained: a published
+  crop ids the regions name, a crop named twice counting twice (one change's after frame is often
+  the next change's before frame, so a region's after crop can be the same record as the next
+  change's before crop), so `frames` can hold fewer crops than `made`, and the limit of 16 counts
+  those names; `regions_without_crop` counts the first-two regions without their before or after
+  crop, and `stop` is `null`, `crop_limit` (the regions had named 16 and more remained: a published
   bound, no warning), or `session_evidence_budget`, `deadline_exceeded` or `cancelled` (cropping
   stopped early, with the fixed warning `Cropping stopped before every listed change's largest
   regions were cropped ...`: run the same call again, which reuses the frames and crops already

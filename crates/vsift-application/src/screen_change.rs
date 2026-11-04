@@ -82,7 +82,9 @@ impl ScreenChangeCrops {
 
 /// Regions of one change that are cropped: the largest, by changed pixels.
 pub const CROPPED_REGIONS_PER_CHANGE: usize = 2;
-/// Most crops one call makes: eight regions, each from both frames.
+/// Most crops one call names: eight regions, each from both frames. It
+/// counts names, so a crop two regions name counts twice although it is one
+/// record (see [`CropSummary::made`]).
 pub const MAX_CROPS_PER_CALL: usize = 16;
 
 /// One page of planned changes, before their frames are taken.
@@ -505,7 +507,13 @@ impl CropStop {
 /// comparison set it (the planner's ruling of 2026-11-04).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CropSummary {
-    /// Crops made, reused ones included.
+    /// Crop ids the regions name: a crop named by two regions counts twice.
+    ///
+    /// One change's after frame is often the next change's before frame, so
+    /// a region's after crop can be the exact repeat of the next change's
+    /// before crop: the same crop record, named twice. The page lists each
+    /// distinct crop record once, so it can list fewer crops than this.
+    /// [`MAX_CROPS_PER_CALL`] bounds this count.
     pub made: usize,
     /// Planned regions (the first [`CROPPED_REGIONS_PER_CHANGE`] of each
     /// listed change) without their before or their after crop.

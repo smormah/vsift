@@ -374,7 +374,10 @@ result partial). As built:
   The crops are `frame_evidence` records of kind `crop`, listed in `frames` after the whole frames
   and delivered in `files` in the same order (at most 56 of each with `--crops`). `data.crops` is
   `{limit, made, regions_without_crop, stop}`, present only with `--crops`, so a call without it is
-  slice 1's answer byte for byte.
+  slice 1's answer byte for byte. `made` counts the crop ids the regions name: one change's after
+  frame is often the next change's before frame, so a region's after crop can be the same record as
+  the next change's before crop, named twice and counted twice but listed once in `frames`. The
+  16-crop bound counts names (the planner, on #574).
 - **Stops.** `crop_limit` is the published bound and adds no warning. `session_evidence_budget`,
   `deadline_exceeded` and `cancelled` stop the cropping and add a fixed warning (run the same call
   again; after `session_evidence_budget`, a new session). None of them makes the result `partial`:

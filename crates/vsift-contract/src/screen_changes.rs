@@ -205,7 +205,9 @@ impl ListedRegionData {
     }
 }
 
-/// What a `--crops` call's cropping made (`data.crops`).
+/// What a `--crops` call's cropping made (`data.crops`): `made` counts the
+/// crop ids the regions name, a crop named twice counting twice, while the
+/// page lists each distinct crop record once.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 struct CropsData {
     limit: usize,

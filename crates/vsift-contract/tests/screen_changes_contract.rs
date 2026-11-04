@@ -430,7 +430,10 @@ fn crop_item(parent: &EvidenceItem, rect: CropRect) -> Built<EvidenceItem> {
 }
 
 /// Crops the first two regions of each change, before then after, in page
-/// order, keeping the first `made` crops (as a call that stopped there).
+/// order, keeping the first `made` crops (as a call that stopped there). A
+/// crop that repeats one already made (the same parent and rectangle) is
+/// named again and counted, but its record is listed once, as the engine
+/// reuses it.
 fn with_crops(mut page: ComparedPage, made: usize) -> Built<ComparedPage> {
     let mut count = 0;
     for (_, change) in &mut page.changes {
@@ -452,7 +455,9 @@ fn with_crops(mut page: ComparedPage, made: usize) -> Built<ComparedPage> {
                         .ok_or("an unlisted parent")?;
                     let item = crop_item(parent, region.rect)?;
                     *slot = Some(item.id().clone());
-                    page.crop_items.push(item);
+                    if !page.crop_items.iter().any(|known| known.id() == item.id()) {
+                        page.crop_items.push(item);
+                    }
                     count += 1;
                 }
             }
@@ -1232,5 +1237,80 @@ fn the_crop_members_are_published_as_the_schema_says() -> TestResult {
     data["crops"]["limit"] = Value::from(16);
     data["crops"]["stop"] = Value::from("partial");
     assert!(!is_valid("changes-data.schema.json", &data)?);
+    Ok(())
+}
+
+/// One change's after frame is the next change's before frame, and both
+/// changes differ in the same rectangle, so the after crop of the first is
+/// the before crop of the second: one crop record, named twice. `made`
+/// counts the names (4), `frames` lists the record once (3 crops), and the
+/// page validates (the planner, on #574).
+#[test]
+fn a_crop_named_twice_is_counted_twice_and_listed_once() -> TestResult {
+    let (recording, mut page, requested) = status_edit_page()?;
+    let dimensions = recording.dimensions();
+    let row = region(dimensions, (1008, 384, 400, 48), 7_140)?;
+    let one_region = || {
+        FrameComparison::Compared(RegionComparison {
+            regions: vec![row],
+            regions_left_out: 0,
+            changed_area: Some(row),
+        })
+    };
+    let shared = page
+        .changes
+        .first()
+        .map(|(_, change)| change.after.clone())
+        .ok_or("the first change")?;
+    if let Some((_, first)) = page.changes.get_mut(0) {
+        first.comparison = one_region();
+    }
+    if let Some((_, second)) = page.changes.get_mut(1) {
+        second.before = shared;
+        second.comparison = one_region();
+    }
+    let page = with_crops(page, 4)?;
+    let rendered = render(
+        &recording,
+        &page,
+        PageOptions {
+            requested,
+            listed: 2,
+            stop: None,
+            resume: None,
+            next_cursor: None,
+            anchors: &TimeAnchors::none(),
+            crops: Some(CropSummary {
+                made: 4,
+                regions_without_crop: 0,
+                stop: None,
+            }),
+        },
+    )?;
+    let value = rendered.json;
+    validate_result(&value)?;
+    let data = &value["data"];
+    assert_eq!(data["crops"]["made"], 4);
+    let changes = data["changes"].as_array().ok_or("changes")?;
+    let first_after = &changes[0]["regions"][0]["after_crop"];
+    assert!(first_after.is_string());
+    assert_eq!(*first_after, changes[1]["regions"][0]["before_crop"]);
+    let frames = data["frames"].as_array().ok_or("frames")?;
+    let crops = frames
+        .iter()
+        .filter(|frame| frame["kind"] == "crop")
+        .count();
+    assert_eq!(crops, 3);
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|frame| frame["evidence_id"] == *first_after)
+            .count(),
+        1
+    );
+    assert_eq!(frames.len(), data["files"].as_array().ok_or("files")?.len());
+    for line in &rendered.lines {
+        validate_line(&serde_json::from_str(line)?)?;
+    }
     Ok(())
 }

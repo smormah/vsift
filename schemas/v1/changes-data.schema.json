@@ -33,7 +33,7 @@
       "items": { "$ref": "screen-change.schema.json" }
     },
     "frames": {
-      "description": "Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them. With --crops, the crops the regions name follow, as crop publishes them, in the order they were made: at most 40 frames and, with --crops, 16 crops.",
+      "description": "Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them. With --crops, the crops the regions name follow, each distinct crop record once, as crop publishes them, in the order they were first named: at most 40 frames and, with --crops, 16 crops.",
       "type": "array",
       "maxItems": 56,
       "items": { "$ref": "frame-evidence.schema.json" }
@@ -46,7 +46,7 @@
   },
   "$defs": {
     "crops": {
-      "description": "Present only with --crops (ADR 0034 section 4): what the call's cropping made. Each listed change's first two regions are cropped from its before and after frame, in page order, only after every listed change has its frames, so cropping never changes which changes are listed. made counts the crops listed (reused ones included); regions_without_crop counts those first-two regions that lack their before or after crop. stop is null when every such region has both crops; crop_limit when the call made limit crops and more regions remained (a published bound, no warning); session_evidence_budget, deadline_exceeded or cancelled when cropping stopped early, with a fixed warning: run the same call again to continue the crops, or after session_evidence_budget crop in a new session. A crop stop never makes the result partial: status, coverage, partial_reason and resume stay about the listing.",
+      "description": "Present only with --crops (ADR 0034 section 4): what the call's cropping made. Each listed change's first two regions are cropped from its before and after frame, in page order, only after every listed change has its frames, so cropping never changes which changes are listed. made counts the crop ids the regions name, a crop named by two regions counting twice (one change's after frame is often the next change's before frame, so the after crop of a region can be the same crop record as the next change's before crop); frames lists each distinct crop record once, so it can hold fewer crops than made, and limit bounds made; regions_without_crop counts those first-two regions that lack their before or after crop. stop is null when every such region has both crops; crop_limit when the regions had named limit crops and more regions remained (a published bound, no warning); session_evidence_budget, deadline_exceeded or cancelled when cropping stopped early, with a fixed warning: run the same call again to continue the crops, or after session_evidence_budget crop in a new session. A crop stop never makes the result partial: status, coverage, partial_reason and resume stay about the listing.",
       "type": "object",
       "additionalProperties": false,
       "required": ["limit", "made", "regions_without_crop", "stop"],
