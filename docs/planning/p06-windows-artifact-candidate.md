@@ -217,3 +217,37 @@ the 13 files), and `P07 local ASR` [39163129897](https://github.com/smormah/vsif
 on an Intel runner (Family 6 Model 207) with accuracy identical to v1.9.2's on the same CPU model (run
 39082010927): `base` clean WER 4.06% (F05's "invoice" heard as "in voice", the backend difference ADR 0017
 records), F08 61.53%, real-time factor 0.355 (0.361 before), peak 336 MiB; `base_q5_1` 4.06%, 46.15%, 0.290, 250 MiB.
+
+## 2026-11-04 re-pin: FFmpeg n9.0.2-39 (the month-end build of 2026-10-31)
+
+The Windows side of the re-pin reviewed in
+[`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md#2026-11-03-re-pin-ffmpeg-n902-39-the-month-end-build-of-2026-10-31)
+(the line, the fix check, the component review and the maintainer's acceptance of 2026-11-04; [L-132](known-limits.md#l-132);
+#351 stays open, [L-144](known-limits.md#l-144)). It is the `win64-lgpl-9.0` zip of the same release and the same source
+(`7adfbe40dcde`, build scripts `5031c6f1`). The hot fix `0.2.4` moved only the Ubuntu catalogue (no published release
+installs FFmpeg on Windows); on `main` the Windows catalogue of ADR 0032 moves to revision `windows-x86_64-2026-11-04-r2`
+for `0.3.0`, and the hosted Windows jobs stage the same bytes.
+
+| Item | Earlier pin (revision `r1`) | Re-pin (revision `r2`) |
+| --- | --- | --- |
+| Asset | `ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip` of `autobuild-2026-08-31-13-27` | `ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip` of `autobuild-2026-10-31-12-59` |
+| Bytes | 147,007,942 | **168,715,328** |
+| SHA-256 | `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56` | **`9d37c564e0d01c18cde184a079fa6ef04d7d2783ada41da81d04165cc8f1a650`** (the publisher's digest; the hosted job's hash of the downloaded bytes equals it) |
+| Entries / expanded bytes | 48 / 358,125,718 | 48 / 411,498,134 |
+| `bin/ffmpeg.exe` | 114,400,768 bytes, `63a0b3c7…5b3a6` | 132,190,720 bytes, `d03c858a130cae1382902925d9f46eb15d7de42e025d34cc29b7ddca6cfb4c62` |
+| `bin/ffprobe.exe` | 114,198,528 bytes, `1ce64d9f…f5879` | 131,990,016 bytes, `61d1eef897bfa42306ac4ab36afc6adce23cccce577bda88b84c06d44e1b9183` |
+| `LICENSE.txt` | 7,651 bytes, `da7eabb7…4464768` | the same bytes |
+
+- **Bounds.** No Windows bound moves: the zip reader's ceilings are 1 GiB compressed and 1 GiB expanded, and the
+  catalogue's reviewed limits are this archive's own (48 entries, 411,498,134 bytes).
+- **Zip features** (what the zip reader accepts): methods stored and deflate, flag bits 0 and 2, no Zip64 extras, no
+  archive or entry comments, no backslash names; the same as the earlier pin.
+- **Imports** (ADR 0032, decision D2). Neither executable imports the Visual C++ runtime (`vcruntime140.dll`,
+  `vcruntime140_1.dll`, `msvcp140.dll`) or OpenMP (`vcomp140.dll`). Against the earlier pin both add only Windows
+  system libraries: `bcryptprimitives.dll`, `dnsapi.dll`, `msimg32.dll`, `userenv.dll` and
+  `api-ms-win-crt-process-l1-1-0.dll` (FFprobe also `api-ms-win-crt-conio-l1-1-0.dll`), which fits the librsvg the recipe
+  added (a Rust library drawing through cairo); none is removed.
+- **Hosted evidence.** The inventory is from `P06 Windows candidate smoke`
+  [41760417079](https://github.com/smormah/vsift/actions/runs/41760417079) on the forward-port branch at `6449fe7d`
+  (Windows Server 2025, build 26100), whose smoke step stopped at the selected files by design, since they still held
+  the earlier pins. The pinned smoke on the final head and `P13 managed smoke` are recorded in the pull request.

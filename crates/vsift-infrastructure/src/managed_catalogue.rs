@@ -1157,15 +1157,15 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
         (
             "bin/ffmpeg.exe",
             "ffmpeg.exe",
-            114_400_768,
-            "63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6",
+            132_190_720,
+            "d03c858a130cae1382902925d9f46eb15d7de42e025d34cc29b7ddca6cfb4c62",
             true,
         ),
         (
             "bin/ffprobe.exe",
             "ffprobe.exe",
-            114_198_528,
-            "1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879",
+            131_990_016,
+            "61d1eef897bfa42306ac4ab36afc6adce23cccce577bda88b84c06d44e1b9183",
             true,
         ),
     ];
@@ -1177,9 +1177,9 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
         integrity,
         format: ManagedArtifactFormat::Zip,
         archive_limits: Some(ReviewedArchiveLimits {
-            max_stream_bytes: 358_125_718,
+            max_stream_bytes: 411_498_134,
             entries: 48,
-            expanded_bytes: 358_125_718,
+            expanded_bytes: 411_498_134,
         }),
         selected_files: pins
             .iter()

@@ -3949,7 +3949,9 @@ that week.**
   raised only as far as this archive needs: `MAX_XZ_ARCHIVE_BYTES` from 128 MiB to 130 MiB (136,314,880) and the
   catalogue's tar stream cap from 400,000,000 to 450,000,000 (the stream is about 444.1 MB). Its build recipe (BtbN
   `5031c6f1`) is read from the hosted smoke's `configuration` line; the compiled-component inventory is still not claimed.
-  It does not carry the fix of [L-144](#l-144), which is on FFmpeg's `master` only.
+  It does not carry the fix of [L-144](#l-144), which is on FFmpeg's `master` only. On `main`, for `0.3.0`, the same pin is Ubuntu
+  revision `ubuntu-24.04-x86_64-2026-11-04-r5` (`main`'s `r4` added online video) and Windows revision `windows-x86_64-2026-11-04-r2`:
+  `ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip`, 168,715,328 bytes and 411,498,134 expanded, within the zip reader's bounds.
 - **Evidence:** [`p06-ubuntu-artifact-candidate.md`](p06-ubuntu-artifact-candidate.md) and
   [`p06-windows-artifact-candidate.md`](p06-windows-artifact-candidate.md), sections of 2026-10-04 (hashes,
   inventory, configuration, runs 37164083942, 37164086257, 37164088495 and 37164090634); BtbN's README
