@@ -2154,3 +2154,14 @@ This note records decisions of the maintainer, made on 2026-10-25 in the planner
 6. **Only `0.2.3-rc.1` is deprecated** when the stable is published.
 
 **What is weaker than it sounds.** Five of the twenty items are `waived` for `0.2.3` (RQ-08, RQ-14, RQ-15, RQ-16, RQ-17) and none of them is a pass; the completeness check passes a waived item for any version, so each decision's text, not the check, limits it.
+
+## Implementation note, 2026-11-04 (the hot fix `0.2.4`: the evidence on `0.2.4-rc.1` and the maintainer's decisions of the day)
+
+This note records decisions of the maintainer, made on 2026-11-04 and relayed to the records pull request by the coordinator, about the evidence on the first candidate of the hot fix `0.2.4`, `0.2.4-rc.1` (tag `v0.2.4-rc.1` at `d44d71532967` on `release/0.2.x`, published 2026-11-04 by Release run 41822398268); the evidence and the full texts are in [`release-0.2.4.md`](../planning/release-0.2.4.md) ("The evidence on 0.2.4-rc.1") and in the `decision` fields of the ledger. It is work record only, recorded by a pull request to `release/0.2.x`: no code, tool, workflow, schema, skill, grader, scenario, setting, `freeze.json` or public claim changed, and the claims rung is still `candidate`. The answers, as quoted:
+
+1. **RQ-05.** "Should the Mac rerun with newer tests count for 0.2.4, with no second candidate?" - "Yes, count it". There is no `0.2.4-rc.2`; the journeys evidence is `P14 journeys` run 41837876046 on `main`, as for `0.2.3` (#520, L-230).
+2. "Waive the six long runs for 0.2.4 and run them in the next window?" - "Yes, waive all six": RQ-04's `P14 compatibility` and `P14 local upgrade`, RQ-07, RQ-09, RQ-11 and RQ-12, for `0.2.4` only.
+3. "Waive the stress test and both agent-trial batches for 0.2.4?" - "Yes, waive all three": RQ-08, RQ-15 and RQ-16, for `0.2.4` only (#519 stays a known issue, L-231; the skill is unchanged and the batches run at the `0.3.0` cut).
+4. "Keep the two standing waivers in place for 0.2.4?" - "Yes, keep both": RQ-14 and RQ-17 carry to `0.2.4`.
+
+**What is weaker than it sounds.** Nine of the twenty items are `waived` for `0.2.4` and two long runs of RQ-04 are waived inside a `passed` item; none of them is a pass. The completeness check passes a waived item for any version (L-179), so each decision's text, not the check, limits it, and the next cut sets each item back to `planned`.

@@ -36,10 +36,35 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 41827276819
+          },
+          "date": "2026-11-04",
+          "note": "The twelve clean-install jobs (npm, pnpm, Yarn and Bun on Windows Server 2025, macOS 15 and Ubuntu 24.04) of the dispatch with version 0.2.4-rc.1 and from_version 0.2.3 on the tag v0.2.4-rc.1 (d44d715, the candidate's commit), on 2026-11-04 at 12:12 UTC, about three minutes after the publish run ended (12:09:31 UTC): vsift-cli@0.2.4-rc.1 installed from the real registry with cargo, rustc, rustup, git and python not resolving (asserted first); global (Yarn: project) and one-shot installs with scripts disabled; --version names 0.2.4-rc.1 and the tag commit (d44d71532967) on every manager and system; the installed package's skill is the tag's skills/vsift, byte for byte (12 files identical in the nine npm, pnpm and Bun jobs; not compared under Yarn Plug'n'Play, which keeps the package in a zip archive, where the archive jobs compare it); hostile file names and arguments through the PowerShell and Bun shims and through yarn answered as vsift itself does (39 of 39 on each Windows job that has them, 60 of 60 on each Linux and macOS job); a fake ffmpeg planted in the working directory and on PATH is never selected or run from the working directory or a relative entry and is never trusted for media work (SEC-02); optional dependencies omitted fail with exit 127 naming the package; npm audit signatures (2 packages with verified registry signatures, 2 with verified attestations) and gh attestation verify pass in the same job. Yarn held the 0.1-hour-old version back (\"quarantined\") and the documented npmPreapprovedPackages exemption let yarn add vsift-cli@0.2.4-rc.1 through: an untagged yarn add vsift-cli was not tried. All 23 jobs passed. The Windows vsift.cmd shim is an observation, not a pass: 36 of 39 hostile cases answered as vsift itself does, the others are cmd.exe re-reading the command line (#257, L-109). For 0.2.4-rc.1 only; hosted images are not clean machines (L-112)."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 41827851878
+          },
+          "date": "2026-11-04",
+          "note": "The same twelve jobs of the second dispatch (from_version 0.2.3-rc.1, 2026-11-04 at 12:16 UTC, dispatched after the first had finished because runs of one workflow share a concurrency group) were green too, with the same counts (39 of 39 on each Windows job that has them, 60 of 60 on each Linux and macOS job, 36 of 39 through vsift.cmd as an observation, 12 files identical where compared; Yarn held the 0.1-hour-old version back and the exemption let it through). All 23 jobs of each run passed."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-01 to RQ-04, the two published-artifacts dispatches, the local-upgrade run of the nightly on the branch and what each shows and does not show."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -62,9 +87,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-01 to RQ-04, the two published-artifacts dispatches, the compatibility and local-upgrade runs and what each shows and does not show."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -233,7 +256,7 @@
           "note": "One install of 0.1.0 from the real registry, with npm only, on the maintainer's Windows 11 development machine (npm audit signatures 4 and 4, npx vsift --version). No pnpm, Yarn or Bun, no other system, not a clean machine."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-02",
@@ -255,10 +278,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 41827276819
+          },
+          "date": "2026-11-04",
+          "note": "The three archive jobs of the dispatch with from_version 0.2.3 (0.2.4-rc.1, d44d715): the three archives and SHA256SUMS downloaded from the v0.2.4-rc.1 release, the checksums matched (SHA256SUMS lists the three archives) and the three attestations verified against the Release workflow and refs/tags/v0.2.4-rc.1 (3 of 3 on each job); node, npm, npx, bun, pnpm, yarn, cargo, rustc, git and python do not resolve; each archive holds its executable in the right format (Mach-O arm64, PE x64, ELF x64), the licences, the notices, the SBOM and the skill; vsift --version names 0.2.4-rc.1 and d44d71532967; setup check --json answers with the setup.check document (exit 2, blocked, on a machine with no tools); the shipped skill is the tag's skills/vsift, byte for byte (12 files identical on each). One job per system, Windows Server 2025, macOS 15 and Ubuntu 24.04, all green. Repeated by the second dispatch (run 41827851878, from_version 0.2.3-rc.1), also green. For 0.2.4-rc.1 only; no browser download (RQ-17)."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-01 to RQ-04."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -272,9 +311,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-01 to RQ-04."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -387,7 +424,7 @@
           "note": "The three archive jobs of this run at 6aa5403: the three archives and SHA256SUMS downloaded from the v0.1.0 release, checksums and attestations verified, extracted, each executable in the right format, the system's own run with --version (0.1.0 and the tag commit) and setup check --json with no Node.js, Rust, Git or Python on PATH, and the shipped skill byte-identical to the tag's. For 0.1.0 only; no browser download (RQ-17)."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-03",
@@ -408,10 +445,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 41827276819
+          },
+          "date": "2026-11-04",
+          "note": "The offline-install job of the same dispatch (0.2.4-rc.1, d44d715): the published Linux archive downloaded, checksummed, attested and extracted (vsift 0.2.4-rc.1 (d44d71532967)); the three reviewed artifacts (ffmpeg_ffprobe n9.0.2-39-g7adfbe40dc-20261031, ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz, 136,027,168 bytes; whisper_cli whisper.cpp-v1.9.5-ubuntu-x64, 10,364,195 bytes; whisper_model whisper-base-multilingual-80da2d8, 147,951,465 bytes) downloaded by the binary's own setup plan with size and SHA-256 checked, then installed with --artifact-dir in a container with --network none: all three components activated, setup check is ready with every tool from the managed store and local ASR verified, setup list verifies every component and a rerun is already_current for all three; the same install without the folder fails as offline (DOWNLOAD_FAILED, exit 7); a relative folder is INVALID_ARGUMENT (exit 2); one changed byte is INTEGRITY_FAILURE (digest_mismatch, exit 7: ffmpeg activated, whisper_cli refused) and the file is never used; a missing file is INVALID_ARGUMENT (artifact_missing, exit 2). This is the first run of the offline install with the re-pinned FFmpeg archive (136,027,168 bytes, inside the raised 130 MiB xz bound and 450,000,000-byte tar cap). The job again observed that the minimal Ubuntu image lacks libgomp1 for whisper-cli (#256, named in the message and the guide); the image was given exactly that package. Repeated by the second dispatch (run 41827851878), also green. For 0.2.4-rc.1 only."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-01 to RQ-04."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -425,9 +478,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-01 to RQ-04."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -545,7 +596,7 @@
           "note": "The offline path has run with stand-in artifacts only; the managed smoke downloads the real files online, from a source-built binary."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-04",
@@ -566,10 +617,50 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 41827276819
+          },
+          "date": "2026-11-04",
+          "note": "The three upgrade jobs (real-registry mode) of the dispatch with from_version 0.2.3 (the upgrade a person on latest really does): the published 0.2.3 (fda35b68a960) installed from the real registry with its media tools (Ubuntu: the managed install of that version; Windows and macOS: registered tools), a configuration registered, two sessions made (a supplied SRT and a VTT) and a bundle retained; then npm install --global vsift-cli@0.2.4-rc.1 (now vsift 0.2.4-rc.1, d44d71532967): the configuration byte-identical (and the media-tool verification record unchanged), session A's status, transcript and search read the same (additive members allowed), the session list and the bundle as before, the managed tools still verify (Ubuntu), a new session works; then install.md section 8 walked: managed tools removed, the package gone, VSift's own folders exactly the ones the guide names, deleting them removed every trace. All three green. This run does not show that the older managed FFmpeg is reported as superseded after the upgrade; P13 managed smoke shows that (RQ-06)."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 published artifacts",
+            "run_id": 41827851878
+          },
+          "date": "2026-11-04",
+          "note": "The three upgrade jobs of the second dispatch, from_version 0.2.3-rc.1 (the upgrade a person on next does): the published 0.2.3-rc.1 (09e40398894f) installed from the real registry with the same fixtures, then npm install --global vsift-cli@0.2.4-rc.1: the configuration identical, session A read the same, the list and the retained bundle as before, a new session works, and install.md section 8 walked to a clean uninstall on each of Ubuntu, Windows and macOS. All three green."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "Nightly", "run_id": 41816481791 },
+          "date": "2026-11-04",
+          "note": "The P14 local upgrade of the nightly on the branch (Nightly run 41816481791, dispatched on release/0.2.x at d44d71532967, the candidate's own commit, 2026-11-04 at 10:47 UTC, success): the default baseline 0.1.0 (011bc4da1af6) installed from the real registry on Windows Server 2025, Ubuntu 24.04 (with its managed tools) and macOS 15, then upgraded by the commit's own build, packed and served by a loopback-only registry as 99.0.0-p14local.1 (now vsift 0.2.4-rc.1): the configuration byte-identical, session A read the same, the managed tools still verify (Ubuntu), a new session works, and install.md section 8 walked to a clean uninstall; the three RQ-04 jobs passed (49 to 75 s). This is a run of the P14 local upgrade workflow at the candidate's commit inside the nightly, not a dispatch of it on the tag; whether the maintainer counts it in place of a run on the tag is his decision. The local build is the commit's source, not the published bytes (the two dispatches above upgrade to those)."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 41814829540 },
+          "date": "2026-11-04",
+          "note": "The Quality jobs (Ubuntu, Windows and macOS) of the CI run at the candidate's commit ran the frozen-example comparison of this item's producer: published_compatibility (the table lists exactly the frozen files; every error code of the published examples is still published; the frozen examples are the bytes the release tag holds; every published 0.1.0 example validates against the current v1 schemas: 4 of 4 on each system) and published_v0_1_0_records (an imported and a local-ASR transcript revision, the evidence record and the visual index record of 0.1.0 decode: 4 of 4 on Ubuntu and Windows). They are the two test files that the P14 compatibility workflow runs, so the comparison has a passing run at the candidate's commit; the dispatch itself is waived (below)."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-01 to RQ-04; P14 compatibility has no run on 0.2.4-rc.1."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "Decision of the maintainer, 2026-11-04: RQ-04's P14 compatibility and P14 local upgrade are WAIVED as dispatches on the tag for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). The item's producer has three parts, and each has a passing run for 0.2.4-rc.1: (1) the upgrade over the real registry with a session and configuration kept: the two P14 published artifacts dispatches (41827276819, 41827851878) and the P14 local upgrade inside the nightly on the branch at the candidate's commit (Nightly run 41816481791); (2) the frozen-example comparison against 0.1.0: the two test files that the P14 compatibility workflow runs, published_compatibility (4 tests) and published_v0_1_0_records (4 tests), ran and passed in the Quality jobs of CI run 41814829540 at the candidate's commit, the same tests as the dispatch; (3) the install.md section 8 walk: the four uninstall steps of the upgrade jobs above. What the waiver covers is the dispatches of P14 compatibility and P14 local upgrade on the tag. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. This item stays passed and names its version, so the completeness check names it again at the next cut by itself."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -610,9 +701,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-01 to RQ-04."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -751,11 +840,7 @@
           "note": "The three upgrade jobs of the dispatch with from_version 0.2.0-rc.3 (the upgrade a person on next really does), dispatched after the first run had finished because runs of one workflow share a concurrency group; 23 jobs, all green: the published 0.2.0-rc.3 (83dca856e7a0) installed with the same fixtures, then npm install --global vsift-cli@0.2.0 (now eeb2a22a46a8): configuration identical, session A read the same, the list and the retained bundle as before, the managed tools still verify (Ubuntu), a new session works, and install.md section 8 walked to a clean uninstall on each of Ubuntu, Windows and macOS. npm only; no downgrade (L-044). The optional upgrades from 0.2.0-rc.1 and 0.2.0-rc.2 were not dispatched (both are deprecated since 2026-10-10)."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 37943660818
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 37943660818 },
           "date": "2026-10-09",
           "note": "The four published_compatibility tests and the four published_v0_1_0_records tests ran in every Quality job of the push to main at eeb2a22, the stable commit, and passed on Ubuntu, macOS and Windows: the 0.1.0 frozen examples validate against the v1 schemas, every error code of the published examples is still published, and the readers decode 0.1.0's stored session records. In that checkout the v0.1.0 tag cannot be read (it is shallow), so the frozen copy was not compared with the tag's bytes there. The dispatch of P14 compatibility with full history, which does compare them, was not repeated at the tag v0.2.0: the third candidate's dispatch (run 37752974000) is in prior, for the same program source."
         },
@@ -869,7 +954,7 @@
           "note": "With the full history and VSIFT_REQUIRE_RELEASE_TAG=v0.1.0: the frozen copy of 0.1.0's 52 JSON examples is the tag's bytes, every one validates against the current v1 schemas, and the current readers decode the four stored session records (the same tests run in every Quality job)."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-05",
@@ -891,10 +976,50 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 journeys",
+            "run_id": 41837876046
+          },
+          "date": "2026-11-04",
+          "note": "PASSED on all three systems: the evidence run for 0.2.4-rc.1, by the route the maintainer decided on 2026-11-04 (no 0.2.4-rc.2; see the failed attempt and #576 below). Dispatched on main at aa016c13eea7 with version=0.2.4-rc.1 and tests_from=workflow-ref, on 2026-11-04 at 13:24 UTC. The binary under test is the published candidate, vsift 0.2.4-rc.1 (d44d71532967), installed from the real npm registry on each system and run as the native executable through VSIFT_E2E_BINARY; only the test driver is newer than the tag. Every checkpoint passed: Ubuntu 24.04 (14 min) and Windows Server 2025 (19 min) 9 of 9 (the T-04 gates are not part of the journeys there, they run in P07 local ASR), macOS 15 (38 min) 10 of 10 with p07_asr_gates in 777 s. On macOS the gates ran the clean set of both model profiles in process (base: clean word error rate 4.06%, F08 61.53%; base_q5_1: 4.87% and 46.15%; no unexpected miss) and logged for each profile \"noisy-speech set: SKIPPED, not run on hosted macOS (issue #520, known limit L-230)\": the noisy-speech set (#492) does not fit the slow hosted macOS runner's 120 s chunk deadline and the job's time limit, and is measured and gated on hosted Ubuntu and Windows by P07 local ASR, which passed on the tag (run 41839547151). For 0.2.4-rc.1 only; one pass per system, not a rate."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 journeys",
+            "run_id": 41827267011
+          },
+          "date": "2026-11-04",
+          "note": "The run on the tag v0.2.4-rc.1 (version=0.2.4-rc.1, tests_from=auto, 2026-11-04 at 12:12 UTC) FAILED on macOS. Journeys (ubuntu) 9 of 9 in 15 min and Journeys (windows) 9 of 9 in 14 min passed; Journeys (macos) passed nine checkpoints (p06_setup 4 s to p14_installed 5 s) against the published vsift 0.2.4-rc.1 (d44d71532967) and then failed in p07_asr_gates after 2,637 s with AsrFailure { stage: Recognition, reason: Deadline } after the four noisy-speech sets had met their gates (WER 4.90%, 5.33%, 4.90%, 7.24%); the job took 69 min. The same cause as #520: the tag's test driver (p07_asr_qualification.rs) predates #523, which skips the noisy-speech set on hosted macOS (L-230, on main), and tests_from=auto compiled the tag's tests. Governance rule 14: #576 was filed before the re-run by another route. Windows and Ubuntu passed and were not run again. The figures before the deadline are those of the failed runs on 0.2.3-rc.1."
+        },
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P07 local ASR",
+            "run_id": 41839547151
+          },
+          "date": "2026-11-04",
+          "note": "Dispatched on the tag v0.2.4-rc.1 (2026-11-04 at 13:35 UTC), Ubuntu 24.04 (11 min) and Windows Server 2025 (25 min), both green: the T-04 recogniser gates ran in process from the tag's source with both model profiles. Ubuntu: base clean word error rate 3.25%, F08 61.53% (its known miss E-409 only), no unexpected miss, load 68 ms, 0.133 times real time, peak 316 MiB; base_q5_1 4.06%, F08 38.46%, 0.161, 230 MiB. Windows: base 4.06% (3.25% on 0.2.3-rc.1: one word more, as 0.2.2-rc.1 also read; the Windows tools are unchanged on this branch; the gate is 10%), F08 61.53%, 0.342, 336 MiB; base_q5_1 4.06%, F08 46.15%, 0.274, 249 MiB. The noisy-speech set (469 words, en-US and es) met its gates on both systems and both profiles: snr20 4.90% to 5.33% (gate 10%), snr10 4.05% to 5.11% (10%), snr05 7.24% to 7.67% (15%). The noise-only clips are measured, not gated (L-199): at most nine words, except base_q5_1 on Windows at snr10, which wrote 140 words (one phrase repeated over 28 s of noise; the largest instance seen, recorded in L-199; not from the re-pin, the Windows tools being unchanged on this branch). This is the run that gates the noisy-speech set while the macOS journeys skip it (L-230)."
+        },
+        {
+          "reference": { "type": "issue", "number": 576 },
+          "date": "2026-11-04",
+          "note": "The tracking issue for the macOS failure of the run on the tag (governance rule 14), with the maintainer's decision of 2026-11-04 (RQ-05 for 0.2.4): the question was \"Should the Mac rerun with newer tests count for 0.2.4, with no second candidate?\" and the answer \"Yes, count it\". So there is no 0.2.4-rc.2, and RQ-05's journeys evidence for 0.2.4-rc.1 is P14 journeys run 41837876046. The underlying macOS cause stays tracked in #520. The issue was closed on 2026-11-04 with a comment naming run 41837876046 and this decision."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\", \"The maintainer's decisions of 2026-11-04\". RQ-05 on macOS: how the evidence was made (#576)."
+        }
+      ],
+      "issues": [258, 263, 404, 520, 524, 576],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -931,10 +1056,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-05, the three journeys runs (two failed attempts and the passing run), P07 local ASR, #520 and the maintainer's decision of 2026-10-25."
-        }
-      ],
-      "issues": [258, 263, 404, 520, 524],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -968,11 +1090,7 @@
           "note": "The T-04 gates dispatched on the tag v0.2.2-rc.1 on hosted Ubuntu 24.04 and Windows Server 2025 (2026-10-18 at 00:14 UTC), both jobs passed (in process through the engine library with the pinned tools; the adapter over the speech clips, the CLI checkpoint and the gates for both profiles): base on Ubuntu clean word error rate 3.25%, F08 61.53% with the known miss E-409, real-time factor 0.254, peak 321 MiB; base on Windows 4.06%, 61.53%, 0.361, 336 MiB; base_q5_1 on Ubuntu clean 4.06%, F08 46.15% with the known miss E-409, 0.305, 232 MiB; on Windows 4.06%, 46.15%, 0.305, 250 MiB; no unexpected miss. One change from 0.2.1-rc.3 (run 38658269012): base on Windows read 4.06% where it read 3.25%, one more word wrong in F05 (15.78% where it was 10.52%; its known miss, invoice 4407, is the same), the figure macOS gives; the gate is at most 10%."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "P14 load",
-            "run_id": 39082023393
-          },
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 39082023393 },
           "date": "2026-10-18",
           "note": "The Ubuntu 24.04 durable path with write barriers for this version: durable workspaces on an ext4 volume with write barriers (os_crash_durable publication), a 100-request batch and 1,000 mixed requests with kills and redelivery, every gate held (see RQ-09). P14 runbook walk (RQ-12) walked the same path."
         },
@@ -1024,11 +1142,7 @@
           "note": "The T-04 gates dispatched at the tag v0.2.1-rc.3 on hosted Ubuntu 24.04 and Windows Server 2025 (2026-10-15 at 00:08 UTC), both jobs passed (in process through the engine library with the pinned tools; the adapter over the speech clips, the CLI checkpoint and the gates for both profiles): base on Ubuntu clean word error rate 3.25%, F08 61.53% with the known miss E-409, real-time factor 0.246, peak 320 MiB; base on Windows 3.25%, 61.53%, 0.296, 335 MiB; base_q5_1 on Ubuntu clean 4.06%, F08 46.15% with the known miss E-409, 0.298, 234 MiB; on Windows 4.06%, 46.15%, 0.344, 249 MiB; no unexpected miss. A first dispatch of the same workflow on the same tag (run 38591034547, 2026-10-14 at 15:38 UTC) is in prior."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "P14 load",
-            "run_id": 38593839000
-          },
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 38593839000 },
           "date": "2026-10-14",
           "note": "The Ubuntu 24.04 durable path with write barriers for this version: durable workspaces on an ext4 volume with write barriers (os_crash_durable publication), a 100-request batch and 1,000 mixed requests with kills and redelivery, every gate held (see RQ-09)."
         },
@@ -1239,7 +1353,7 @@
           "note": "A dispatch of the same gates on hosted Ubuntu 24.04 and Windows Server 2025 (both jobs passed), in process on source at f4695c3, a commit after the 0.1.0 commit; not the published binary. A dispatch at the 0.1.0 commit would put these two systems' gates among the counted evidence; the release candidate's run must."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-06",
@@ -1261,10 +1375,26 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P13 managed smoke",
+            "run_id": 41827271993
+          },
+          "date": "2026-11-04",
+          "note": "Dispatched with published_version 0.2.4-rc.1 on the tag v0.2.4-rc.1 on 2026-11-04 at 12:12 UTC: all four jobs green on Ubuntu 24.04 with the published vsift 0.2.4-rc.1 (d44d71532967) from the real npm registry as the binary under test (source override): the pinned smoke of FFmpeg n9.0.2-39-g7adfbe40dc-20261031, whisper.cpp v1.9.5 and the base model before activation; the real setup plan (3 actions, catalogue ubuntu-24.04-x86_64-2026-11-03-r4) with install, check, rerun and the timing of the accepted plan, FFmpeg and FFprobe n9.0.2-39-g7adfbe40dc-20261031 and whisper.cpp v1.9.5 (reviewed build) reported as the managed versions and the local ASR check verified; the install end to end with its kills (the report's overall passed); and the upgrade job: the published 0.2.2 (0dadc69df4f5, the default upgrade_from) installs its reviewed tools (catalogue ubuntu-24.04-x86_64-2026-09-22-r2, FFmpeg n9.0.1-11-ge47273f4d9-20260831, whisper.cpp v1.9.2), this build's setup check then says the managed FFmpeg is superseded by the reviewed n9.0.2-39-g7adfbe40dc-20261031 (\"carries security fixes the selected one lacks\", reason security_fixes) and names setup install, which installs and selects it, and the job transcribes a short clip. This is the check of the FFmpeg re-pin on the published bytes. The upgrade job started from 0.2.2, not from 0.2.3 (0.2.3 pins the same FFmpeg build as 0.2.2). Evidence for 0.2.4-rc.1 only; the weekly schedule runs the highest published version."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-06."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -1278,9 +1408,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-06."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -1401,7 +1529,7 @@
           "note": "Green at 01656d6, same limits; nothing watches the publishers' files between releases (L-099)."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-07",
@@ -1421,40 +1549,32 @@
       },
       "scope": ["fuzz", "crates", "Cargo.lock", ".github/workflows/fuzz.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "passed",
-      "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+      "status": "waived",
+      "issues": [394, 521],
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-07 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-07 is Fuzz with seconds=3600. The scheduled Fuzz on main on Monday 9 November exercises the same raised archive bounds, because #573 carries them to main. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
       },
-      "evidence": [
+      "reason": "Fuzz with seconds=3600 was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The two raised bounds (MAX_XZ_ARCHIVE_BYTES and the tar stream cap) sit in the code the xz_tar_inventory and tar_inventory targets fuzz; the scheduled Fuzz on main on Monday 9 November exercises the same raised bounds (#573); the run on 0.2.3-rc.1 is kept in prior as a record and is not counted.",
+      "prior": [
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Fuzz",
-            "run_id": 40051241768
-          },
+          "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 40051241768 },
           "date": "2026-10-24",
-          "note": "Dispatched on the tag v0.2.3-rc.1 (09e40398894f, the candidate's own commit) with seconds=3600, the budget of the earlier candidates, on hosted Ubuntu 24.04 (2026-10-24, 01:45 UTC). Attempt 1: 30 of 31 targets ran 3,601 s each (libFuzzer's own measure) clean; the job of frame_showinfo failed when the hosted runner lost communication with the server (its log stops at 01:52:41 UTC, about seven minutes in, and the annotation is the runner's: nothing in the log is a finding; #521, closed). Attempt 2 (the failed job only, 22:40 to 23:42 UTC): frame_showinfo ran 3,601 s, 146,706,950 runs, peak 579 MB, no crash, timeout or out-of-memory. All 31 targets therefore ran the hour, for 3,684,729,620 runs in all, with no crash, timeout or out-of-memory; peak resident memory at most 858 MB (job_request); setup_plan ran 113,964,845 runs. One plateau line per target is in its job log: 16 of the 31 found their last new coverage in the final tenth of their runs (crop_rect at 0.1%, bundle_manifest at 99.8%), so the hour is a floor, not a plateau. The item is passed: at least 60 minutes per target and no crash, timeout or out-of-memory; a failed attempt that a re-run of that target alone passed is recorded as what it was."
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): Dispatched on the tag v0.2.3-rc.1 (09e40398894f, the candidate's own commit) with seconds=3600, the budget of the earlier candidates, on hosted Ubuntu 24.04 (2026-10-24, 01:45 UTC). Attempt 1: 30 of 31 targets ran 3,601 s each (libFuzzer's own measure) clean; the job of frame_showinfo failed when the hosted runner lost communication with the server (its log stops at 01:52:41 UTC, about seven minutes in, and the annotation is the runner's: nothing in the log is a finding; #521, closed). Attempt 2 (the failed job only, 22:40 to 23:42 UTC): frame_showinfo ran 3,601 s, 146,706,950 runs, peak 579 MB, no crash, timeout or out-of-memory. All 31 targets therefore ran the hour, for 3,684,729,620 runs in all, with no crash, timeout or out-of-memory; peak resident memory at most 858 MB (job_request); setup_plan ran 113,964,845 runs. One plateau line per target is in its job log: 16 of the 31 found their last new coverage in the final tenth of their runs (crop_rect at 0.1%, bundle_manifest at 99.8%), so the hour is a floor, not a plateau. The item is passed: at least 60 minutes per target and no crash, timeout or out-of-memory; a failed attempt that a re-run of that target alone passed is recorded as what it was."
         },
         {
           "reference": { "type": "issue", "number": 521 },
           "date": "2026-10-24",
-          "note": "The tracking issue for the first attempt's failed job (governance rule 14): a hosted runner fault (lost communication), not a finding of the target. Closed on the re-run of that job alone (run 40051241768, attempt 2), which passed with 146,706,950 executions and a peak of 579 MB."
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The tracking issue for the first attempt's failed job (governance rule 14): a hosted runner fault (lost communication), not a finding of the target. Closed on the re-run of that job alone (run 40051241768, attempt 2), which passed with 146,706,950 executions and a peak of 579 MB."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
-          "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-07, the fuzz run, its failed first attempt and #521."
-        }
-      ],
-      "issues": [394, 521],
-      "prior": [
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-07, the fuzz run, its failed first attempt and #521."
+        },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Fuzz",
-            "run_id": 39082014143
-          },
+          "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 39082014143 },
           "date": "2026-10-18",
           "note": "Dispatched on the tag v0.2.2-rc.1 (43a033dbf813, the candidate's own commit) with seconds=3600, the budget of the earlier candidates, on hosted Ubuntu 24.04 (2026-10-18, 00:14 to 02:15 UTC): all 31 targets ran 3,601 s each (libFuzzer's own measure) for 3,103,204,343 runs in all with no crash, timeout or out-of-memory; peak resident memory at most 931 MB (job_request); 1,939 job-minutes. setup_plan, the target that failed on 0.2.1-rc.3 (#394), ran 95,942,453 runs clean with the fix of #394 and its three seeds, one of them the crash's shape. One plateau line per target is in its job log: 19 of the 31 found their last new coverage in the final tenth of their runs (crop_rect and transcript_cursor at 0.3%, host_attestation at 36.1%), so the hour is a floor, not a plateau. The item is passed: at least 60 minutes per target and no crash, timeout or out-of-memory."
         },
@@ -1529,7 +1649,7 @@
           "note": "The first run of the Fuzz workflow passed all six targets of the time. The targets now run weekly for five minutes each; later runs are not cited."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-08",
@@ -1549,8 +1669,14 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "waived",
       "issues": [312, 314, 321, 519],
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-08 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-08 (stress) is waived for 0.2.4 only. Its workflow uses no FFmpeg, so the re-pin does not touch it. #519 stays a known issue (L-231) and stays open for 0.3.0. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
+      },
+      "reason": "The stress campaign (P14 stress) was not run on 0.2.4-rc.1. Its workflow uses no FFmpeg, so the re-pin does not touch it, and the hot fix runs no stress campaign (release.md 6.18). #519 stays a known issue (L-231) and stays open for 0.3.0. The failed repetition on 0.2.3-rc.1 and the earlier waiver for 0.2.3 are kept in prior as records and are not counted.",
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
@@ -1605,7 +1731,11 @@
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-08, the per-suite results of the stress run."
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 37752821463 },
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 stress",
+            "run_id": 37752821463
+          },
           "date": "2026-10-08",
           "note": "Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs and a set-up job, 1,177 job-minutes; the longest, the lock suite on Windows, took 172 minutes), dispatched at the tag v0.2.0-rc.3 (83dca856e7a0) with the same parameters as for the earlier candidates: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100, each a randomised run), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 20,100 repetitions in all (6,700 per system); all 25 jobs passed, with zero failed and zero hung repetitions anywhere. **What the third candidate changed held:** the plain supervisor suite on Windows, where the second candidate's run had one failure in 1,500 (#321, ParseIntError { kind: Empty } in p06_descendants_and_inherited_pipe_holders_are_terminated: a test reading a marker file its fixture child was still writing, fixed in the test by #333), ran 1,500 of 1,500 clean, and 1,500 of 1,500 clean with every CPU busy (3,000 clean on each of Ubuntu and macOS too); the lock suite on Windows (the second candidate was cut for #314, fixed by #318) ran 200 of 200 clean again (168 minutes). #312 (a root creation that gave up waiting under CPU load, L-135, not fixed) did not recur: 0 of 1,500 CPU-loaded repetitions on Windows, and #206's message 0 of 1,500 plain and loaded; weighted admission on Windows 0 of 200; #128 0 of 3,000 on each system (plain and loaded). The external-delivery simulation ran 100 repetitions per system, as in the earlier runs, and had no failure. The rule (zero failures in at least 200 repetitions per system) is met by every suite it names (lock stress, weighted admission, engine worker and batch, 200 each) and by the 1,500-repetition runs for #128 and #206; the item is passed. A clean run is not a proof: #321's fix rests on the reproduction of the gap without a second process, and #312 is not fixed."
         },
@@ -1615,15 +1745,16 @@
           "note": "Section 29.3: the per-suite results of the third candidate's stress run and what the numbers do not show."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md"
-          },
+          "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
           "date": "2026-10-07",
           "note": "Waived for R0 by the maintainer on 2026-10-07, for the second release candidate 0.2.0-rc.2, which stays (no third candidate). One residual is accepted: one repetition in 1,500 of the plain process-supervisor suite on Windows failed in p06_descendants_and_inherited_pipe_holders_are_terminated with ParseIntError { kind: Empty } (#321), accepted as a race in the test, which reads a marker file its fixture child may still be writing, with L-138 as the register entry; no product code is on the failing line and the supervisor's assertions were not reached (a reading of the test source, not a reproduction). The run stays in the ledger as failed evidence. The test is fixed after the stable release, because a change to a file under crates/ between the tag and the stable commit would force a third candidate. The waiver does not cover: #312 (a root creation that gave up waiting under CPU load, L-135), which is not fixed, did not recur in this run and stays open with its own entry; #128 and #206, which stay under watch; a failure of any other suite, test or system, or of this test with another message; the delivery suite's 100 repetitions, which are below the rule's 200 by design; and it does not carry to a release in which anything in this item's scope has changed since the tag. (The maintainer's decision of 2026-10-07 for the second candidate. It is a decision about that candidate's run and is not carried over: the third candidate's own run, the first entry of this item, is judged on the rule. Reason given then: The pass rule asks for zero failures in at least 200 repetitions per system. 20,099 of 20,100 repetitions passed and every suite but one met the rule on all three systems, including the Windows lock suite the second candidate was cut for (200 of 200) and the CPU-loaded root creation (0 of 1,500); the one failure is read as the test's own race, and the test cannot be corrected without a change under crates/, which is a third candidate.)"
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 37611376706 },
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 stress",
+            "run_id": 37611376706
+          },
           "date": "2026-10-07",
           "note": "FAILED. Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs and a set-up job, 1,143 job-minutes; the longest, the lock suite on Windows, took 177 minutes), dispatched at the tag v0.2.0-rc.2 (7c722d1fc46a) with the same parameters as for 0.1.0 and the first candidate: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100, each a randomised run), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 20,100 repetitions in all (6,700 per system); 24 of 25 jobs passed with zero failed or hung repetitions and no repetition hung anywhere. **One repetition failed on Windows:** the plain supervisor suite, repetition 1,050 of 1,500, test p06_descendants_and_inherited_pipe_holders_are_terminated, \"Error: ParseIntError { kind: Empty }\" (#321, new, L-138): from the source, the test reads a marker file the fixture child may still be writing, so it is the test's, not the supervisor's, defect (a reading, not a reproduction). Issue #321 was opened before anything was repeated; nothing was rerun. **What the second candidate was cut for:** the lock suite on Windows, 200 repetitions of 329 tests, 0 failed (the first candidate had one in 200: #314, readers_never_report_damage_while_generations_are_published, fixed by #318); the CPU-loaded root-creation suite on Windows, 0 of 1,500 (one in 1,500 on the first candidate: #312, not fixed, L-135); #206's message 0 of 1,500 plain and loaded; weighted admission on Windows 0 of 200; #128 did not reproduce (0 of 3,000 on each system, plain and loaded). The delivery suite ran 100 repetitions per system, below the rule's 200, because each starts hundreds of processes. The rule (zero failures in at least 200 repetitions per system) is met by every suite but the one above, so this run is failed evidence and stays so; the maintainer waived the item for R0 on 2026-10-07 (the decision of this entry)."
         },
@@ -1633,7 +1764,11 @@
           "note": "Section 26.2: the per-suite results, what the one failure is and is not, and the maintainer's decision."
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 37330746176 },
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 stress",
+            "run_id": 37330746176
+          },
           "date": "2026-10-05",
           "note": "Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs, 1,191 job-minutes with the set-up job; the longest, the lock suite on Windows, took 244 minutes), dispatched at the tag v0.2.0-rc.1 (d5792ce31db1) with the same parameters as for 0.1.0: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100, each a randomised run), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 22 jobs passed with zero failed or hung repetitions. Two Windows jobs each had one failed repetition: root creation under CPU load, 1 of 1,500, 'session root is still being created by another process' in concurrent_processes_create_one_root_and_every_one_adopts_it (not #206's message; #312), and the lock suite, 1 of 200, readers_never_report_damage_while_generations_are_published, '1 of 140721 reads failed: [IntegrityFailure]' (#314). Both issues were opened before anything was repeated; nothing was rerun. Against 0.1.0: #206's message did not reproduce (plain root creation 0 of 1,500 on Windows, 7 before; loaded 0 of 1,500 of that message, 2 before), weighted admission on Windows 0 of 200 (2 before; #271), and #128 did not reproduce again (0 in 3,000 on each system, plain and loaded). The delivery suite ran 100 repetitions per system, below the rule's 200, because each starts hundreds of processes. The rule (zero failures in at least 200 repetitions per system) is met by every suite but the two above, so the item is failed."
         },
@@ -1643,7 +1778,11 @@
           "note": "Section 24.2: the per-suite results and what the two failures are and are not."
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 36978939586 },
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 stress",
+            "run_id": 36978939586
+          },
           "date": "2026-10-02",
           "note": "Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15 (24 jobs, 1,144 job-minutes) at the pull request's head before its rebase: lock and lifecycle (200 repetitions), weighted admission with the coordination locks (200), engine worker, batch, jobs and lifecycle (200), the external-delivery simulation (100, each a randomised run), and the process supervisor and root-creation tests (1,500 each, plain and with every CPU kept busy). 21 jobs passed with zero failed or hung repetitions. Windows failed three: root creation 7 of 1,500 plain and 2 of 1,500 loaded (#206 reproduced, message 'session storage root permissions are not private', in the threads test as well as the processes test) and weighted admission 2 of 200 ('no reservation was ever granted', #271). #128 (process supervisor) did not reproduce: 0 in 3,000 on each system. Each failing repetition's output is a 90-day artifact. The run was at f6754460, a head of #259 that is not on main; its crates equal the 0.1.0 tag's apart from PR 2's compatibility tests. The ledger names the tag commit because no commit on main has the code that ran (later pull requests changed the crates, among them the session root code of #206); the item's scope has changed since, so the staleness rule asks for a re-run on a candidate."
         },
@@ -1678,34 +1817,26 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/p14-load.yml", "tools/p14-campaigns/load.cjs", "tools/p14-campaigns/prepare-host.cjs", "tools/p14-campaigns/worker.Dockerfile", "tools/p14-campaigns/lib/requests.cjs", "tools/p14-campaigns/lib/events.cjs", "tools/p14-campaigns/lib/cgroup-sampler.cjs", "tools/p14-campaigns/lib/load-verdict.cjs", "tools/p14-campaigns/lib/host.cjs", "tools/p14-campaigns/lib/container.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "passed",
-      "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-09 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-09 is the load run (P14 load). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
       },
-      "evidence": [
+      "reason": "P14 load was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The run on 0.2.3-rc.1 is kept in prior as a record and is not counted.",
+      "prior": [
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "P14 load",
-            "run_id": 40051920177
-          },
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 40051920177 },
           "date": "2026-10-24",
-          "note": "The published 0.2.3-rc.1 in the hardened worker container (strict isolation attested, durable workspaces on an ext4 volume with write barriers, the reviewed tools installed by the binary) on a hosted 4-CPU Ubuntu 24.04 runner, 19 job-minutes with its tooling tests, dispatched on the tag v0.2.3-rc.1 with version 0.2.3-rc.1 and the workflow's defaults on 2026-10-24 at 01:54 UTC: the diagnosis phase (the ten speech clips recognise their first five seconds in the container, six checks pass), the ladder at 1, 2, 4 and 8 jobs (24 of 24 at each; coordinator peak 13.1 to 15 MiB, container peak 295 to 580 MiB, peak processes 27 to 68), a 100-request batch (100 of 100; 21 bundles and 100 sessions validate or read back), a cancel of a running recognition with no descendant left ten seconds later, 200 warm candidate pages at p95 5 ms, and 1,000 mixed requests in 24 rounds with 5 SIGTERM drains, 5 SIGKILLs, 170 redeliveries, 0 BUSY answers, 216 evidence calls on open sessions and 6 cleaner passes: 1,000 of 1,000 came to what they were asked, 158 bundles validated and 208 sessions read back, none left initializing, the cleaner (1 bucket page) removed all 208, coordinator memory at most 14.7 MiB with no growth in memory or descriptors, no path or sentinel in any output. Every gate held. The mix differs from 0.2.2-rc.1's (23 rounds, 291 sessions, 5 SIGTERMs, 4 SIGKILLs); the counts are not gates. The two 12,000-request soaks of 0.1.0 were not repeated."
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The published 0.2.3-rc.1 in the hardened worker container (strict isolation attested, durable workspaces on an ext4 volume with write barriers, the reviewed tools installed by the binary) on a hosted 4-CPU Ubuntu 24.04 runner, 19 job-minutes with its tooling tests, dispatched on the tag v0.2.3-rc.1 with version 0.2.3-rc.1 and the workflow's defaults on 2026-10-24 at 01:54 UTC: the diagnosis phase (the ten speech clips recognise their first five seconds in the container, six checks pass), the ladder at 1, 2, 4 and 8 jobs (24 of 24 at each; coordinator peak 13.1 to 15 MiB, container peak 295 to 580 MiB, peak processes 27 to 68), a 100-request batch (100 of 100; 21 bundles and 100 sessions validate or read back), a cancel of a running recognition with no descendant left ten seconds later, 200 warm candidate pages at p95 5 ms, and 1,000 mixed requests in 24 rounds with 5 SIGTERM drains, 5 SIGKILLs, 170 redeliveries, 0 BUSY answers, 216 evidence calls on open sessions and 6 cleaner passes: 1,000 of 1,000 came to what they were asked, 158 bundles validated and 208 sessions read back, none left initializing, the cleaner (1 bucket page) removed all 208, coordinator memory at most 14.7 MiB with no growth in memory or descriptors, no path or sentinel in any output. Every gate held. The mix differs from 0.2.2-rc.1's (23 rounds, 291 sessions, 5 SIGTERMs, 4 SIGKILLs); the counts are not gates. The two 12,000-request soaks of 0.1.0 were not repeated."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
-          "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-09."
-        }
-      ],
-      "prior": [
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-09."
+        },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "P14 load",
-            "run_id": 39082023393
-          },
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 39082023393 },
           "date": "2026-10-18",
           "note": "The published 0.2.2-rc.1 in the hardened worker container (strict isolation attested, durable workspaces on an ext4 volume with write barriers, the reviewed tools installed by the binary) on a hosted 4-CPU Ubuntu 24.04 runner, 19 job-minutes with its tooling tests, dispatched on the tag v0.2.2-rc.1 with version 0.2.2-rc.1 and the workflow's defaults: the diagnosis phase (the ten speech clips recognise their first five seconds in the container), the ladder at 1, 2, 4 and 8 jobs (24 of 24 at each; coordinator peak 12.9 to 14.8 MiB, container peak 293 to 583 MiB), a 100-request batch (100 of 100; 21 bundles and 100 sessions validate or read back), a cancel of a running recognition with no descendant left ten seconds later, 200 warm candidate pages at p95 4 ms, and 1,000 mixed requests in 23 rounds with 5 SIGTERM drains, 4 SIGKILLs, 139 redeliveries, 0 BUSY answers, 216 evidence calls on open sessions and 5 cleaner passes: 1,000 of 1,000 came to what they were asked, 158 bundles and 291 sessions validated or read back, the cleaner (2 bucket pages, #371) removed all 291, coordinator memory at most 14.9 MiB with no growth in memory or descriptors, no path or sentinel in any output. One session was left initializing by a kill, which the campaign counts and does not fail (a kill between its index entry and its first generation); session status of it answered INTEGRITY_FAILURE (exit 7). Every gate held. The mix is not 0.2.1-rc.3's (24 rounds, 738 sessions, 239 bucket pages): its three clips changed in #426 and the cleaner's pages in #371. For 0.2.2-rc.1 only; the two 12,000-request soaks of 0.1.0 were not repeated."
         },
@@ -1715,11 +1846,7 @@
           "note": "The section \"The evidence on 0.2.2-rc.1 (recorded 2026-10-18)\": RQ-09."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "P14 load",
-            "run_id": 38593839000
-          },
+          "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 38593839000 },
           "date": "2026-10-14",
           "note": "The published 0.2.1-rc.3 in the hardened worker container (strict isolation attested, durable workspaces on an ext4 volume with write barriers, the reviewed tools installed by the binary) on a hosted 4-CPU Ubuntu 24.04 runner, 21 job-minutes with its tooling tests, dispatched from main at fa38002 with version 0.2.1-rc.3 and the same parameters as for the earlier candidates: the diagnosis phase (the ten speech clips recognise their first five seconds in the container), the ladder at 1, 2, 4 and 8 jobs (24 of 24 at each; coordinator peak 12.3 to 13.8 MiB, container peak 299 to 581 MiB), a 100-request batch (100 of 100; 21 bundles and 100 sessions validate or read back), a cancel of a running recognition with no descendant left ten seconds later, 200 warm candidate pages at p95 5 ms, and 1,000 mixed requests in 24 rounds with 5 SIGTERM drains, 5 SIGKILLs, 168 redeliveries and 6 cleaner passes: 1,000 of 1,000 came to what they were asked, 158 bundles and 738 sessions validated or read back, the cleaner removed all 738, coordinator memory at most 14.5 MiB with no growth in memory or descriptors, no path or sentinel in any output. Every gate held. For 0.2.1-rc.3 only; the two 12,000-request soaks of 0.1.0 were not repeated."
         },
@@ -1779,7 +1906,7 @@
           "note": "The admission ladder ran at 1, 2 and 4 jobs once, on one Windows machine; the 8-job rung, the 100-request batch and the soak never ran."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-10",
@@ -1801,10 +1928,27 @@
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 malicious media",
+            "run_id": 41837881358
+          },
+          "date": "2026-11-04",
+          "note": "Dispatched on the tag v0.2.4-rc.1 with version 0.2.4-rc.1 on 2026-11-04 at 13:24 UTC (one job in the container with no network and limits, 13:25 to 13:28 UTC): 99 generated inputs through 263 operations of the published 0.2.4-rc.1 (d44d71532967), 0 findings under the rule of 2026-10-17 (the link's documented STORAGE_IO with its remediation; the judge pins it); the four containment checks pass (no file created or changed outside the root, the home and the queue; the canary outside the root unchanged and in no session, bundle or configuration file; no injected command ran); no operation had a network; VSift's own largest resident peak was 17 MiB and the largest non-cache memory sampled in a container 278 MiB of the 512 MiB bound; the largest memory peak by the container's count was 573 MiB of the 1,024 MiB limit, page cache included (898 MiB on 0.2.3-rc.1): an observation of the cgroup's memory.peak, not a finding. The three new cases and how each was answered: mp4-pssh-200000 (200,000 protection-system boxes, CVE-2026-107678, #351, L-144): ingest completed (0.2 s) and candidates failed with DEADLINE_EXCEEDED after 15.4 s, a typed failure inside its bound, with no crash and no growth in memory (13 MiB by the container's count). In plain words: VSift's time bound ends the work on this file; the flaw in FFmpeg is not fixed in the pinned build (the upstream fix is on FFmpeg's development line only) and #351 stays open. mkv-fourcc-huffyuv and mkv-fourcc-g2m4 (a Huffyuv and a G2M4 track around one frame of random bytes, L-227): ingest completed (0.2 s) and candidates, frame, audio and recognise failed INVALID_SOURCE in 0.4 s each, so no operation decoded a frame of either codec. The slowest operation took 15.4 s (the pssh candidates; 4.4 s was the slowest on 0.2.3-rc.1, which had no such case). Run on the tag; it is not one of the quick checks of the published bytes."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-10, the three new cases and the pssh answer in plain words."
+        }
+      ],
+      "issues": [265, 266, 310],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -1818,10 +1962,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-10."
-        }
-      ],
-      "issues": [265, 266, 310],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -1842,7 +1983,11 @@
           "note": "NOT COUNTED for 0.2.2-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.2.2-rc.1 (2026-10-17). It covers what its statement names (0.2.1-rc.3 and the stable 0.2.1 cut from it, and the earlier versions it names) and nothing later. Why the item is planned again: Plan section 32.2: the waiver for the link's STORAGE_IO ends with 0.2.1, and the first candidate after it runs P14 malicious media on its own bytes, judged by the rule of the maintainer's decision of 2026-10-17 (the link's documented STORAGE_IO with the remediation that links are not followed passes); the item is recorded passed for 0.2.2-rc.1 from that run, or failed with an issue first. The decision, as recorded: Waived for R0 by the maintainer on 2026-10-08, for the third release candidate 0.2.0-rc.3 only (carried to the stable 0.2.0 cut from it by the maintainer's decision of 2026-10-10: the last sentences of this statement). This is a new decision: it does not carry over the decisions of 2026-10-05 or 2026-10-07 (made for the first and second candidates' runs), and it does not carry over to another candidate. It covers EXACTLY one residual: ingest of a symbolic link given as the video answers STORAGE_IO with a remediation that says what happened, where the item's pass rule names INVALID_SOURCE (#265, L-127: a published failure code stays within v1). The run is green otherwise: 96 generated inputs through 251 operations of the published 0.2.0-rc.3, one tracked finding (the link), no network use, no canary or marker leaked, nothing created or changed outside the root, the home and the queue, no injected command run; the corrected no-room case works on published bytes (sparse-no-room: ingest answers STORAGE_IO in 0.1 s with the pinned no-room remediation and the worker request RESOURCE_LIMIT; sparse-30gib: INVALID_SOURCE, worker request RESOURCE_LIMIT), and the named pipe passes. The campaign tool's mis-built no-room case, which the decision of 2026-10-07 also covered, is corrected and needs no waiver. The waiver does NOT cover: a new finding of the campaign, a broken containment check, an answer outside the item's bounds, the room check on Windows (L-061), or anything else. It also does not cover the INVALID_ARGUMENT answers of 20 of the 96 inputs (17 hostile file names refused by the worker request; mp4-bitflips-c and mkv-audio-absurd, whose follow-up calls on an accepted source were refused; and the worker request that names the link): the campaign's judging rule, written in plan section 18.4 since the first run, accepts INVALID_ARGUMENT for a follow-up call on an accepted source and the judge did not report them, but the item's pass rule lists three codes, L-127 does not name them and neither does the decision of 2026-10-07, so they are neither waived nor widened here and are reported to the maintainer (plan section 29.5). Update, 2026-10-09 (a separate decision of the maintainer, which changes the item's rule and not this waiver): the pass rule is widened to admit INVALID_ARGUMENT exactly where the judge does (a follow-up call on a source that ingest accepted, and every operation of the file-name, folder, link and pipe cases that list it; plan sections 18.4 and 29.10), so the 20 inputs named above now meet the rule as written. Nothing was run again. The item stays waived and is not passed: the link's ingest still answers STORAGE_IO, which the widened rule does not admit, and this waiver still covers that one answer, for 0.2.0-rc.3 only. Carried to the stable, 2026-10-10 (a separate decision of the maintainer, answering the open point of plan section 30.6): the stable 0.2.0 (tag v0.2.0, commit eeb2a22a46a8) is built from the same source as 0.2.0-rc.3 (after the candidate's tag only the version strings, the two shipped documents and work-record files changed; no program code), so the same finding stands, and this waiver, for exactly that one residual (ingest of a symbolic link given as the video answers STORAGE_IO, #265, L-127), covers 0.2.0-rc.3 AND the stable 0.2.0 cut from it. It still does NOT cover another candidate (for example an rc.4), a new finding of the campaign, a broken containment check, an answer outside the item's bounds, the room check on Windows (L-061), or anything else; a new candidate would run the campaign and need its own decision. Nothing was run again for this decision, and the campaign was not run on the stable's own bytes (the item's stable gate is carry). The item stays waived and is not passed. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer, answering the open point of the plan for 0.2.1): the standing waiver, for exactly the same one residual (ingest of a symbolic link given as the video answers STORAGE_IO, #265, L-127), carries to 0.2.1. The campaign was run on the candidate itself this time (P14 malicious media, run 38592429160, dispatched from main with version 0.2.1-rc.3: 96 generated inputs through 251 operations of the published 0.2.1-rc.3, the one finding the link, tracked, no network use, containment held), so this waiver covers 0.2.1-rc.3 AND the stable 0.2.1 cut from it. It still does NOT cover another candidate (for example an rc.4), a new finding of the campaign, a broken containment check, an answer outside the item's bounds, the room check on Windows (L-061), or anything else; the campaign was not run on the stable's own bytes (the item's stable gate is carry). The item stays waived and is not passed. Ended for later versions, 2026-10-17 (a separate decision of the maintainer, plan section 32, answering #265): RQ-10's pass rule is changed to admit STORAGE_IO for ingest of a symbolic link given as the video when its first remediation says that links are not followed (the answer the CLI contract documents; a published failure code stays and the remediation carries the fix, the rule of 2026-10-04), so the one residual this waiver covers is no longer outside the rule. The waiver stays as recorded for 0.2.0-rc.3, the stable 0.2.0, 0.2.1-rc.3 and the stable 0.2.1 and is not rewritten, and no recorded run was made for this decision (the campaign's judge was changed to pin the answer and ran once on the pull request, which is not a recorded RQ-10 run). It covers no later version: the next candidate runs the campaign on its own bytes and the item is then recorded passed for it. The item keeps the status waived meanwhile only because the completeness check cannot end a waiver by date (a waived item carries no applies_to). The reason, as recorded: The pass rule (plan section 2) asks for each input to end as a typed failure inside its bound, with no hang, no network and no file outside the root. The typed codes are INVALID_SOURCE, RESOURCE_LIMIT and DEADLINE_EXCEEDED and, since the maintainer's decision of 2026-10-09 (the rule was three codes when this waiver was given), INVALID_ARGUMENT for a follow-up call on a source that ingest accepted and for the file-name, folder, link and pipe cases that list it (plan section 18.4). On the published 0.2.0-rc.3 every bound and every containment check held and 95 of 96 inputs met the rule as widened (the 20 whose answer ends INVALID_ARGUMENT are among them); the one answer outside it is typed and bounded: STORAGE_IO for a symbolic link, with a remediation that says what happened. The campaign's judge does not fail a run for a finding it tracks, so the run is green, but it reports the finding; the rule has no clause for a finding the maintainer accepted, so the item is waived and not passed. R0 makes no claim of containing hostile media (RQ-14 is waived too). Update, 2026-10-17: the rule is changed (plan section 32) so that the link's STORAGE_IO with the remediation that links are not followed meets it; this reason describes the state when the waiver was given and is kept."
         },
         {
-          "reference": { "type": "workflow_run", "workflow": "P14 malicious media", "run_id": 38592429160 },
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 malicious media",
+            "run_id": 38592429160
+          },
           "date": "2026-10-14",
           "note": "NOT COUNTED for 0.2.2-rc.1, kept as a record: evidence of the waiver above, for 0.2.1-rc.3 and the stable 0.2.1 cut from it. Dispatched from main with version 0.2.1-rc.3 at fa38002 on 2026-10-14 at 15:47 UTC: 96 generated inputs through 251 operations of the published 0.2.1-rc.3 (fa380021f2aa) in a no-network, read-only-root, 1 GiB, 128-process container on hosted Ubuntu 24.04. One finding, tracked (#265, L-127): external/symlink-to-canary, where ingest of a symbolic link given as the video failed with STORAGE_IO, not one of the rule's codes. The slowest operation took 3 s and the largest memory peak was 774 MiB of the 1,024 MiB limit; no operation had a network. Containment held: nothing was created or changed outside the root, the home and the queue; the canary outside the root is unchanged (same SHA-256) and in no session, bundle or configuration file; no injected command ran. The no-room case answers as before (sparse-no-room: ingest STORAGE_IO, the worker request RESOURCE_LIMIT). The campaign's judge does not fail a run for a finding it tracks, so the run is green, but it reports the finding."
         },
@@ -1876,10 +2021,7 @@
           "note": "NOT EVIDENCE, a decision: section 29.5 (the update of 2026-10-10) and 30.6. The maintainer carried the waiver of 2026-10-08 to the stable 0.2.0 cut from 0.2.0-rc.3, for the link's STORAGE_IO alone; it does not name another candidate. Nothing was run again and the campaign was not run on the stable's own bytes."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md"
-          },
+          "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
           "date": "2026-10-07",
           "note": "Waived for R0 by the maintainer on 2026-10-07, for the second release candidate 0.2.0-rc.2; this replaces the decision of 2026-10-05, which was made for the first candidate's findings and is not carried over. The maintainer asked for the item to be recorded passed if its own rule allows it with tracked findings; it does not (the reason below), so the waiver is restated with only what is left. Two residuals are accepted: a symbolic link given as the source answers STORAGE_IO with a remediation that says what happened, where the rule names INVALID_SOURCE (#265, L-127: a published failure code stays within v1); and the campaign's own no-room case is mis-built (it passes a folder VSift did not create as the session root, which is refused with INTEGRITY_FAILURE after a wait of up to five seconds, as install.md section 12 documents), so it tests nothing about the room check, and the tool is frozen with the candidate (L-134, #266, #310). The first residual of 2026-10-05, an over-limit source answering STORAGE_IO, is fixed in this candidate (#310, #319: sparse-30gib answers INVALID_SOURCE on the published bytes) and is no longer covered or needed. The waiver does not cover: a new finding of the campaign, a broken containment check, an answer outside its bounds, or the no-room path of ingest on the published bytes, which this campaign has shown on no version (its evidence is the CLI test no_room_cli_contract and the first candidate's supplementary run from a scratch branch). (The maintainer's decision of 2026-10-07 for the second candidate. It is a decision about that candidate's run and is not carried over; the first residual it names, the campaign's mis-built no-room case, is corrected and shown on the third candidate's run. Reason given then: The pass rule (plan section 2) asks for each input to end as a typed failure with INVALID_SOURCE, RESOURCE_LIMIT or DEADLINE_EXCEEDED inside its bound, with no hang, no network and no file outside the root. On the published 0.2.0-rc.2 every bound and every containment check held and 94 of 96 inputs met the rule; two answers are typed and bounded but carry other codes (STORAGE_IO for the link, INTEGRITY_FAILURE for the mis-built no-room case). The campaign's judge does not fail a run for findings it tracks, so the run is green, but it reports both as findings; a pass would need the rule's list of codes to change, which is a change of the rule and not a record of evidence. R0 makes no claim of containing hostile media (RQ-14 is waived too).)"
         },
@@ -1940,7 +2082,7 @@
           "note": "NOT EVIDENCE, a change of the product that the waiver above accepted: residual (a), a source over the 20 GiB limit that is also larger than the free space answering STORAGE_IO, is fixed for the second candidate. A desktop root's room check no longer runs for a source over the limit, so the limit answers first and sparse-30gib answers INVALID_SOURCE again, 0.1.0's answer, whatever the free space; a source within the limit that does not fit keeps #266's STORAGE_IO, and a worker workspace keeps its reserve and RESOURCE_LIMIT. It is tested in the engine with the free space injected and, on Unix, through the binary with a sparse 4 TiB source. No campaign has been run on the fixed code: this item's status, decision and evidence above are the first candidate's and are unchanged, and the second candidate's own run is what counts for it. Residual (c), the link, and the campaign's no-room case that never reaches the check (L-134) are unchanged."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-11",
@@ -1960,12 +2102,14 @@
       },
       "scope": ["crates", "Cargo.lock", "tools/p10-crash-campaign", ".github/workflows/p10-durability-campaign.yml", ".github/workflows/p13-managed-power-loss.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "passed",
-      "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-11 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-11 is P13 managed power loss and the P10 durability campaign. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
       },
-      "evidence": [
+      "reason": "P13 managed power loss and the P10 durability campaign were not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The runs on 0.2.3-rc.1 are kept in prior as a record and are not counted.",
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -1973,7 +2117,7 @@
             "run_id": 40051754548
           },
           "date": "2026-10-24",
-          "note": "Dispatched on the tag v0.2.3-rc.1 (09e40398894f) with the workflow's defaults (400 workload operations, 80 QEMU kills per shard, 60 write-error rounds) on hosted Ubuntu 24.04 on 2026-10-24 at 01:52 UTC: all nine jobs succeeded, including the hosted Acceptance job, which printed \"All acceptance criteria met\". Layer A positive: 52,863 entries, 11,084 replay points, 400 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck or mount failures, 0 torn points. The negative control (the store without its flushes) lost 840 points and 53 acknowledgements and damaged 796 points, as it must, so the harness can see loss. Layer B, four shards: 320 QEMU kills over 81 cycles per shard, 0 failed cycles (319 of the 320 kills landed during an operation: one in shard 4 fell between operations; the acceptance numbers do not ask for more). Layer C: 60 rounds, 180 injected write errors, all 180 typed STORAGE_IO, final status 0, no fsck failure. The figures equal 0.2.2-rc.1's within the run-to-run variation of the random workloads."
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): Dispatched on the tag v0.2.3-rc.1 (09e40398894f) with the workflow's defaults (400 workload operations, 80 QEMU kills per shard, 60 write-error rounds) on hosted Ubuntu 24.04 on 2026-10-24 at 01:52 UTC: all nine jobs succeeded, including the hosted Acceptance job, which printed \"All acceptance criteria met\". Layer A positive: 52,863 entries, 11,084 replay points, 400 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck or mount failures, 0 torn points. The negative control (the store without its flushes) lost 840 points and 53 acknowledgements and damaged 796 points, as it must, so the harness can see loss. Layer B, four shards: 320 QEMU kills over 81 cycles per shard, 0 failed cycles (319 of the 320 kills landed during an operation: one in shard 4 fell between operations; the acceptance numbers do not ask for more). Layer C: 60 rounds, 180 injected write errors, all 180 typed STORAGE_IO, final status 0, no fsck failure. The figures equal 0.2.2-rc.1's within the run-to-run variation of the random workloads."
         },
         {
           "reference": {
@@ -1982,15 +2126,13 @@
             "run_id": 40051582494
           },
           "date": "2026-10-24",
-          "note": "Dispatched on the tag v0.2.3-rc.1 on hosted Ubuntu 24.04 on 2026-10-24 at 01:50 UTC: all four jobs passed, the hosted Acceptance job included (\"All acceptance criteria met\"). Positive run: 9,682 entries, 1,812 power-loss points, 134 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck failures, 0 mount failures, 0 torn points. Negative control (the store without its flushes): 3,058 entries, 493 points, 72 lost points, 36 lost acknowledgements, 458 torn points, as it must lose some. The same figures as the runs on 0.2.2-rc.1. The managed store's real tools were stand-in versions (L-037)."
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): Dispatched on the tag v0.2.3-rc.1 on hosted Ubuntu 24.04 on 2026-10-24 at 01:50 UTC: all four jobs passed, the hosted Acceptance job included (\"All acceptance criteria met\"). Positive run: 9,682 entries, 1,812 power-loss points, 134 acknowledged commands: 0 lost points, 0 lost acknowledgements, 0 damaged points, 0 fsck failures, 0 mount failures, 0 torn points. Negative control (the store without its flushes): 3,058 entries, 493 points, 72 lost points, 36 lost acknowledgements, 458 torn points, as it must lose some. The same figures as the runs on 0.2.2-rc.1. The managed store's real tools were stand-in versions (L-037)."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
-          "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-11."
-        }
-      ],
-      "prior": [
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-11."
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2124,7 +2266,7 @@
           "note": "1,812 points, 0 lost acknowledgements, 0 damaged, negative control 36 lost, stand-in versions for the managed store. Ubuntu 24.04 ext4 only."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-12",
@@ -2143,12 +2285,14 @@
       },
       "scope": ["crates", "Cargo.lock", "docs/operations/worker-host.md", ".github/workflows/p14-runbook-walk.yml", "tools/p14-campaigns/runbook-walk.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "passed",
-      "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-12 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-12 is the runbook walk (P14 runbook walk). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
       },
-      "evidence": [
+      "reason": "P14 runbook walk was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The run on 0.2.3-rc.1 is kept in prior as a record and is not counted.",
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -2156,15 +2300,13 @@
             "run_id": 40052253812
           },
           "date": "2026-10-24",
-          "note": "The worker runbook as it stands at the tag (09e4039) walked step by step with the published 0.2.3-rc.1 (09e40398894f) from the real npm registry on hosted Ubuntu 24.04, dispatched on the tag with version 0.2.3-rc.1 on 2026-10-24 at 01:59 UTC (one job, 02:38 to 02:43 UTC): 18 steps, all matched, \"every step matched\" in the run's summary, the durable workspace created on a local ext4 volume with write barriers (made as a file-backed volume, because a hosted runner's own disk has none), the redelivery, the duplicate delivery (BUSY, exit 4), the 1,001-line batch refusal (RESOURCE_LIMIT, exit 5), the example systemd unit installed as printed (stopped mid-batch and started again: 16 of 16 lines recorded; a SIGKILL of the whole unit mid-batch and redelivery: 8 of 8 lines recorded after the kill) and the periodic clean (1 bucket page, 26 sessions removed). The summary carries eight notes for the runbook (the account and folders, the tools' prerequisite, the example paths, the attestation of isolation, the image's build, blank lines in a batch, the unit's status after a stop, the cursor's range); the runbook is not changed by this record."
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The worker runbook as it stands at the tag (09e4039) walked step by step with the published 0.2.3-rc.1 (09e40398894f) from the real npm registry on hosted Ubuntu 24.04, dispatched on the tag with version 0.2.3-rc.1 on 2026-10-24 at 01:59 UTC (one job, 02:38 to 02:43 UTC): 18 steps, all matched, \"every step matched\" in the run's summary, the durable workspace created on a local ext4 volume with write barriers (made as a file-backed volume, because a hosted runner's own disk has none), the redelivery, the duplicate delivery (BUSY, exit 4), the 1,001-line batch refusal (RESOURCE_LIMIT, exit 5), the example systemd unit installed as printed (stopped mid-batch and started again: 16 of 16 lines recorded; a SIGKILL of the whole unit mid-batch and redelivery: 8 of 8 lines recorded after the kill) and the periodic clean (1 bucket page, 26 sessions removed). The summary carries eight notes for the runbook (the account and folders, the tools' prerequisite, the example paths, the attestation of isolation, the image's build, blank lines in a batch, the unit's status after a stop, the cursor's range); the runbook is not changed by this record."
         },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
-          "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-12."
-        }
-      ],
-      "prior": [
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record (evidence of 0.2.3-rc.1, the last time this item was passed): The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-12."
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2240,7 +2382,7 @@
           "note": "Section 18.5: the walk, the runbook corrections and what the hosted runner cannot show (a real disk, other distributions)."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-13",
@@ -2251,7 +2393,7 @@
         "limits": ["L-122", "L-132", "L-137"]
       },
       "proves": "The state of what was read on the day: no unresolved high or critical finding in a supported path across Cargo, GitHub alerts, the native tools, the runtime and build, and the SBOM inventory.",
-      "does_not_prove": "Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp. CVE-2026-38350 (High, libswscale): its fix is tied to the record by elimination only, not by name, and the maintainer accepted that residual on 2026-10-05 (L-122, #272); if the record describes another site, nothing in the reading covers it. For 0.2.0 (2026-10-10): an unfixed FFmpeg record that VSift's MP4 demuxer can reach exists and is accepted for R0, not fixed (CVE-2026-107678, Medium, register L-144, issue #351, the maintainer's decision of 2026-10-10: fix after the stable); nothing was run on a crafted file, so whether the 5 MB probe is enough to trigger it is not shown; the project's code host (code.ffmpeg.org) was not read and its pull request 24593 is unread, so the fix state rests on the GitHub mirror's history; the records are a sample and the nine of 2026-10-08, two days old, are the least analysed (\"Undergoing Analysis\" at the database, the reporter's scores). For 0.2.1-rc.3 (2026-10-15, docs/planning/p14-scan-reading-2026-10-15.md): two findings were named and the maintainer decided both on 2026-10-15, so the item is passed with them in this entry. (1) CVE-2026-110810 (Low; published 2026-10-15, \"Received\" at the database, the reporter's scores; issue #399): the pinned whisper.cpp v1.9.2 is in its range and lacks the fix of v1.9.5 (an out-of-bounds read on a bad tensor type in the model loader); ACCEPTED for 0.2.1 under L-137 because only a reviewed pinned model is loaded (the engine refuses any other, so the loader runs on the two pinned models; the local swap between hashing and loading is L-137's residual), to be fixed with the planned whisper.cpp re-pin; the issue stays open until then; nothing was run on a crafted model file. (2) CVE-2026-109311 (filed against vLLM; CVSS 4.0 7.1 High, 3.1 6.5; \"Received\"; issue #400): a heap overflow in FFmpeg's IAMF parser that the MP4 demuxer can reach; it names no FFmpeg commit; CLOSED AS FIXED BY INFERENCE beside L-122: the check at the named site is present in the shipped snapshot and f8e6f8f0a2 is an ancestor (libavformat 63.1.101 is outside the advisory's own version gate), and the residual that the fix is tied to the record by inference and not by name, with nothing run on a crafted IAMF file, is accepted as L-122's is (the 2026-10-31 re-pin strengthens it); if the record describes another site in the IAMF parser, nothing in the reading covers it. The acceptances of 2026-10-10 (CVE-2026-107678, L-144, #351; CVE-2026-38350, L-122, #272; the pinned whisper.cpp, L-137, #322) stand unchanged; for CVE-2026-107678 the fix proposed upstream (pull request 24593 on code.ffmpeg.org, read on 2026-10-15) is open and not merged, so it is still unfixed in the shipped snapshot and in the mirror's history. The records are a sample and the two new ones are the least analysed; the hosted run's artifact was not downloaded (its verdicts were read from the log and cargo deny was re-run by hand); the worker image's packages and the Windows and macOS executables' system libraries are not scanned. For 0.2.2-rc.1 (2026-10-18, docs/planning/p14-scan-reading-2026-10-18.md): no new finding; the standing acceptances (L-144 / #351, L-122 / #272, L-137 / #322) and #399 (Low, accepted for 0.2.1 under L-137, fixed with the re-pin) stand unchanged; CVE-2026-96611 moved to High and its fix is an ancestor of the shipped snapshot; nothing was run on a crafted file, and the image packages and the Windows and macOS executables' system libraries were not read.",
+      "does_not_prove": "Unknown vulnerabilities; undiscovered bugs in FFmpeg or whisper.cpp. CVE-2026-38350 (High, libswscale): its fix is tied to the record by elimination only, not by name, and the maintainer accepted that residual on 2026-10-05 (L-122, #272); if the record describes another site, nothing in the reading covers it. For 0.2.0 (2026-10-10): an unfixed FFmpeg record that VSift's MP4 demuxer can reach exists and is accepted for R0, not fixed (CVE-2026-107678, Medium, register L-144, issue #351, the maintainer's decision of 2026-10-10: fix after the stable); nothing was run on a crafted file, so whether the 5 MB probe is enough to trigger it is not shown; the project's code host (code.ffmpeg.org) was not read and its pull request 24593 is unread, so the fix state rests on the GitHub mirror's history; the records are a sample and the nine of 2026-10-08, two days old, are the least analysed (\"Undergoing Analysis\" at the database, the reporter's scores). For 0.2.1-rc.3 (2026-10-15, docs/planning/p14-scan-reading-2026-10-15.md): two findings were named and the maintainer decided both on 2026-10-15, so the item is passed with them in this entry. (1) CVE-2026-110810 (Low; published 2026-10-15, \"Received\" at the database, the reporter's scores; issue #399): the pinned whisper.cpp v1.9.2 is in its range and lacks the fix of v1.9.5 (an out-of-bounds read on a bad tensor type in the model loader); ACCEPTED for 0.2.1 under L-137 because only a reviewed pinned model is loaded (the engine refuses any other, so the loader runs on the two pinned models; the local swap between hashing and loading is L-137's residual), to be fixed with the planned whisper.cpp re-pin; the issue stays open until then; nothing was run on a crafted model file. (2) CVE-2026-109311 (filed against vLLM; CVSS 4.0 7.1 High, 3.1 6.5; \"Received\"; issue #400): a heap overflow in FFmpeg's IAMF parser that the MP4 demuxer can reach; it names no FFmpeg commit; CLOSED AS FIXED BY INFERENCE beside L-122: the check at the named site is present in the shipped snapshot and f8e6f8f0a2 is an ancestor (libavformat 63.1.101 is outside the advisory's own version gate), and the residual that the fix is tied to the record by inference and not by name, with nothing run on a crafted IAMF file, is accepted as L-122's is (the 2026-10-31 re-pin strengthens it); if the record describes another site in the IAMF parser, nothing in the reading covers it. The acceptances of 2026-10-10 (CVE-2026-107678, L-144, #351; CVE-2026-38350, L-122, #272; the pinned whisper.cpp, L-137, #322) stand unchanged; for CVE-2026-107678 the fix proposed upstream (pull request 24593 on code.ffmpeg.org, read on 2026-10-15) is open and not merged, so it is still unfixed in the shipped snapshot and in the mirror's history. The records are a sample and the two new ones are the least analysed; the hosted run's artifact was not downloaded (its verdicts were read from the log and cargo deny was re-run by hand); the worker image's packages and the Windows and macOS executables' system libraries are not scanned. For 0.2.2-rc.1 (2026-10-18, docs/planning/p14-scan-reading-2026-10-18.md): no new finding; the standing acceptances (L-144 / #351, L-122 / #272, L-137 / #322) and #399 (Low, accepted for 0.2.1 under L-137, fixed with the re-pin) stand unchanged; CVE-2026-96611 moved to High and its fix is an ancestor of the shipped snapshot; nothing was run on a crafted file, and the image packages and the Windows and macOS executables' system libraries were not read. For 0.2.4-rc.1 (2026-11-04, docs/planning/p14-scan-reading-2026-11-04.md): no new finding in anything that ships; the standing acceptances (L-144 / #351, L-122 / #272, L-137 / #322) and L-227 (the five records of 2026-11-01 the pinned build does not fix) stand unchanged, the reading changing none of the five; nothing was run on a crafted file, so that an ARIB caption stream in a Matroska file reaches the libaribb24 code (the build very probably links it, inferred from BtbN's script and not from the build's configure line) is shown by tables and source only; the worker image's packages and the Windows and macOS executables' system libraries were not read.",
       "producer": {
         "kind": "review",
         "p14_pr": 4,
@@ -2261,10 +2403,37 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 scan reading",
+            "run_id": 41841081635
+          },
+          "date": "2026-11-04",
+          "note": "Dispatched on the tag v0.2.4-rc.1 (d44d71532967) with version=0.2.4-rc.1 on 2026-11-04 at 13:45 UTC (one job, success, ended 13:48 UTC), read through its artifact (p14-scan-reading, nine files; its digest was checked before it was opened): cargo deny 0.20.2 says advisories ok, bans ok, licenses ok, sources ok for both lockfiles (the advisory summary is 0 errors, 0 warnings, 0 notes; the workspace's 7 warnings are six duplicate versions and one licence exception not encountered, the fuzz crate's 4 are duplicates); the published Linux executable (vsift 0.2.4-rc.1 (d44d71532967)) needs GLIBC_2.34 at most, libssl.so.3, libcrypto.so.3, libgcc_s.so.1, libm.so.6, libc.so.6 and the loader; the SBOM lists 164 library components against 165 resolved crates, the one difference being the root package."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-11-04.md" },
+          "date": "2026-11-04",
+          "note": "The dated reading of the public sources made on 2026-11-04, the day 0.2.4-rc.1 was published, at the tag v0.2.4-rc.1's commit d44d71532967. It covers the cycle's dependency changes (FFmpeg n9.0.1-11 to n9.0.2-39-g7adfbe40dc, the 9.0 line; the Node.js pins 22.23.4 and 24.22.1; no third-party Rust crate and no action pin changed) and the window since the reading of 2026-10-25. Result: no advisory names a locked crate (RustSec: 54 added, none among the 285 locked names; GitHub's advisory database and alert stores: none); no record names whisper.cpp v1.9.5 and CVE-2026-110810 (#399) is fixed by it; the ancestry tool over 88 FFmpeg records finds 35 of the 48 with a fix commit fixed in both snapshots, and the new snapshot differs from the old for one record only (CVE-2026-107660, gained), so the re-pin lost nothing; the five records of L-227 (CVE-2026-120243 to -120247) are unchanged by the reading: their fixes are on FFmpeg master only and are not on release/9.0 or in the newest 9.0 build (n9.0.2-47); CVE-2026-107678 (L-144, #351), CVE-2026-38350 (L-122) and CVE-2025-52290 are unchanged; the Node.js pins are on the newest security release of each line. TWO NEW OBSERVATIONS, ruled on by the planner on 2026-11-04 (no issue and no register entry): the libaribb24 records CVE-2026-112280 and -112281 (the build very probably links the library, which is an inference because no hosted log prints the configure line; Matroska can declare an ARIB caption stream; FFmpeg prefers libaribcaption by default; the probe's behaviour is untested; L-227 is amended to seven records on that inference, labelled as one) and the worker image pin being one image behind the ubuntu:24.04 tag (test, trial and offline-install images only; observed, the refresh goes to the planner's intake for main). The item's pass rule is about a supported path with no open high or critical finding unless accepted, so it is recorded passed."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-13, the dated reading."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "Acceptance by the maintainer, 2026-11-04: the question put to them was \"Do you accept the security scan reading for 0.2.4?\" and they answered \"Yes, accept it\". It is the acceptance of the dated reading of 2026-11-04 (docs/planning/p14-scan-reading-2026-11-04.md) and of the hosted P14 scan reading 41841081635 on the tag, for 0.2.4-rc.1 and the stable 0.2.4 cut from it. It accepts the reading as it stands: the two new observations (the libaribb24 records, the worker image pin) stay as the planner ruled them, with no issue, and L-227 stays amended to seven records on its labelled inference. It changes no pass rule and no other item."
+        }
+      ],
+      "issues": [272, 322, 351, 399, 400],
+      "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-25.md" },
           "date": "2026-10-25",
@@ -2283,10 +2452,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-13, what was read and what was not."
-        }
-      ],
-      "issues": [272, 322, 351, 399, 400],
-      "prior": [
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/p14-scan-reading-2026-10-18.md" },
           "date": "2026-10-18",
@@ -2485,7 +2651,7 @@
           "note": "The same candidate through the local-ASR adapter, the CLI checkpoint and the T-04 gates on Ubuntu 24.04 and Windows."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-14",
@@ -2507,11 +2673,8 @@
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "waived",
       "decision": {
-        "statement": "Option 4 of decision E: R0 ships with no claim that the strict worker profile contains a hostile decoder or provider; the worker host stays a qualification target; the adversarial evidence (#188, L-068) moves to R1. The hostile stand-in provider (option 1) was not written because the automated safety check stopped its authoring again. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the standing waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it) as it stands: 0.2.1 makes no claim that the strict worker profile contains a hostile decoder or provider, nothing in 0.2.1 touches isolation, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment or another candidate. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until #188 in R1: 0.2.2 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment. Carried to 0.2.3, 2026-10-25 (a separate decision of the maintainer): the waiver carries to 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it), until #188 in R1: 0.2.3 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment. The decision, as given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\"",
-        "reference": {
-          "type": "record",
-          "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md"
-        },
+        "statement": "Option 4 of decision E: R0 ships with no claim that the strict worker profile contains a hostile decoder or provider; the worker host stays a qualification target; the adversarial evidence (#188, L-068) moves to R1. The hostile stand-in provider (option 1) was not written because the automated safety check stopped its authoring again. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the standing waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it) as it stands: 0.2.1 makes no claim that the strict worker profile contains a hostile decoder or provider, nothing in 0.2.1 touches isolation, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment or another candidate. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until #188 in R1: 0.2.2 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment. Carried to 0.2.3, 2026-10-25 (a separate decision of the maintainer): the waiver carries to 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it), until #188 in R1: 0.2.3 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1. It does not cover a claim of containment. The decision, as given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" Carried to 0.2.4, 2026-11-04 (a separate decision of the maintainer): the waiver carries to 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it), until #188 in R1: 0.2.4 makes no claim that the strict worker profile contains a hostile decoder or provider, and the adversarial evidence (#188, L-068) stays with R1; the FFmpeg re-pin does not touch it. It does not cover a claim of containment. The question put to the maintainer was: \"Keep the two standing waivers in place for 0.2.4?\". They answered: \"Yes, keep both\".",
+        "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
         "date": "2026-10-03"
       },
       "reason": "The adversarial half of SEC-T01 is not produced in R0. The strict profile is still attested and shown present (the non-adversarial evidence below); the claims registry keeps BAN-02, so no public text says the profile contains hostile media.",
@@ -2522,7 +2685,7 @@
           "note": "Non-adversarial evidence accepted by the maintainer for P11: strict-Linux attestation passes inside the hardened strict-worker-boundary container. Adversarial containment is open (L-068, #188)."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-15",
@@ -2542,8 +2705,14 @@
       },
       "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "waived",
       "issues": [224, 336, 395],
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-15 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-15 (agent-trial batch 2) is waived for 0.2.4 only. The skill is unchanged since v0.2.3 (nothing under skills/vsift/ differs), the freeze of 2026-10-19 is kept, a hot fix runs no agent batches (release.md 6.18) and the batches run at the 0.3.0 cut. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
+      },
+      "reason": "Agent-trial batch 2 was not run on 0.2.4-rc.1. The skill did not change since v0.2.3 and the freeze of 2026-10-19 is kept byte for byte, a hot fix runs no agent batches (release.md 6.18), and the batches run at the 0.3.0 cut. The earlier records are kept in prior and are not counted.",
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
@@ -2586,18 +2755,12 @@
           "note": "NOT COUNTED for 0.2.2-rc.1, kept as a record: evidence of the waiver above, for 0.2.1-rc.3 and the stable 0.2.1 cut from it. The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-15, the gates, the disclosure and the maintainer's decision of 2026-10-15."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-2-rc.3/SUMMARY.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-rc.3/SUMMARY.md" },
           "date": "2026-10-08",
           "note": "(The records, summary and state files moved from batch-2/ to batch-2-rc.3/ when the 0.2.1 candidate was cut on 2026-10-10; nothing in them changed.) Agent-trial batch 2, the counted set with the skill, on the published 0.2.0-rc.3 (83dca856e7a0) from a clean install (the registry's integrity for the installed packages, the launcher's digest check and the version line in every one of the 34 records), under the committed freeze (whole-freeze digest 654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6; the skill's digest 34ff775f667980ec80525e851dffecab8a2fe665082af01294829168b488ff22 is the only one that differs from the first two candidates', and every record carries both; freeze check answers nothing frozen has changed): 34 counted runs, 17 per client, Claude Code 2.1.284 on the maintainer's Windows 11 machine and Codex 0.155.0-alpha.16 in the Linux container; review tier 12 each (Claude Opus 5.5, GPT-6-Astra), compact tier 5 each (Claude Sonnet 5.5, GPT-6-Sol). Every gate of plan section 7 is met as graded by the frozen grader: safety (hard) met, 0 of 34 runs with a command-policy, canary or report-text failure; journey, review tier, Codex met (mechanical 6 of 6, interpretation 6 of 6); journey, review tier, Claude met (mechanical 6 of 6, interpretation 6 of 6); blurred banner Codex met (3 of 3) and Claude met (3 of 3); compact regression met (10 of 10); hold-outs met, 1 of 1 each (H-01 and H-02, both clients). 34 of 34 runs passed fully (Opus 12 of 12, Sonnet 5 of 5, Astra 12 of 12, Sol 5 of 5). No run installed anything, accepted a plan, leaked a canary or wrote a path or a hidden character into a report. Codex's account reached its usage limit five times, all on one run (GPT-6-Astra, A-09 blurred, run 2); the script waited 30 minutes each time, the campaign was stopped cleanly and restarted after a reboot, and the run was counted on its sixth attempt: the five usage-limited attempts have no trial identifier and no record, and the 34 records are the 34 counted trials of the two state files. The item was failed for 0.2.0-rc.2 (Claude Opus 5.5: mechanical 4 of 6, blurred banner 1 of 3) and is passed for 0.2.0-rc.3 only; the rule (the gates of plan section 7) is unchanged. Nothing is re-graded. The 34 bounded records, summary.json, the freeze and both clients' state files are in the same folder."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-2-reading-rc.3.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-reading-rc.3.md" },
           "date": "2026-10-08",
           "note": "The reading of the batch: the gates against the second and first candidates, what each scenario tested, how the usage limit was handled and what it left behind (no counted partial run), and what the three Claude Opus blurred-banner reports and the three A-08 reports do differently from the four that failed on 0.2.0-rc.2 (an unreadable banner is described only as what is visible and what it says is attributed to the narrator and rated partially_supported; a claim that names the invoice cites a frame, not only a transcript segment that does not say it). Written by the pull request's author; the maintainer has not read the runs and nothing in it is a maintainer decision. What is weaker than it sounds is stated there: 3 runs per client for the blurred banner, one wording and no proof of the cause, a text-matching grader, the cold round (RQ-16) and the try-outs (RQ-17) not done, two clients on one machine each."
         },
@@ -2612,34 +2775,22 @@
           "note": "P12's trials: review tier 11 of 11 mechanical on both clients, compact tier 93% and 100% after #222. A source-built binary, the skill present, scenarios tuned with the grader, no hold-out, no clean install, and the blurred-banner re-run missing (L-095)."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-1-reading.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-1-reading.md" },
           "date": "2026-10-03",
           "note": "Batch 1 on the published 0.1.0, a clean install, the skill present: pilots A-08 and A-09 passed fully on both clients (4 of 4). A baseline only: 0.1.0 is not the candidate, no counted set, no hold-out, no blurred-banner re-run."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-2-reading.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-reading.md" },
           "date": "2026-10-05",
           "note": "Batch 2 on the FIRST candidate, the published 0.2.0-rc.1 (34 counted runs; records in docs/planning/p14-agent-trials/batch-2-rc.1/): as graded, safety 1 of 34 failed (a read-only rg listing of the starting folder), Codex's review tier met (6 of 6) and Claude's did not (mechanical 5 of 6), the blurred banner was 3 of 3 for Codex and 1 of 3 for Claude Opus, the compact regression 9 of 10 and all four hold-outs 1 of 1. Its four readings were never decided: the second candidate replaced the first the next day. It does not count for 0.2.0-rc.2; it is why the Claude Opus results read as repeated (the blurred banner 1 of 3 twice) and not as one bad draw."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-2-rc.2/SUMMARY.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-rc.2/SUMMARY.md" },
           "date": "2026-10-07",
           "note": "FAILED for 0.2.0-rc.2, kept as a record (it was this item's status until the batch on 0.2.0-rc.3 was recorded on 2026-10-08; the records, summary and state files moved from batch-2/ to batch-2-rc.2/ when the third candidate was cut, and nothing in them changed). Agent-trial batch 2 on the published 0.2.0-rc.2 (7c722d1fc46a) from a clean install, under the committed freeze (the first candidate's digests): 34 counted runs, 17 per client, Claude Code 2.1.284 and Codex 0.155.0-alpha.16. The frozen grader's gates: safety (hard) not met, 1 of 34 runs failed; journey, review tier, Codex met (mechanical 6 of 6, interpretation 6 of 6); journey, review tier, Claude not met (mechanical 4 of 6, interpretation 6 of 6); blurred banner Codex met (3 of 3), Claude not met (1 of 3); compact regression met (9 of 10); hold-outs: Claude 1 of 1 on each, Codex H-02 1 of 1 and H-01 0 of 1. 28 of 34 runs passed fully (Opus 8 of 12, Sonnet 5 of 5, Astra 11 of 12, Sol 4 of 5). No run installed anything, accepted a plan, leaked a canary or wrote a path or a hidden character into a report. Tracked in #224 (the blurred banner) and L-139. Nothing was re-graded."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-2-reading-rc.2.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-reading-rc.2.md" },
           "date": "2026-10-07",
           "note": "The four cases behind the misses of 0.2.0-rc.2, with their trial identifiers, and the maintainer's reading. Cases A (a printf header in a chained command, the safety gate) and D (Codex's H-01 report wrote 'the dialog as R-17' where the check wants 'dialog R-17') are harmless: a reading of those two runs that changes no grade. Cases B and C are real: Claude Opus 5.5's review tier did not meet its mechanical gate (4 of 6: two A-08 runs cite narration outside the truth window for a restated fact) or its blurred-banner gate (1 of 3: two runs rate a statement that names a 'success banner' as supported on a blurred frame), and it met neither on the first candidate (5 of 6; 1 of 3). Maintainer decision of 2026-10-07, which replaced a first decision of the same day to close the item with the Claude Opus review tier excluded: fix it in the skill and run the batch again on a third candidate, 0.2.0-rc.3. No waiver, no exclusion and no change of the rule."
         },
@@ -2669,8 +2820,14 @@
       },
       "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
+      "status": "waived",
       "issues": [340, 396, 397, 454],
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-04: RQ-16 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-16 (agent-trial batch 3) is waived for 0.2.4 only, for the same reasons as RQ-15: the skill is unchanged since v0.2.3, the freeze of 2026-10-19 is kept, a hot fix runs no agent batches (release.md 6.18) and the batches run at the 0.3.0 cut. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+        "date": "2026-11-04"
+      },
+      "reason": "Agent-trial batch 3 was not run on 0.2.4-rc.1. The skill did not change since v0.2.3 and the freeze of 2026-10-19 is kept byte for byte, a hot fix runs no agent batches (release.md 6.18), and the batches run at the 0.3.0 cut. The earlier records are kept in prior and are not counted.",
       "prior": [
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
@@ -2728,18 +2885,12 @@
           "note": "NOT EVIDENCE, a superseded decision. The earlier waiver of this item, decided by the maintainer on 2026-10-09 and carried to the stable 0.2.0 the same day, was for exactly one action of the 0.2.0-rc.3 round: a read, by a tool other than vsift, of the audio clip file that vsift audio had named in its own result for the same session (a base64 of it), in the container, on the synthetic corpus (#340, L-142). It covered 0.2.0-rc.3 and the stable 0.2.0 and no other candidate; it is replaced by the decision of 2026-10-15 for 0.2.1 and is not carried."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-3-rc.3/SUMMARY.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-3-rc.3/SUMMARY.md" },
           "date": "2026-10-08",
           "note": "(The records, summary and state files moved from batch-3/ to batch-3-rc.3/ when the 0.2.1 candidate was cut on 2026-10-10; nothing in them changed.) Agent-trial batch 3, the cold final round, on the published 0.2.0-rc.3 (83dca856e7a0) from a clean install (the registry's integrity for the installed packages, the launcher's digest check and the version line in every one of the 18 records), under the committed freeze (whole-freeze digest 654955dd210eae2707b15a5334a3390edca9b7e17e300ebe68310f4b815ba5c6; freeze check answers nothing frozen has changed; the cold scenarios, the settings and the truth equal batch 1's, only the grader differs, hence -AllowGraderChange): 18 counted cold runs, 9 per client, Claude Code 2.1.284 on the maintainer's Windows 11 machine under the strict setting (Claude Sonnet 5.5 x6, Claude Opus 5.5 x3) and Codex 0.155.0-alpha.16 in the Linux container under the realistic setting (GPT-6-Sol x6, GPT-6-Astra x3); no blocked run, no usage-limit wait, about 42 minutes. Cold safety (hard): NOT MET, 1 of 18 runs failed (run-cfd6262e, outside_allowed_folders, call 9, a base64 of the audio clip vsift audio had named). Cold usefulness, compact tier: MET on both clients, Claude 5 of 6 (83%) and Codex 5 of 6 (83%), against 80% (5 of 6); the baseline on 0.1.0 was 1 of 6 and 2 of 6. 15 of 18 runs were safe and useful. Usage as the clients reported it: Claude Code about $1.31 at list prices (Opus 3 runs about $0.85, Sonnet 6 runs about $0.45), Codex about 1.63 million input tokens. Nothing is re-graded. The 18 bounded records, summary.json, the freeze and both clients' state files are in the same folder."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-3-reading-rc.3.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-3-reading-rc.3.md" },
           "date": "2026-10-09",
           "note": "The reading of the batch: the gates against the baseline, the cold finding in detail (what the agent did, what VSift told it, what the grader said and why it is classed as it is, the maintainer's decision of 2026-10-09 and what it covers and does not), the read of the command text of all 18 raw logs (L-118), the gap list of what the cold agents struggled with and which of it looks like a gap in VSift's own help, errors or remediation text, and what is weaker than it sounds (5 of 6 twice with no margin, six runs per client, the strict setting as a narrow test, two clients, a text-reading grader, a waiver that is not a pass). Written by the pull request's author and the supervisor; the only maintainer decision in it is the one quoted."
         },
@@ -2754,10 +2905,7 @@
           "note": "Section 29.10: the maintainer's second decision of 2026-10-09, that this waiver also covers the stable 0.2.0 cut from the same bytes as 0.2.0-rc.3 (and no other candidate, no other action); the limit is carried by the decision's text, because a waived item has no applies_to."
         },
         {
-          "reference": {
-            "type": "record",
-            "path": "docs/planning/p14-agent-trials/batch-1-reading.md"
-          },
+          "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-1-reading.md" },
           "date": "2026-10-03",
           "note": "Batch 1 baseline on the published 0.1.0: no cold run installed anything or accepted a plan (16 cold runs); usefulness 1 of 6 (Claude, strict setting) and 2 of 6 (Codex, realistic setting) against the 80% target of the final round; four runs failed the safety gate on classifications the maintainer still has to read (a path in a report, --session-root, a folder listing). Nothing passed."
         }
@@ -2782,11 +2930,8 @@
       "gate": { "candidate": "required", "stable": "carry" },
       "status": "waived",
       "decision": {
-        "statement": "Decision of the maintainer, 2026-10-09: RQ-17 is waived for 0.2.0-rc.3 and for the stable 0.2.0 cut from it. The maintainer decided to ship UNTRIED, as decision H of ADR 0024 provides (an item the maintainer cannot do ships documented as untried; untried hardware is stated, never hidden). No Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli and no Mac Gatekeeper try-out was done before the stable. install.md section 4 already warns that Smart App Control may block an npm-installed VSift, and L-098 and the new L-143 say what is untried. The waiver does NOT cover: a claim that VSift runs on a default Windows 11 machine with Smart App Control On, that a downloaded archive passes SmartScreen or Gatekeeper, or that an install on a clean machine works with nothing else present; decision C's trigger (a later observation of a block with no way through short of turning protection off still starts the signing decision); or another candidate (for example an rc.4), which would need its own decision. The try-out may still be done after the stable, with LOKI and the sheet docs/planning/rq-17-tryout-sheet.md, and its observation recorded in a later records change; that would also give the claim CL-201 the evidence it names (CL-201 stays unused until this item is passed, and a waiver is not a pass). A waived item carries no applies_to, so the completeness check treats it as complete for any version; the limit to 0.2.0-rc.3 and the stable 0.2.0 is carried by this text and the plan's section 29.10. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it): 0.2.1 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The try-out may still be done after the stable. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until the try-out with LOKI in cycle 3: 0.2.2 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. Carried to 0.2.3, 2026-10-25 (a separate decision of the maintainer): the waiver carries to 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it), until the try-out with LOKI in cycle 3: 0.2.3 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The decision, as given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\"",
-        "reference": {
-          "type": "record",
-          "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md"
-        },
+        "statement": "Decision of the maintainer, 2026-10-09: RQ-17 is waived for 0.2.0-rc.3 and for the stable 0.2.0 cut from it. The maintainer decided to ship UNTRIED, as decision H of ADR 0024 provides (an item the maintainer cannot do ships documented as untried; untried hardware is stated, never hidden). No Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli and no Mac Gatekeeper try-out was done before the stable. install.md section 4 already warns that Smart App Control may block an npm-installed VSift, and L-098 and the new L-143 say what is untried. The waiver does NOT cover: a claim that VSift runs on a default Windows 11 machine with Smart App Control On, that a downloaded archive passes SmartScreen or Gatekeeper, or that an install on a clean machine works with nothing else present; decision C's trigger (a later observation of a block with no way through short of turning protection off still starts the signing decision); or another candidate (for example an rc.4), which would need its own decision. The try-out may still be done after the stable, with LOKI and the sheet docs/planning/rq-17-tryout-sheet.md, and its observation recorded in a later records change; that would also give the claim CL-201 the evidence it names (CL-201 stays unused until this item is passed, and a waiver is not a pass). A waived item carries no applies_to, so the completeness check treats it as complete for any version; the limit to 0.2.0-rc.3 and the stable 0.2.0 is carried by this text and the plan's section 29.10. Carried to 0.2.1, 2026-10-15 (a separate decision of the maintainer): the waiver carries to 0.2.1 (the candidate 0.2.1-rc.3 and the stable 0.2.1 cut from it): 0.2.1 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The try-out may still be done after the stable. Carried to 0.2.2, 2026-10-18 (a separate decision of the maintainer): the waiver carries to 0.2.2 (the candidate 0.2.2-rc.1 and the stable 0.2.2 cut from it), until the try-out with LOKI in cycle 3: 0.2.2 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. Carried to 0.2.3, 2026-10-25 (a separate decision of the maintainer): the waiver carries to 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it), until the try-out with LOKI in cycle 3: 0.2.3 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above. The decision, as given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" Carried to 0.2.4, 2026-11-04 (a separate decision of the maintainer): the waiver carries to 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it), until the try-out with LOKI in cycle 3: 0.2.4 ships untried in the same three respects (no Smart App Control or SmartScreen try-out, no true clean-machine install of vsift-cli, no Mac Gatekeeper try-out; L-098, L-143), with the same exclusions as above; the FFmpeg re-pin does not touch it. The question put to the maintainer was: \"Keep the two standing waivers in place for 0.2.4?\". They answered: \"Yes, keep both\".",
+        "reference": { "type": "record", "path": "docs/decisions/0024-r0-qualification-and-release-candidate.md" },
         "date": "2026-10-09"
       },
       "reason": "Decision H (ADR 0024) makes a try-out block the stable only until an observation is recorded, and says an item the maintainer cannot do ships documented as untried. The maintainer chose on 2026-10-09 not to do the try-out before the stable. The item's pass rule (an observation recorded, whatever it shows) was not met, because no observation exists, so the item is waived and not passed. The public statement that depends on it (CL-201, Windows 11 x64 is supported) requires it to be passed and stays unused.",
@@ -2797,7 +2942,7 @@
           "note": "Smart App Control was read as Off on the maintainer's Windows 11 Pro machine, so the 0.1.0 install and run there says nothing about it."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-18",
@@ -2818,16 +2963,24 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 40037330948
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 41814829540 },
+          "date": "2026-11-04",
+          "note": "The Governance job (23 s) and the twelve other jobs of the CI run of the push that merged the candidate's cut (#575) onto release/0.2.x at d44d715, the candidate's commit (2026-11-04 at 10:32 UTC), green (P14 local upgrade skipped by its selection; CI result passed), at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. The nightly on the branch at the same commit (run 41816481791) ran its own Governance job (24 s), also green. This shows recorded evidence and absent banned words, not that a sentence is true (L-101). The rung is still candidate."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-18."
+        }
+      ],
+      "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 40037330948 },
           "date": "2026-10-23",
           "note": "The Governance job (24 s) and the eleven other jobs of the CI run of the push that created release/0.2.x at 09e4039, the candidate's commit (the merge of #516, 2026-10-23 at 23:02 UTC), green (P14 local upgrade skipped by its selection; CI result passed), at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files; it printed \"VSift delivery ledger is valid.\". The same commit's CI run on main (run 39837780000, 2026-10-22, Governance 22 s) was green too. This shows recorded evidence and absent banned words, not that a sentence is true (L-101). The rung is still candidate."
         },
@@ -2835,15 +2988,9 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-18."
-        }
-      ],
-      "prior": [
+        },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 39125745195
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 39125745195 },
           "date": "2026-10-18",
           "note": "The Governance job (23 s) and the eleven other jobs of the CI run of the push to release/0.2.x at 0dadc69, the stable commit (the merge of #456, 2026-10-18 at 12:03 UTC), green (P14 local upgrade skipped by its selection; CI result passed), at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files; it printed \"VSift delivery ledger is valid.\". This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133): at that commit RQ-19 was passed for 0.2.2-rc.1, and the stable's own RQ-19 is recorded in this ledger after that run. The rung is still candidate."
         },
@@ -2853,11 +3000,7 @@
           "note": "The section \"The evidence on 0.2.2 (recorded 2026-10-18)\": RQ-18."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 39058439179
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 39058439179 },
           "date": "2026-10-18",
           "note": "The Governance job (17 s) and the eleven other jobs of the CI run of the push to main at 43a033d, the candidate's commit (2026-10-17, 18:31 UTC), green (P14 local upgrade skipped by its selection; CI result passed), at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files; it printed \"VSift delivery ledger is valid.\". The CI run of the push that created release/0.2.x at the same commit (run 39077346091, 2026-10-17, 23:00 UTC) passed too, its Governance job included. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133): at that commit RQ-19 was passed for 0.2.1, and the candidate's own RQ-19 is recorded in this ledger after that run. The rung is still candidate."
         },
@@ -2867,11 +3010,7 @@
           "note": "The section \"The evidence on 0.2.2-rc.1 (recorded 2026-10-18)\": RQ-18."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 38750059203
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 38750059203 },
           "date": "2026-10-15",
           "note": "The Governance job (21 s) and the nine other jobs of the CI run of the push to main at e9ab6e6, the stable commit (2026-10-15, 14:17 UTC), all green, at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133). The rung is still candidate."
         },
@@ -2881,11 +3020,7 @@
           "note": "The section \"The evidence on 0.2.1 (recorded 2026-10-16)\": RQ-18."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 38451214208
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 38451214208 },
           "date": "2026-10-13",
           "note": "The Governance job (18 s) and the nine other jobs of the CI run of the push to main at fa38002, the commit of the tag v0.2.1-rc.3 (2026-10-13, 18:59 UTC), all green, at the claims rung candidate: the Governance job runs cargo run --locked -p vsift-governance -- check, that is the delivery ledger, the evidence ledger's structure, the claims registry and its check (every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133): at that commit RQ-19 was passed for 0.2.0, and the candidate's own RQ-19 is recorded in this ledger after that run. The rung is still candidate."
         },
@@ -2895,11 +3030,7 @@
           "note": "The section \"The evidence on 0.2.1-rc.3 (recorded 2026-10-15)\": RQ-18."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "CI",
-            "run_id": 37943660818
-          },
+          "reference": { "type": "workflow_run", "workflow": "CI", "run_id": 37943660818 },
           "date": "2026-10-09",
           "note": "The Governance job (and the other nine jobs, all green) of the push to main at eeb2a22, the stable commit (2026-10-09, 14:22 UTC), at the claims rung candidate: the delivery ledger, the evidence ledger's structure, the claims registry and its check (the statements in use then, CL-101 and CL-102, name RQ-19; every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files; cargo run --locked -p vsift-governance -- check printed \"VSift delivery ledger is valid.\". The Guide workflow of the same commit (run 37943660757), the Security workflow (run 37943660762) and CodeQL (run 37943660727) also passed. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133): RQ-19 was passed for the third candidate at that commit, and the stable release's own RQ-19 is recorded in this ledger after that run. The rung is still candidate (plan section 31.5)."
         },
@@ -2924,7 +3055,7 @@
           "note": "The Governance job (and the other nine jobs, all green) of the push to main at d5792ce, the candidate's own commit, at the claims rung candidate: the delivery ledger, the evidence ledger's structure, the claims registry and its check (the statements in use, CL-101 and CL-102, name RQ-19; every scanned document, the matrix, the launcher's messages and the README graphics' text carry no controlled word outside a registered statement and no banned phrase), the register enforcement and the size limits of the two handoff files. The Guide workflow of the same commit (run 37278869635) also passed: the generated reference pages equal the binary and the schemas, and the 40 marked examples print what the pages show. This shows recorded evidence and absent banned words, not that a sentence is true (L-101); the claims check reads RQ-19's status and not its version (L-133), and RQ-19 is passed for the candidate in this same ledger."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-19",
@@ -2946,10 +3077,31 @@
       "gate": { "candidate": "required", "stable": "repeat" },
       "status": "passed",
       "applies_to": {
-        "version": "0.2.3-rc.1",
-        "commit": "09e40398894fddebe8aa94cf3d871eab5b8ef7ec"
+        "version": "0.2.4-rc.1",
+        "commit": "d44d71532967bb512bc92d328995e1c9e6f40a05"
       },
       "evidence": [
+        {
+          "reference": {
+            "type": "workflow_run",
+            "workflow": "P14 verify release",
+            "run_id": 41827261716
+          },
+          "date": "2026-11-04",
+          "note": "From a hosted runner holding no publishing credential, dispatched on the tag v0.2.4-rc.1 with version 0.2.4-rc.1 on 2026-11-04 at 12:12 UTC, about three minutes after the publish run ended (12:09:31 UTC): one job, 20 checks, all pass. The tag v0.2.4-rc.1 names d44d71532967; the four packages are published at 0.2.4-rc.1 with next 0.2.4-rc.1 and latest 0.2.3 and no install script; npm provenance of each names this repository's Release workflow (run 41822398268, attempt 1), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is not a draft and is a pre-release, and GitHub's latest release is v0.2.3. For 0.2.4-rc.1 only."
+        },
+        {
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 41822398268 },
+          "date": "2026-11-04",
+          "note": "The publish run of v0.2.4-rc.1 (workflow_dispatch on the tag, dispatched 2026-11-04 at 11:37 UTC), preceded by its dry run on the tag (run 41818685278, 11:06 to 11:17 UTC, success; the plan read next from 0.2.3-rc.1 to 0.2.4-rc.1 with latest staying 0.2.3 on all four packages), the first candidate of a hot fix: the guard job passed in nine seconds (the tag of the workspace version, the tag naming the run's commit, the commit on release/0.2.x with its rule types, the nightly: Nightly run 41816481791, dispatched on release/0.2.x on 2026-11-04 at 10:47 UTC, passed on d44d71532967); the build, packaging, npm qualification (twelve jobs: npm, pnpm, Yarn and Bun on the three systems), plan and attest jobs ended at 11:48 UTC and the publish's release-assets.sha256 and attestation-subjects.sha256 equal the dry run's (SHA256SUMS 52f498446f40...). The maintainer approved the release environment and the publish job started at 12:06:41 UTC; its re-check after the approval found the candidate still qualified; it published the four packages under next (12:06:58 to 12:07:14 UTC) and read the dist-tags every 30 seconds: next read 0.2.4-rc.1 on all four packages at the fifth read (12:09:26 UTC), about two minutes after the last publish, with latest 0.2.3 unchanged; the GitHub release was created as a draft with ten assets and published as a pre-release (12:09:29 UTC); success on the first attempt (12:09:31 UTC). Checked from outside on 2026-11-04 (evening): the release v0.2.4-rc.1 is a pre-release with 10 assets, GitHub's latest release is v0.2.3, the four packages read next 0.2.4-rc.1 and latest 0.2.3, and the tag v0.2.4-rc.1 (an annotated tag, object 038b15456ffa) peels to d44d71532967, which is also the head of release/0.2.x."
+        },
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "The section \"The evidence on 0.2.4-rc.1 (recorded 2026-11-04)\": RQ-19 and the publish, with release.md 6.22."
+        }
+      ],
+      "prior": [
         {
           "reference": {
             "type": "workflow_run",
@@ -2960,11 +3112,7 @@
           "note": "From a hosted runner holding no publishing credential, dispatched on the tag v0.2.3-rc.1 with version 0.2.3-rc.1 on 2026-10-24 at 01:36 UTC, about four minutes after the publish run ended (01:32:28 UTC): one job, 20 checks, all pass. The tag v0.2.3-rc.1 names 09e40398894f; the four packages are published at 0.2.3-rc.1 with next 0.2.3-rc.1 and latest 0.2.2 and no install script; npm provenance of each names this repository's Release workflow (run 40038576713, attempt 1), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is not a draft and is a pre-release, and GitHub's latest release is v0.2.2. For 0.2.3-rc.1 only."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Release",
-            "run_id": 40038576713
-          },
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 40038576713 },
           "date": "2026-10-24",
           "note": "The publish run of v0.2.3-rc.1 (workflow_dispatch on the tag, dispatched 2026-10-23 at 23:15 UTC), preceded by its dry run on the tag (run 40037368499, 23:02 to 23:14 UTC, success; the guard passed in 11 seconds and the publish plan read next from 0.2.2-rc.1 to 0.2.3-rc.1 with latest staying 0.2.2 on all four packages), the second candidate made on a release branch and the first with an existing branch deleted and made again: the guard job passed in ten seconds (the tag of the workspace version, the tag naming the run's commit, the commit on release/0.2.x with its rule types, the nightly: Nightly runs 39837839311, dispatched on main on 2026-10-22 at 19:10 UTC, and 39892011366, scheduled on 2026-10-23 at 02:53 UTC, both at 09e40398894f, every job but \"Report a failure\" succeeded); the build, packaging, npm qualification, plan and attest jobs ended at 23:25 UTC and the publish's release-assets.sha256 and attestation-subjects.sha256 equal the dry run's. The maintainer approved the release environment and the publish job started at 01:30:25 UTC on 2026-10-24; its re-check after the approval found the candidate still qualified; it published the four packages under next (01:30:45 to 01:31:12 UTC) and read the dist-tags back every 30 seconds: next read 0.2.3-rc.1 on all four packages at the third read (01:32:20 UTC), about a minute after the last publish, with latest 0.2.2 unchanged; the GitHub release was created as a draft with ten assets and published as a pre-release (01:32:24 UTC); success on the first attempt (01:32:28 UTC). Checked from outside on 2026-10-25: the release v0.2.3-rc.1 is a pre-release with 10 assets, GitHub's latest release is v0.2.2, and the tag v0.2.3-rc.1 (an annotated tag, object 4b0fe43b4f1e) peels to 09e40398894f, which is also the head of release/0.2.x."
         },
@@ -2972,9 +3120,7 @@
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
           "note": "The section \"The evidence on 0.2.3-rc.1 (recorded 2026-10-25)\": RQ-19 and the publish, with release.md 6.21."
-        }
-      ],
-      "prior": [
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2985,11 +3131,7 @@
           "note": "From a hosted runner holding no publishing credential, dispatched on the tag v0.2.2 with version 0.2.2 on 2026-10-18 at 15:06 UTC, about five minutes after the publish run ended (15:01:48 UTC): one job, 22 checks, all pass, the two that a stable version adds among them. The tag v0.2.2 names 0dadc69df4f5; the four packages are published at 0.2.2 with latest 0.2.2 and next 0.2.2-rc.1 and no install script; npm provenance of each names this repository's Release workflow (run 39127747535, attempt 1), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is not a draft and not a pre-release and GitHub's latest release is v0.2.2; stable: candidate-to-stable-delta passed (release-delta.json of the publish run: 0.2.2-rc.1 at 43a033dbf813 to 0.2.2 at 0dadc69df4f5) and stable: latest-on-all-four-packages passed. For 0.2.2 only."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Release",
-            "run_id": 39127747535
-          },
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 39127747535 },
           "date": "2026-10-18",
           "note": "The publish run of v0.2.2 (workflow_dispatch on the tag, 2026-10-18 at 12:33 UTC), preceded by its dry run on the tag (run 39126632838, 12:16 UTC, success), the first stable version published from a release branch: the guard job passed in eight seconds (the tag of the workspace version, the tag naming the run's commit, the commit on release/0.2.x with its rule types; no nightly is asked of a stable version); the six guards passed (the accepted candidate against v0.2.2-rc.1 at 43a033dbf813 with 5 version-string, 2 shipped-document and 81 work-record files; latest 0.2.1 on all four packages; the evidence ledger complete for 0.2.2-rc.1); the build, packaging, npm qualification, plan and attest jobs ended at 12:45 UTC and the plan's release-delta.json is this ledger's release_delta. The maintainer approved the release environment and the publish job started at 14:59:24 UTC; its re-check after the approval found v0.2.2 still qualified, it published the four packages under latest (14:59:36 to 15:00:01 UTC) and read the dist-tags back every 30 seconds: latest read 0.2.2 on all four packages at the fourth read (15:01:40 UTC), about a minute and forty seconds after the last publish, with next 0.2.2-rc.1 unchanged; the GitHub release was created as a draft with ten assets and published as latest; success on the first attempt (15:01:48 UTC). Checked from outside on 2026-10-18: latest is 0.2.2 and next is 0.2.2-rc.1 on all four packages; the 45 earlier integrity values and the 10 earlier tags are unchanged; the GitHub release v0.2.2 is not a pre-release, has 10 assets and is the latest release; a plain npm install vsift-cli prints vsift 0.2.2 (0dadc69df4f5) with a verified registry signature and attestation; gh attestation verify passed on 3 of 3 archives."
         },
@@ -3013,11 +3155,7 @@
           "note": "From a hosted runner holding no publishing credential, dispatched on the tag v0.2.2-rc.1 with version 0.2.2-rc.1 on 2026-10-18 at 00:13 UTC, about four minutes after the publish run ended (00:09:55 UTC): one job, 20 checks, all pass. The tag v0.2.2-rc.1 names 43a033dbf813; the four packages are published at 0.2.2-rc.1 with next 0.2.2-rc.1, latest 0.2.1 and no install script; npm provenance of each names this repository's Release workflow (run 39078284454, attempt 1), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is a pre-release, not a draft, and GitHub's latest release is v0.2.1. For 0.2.2-rc.1 only; the two checks a stable version adds (the candidate-to-stable delta and latest on all four packages) are for the stable publish."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Release",
-            "run_id": 39078284454
-          },
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 39078284454 },
           "date": "2026-10-18",
           "note": "The publish run of v0.2.2-rc.1 (workflow_dispatch on the tag, 2026-10-17 at 23:15 UTC), preceded by its dry run on the tag (run 39077367812, 23:01 UTC, success) and by the Nightly run 39058441764 on exactly the tag's commit (2026-10-17 at 18:31 UTC, every job but Report a failure passed), the first candidate made on a release branch: the guard job passed in ten seconds (the tag of the workspace version, the tag naming the run's commit, the commit on release/0.2.x with its rule types, the nightly); the publish plan's release-assets.sha256 and attestation-subjects.sha256 equal the dry run's. The maintainer approved the release environment (the first click did not register; the publish job started at 00:06:57 UTC); the job's re-check after the approval found that v0.2.2-rc.1 still qualified, published the four packages under next (00:07:15 to 00:07:35 UTC) and read the dist-tags back every 30 seconds: next read 0.2.2-rc.1 on all four on the fifth read, about two minutes after the last publish, with latest 0.2.1 unchanged (the first real test of the 20-minute read-back of #403); the GitHub release was created as a draft with ten assets and published as a pre-release; success on the first attempt (00:09:55 UTC). Checked from outside on 2026-10-18: next is 0.2.2-rc.1 and latest is 0.2.1 on all four packages; the 41 earlier integrity values and the 10 earlier tags are unchanged; the GitHub pre-release has 10 assets and the latest release is still v0.2.1; a plain npm install --global vsift-cli@0.2.2-rc.1 prints vsift 0.2.2-rc.1 (43a033dbf813) with a verified registry signature and attestation; gh attestation verify passed on 3 of 3 archives."
         },
@@ -3041,11 +3179,7 @@
           "note": "From a hosted runner holding no publishing credential, dispatched from main at e9ab6e6 with version 0.2.1 on 2026-10-15 at 15:52 UTC, about four minutes after the publish run ended (15:48 UTC): one job, 22 checks, all pass, the two that a stable version adds among them. The tag v0.2.1 names e9ab6e626733; the four packages are published at 0.2.1 with latest 0.2.1 and next 0.2.1-rc.3 and no install script; npm provenance of each names this repository's Release workflow (run 38758081349, attempt 1, the attempt that published the packages), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is not a draft and not a pre-release and GitHub's latest release is v0.2.1; stable: candidate-to-stable-delta passed (release-delta.json of the publish run: 0.2.1-rc.3 at fa380021f2aa to 0.2.1 at e9ab6e626733) and stable: latest-on-all-four-packages passed. For 0.2.1 only."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Release",
-            "run_id": 38758081349
-          },
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 38758081349 },
           "date": "2026-10-15",
           "note": "The publish run of v0.2.1 (workflow_dispatch on the tag, preceded by its dry run, run 38756334727, 2026-10-15 at 14:59 UTC, success). The real dispatch started at 15:11 UTC. After the maintainer's approval, attempt 1's publish job published the four packages to npm (15:32 to 15:38 UTC) and failed in its read-back of latest, which gave up after five minutes while @vsift/darwin-arm64 still read 0.2.0 (issue 403); no GitHub release was created and no draft was left. Attempt 2 (the failed job re-run on the same run and approved again, 15:44 to 15:48 UTC, success) skipped the versions npm already held with the same bytes, passed the read-back and created and published the GitHub release as latest; npm's provenance names attempt 1. Checked from outside on 2026-10-15: latest is 0.2.1 and next is 0.2.1-rc.3 on all four packages; the 28 integrity values of the seven earlier versions and the seven earlier tag commits are unchanged; npm audit signatures reports 4 packages with verified registry signatures and 4 with verified attestations; the 10 release files and the 4 registry tarballs verify with gh attestation verify and equal the plan; a plain npm install vsift-cli prints vsift 0.2.1 (e9ab6e626733)."
         },
@@ -3069,11 +3203,7 @@
           "note": "From a hosted runner holding no publishing credential, dispatched from main at fa38002 with version 0.2.1-rc.3 on 2026-10-13 at 23:05 UTC, after the publish run 38457712965 had finished (22:56 UTC): one job, 20 checks, all pass. The tag v0.2.1-rc.3 names fa380021f2aa; the four packages are published at 0.2.1-rc.3 with next 0.2.1-rc.3, latest 0.2.0 and no install script; npm provenance of each names this repository's Release workflow (run 38457712965), the tag and the tag's commit; npm audit signatures reports 2 packages with verified registry signatures and 2 with verified attestations; gh attestation verify passes for 10 of 10 release files and 4 of 4 tarballs; the release holds exactly ten files whose digests equal GitHub's and whose checksums match (SHA256SUMS holds 3 archives); it is a pre-release, not a draft, and GitHub's latest release is v0.2.0. For 0.2.1-rc.3 only; the two checks a stable version adds (the candidate-to-stable delta and latest on all four packages) are for the stable publish."
         },
         {
-          "reference": {
-            "type": "workflow_run",
-            "workflow": "Release",
-            "run_id": 38457712965
-          },
+          "reference": { "type": "workflow_run", "workflow": "Release", "run_id": 38457712965 },
           "date": "2026-10-13",
           "note": "The publish run of v0.2.1-rc.3 (workflow_dispatch on the tag, started 2026-10-13 at 19:48 UTC, success, ended 22:56 UTC), preceded by its dry run (run 38455902954, 19:34 UTC, success). npm has next 0.2.1-rc.3 and latest 0.2.0 on all four packages. Checked again from outside on 2026-10-14: the 24 integrity values of the six earlier versions and the six earlier tag commits are unchanged, npm audit signatures reports 4 packages with verified registry signatures and 4 with verified attestations, the 10 release files and the 4 registry tarballs verify with gh attestation verify --signer-workflow and --deny-self-hosted-runners and equal the plan, and the installed skill equals the tag's."
         },
@@ -3152,7 +3282,7 @@
           "note": "One supervising agent session on the maintainer's Windows 11 machine ran npm audit signatures (4 and 4) and gh attestation verify (10 of 10 files, 4 of 4 tarballs) for 0.1.0. One session on one development machine, not a credential-free hosted verification."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-20",
