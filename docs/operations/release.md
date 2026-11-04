@@ -339,7 +339,7 @@ optional dependency at the same version (a release-tool test and the governance 
 fail otherwise). To release a new version, change the workspace version and those four
 places in `npm/vsift-cli/package.json` together.
 
-**Pinned tools** (workflow `env`): Node.js 22.23.3 (with the npm it ships), Bun 1.2.23,
+**Pinned tools** (workflow `env`): Node.js 22.23.4 (with the npm it ships), Bun 1.2.23,
 pnpm 12.8.1, Yarn 4.18.1, Verdaccio 6.10.4. Update them in one reviewed change.
 
 **Reproducing it locally.** On Linux or macOS (the tarballs must be packed where Unix

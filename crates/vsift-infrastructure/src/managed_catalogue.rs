@@ -22,10 +22,10 @@ use crate::{
     StagedManagedCandidate, StagedManagedPayload,
 };
 
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-10-18-r3";
-const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
-const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
-const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-03-r4";
+const STOP_NEW_PLANS_AT: u64 = 1_853_971_200;
+const STOP_NEW_PLANS_DATE: &str = "2028-10-01T00:00:00Z";
+const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz";
 const WHISPER_URL: &str =
     "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
@@ -43,8 +43,8 @@ const MODEL_Q5_1_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23
 const COMPATIBILITY_FIXTURE_BYTES: u64 = 76_500;
 const COMPATIBILITY_FIXTURE_SHA256: &str =
     "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070";
-const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.1-11-ge47273f4d9-20260831";
-const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.1-11-ge47273f4d9-20260831";
+const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.2-39-g7adfbe40dc-20261031";
+const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.2-39-g7adfbe40dc-20261031";
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -160,11 +160,22 @@ pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCa
 /// memory-safety fixes and the fix of CVE-2026-110810 (L-137). `FFmpeg` and
 /// the model have not been re-pinned yet, so they have no entry.
 fn superseded_versions() -> Vec<SupersededManagedVersion> {
-    vec![SupersededManagedVersion {
-        component: ManagedComponent::WhisperCli,
-        version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
-        reason: SupersessionReason::SecurityFixes,
-    }]
+    vec![
+        SupersededManagedVersion {
+            component: ManagedComponent::WhisperCli,
+            version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
+            reason: SupersessionReason::SecurityFixes,
+        },
+        // The FFmpeg of `0.2.3` and earlier. The 2026-10-31 build is 112
+        // commits later on `release/9.0`, among them memory-safety fixes in
+        // code VSift runs (the VP8, VP9, H.264, Opus and AAC decoders, the
+        // `mov` keys atom, a Matroska duration overflow).
+        SupersededManagedVersion {
+            component: ManagedComponent::MediaTools,
+            version: String::from("n9.0.1-11-ge47273f4d9-20260831"),
+            reason: SupersessionReason::SecurityFixes,
+        },
+    ]
 }
 
 /// Returns the reviewed compatibility policy that any selected provider set must meet.
@@ -720,48 +731,48 @@ fn archive_path(path: &str) -> bool {
 
 fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(
-        113_372_924,
-        "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf",
+        136_027_168,
+        "6046d6731b26f58887e953561551d254a6eec9fbca4100dfeab56e19af8328d5",
     )?;
     validate_source(FFMPEG_URL, PublisherOrigin::GitHubRelease, integrity)?;
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
-        version: String::from("n9.0.1-11-ge47273f4d9-20260831"),
+        version: String::from("n9.0.2-39-g7adfbe40dc-20261031"),
         publisher: String::from("BtbN FFmpeg Builds"),
         source_url: String::from(FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::TarXz,
         archive_limits: Some(ReviewedArchiveLimits {
-            max_stream_bytes: 400_000_000,
+            max_stream_bytes: 450_000_000,
             entries: 73,
-            expanded_bytes: 370_667_773,
+            expanded_bytes: 444_067_173,
         }),
         selected_files: vec![
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/LICENSE.txt",
+                "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0/LICENSE.txt",
                 "LICENSE.txt",
                 7_651,
                 "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
             )?,
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffmpeg",
+                "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0/bin/ffmpeg",
                 "ffmpeg",
-                116_038_416,
-                "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+                140_488_520,
+                "d372f20463a8ffb9eef1675242cdbf9aae19b647503b073fc9b5b1f42b91c94a",
             )?,
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffprobe",
+                "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0/bin/ffprobe",
                 "ffprobe",
-                115_829_520,
-                "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+                140_259_080,
+                "9a7f735d3df4f56dd8406cd7a03a227686bec55b1edc496c25bd8b1867e44498",
             )?,
         ],
         archive_links: Vec::new(),
         runtime_copies: Vec::new(),
         licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
-        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.1/COPYING.LGPLv3"),
+        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.2/COPYING.LGPLv3"),
         source_code_url: String::from(
-            "https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a",
+            "https://github.com/BtbN/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
         ),
         trust_limit: String::from(
             "Third-party static build: the archive LGPLv3 notice and hosted F01 media operations were checked; a complete compiled-component source/licence inventory and legal clearance are not claimed.",
@@ -775,14 +786,14 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
             )?,
             file(
                 "ffmpeg",
-                116_038_416,
-                "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+                140_488_520,
+                "d372f20463a8ffb9eef1675242cdbf9aae19b647503b073fc9b5b1f42b91c94a",
                 true,
             )?,
             file(
                 "ffprobe",
-                115_829_520,
-                "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+                140_259_080,
+                "9a7f735d3df4f56dd8406cd7a03a227686bec55b1edc496c25bd8b1867e44498",
                 true,
             )?,
         ],
@@ -1138,10 +1149,11 @@ mod tests {
         Ok(())
     }
 
-    /// The v1.9.2 managed install of `0.2.2` and earlier is named, with its
-    /// security reason, and nothing the catalogue pins now is superseded.
+    /// The v1.9.2 managed install of `0.2.2` and earlier and the `FFmpeg` of
+    /// `0.2.3` and earlier are named, with their security reason, and nothing
+    /// the catalogue pins now is superseded.
     #[test]
-    fn the_earlier_whisper_pin_is_superseded_for_its_security_fixes()
+    fn the_earlier_pins_are_superseded_for_their_security_fixes()
     -> Result<(), Box<dyn std::error::Error>> {
         let catalogue = accepted_ubuntu_catalogue()?;
         let update = catalogue
@@ -1152,6 +1164,14 @@ mod tests {
             .ok_or("v1.9.2 is not reported as superseded")?;
         assert_eq!(update.reviewed_version, "whisper.cpp-v1.9.5-ubuntu-x64");
         assert_eq!(update.reason, SupersessionReason::SecurityFixes);
+        let media = catalogue
+            .update_for(
+                ManagedComponent::MediaTools,
+                "n9.0.1-11-ge47273f4d9-20260831",
+            )
+            .ok_or("the FFmpeg of 0.2.3 is not reported as superseded")?;
+        assert_eq!(media.reviewed_version, "n9.0.2-39-g7adfbe40dc-20261031");
+        assert_eq!(media.reason, SupersessionReason::SecurityFixes);
         let mut seen = HashSet::new();
         for entry in &catalogue.superseded {
             assert!(seen.insert((entry.component.identifier(), entry.version.clone())));
@@ -1169,6 +1189,35 @@ mod tests {
                 None
             );
         }
+        Ok(())
+    }
+
+    /// The `0.2.4` re-pin raised two reviewed bounds for the `FFmpeg` archive of
+    /// 2026-10-31 (`n9.0.2-39`), each only as far as that archive needs: the XZ
+    /// compressed ceiling and the tar stream cap.
+    #[test]
+    fn the_reviewed_ffmpeg_archive_fits_its_raised_bounds() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let catalogue = accepted_ubuntu_catalogue()?;
+        let ffmpeg = catalogue
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.component == ManagedComponent::MediaTools)
+            .ok_or("the catalogue has an FFmpeg artifact")?;
+        assert_eq!(ffmpeg.integrity.bytes(), 136_027_168);
+        assert!(ffmpeg.integrity.bytes() <= crate::MAX_XZ_ARCHIVE_BYTES);
+        let limits = ffmpeg
+            .archive_limits
+            .ok_or("the FFmpeg archive has reviewed limits")?;
+        assert_eq!(limits.entries, 73);
+        assert_eq!(limits.expanded_bytes, 444_067_173);
+        assert_eq!(limits.max_stream_bytes, 450_000_000);
+        // The archive's tar stream: 73 headers of 512 bytes, each file padded to
+        // 512 bytes, and the two end blocks (from the hosted inventory of run
+        // 41693413562). The cap holds it with under 6 MB to spare.
+        let tar_stream_bytes = 444_122_624_u64;
+        assert!(tar_stream_bytes <= limits.max_stream_bytes);
+        assert!(limits.max_stream_bytes - tar_stream_bytes < 6_000_000);
         Ok(())
     }
 
@@ -1190,7 +1239,7 @@ mod tests {
             catalogue.artifacts[2].component,
             ManagedComponent::WhisperModel
         );
-        assert_eq!(catalogue.stop_new_plans_date, "2028-08-01T00:00:00Z");
+        assert_eq!(catalogue.stop_new_plans_date, "2028-10-01T00:00:00Z");
         assert_eq!(catalogue.compatibility.fixture.bytes(), 76_500);
         assert_eq!(
             catalogue.compatibility.fixture.sha256_hex(),

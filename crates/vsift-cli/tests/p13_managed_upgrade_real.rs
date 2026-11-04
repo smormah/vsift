@@ -1,6 +1,6 @@
 //! Opt-in checkpoint: a real managed install made by an earlier release is
 //! upgraded to this build's pins on Ubuntu 24.04 x86-64 (the whisper.cpp
-//! re-pin of `0.2.3`, L-137).
+//! re-pin of `0.2.3`, L-137, and the `FFmpeg` re-pin of `0.2.4`, L-132).
 //!
 //! From a fresh per-user base with an empty `PATH`:
 //!
@@ -9,15 +9,17 @@
 //!    and installs its own catalogue from the publishers: `FFmpeg`, whisper.cpp
 //!    v1.9.2 and the model.
 //! 2. **This build's `setup check`** must use that install and name its
-//!    whisper.cpp as superseded (`managed_updates`: the v1.9.2 key, the v1.9.5
-//!    pin, `security_fixes`), in JSON and in text.
+//!    `FFmpeg` (the build of 2026-08-31) and its whisper.cpp as superseded
+//!    (`managed_updates`: each earlier key, each pin, `security_fixes`), in
+//!    JSON and in text.
 //! 3. **This build's `setup plan` and `setup install`** must install only
-//!    whisper.cpp v1.9.5 (the media tools and the model are already current)
-//!    and select it.
+//!    the `FFmpeg` build of 2026-10-31 and whisper.cpp v1.9.5 (the model is
+//!    already current) and select them.
 //! 4. **This build's `setup check`** must then name `whisper.cpp v1.9.5
 //!    (reviewed build)`, report no update, and pass the local-ASR
 //!    verification run now (the recogniser's identity changed, so no earlier
-//!    pass counts); `setup list` keeps v1.9.2 as the previous version.
+//!    pass counts); `setup list` keeps the earlier `FFmpeg` and v1.9.2 as the
+//!    previous versions.
 //! 5. **A transcription works:** plain `ingest` of F05's speech variant and
 //!    `transcript retranscribe` on the managed tools hear its words.
 //!
@@ -59,6 +61,9 @@ const DEADLINE: Duration = Duration::from_mins(30);
 /// The earlier release's whisper.cpp, and the pin that replaces it.
 const EARLIER_WHISPER: &str = "whisper.cpp-v1.9.2-ubuntu-x64";
 const PINNED_WHISPER: &str = "whisper.cpp-v1.9.5-ubuntu-x64";
+/// The earlier releases' `FFmpeg` (`0.2.3` and before), and the pin of `0.2.4`.
+const EARLIER_MEDIA: &str = "n9.0.1-11-ge47273f4d9-20260831";
+const PINNED_MEDIA: &str = "n9.0.2-39-g7adfbe40dc-20261031";
 
 struct Base(PathBuf);
 
@@ -215,18 +220,18 @@ fn an_earlier_releases_managed_install_upgrades_to_the_current_pins() -> TestRes
 
     assert_superseded_before_the_upgrade(&base)?;
 
-    // 3. This build's plan installs only the new whisper.cpp.
+    // 3. This build's plan installs only the new FFmpeg and whisper.cpp.
     let upgrade = plan_and_install(&base, || base.current(), "current")?;
     assert_eq!(
         statuses(&upgrade),
-        ["already_current", "activated", "already_current"]
+        ["activated", "activated", "already_current"]
     );
 
     assert_upgraded(&base)?;
     assert_transcription_works(&base)
 }
 
-/// Step 2: this build names the earlier whisper.cpp as superseded.
+/// Step 2: this build names the earlier `FFmpeg` and whisper.cpp as superseded.
 fn assert_superseded_before_the_upgrade(base: &Base) -> TestResult {
     let before = json(
         &base
@@ -241,19 +246,27 @@ fn assert_superseded_before_the_upgrade(base: &Base) -> TestResult {
     let updates = before["managed_updates"]
         .as_array()
         .ok_or("no managed_updates")?;
-    assert_eq!(updates.len(), 1, "{updates:?}");
-    assert_eq!(updates[0]["component"], "whisper_cli");
-    assert_eq!(updates[0]["selected_version"], EARLIER_WHISPER);
-    assert_eq!(updates[0]["reviewed_version"], PINNED_WHISPER);
-    assert_eq!(updates[0]["reason"], "security_fixes");
+    assert_eq!(updates.len(), 2, "{updates:?}");
     let text = String::from_utf8(base.current()?.args(["setup", "check"]).output()?.stdout)?;
     println!("{text}");
-    assert!(
-        text.contains(&format!(
-            "[update, security] whisper_cli: the selected managed version is {EARLIER_WHISPER}"
-        )),
-        "{text}"
-    );
+    for (component, earlier, pinned) in [
+        ("ffmpeg_ffprobe", EARLIER_MEDIA, PINNED_MEDIA),
+        ("whisper_cli", EARLIER_WHISPER, PINNED_WHISPER),
+    ] {
+        let update = updates
+            .iter()
+            .find(|update| update["component"] == component)
+            .ok_or_else(|| format!("no update for {component}: {updates:?}"))?;
+        assert_eq!(update["selected_version"], earlier);
+        assert_eq!(update["reviewed_version"], pinned);
+        assert_eq!(update["reason"], "security_fixes");
+        assert!(
+            text.contains(&format!(
+                "[update, security] {component}: the selected managed version is {earlier}"
+            )),
+            "{text}"
+        );
+    }
 
     Ok(())
 }
@@ -275,14 +288,18 @@ fn assert_upgraded(base: &Base) -> TestResult {
     assert_eq!(after["local_asr"]["verification"]["status"], "verified");
     assert_eq!(after["local_asr"]["verification"]["source"], "ran_now");
     let list = data(base, &["setup", "list"])?;
-    let cli = list["components"]
-        .as_array()
-        .ok_or("no components")?
-        .iter()
-        .find(|component| component["component"] == "whisper_cli")
-        .ok_or("no whisper_cli in setup list")?;
-    assert_eq!(cli["selected_version"], PINNED_WHISPER);
-    assert_eq!(cli["previous_version"], EARLIER_WHISPER);
+    let components = list["components"].as_array().ok_or("no components")?;
+    for (name, earlier, pinned) in [
+        ("ffmpeg_ffprobe", EARLIER_MEDIA, PINNED_MEDIA),
+        ("whisper_cli", EARLIER_WHISPER, PINNED_WHISPER),
+    ] {
+        let component = components
+            .iter()
+            .find(|component| component["component"] == name)
+            .ok_or_else(|| format!("no {name} in setup list"))?;
+        assert_eq!(component["selected_version"], pinned);
+        assert_eq!(component["previous_version"], earlier);
+    }
 
     Ok(())
 }

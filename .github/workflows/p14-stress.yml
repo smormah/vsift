@@ -77,7 +77,7 @@ defaults:
     shell: bash
 
 env:
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.4"
   # The repetitions of a pull request's run. One is a smoke of the workflow;
   # raise them only to run the campaign from a branch that cannot dispatch it.
   PR_RUNS: "1"
