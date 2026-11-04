@@ -63,6 +63,12 @@
 //!   [`CandidatesStreamData`]), built from a [`CandidatesPresentation`] by
 //!   [`candidates_response`], which fills the envelope coverage and the
 //!   `partial` status when the range has gaps (P08).
+//! - **Screen changes:** the `changes` page [`ScreenChangesData`], its
+//!   published evidence record [`ScreenChangeData`] and its stream
+//!   [`ScreenChangesEvidenceStream`] (the page's `frame_evidence` records,
+//!   then its `screen_change` records, then [`ScreenChangesStreamData`]),
+//!   built from a [`ScreenChangesPresentation`] by [`screen_changes_response`]
+//!   (ADR 0034).
 //! - **Evidence navigation:** the `frame get`, `frame neighbours`,
 //!   `frame burst` and `crop` result [`FrameData`], its published evidence
 //!   record [`FrameEvidenceData`] and its stream [`FrameEvidenceStream`]
@@ -134,6 +140,7 @@ mod local_asr;
 mod navigation;
 mod optional_component;
 mod request;
+mod screen_changes;
 mod screen_text;
 mod search;
 mod session;
@@ -267,6 +274,12 @@ pub use navigation::{
 pub use optional_component::{
     OptionalComponentText, SITE_TERMS_NOTICE, include_command_arguments, optional_check_step,
     optional_component_text,
+};
+pub use screen_changes::{
+    CHANGES_COVERAGE_WARNING, CHANGES_CURSOR_REMEDIATION, CHANGES_CURSOR_WITHOUT_INDEX_REMEDIATION,
+    CHANGES_STOPPED_WARNING, ListedScreenChange, ScreenChangeData, ScreenChangeResumePresentation,
+    ScreenChangesData, ScreenChangesEvidenceStream, ScreenChangesPresentation,
+    ScreenChangesStreamData, screen_changes_response,
 };
 pub use screen_text::{
     CANDIDATES_INCOMPLETE_REASON, FRAMES_AWAITING_ANALYSIS_REASON, FRAMES_FAILED_REASON,

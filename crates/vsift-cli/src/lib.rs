@@ -6,6 +6,7 @@ mod batch;
 #[cfg(test)]
 mod build_identity;
 mod candidates;
+mod changes;
 mod clocks;
 mod command;
 mod config;
@@ -117,6 +118,7 @@ const fn is_long_running(command: &Command) -> bool {
         Command::Ingest(_)
         | Command::Watch(_)
         | Command::Candidates(_)
+        | Command::Changes(_)
         | Command::Ocr(_)
         | Command::Clocks(_)
         | Command::Frame(_)
@@ -183,6 +185,7 @@ const fn operation_name(command: &Command) -> CommandName {
         Command::Transcript(arguments) => arguments.command.operation_name(),
         Command::Search(_) => CommandName::Search,
         Command::Candidates(_) => CommandName::Candidates,
+        Command::Changes(_) => CommandName::Changes,
         Command::Clocks(_) => CommandName::Clocks,
         Command::Ocr(arguments) => match arguments.command {
             Some(OcrCommand::Search(_)) => CommandName::OcrSearch,
@@ -672,6 +675,14 @@ where
             let view = read_view::presented_view(mode, arguments.view);
             let result = candidates::candidates(&engine, arguments, view, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
+        }
+        Command::Changes(arguments) if mode == OutputMode::JsonLines => {
+            let result = changes::changes_stream(&engine, arguments, &cancellation).await;
+            write_evidence_stream(&mut writer, CommandName::Changes, result)
+        }
+        Command::Changes(arguments) => {
+            let result = changes::changes(&engine, arguments, &cancellation).await;
+            write_session_result(&mut writer, mode, CommandName::Changes, result)
         }
         Command::Ocr(OcrArguments {
             command: Some(OcrCommand::Search(arguments)),

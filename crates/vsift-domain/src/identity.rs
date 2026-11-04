@@ -118,6 +118,11 @@ opaque_identifier!(
     "Opaque identity for one visual candidate: a sampled screen state at a source time (P08)."
 );
 opaque_identifier!(
+    ScreenChangeId,
+    "chg_",
+    "Opaque identity for one change of screen between two exact frames (ADR 0034)."
+);
+opaque_identifier!(
     ScreenTextIndexId,
     "sti_",
     "Opaque identity for one immutable revision of a session's on-screen text index (OCR, ADR 0030)."

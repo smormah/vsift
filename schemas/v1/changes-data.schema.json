@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/changes-data.schema.json",
+  "title": "VSift changes data v1",
+  "description": "The data member of a complete or partial changes result (0.3.0, ADR 0034): one bounded page of the screen changes whose after frame lies in the requested range, in time order, as published screen-change records. A call without a cursor first analyses the range's missing 60 s windows as candidates does (at most 30 per call); index names the revision the changes were read from, and coverage is the index's own, as candidates reports it. Each change cites its two frames by evidence_id: frames lists each distinct frame_evidence record of the page once, in order of first use, and files delivers each frame's image as the absolute path of the committed session artifact, valid while the session exists. Cite a change by its before and after evidence_id, never by change_id. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty or partial_reason is set. Pass next_cursor back with the same session, range and --limit to continue; it never analyses anything. When this call could not go on (partial_reason set, or the pages reached the end of the analysed part), resume says where a fresh call without --cursor continues.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "range",
+    "index",
+    "profile",
+    "coverage",
+    "changes",
+    "frames",
+    "files",
+    "partial_reason",
+    "next_cursor",
+    "resume"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "range": {
+      "description": "The requested half-open range.",
+      "$ref": "candidates-data.schema.json#/$defs/range"
+    },
+    "index": { "$ref": "candidates-data.schema.json#/$defs/index" },
+    "profile": { "$ref": "#/$defs/profile" },
+    "coverage": { "$ref": "candidates-data.schema.json#/$defs/coverage" },
+    "changes": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "screen-change.schema.json" }
+    },
+    "frames": {
+      "description": "Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them.",
+      "type": "array",
+      "maxItems": 40,
+      "items": { "$ref": "frame-evidence.schema.json" }
+    },
+    "files": { "$ref": "#/$defs/files" },
+    "partial_reason": { "$ref": "#/$defs/partial_reason" },
+    "next_cursor": { "$ref": "candidates-data.schema.json#/$defs/next_cursor" },
+    "resume": { "$ref": "#/$defs/resume" }
+  },
+  "$defs": {
+    "profile": {
+      "description": "The versioned rule that finds regions. A pixel changed when any of its R, G and B differs by at least pixel_level; a tile of tile x tile displayed pixels changed when it holds at least tile_pixels changed pixels; changed tiles at most join_distance tiles apart join one region; at most max_regions regions are listed per change. Changing a threshold is a new profile.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identifier",
+        "pixel_level",
+        "tile",
+        "tile_pixels",
+        "join_distance",
+        "max_regions"
+      ],
+      "properties": {
+        "identifier": { "const": "screen-change-regions-v1" },
+        "pixel_level": { "const": 32 },
+        "tile": { "const": 16 },
+        "tile_pixels": { "const": 4 },
+        "join_distance": { "const": 2 },
+        "max_regions": { "const": 8 }
+      }
+    },
+    "files": {
+      "description": "One delivered file per frame, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.",
+      "type": "array",
+      "maxItems": 40,
+      "items": { "$ref": "frame-data.schema.json#/$defs/files/items" }
+    },
+    "partial_reason": {
+      "description": "Why the page stopped before its last change: session_evidence_budget (the session has no room for the next change's frames), deadline_exceeded or cancelled. The changes listed are complete and their frames committed; there is then no next_cursor, and resume says where a fresh call continues. null when the page was not stopped.",
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["session_evidence_budget", "deadline_exceeded", "cancelled"] }
+      ]
+    },
+    "resume": {
+      "description": "Where a fresh call (a new --from, no cursor) continues when this one cannot: from_us is the after time of the first change not listed, or the start of the first window still to analyse. reason is not_analyzed (the pages reached the end of the analysed part; a fresh call analyses from there), session_evidence_budget (continue in a new session, after session retain and ingest), deadline_exceeded or cancelled. null when the range is answered to its end, or when next_cursor continues it.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["from_us", "reason"],
+          "properties": {
+            "from_us": { "type": "integer", "minimum": 0 },
+            "reason": {
+              "enum": ["not_analyzed", "session_evidence_budget", "deadline_exceeded", "cancelled"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

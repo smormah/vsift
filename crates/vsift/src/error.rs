@@ -180,6 +180,9 @@ pub enum EngineError {
     /// A cursor was supplied for a session that has no visual index yet, so
     /// it cannot belong to any page of this session.
     CandidateCursorWithoutIndex,
+    /// A screen-change page request, usually its cursor, was rejected
+    /// (`changes`, ADR 0034).
+    ScreenChangeQuery(vsift_application::ScreenChangeQueryError),
     /// Visual analysis stopped (deadline, busy admission or cancellation)
     /// before it indexed anything of the requested range.
     VisualAnalysisStopped(VisualExtensionStop),
@@ -501,6 +504,7 @@ impl EngineError {
             | Self::NoVideoStream
             | Self::CandidateQuery(_)
             | Self::CandidateCursorWithoutIndex
+            | Self::ScreenChangeQuery(_)
             | Self::FrameNotSelected(_)
             | Self::EvidenceNotFound
             | Self::EvidenceKindMismatch
@@ -886,6 +890,7 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the source has no video stream the media tools decode")
             }
             Self::CandidateQuery(error) => error.fmt(formatter),
+            Self::ScreenChangeQuery(error) => error.fmt(formatter),
             Self::CandidateCursorWithoutIndex => {
                 formatter.write_str("the session has no visual candidates this cursor could page")
             }
@@ -1006,6 +1011,7 @@ impl Error for EngineError {
             Self::TranscriptAssembly(error) => Some(error),
             Self::SearchQueryRejected(error) => Some(error),
             Self::CandidateQuery(error) => Some(error),
+            Self::ScreenChangeQuery(error) => Some(error),
             Self::VisualIndexBuild(error) => Some(error),
             Self::Ocr(error) => Some(error),
             Self::BundleSearch(error) => Some(error),

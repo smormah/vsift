@@ -1220,6 +1220,68 @@ pub(crate) struct CandidatesPage {
     pub(crate) next_cursor: Option<String>,
 }
 
+/// `changes` data (`changes-data.schema.json`, ADR 0034).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesPage {
+    pub(crate) session_id: String,
+    pub(crate) range: Range,
+    pub(crate) index: VisualIndex,
+    pub(crate) profile: ChangesProfile,
+    pub(crate) coverage: CandidatesCoverage,
+    pub(crate) changes: Vec<ScreenChange>,
+    pub(crate) files: Vec<DeliveredFile>,
+    pub(crate) partial_reason: Option<String>,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) resume: Option<ChangesResume>,
+}
+
+/// The region rule of a `changes` page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesProfile {
+    pub(crate) identifier: String,
+    pub(crate) pixel_level: u64,
+    pub(crate) tile: u64,
+    pub(crate) tile_pixels: u64,
+}
+
+/// Where a fresh `changes` call continues.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesResume {
+    pub(crate) from_us: u64,
+    pub(crate) reason: String,
+}
+
+/// One screen change (`screen-change.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenChange {
+    pub(crate) kind: String,
+    pub(crate) motion: Option<String>,
+    pub(crate) settled: Option<bool>,
+    pub(crate) change_window: Range,
+    pub(crate) before: ChangeFrame,
+    pub(crate) after: ChangeFrame,
+    pub(crate) comparison: String,
+    pub(crate) regions: Vec<ChangeRegionView>,
+    pub(crate) regions_left_out: u64,
+    pub(crate) no_region_at_threshold: bool,
+}
+
+/// One of a change's two frames.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangeFrame {
+    pub(crate) evidence_id: String,
+    pub(crate) time_us: u64,
+}
+
+/// A rectangle where a change's two frames differ.
+#[derive(Clone, Copy, Debug, Deserialize)]
+pub(crate) struct ChangeRegionView {
+    pub(crate) x: u64,
+    pub(crate) y: u64,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+}
+
 /// The candidates a page left out, by reason, over its whole range.
 #[derive(Debug, Deserialize)]
 pub(crate) struct CandidatesOmitted {

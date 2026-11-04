@@ -314,7 +314,7 @@ impl From<&VisualCandidateData> for BriefVisualCandidateData {
 
 /// The index revision a page was read from and its fixed sampling grid.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct IndexData {
+pub(crate) struct IndexData {
     index_id: String,
     number: u32,
     profile: &'static str,
@@ -325,7 +325,9 @@ struct IndexData {
 }
 
 impl IndexData {
-    fn new(index: &VisualIndex) -> Self {
+    /// Presents the index revision a page was read from; `changes` reports
+    /// it as `candidates` does (ADR 0034).
+    pub(crate) fn new(index: &VisualIndex) -> Self {
         Self {
             index_id: index.id().as_str().to_owned(),
             number: index.number().get(),
@@ -349,7 +351,7 @@ struct GapData {
 
 /// The coverage of the range: what is analysed and every typed gap.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct VisualCoverageData {
+pub(crate) struct VisualCoverageData {
     searched_range: RangeData,
     analyzed: Vec<RangeData>,
     gaps: Vec<GapData>,
@@ -358,13 +360,22 @@ struct VisualCoverageData {
 
 impl VisualCoverageData {
     fn new(page: &CandidatesPresentation<'_>) -> Self {
-        let gaps = merged_typed_gaps(page.gaps);
+        Self::of(page.searched, page.analysed, page.gaps)
+    }
+
+    /// The coverage of `searched`: its analysed parts and typed gaps, the
+    /// same for `candidates` and `changes` (ADR 0034 section 7).
+    pub(crate) fn of(
+        searched: TimeRange,
+        analysed: &[TimeRange],
+        gaps: &[VisualCoverageGap],
+    ) -> Self {
+        let gaps = merged_typed_gaps(gaps);
         let ranges_truncated =
-            page.analysed.len() > MAX_COVERAGE_RANGES || gaps.len() > MAX_COVERAGE_RANGES;
+            analysed.len() > MAX_COVERAGE_RANGES || gaps.len() > MAX_COVERAGE_RANGES;
         Self {
-            searched_range: RangeData::new(page.searched),
-            analyzed: page
-                .analysed
+            searched_range: RangeData::new(searched),
+            analyzed: analysed
                 .iter()
                 .take(MAX_COVERAGE_RANGES)
                 .map(|range| RangeData::new(*range))
@@ -500,8 +511,19 @@ pub struct CandidatesStreamData {
 /// any gap, the gaps merged across reasons as `<from_us>-<to_us>`, and the
 /// distinct reasons in taxonomy order.
 pub(crate) fn envelope_coverage(gaps: &[VisualCoverageGap]) -> CoverageResponse {
+    envelope_coverage_with_stop(gaps, None)
+}
+
+/// [`envelope_coverage`] with the part of the range a `changes` page left
+/// unlisted when it stopped early (ADR 0034 section 6), and the stop's
+/// identifier after the gap reasons.
+pub(crate) fn envelope_coverage_with_stop(
+    gaps: &[VisualCoverageGap],
+    stopped: Option<(TimeRange, &'static str)>,
+) -> CoverageResponse {
     let mut ranges: Vec<TimeRange> = Vec::new();
     let mut ordered: Vec<TimeRange> = gaps.iter().map(|gap| gap.range).collect();
+    ordered.extend(stopped.map(|(range, _)| range));
     ordered.sort_by_key(|range| (range.start(), range.end()));
     for range in ordered {
         match ranges.last_mut() {
@@ -518,6 +540,7 @@ pub(crate) fn envelope_coverage(gaps: &[VisualCoverageGap]) -> CoverageResponse 
         .filter(|reason| gaps.iter().any(|gap| gap.reason == **reason))
         .map(|reason| reason.identifier().to_owned())
         .collect();
+    reasons.extend(stopped.map(|(_, reason)| reason.to_owned()));
     if ranges.len() > MAX_COVERAGE_RANGES {
         reasons.push(GAPS_TRUNCATED_REASON.to_owned());
     }

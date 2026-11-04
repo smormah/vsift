@@ -110,6 +110,18 @@ pub(crate) enum Command {
     /// List the moments the screen changed.
     #[command(after_help = help_text::CANDIDATES)]
     Candidates(CandidatesArguments),
+    /// Show where the screen changed, with the frames before and after.
+    ///
+    /// Each change of the range is a moment the screen changed (from
+    /// candidates), the exact frame before and after it (ordinary evidence,
+    /// as frame get gives it) and the rectangles where those two frames
+    /// differ, largest first. It says which pixels differ, never what the
+    /// change means. Cite a change by its before and after evidence ids
+    /// (evd_...), never by its change id (chg_...). At most 20 changes a
+    /// page; a call without --cursor first analyses missing parts of the
+    /// range, as candidates does.
+    #[command(after_help = help_text::CHANGES)]
+    Changes(ChangesArguments),
     /// Read on-screen text.
     ///
     /// With the optional OCR runner, opt-in and bounded: each call reads at most --max-frames frames of the
@@ -1039,6 +1051,31 @@ pub(crate) struct CandidatesArguments {
     /// cursor continues only pages of the same choice.
     #[arg(long = "omit", value_enum, default_value_t, hide_short_help = true)]
     pub omit: OmitArgument,
+}
+
+/// Screen-change page request (ADR 0034); missing windows of the range are
+/// analysed first, at most 30 minutes of video per call, as for
+/// `candidates`.
+#[derive(Args, Debug)]
+pub(crate) struct ChangesArguments {
+    /// Session whose video is read.
+    pub session: SessionId,
+    /// Inclusive source-timeline start in microseconds; a change is listed
+    /// when its after frame lies in the range.
+    #[arg(long)]
+    pub from: u64,
+    /// Exclusive source-timeline end in microseconds; a range past the end
+    /// of the video is clipped to it.
+    #[arg(long)]
+    pub to: u64,
+    /// Changes per page, 1 through 20; defaults to 10. Each change brings
+    /// up to two frames.
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=20))]
+    pub limit: Option<u16>,
+    /// Opaque continuation token returned by the previous page of the same
+    /// range and --limit; a call with a cursor never analyses anything.
+    #[arg(long, hide_short_help = true)]
+    pub cursor: Option<String>,
 }
 
 /// Which candidates `candidates --omit` leaves out (#367).

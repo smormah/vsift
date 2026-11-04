@@ -50,9 +50,9 @@ use vsift_infrastructure::{
     MAX_TAR_STREAM_BYTES, MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
     VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
     classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_request_record, decode_screen_text_index_record, decode_transcript_parts,
-    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
-    encode_evidence_record, encode_job_record, encode_request_record,
+    decode_png_pixels, decode_request_record, decode_screen_text_index_record,
+    decode_transcript_parts, decode_transcript_record, decode_visual_index_record,
+    encode_chunk_checkpoint, encode_evidence_record, encode_job_record, encode_request_record,
     encode_screen_text_index_record, encode_transcript_part, encode_transcript_record,
     encode_visual_index_record, inspect_bzip2_tar_inventory, inspect_gzip_tar_inventory,
     inspect_tar_inventory, inspect_xz_tar_inventory, inspect_zip_inventory,
@@ -154,6 +154,10 @@ pub enum Target {
     /// An extraction run's standard output through `parse_png_sequence`. See
     /// [`png_sequence_input`] for the input layout.
     PngSequence,
+    /// One stored evidence PNG through `decode_png_pixels`, which `changes`
+    /// compares two frames with (ADR 0034). See [`png_pixels_input`] for the
+    /// input layout.
+    PngPixels,
     /// The stored evidence record through `decode_evidence_record`, as a
     /// session read and `bundle validate` read it (P09 PR 2).
     EvidenceRecord,
@@ -249,7 +253,7 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 39] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
@@ -264,6 +268,7 @@ impl Target {
         Self::FrameShowinfo,
         Self::FrameListing,
         Self::PngSequence,
+        Self::PngPixels,
         Self::EvidenceRecord,
         Self::CropRect,
         Self::Mountinfo,
@@ -308,6 +313,7 @@ impl Target {
             Self::FrameShowinfo => "frame_showinfo",
             Self::FrameListing => "frame_listing",
             Self::PngSequence => "png_sequence",
+            Self::PngPixels => "png_pixels",
             Self::EvidenceRecord => "evidence_record",
             Self::CropRect => "crop_rect",
             Self::Mountinfo => "mountinfo",
@@ -356,6 +362,7 @@ impl Target {
             Self::FrameShowinfo => check_frame_showinfo(data),
             Self::FrameListing => check_frame_listing(data),
             Self::PngSequence => check_png_sequence(data),
+            Self::PngPixels => check_png_pixels(data),
             Self::EvidenceRecord => check_evidence_record(data),
             Self::CropRect => check_crop_rect(data),
             Self::Mountinfo => check_mountinfo(data),
@@ -456,6 +463,9 @@ pub enum Violation {
     /// Accepted PNG images are not exactly the input, split into the
     /// expected number of images of the expected size.
     PngSequenceMismatch,
+    /// Decoded pixels are not exactly three bytes per pixel, differ between
+    /// two decodes of one input, or came from an image the PNG walker refuses.
+    PngPixelsMismatch,
     /// An accepted evidence record could not be encoded again.
     EvidenceRecordNotReencodable,
     /// An accepted evidence record changed in a round trip, or holds more
@@ -566,6 +576,7 @@ impl fmt::Display for Violation {
             }
             Self::ListingOutOfBounds => "an accepted frame listing is out of bounds",
             Self::PngSequenceMismatch => "accepted PNG images do not match the output",
+            Self::PngPixelsMismatch => "decoded pixels do not match the accepted image",
             Self::EvidenceRecordNotReencodable => {
                 "an accepted evidence record could not be encoded again"
             }
@@ -1398,6 +1409,39 @@ fn check_png_sequence(data: &[u8]) -> Result<(), Violation> {
         })
     {
         return Err(Violation::PngSequenceMismatch);
+    }
+    Ok(())
+}
+
+/// Builds a [`Target::PngPixels`] input: the expected width and height as
+/// big-endian 16-bit integers, then one PNG.
+#[must_use]
+pub fn png_pixels_input(width: u16, height: u16, png: &[u8]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(png.len().saturating_add(4));
+    data.extend_from_slice(&width.to_be_bytes());
+    data.extend_from_slice(&height.to_be_bytes());
+    data.extend_from_slice(png);
+    data
+}
+
+fn check_png_pixels(data: &[u8]) -> Result<(), Violation> {
+    let [width_high, width_low, height_high, height_low, png @ ..] = data else {
+        return Ok(());
+    };
+    let width = u16::from_be_bytes([*width_high, *width_low]);
+    let height = u16::from_be_bytes([*height_high, *height_low]);
+    let Ok(dimensions) = FrameDimensions::new(u32::from(width), u32::from(height)) else {
+        return Ok(());
+    };
+    let Ok(pixels) = decode_png_pixels(png, dimensions) else {
+        return Ok(());
+    };
+    let expected = usize::from(width) * usize::from(height) * 3;
+    if pixels.len() != expected
+        || decode_png_pixels(png, dimensions).ok().as_ref() != Some(&pixels)
+        || parse_png_sequence(png, 1, dimensions).is_err()
+    {
+        return Err(Violation::PngPixelsMismatch);
     }
     Ok(())
 }

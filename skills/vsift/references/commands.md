@@ -63,6 +63,7 @@ whole; do not pipe it into `grep`, `head` or anything else.
 | `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (for a stretch a `partial` read lists: once, and only if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
 | `vsift candidates` | free | Shortlist only. |
+| `vsift changes` | free | What changed on screen between two times: each change with its exact before and after frames and the rectangles where they differ; page with `--cursor`, and continue from `resume` with a new `--from`. Cite a change by its two frames' evidence ids, never by its `chg_` id. |
 | `vsift ocr` | explicit | Reads text on the screen with the optional OCR runner; it costs minutes of CPU on a long video, so only when the user asks for on-screen text. Each call reads at most `--max-frames` frames; `search` then finds the text with the transcript. |
 | `vsift clocks` | explicit | Finds the clocks in what `ocr` read, and how they move against the video, with the frames that prove it. Run it only when the user asks about the time on the screen. `--screen-zone` and `--accept-gap` take only what the user stated, never an observation or a detected gap: those are reported, and only a person's word turns one into a clock time. |
 | `vsift ocr search` | free | On-screen text that `ocr` read, with or without a transcript; each hit cites its frame, time and region; page with `--cursor`. |

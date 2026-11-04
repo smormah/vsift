@@ -43,14 +43,14 @@ use vsift_domain::{
 use vsift_fuzz::{
     CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
     OCR_FUZZ_IMAGES, REQUEST_FUZZ_OPERATION, SCREEN_TEXT_FUZZ_SESSION, Target, VISUAL_FUZZ_SESSION,
-    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal,
+    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal, png_pixels_input,
     png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
     ArchiveInventoryBounds, BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice,
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
-    decode_job_record, decode_request_record, decode_screen_text_index_record,
+    decode_job_record, decode_png_pixels, decode_request_record, decode_screen_text_index_record,
     decode_transcript_parts, decode_transcript_record, decode_visual_index_record,
     encode_transcript_record, encode_visual_index_record, inspect_bzip2_tar_inventory,
     inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
@@ -83,6 +83,9 @@ enum Origin {
     /// A `png_sequence` input: this many copies of the recorded 80x80 F01
     /// crop PNG ([`RECORDED_CROP`]), expected as 80x80 images.
     RecordedCrops(u8),
+    /// A `png_pixels` input: the recorded 80x80 F01 crop PNG
+    /// ([`RECORDED_CROP`]), expected as an 80x80 image.
+    RecordedCropPixels,
     /// A `crop_rect` input: an outer rectangle that appears verbatim in the
     /// first file, a line feed, and an inner one that appears in the second.
     CropPair {
@@ -564,6 +567,11 @@ const SEEDS: &[Seed] = &[
         "F01-crop-x2.bin",
         Origin::RecordedCrops(2),
     ),
+    seed(
+        Target::PngPixels,
+        "F01-crop.bin",
+        Origin::RecordedCropPixels,
+    ),
     seed(Target::ClockFace, "taskbar-minutes.txt", Origin::Written),
     seed(
         Target::ClockFace,
@@ -973,6 +981,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::FrameListing, "forged-title-listing-0-1000000.txt"),
         (Target::PngSequence, "F01-crop-x1.bin"),
         (Target::PngSequence, "F01-crop-x2.bin"),
+        (Target::PngPixels, "F01-crop.bin"),
         (Target::EvidenceRecord, "bundle-evidence-record.json"),
         (Target::CropRect, "whole-frame-then-corner.txt"),
         (Target::Mountinfo, "ext4-and-proc.txt"),
@@ -1162,6 +1171,14 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
             .is_ok(),
             _ => false,
         },
+        Target::PngPixels => match data {
+            [_, _, _, _, png @ ..] => decode_png_pixels(
+                png,
+                FrameDimensions::new(u32::from(RECORDED_CROP_SIZE), u32::from(RECORDED_CROP_SIZE))?,
+            )
+            .is_ok(),
+            _ => false,
+        },
         Target::EvidenceRecord => {
             decode_evidence_record(data, &SessionId::parse(EVIDENCE_FUZZ_SESSION)?).is_ok()
         }
@@ -1329,6 +1346,13 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_) => true,
             Origin::RecordedCrops(count) => data == crops_seed(count)?,
+            Origin::RecordedCropPixels => {
+                data == png_pixels_input(
+                    RECORDED_CROP_SIZE,
+                    RECORDED_CROP_SIZE,
+                    &fs::read(repository(RECORDED_CROP))?,
+                )
+            }
             Origin::CropPair {
                 outer,
                 outer_in,
@@ -1580,6 +1604,7 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedCrops(_)
+            | Origin::RecordedCropPixels
             | Origin::CropPair { .. }
             | Origin::SearchPair { .. }
             | Origin::BundleImage(_)
@@ -1821,6 +1846,7 @@ fn the_derived_seeds_are_rebuilt_by_the_harness() -> TestResult {
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_)
             | Origin::RecordedCrops(_)
+            | Origin::RecordedCropPixels
             | Origin::CropPair { .. }
             | Origin::SearchPair { .. } => continue,
         };

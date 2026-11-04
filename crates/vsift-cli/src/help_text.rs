@@ -59,6 +59,7 @@ Explore a video step by step (what AI assistants use; you can too)
   transcript  Read or redo a session's transcript
   search      Find words in what was said
   candidates  List the moments the screen changed
+  changes     Show where the screen changed, with the frames before and after
   frame       Get the exact frame at a moment
   crop        Cut out part of a frame
   audio       Save a short clip for a person or a speech tool to play
@@ -320,6 +321,14 @@ pub(crate) const CANDIDATES: &str = command_help!(
     "guide/investigate-a-recording.md",
     "vsift candidates <session> --from 0 --to 300000000",
     "  Where the screen changed in the first 5:00 (times are microseconds)",
+);
+
+pub(crate) const CHANGES: &str = command_help!(
+    "guide/investigate-a-recording.md#what-changed-between-two-times",
+    "vsift changes <session> --from 0 --to 300000000",
+    "  Each change in the first 5:00: where on the screen, and its two frames",
+    "vsift changes <session> --from 90000000 --to 100000000 --limit 5 --json",
+    "  The same from 1:30 to 1:40, five changes a page, for a script",
 );
 
 pub(crate) const OCR: &str = command_help!(

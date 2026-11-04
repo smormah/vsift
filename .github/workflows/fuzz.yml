@@ -146,6 +146,7 @@ jobs:
           - frame_showinfo
           - frame_listing
           - png_sequence
+          - png_pixels
           - evidence_record
           - crop_rect
           - mountinfo

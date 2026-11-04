@@ -18,6 +18,7 @@ use vsift_domain::{
 
 mod evidence;
 mod png;
+mod png_pixels;
 mod showinfo;
 
 pub use evidence::{
@@ -25,6 +26,7 @@ pub use evidence::{
     WAV_HEADER_BYTES, WAV_SAMPLE_RATE, max_frames_per_run, wav_from_pcm_s16le_mono,
 };
 pub use png::{MAX_IMAGES_PER_RUN, parse_png_sequence};
+pub use png_pixels::{PngPixelsError, decode_png_pixels, read_png_pixels};
 pub use showinfo::{
     FrameListingWindow, MAX_LISTING_DIAGNOSTIC_BYTES, ObservedFrameTime, parse_ashowinfo_start,
     parse_frame_listing, parse_frame_showinfo,

@@ -24,6 +24,7 @@
 - [vsift transcript retranscribe](#vsift-transcript-retranscribe): Transcribe the session's speech locally with whisper.cpp into a new revision: the whole video, or one range of it
 - [vsift search](#vsift-search): Find words in what was said
 - [vsift candidates](#vsift-candidates): List the moments the screen changed
+- [vsift changes](#vsift-changes): Show where the screen changed, with the frames before and after
 - [vsift frame](#vsift-frame): Get the exact frame at a moment
 - [vsift frame get](#vsift-frame-get): Extract the frame a time or a visual candidate names
 - [vsift frame neighbours](#vsift-frame-neighbours): Extract consecutive frames on each side of an earlier frame
@@ -79,6 +80,7 @@ Explore a video step by step (what AI assistants use; you can too)
   transcript  Read or redo a session's transcript
   search      Find words in what was said
   candidates  List the moments the screen changed
+  changes     Show where the screen changed, with the frames before and after
   frame       Get the exact frame at a moment
   crop        Cut out part of a frame
   audio       Save a short clip for a person or a speech tool to play
@@ -1205,6 +1207,67 @@ Examples:
     Where the screen changed in the first 5:00 (times are microseconds)
 
 Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md
+```
+
+## vsift changes
+
+Show where the screen changed, with the frames before and after.
+
+```text
+Show where the screen changed, with the frames before and after.
+
+Each change of the range is a moment the screen changed (from candidates), the exact frame before and after it (ordinary evidence, as frame get gives it) and the rectangles where those two frames differ, largest first. It says which pixels differ, never what the change means. Cite a change by its before and after evidence ids (evd_...), never by its change id (chg_...). At most 20 changes a page; a call without --cursor first analyses missing parts of the range, as candidates does.
+
+Usage: vsift changes [OPTIONS] --from <FROM> --to <TO> <SESSION>
+
+Arguments:
+  <SESSION>
+          Session whose video is read
+
+Options:
+      --from <FROM>
+          Inclusive source-timeline start in microseconds; a change is listed when its after frame lies in the range
+
+      --json
+          Machine-readable output: one versioned JSON result
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --to <TO>
+          Exclusive source-timeline end in microseconds; a range past the end of the video is clipped to it
+
+      --limit <LIMIT>
+          Changes per page, 1 through 20; defaults to 10. Each change brings up to two frames
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --cursor <CURSOR>
+          Opaque continuation token returned by the previous page of the same range and --limit; a call with a cursor never analyses anything
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift changes <session> --from 0 --to 300000000
+    Each change in the first 5:00: where on the screen, and its two frames
+  vsift changes <session> --from 90000000 --to 100000000 --limit 5 --json
+    The same from 1:30 to 1:40, five changes a page, for a script
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/investigate-a-recording.md#what-changed-between-two-times
 ```
 
 ## vsift frame

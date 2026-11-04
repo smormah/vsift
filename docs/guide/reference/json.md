@@ -38,6 +38,8 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [candidates-brief-data.schema.json](#candidates-brief-dataschemajson): VSift candidates data, brief view v1
 - [candidates-data.schema.json](#candidates-dataschemajson): VSift candidates data v1
 - [candidates-stream-data.schema.json](#candidates-stream-dataschemajson): VSift candidates JSON Lines terminal data v1
+- [changes-data.schema.json](#changes-dataschemajson): VSift changes data v1
+- [changes-stream-data.schema.json](#changes-stream-dataschemajson): VSift changes JSON Lines terminal data v1
 - [clocks-data.schema.json](#clocks-dataschemajson): VSift clocks data v1
 - [config.schema.json](#configschemajson): VSift user configuration v1
 - [evidence-event.schema.json](#evidence-eventschemajson): VSift JSONL evidence record event v1
@@ -58,6 +60,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [operation-response.schema.json](#operation-responseschemajson): VSift operation terminal response v1
 - [progress-event.schema.json](#progress-eventschemajson): VSift JSONL progress event v1
 - [result-event.schema.json](#result-eventschemajson): VSift JSONL result event v1
+- [screen-change.schema.json](#screen-changeschemajson): VSift screen change record v1
 - [screen-text-data.schema.json](#screen-text-dataschemajson): VSift ocr data v1
 - [search-brief-data.schema.json](#search-brief-dataschemajson): VSift search data, brief view v1
 - [search-data.schema.json](#search-dataschemajson): VSift search data v1
@@ -748,6 +751,109 @@ The data member of the complete or partial terminal result that ends a candidate
 | `record_count` | integer | yes | 0 to 100 |
 | `next_cursor` | string or null | yes | 1 to 512 characters |
 
+### changes-data.schema.json
+
+**VSift changes data v1** ([the schema](../../../schemas/v1/changes-data.schema.json))
+
+The data member of a complete or partial changes result (0.3.0, ADR 0034): one bounded page of the screen changes whose after frame lies in the requested range, in time order, as published screen-change records. A call without a cursor first analyses the range's missing 60 s windows as candidates does (at most 30 per call); index names the revision the changes were read from, and coverage is the index's own, as candidates reports it. Each change cites its two frames by evidence_id: frames lists each distinct frame_evidence record of the page once, in order of first use, and files delivers each frame's image as the absolute path of the committed session artifact, valid while the session exists. Cite a change by its before and after evidence_id, never by change_id. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty or partial_reason is set. Pass next_cursor back with the same session, range and --limit to continue; it never analyses anything. When this call could not go on (partial_reason set, or the pages reached the end of the analysed part), resume says where a fresh call without --cursor continues.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `range` | object | yes | The requested half-open range. |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `index` | object | yes | The committed visual-index revision the page was read from. Each call that analyses anything commits a new revision holding every window of the one before it unchanged, so candidate identities never change. |
+| `index.index_id` | string | yes | pattern `^vix_[a-z0-9]{16,64}$` |
+| `index.number` | integer | yes | 1 to 64 |
+| `index.profile` | constant "r0-visual-v1" | yes |  |
+| `index.duration_us` | integer | yes | The video's probed duration; windows and coverage are clipped to it.; at least 1 |
+| `index.window_us` | constant 60000000 | yes |  |
+| `index.sample_interval_us` | constant 500000 | yes | Decoded frames are sampled at least this far apart (2 Hz). |
+| `index.coverage_interval_us` | constant 10000000 | yes | Every cell of this length that holds a decoded frame has at least one candidate. |
+| `profile` | object | yes | The versioned rule that finds regions. A pixel changed when any of its R, G and B differs by at least pixel_level; a tile of tile x tile displayed pixels changed when it holds at least tile_pixels changed pixels; changed tiles at most join_distance tiles apart join one region; at most max_regions regions are listed per change. Changing a threshold is a new profile. |
+| `profile.identifier` | constant "screen-change-regions-v1" | yes |  |
+| `profile.pixel_level` | constant 32 | yes |  |
+| `profile.tile` | constant 16 | yes |  |
+| `profile.tile_pixels` | constant 4 | yes |  |
+| `profile.join_distance` | constant 2 | yes |  |
+| `profile.max_regions` | constant 8 | yes |  |
+| `coverage` | object | yes |  |
+| `coverage.searched_range` | object | yes | The requested range clipped to the video. |
+| `coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `coverage.analyzed` | array of object | yes | Parts of searched_range that analysed windows cover, merged and in start order. no_decoded_frame and candidate_budget_exhausted gaps lie inside them.; at most 100 items |
+| `coverage.analyzed[].from_us` | integer | yes | at least 0 |
+| `coverage.analyzed[].to_us` | integer | yes | at least 1 |
+| `coverage.gaps` | array of object | yes | Every typed gap of searched_range in start order; touching gaps of one reason are merged, except budget gaps, which stay per window.; at most 100 items |
+| `coverage.gaps[].from_us` | integer | yes | at least 0 |
+| `coverage.gaps[].to_us` | integer | yes | at least 1 |
+| `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
+| `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
+| `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
+| `changes` | array of object, see [screen-change.schema.json](#screen-changeschemajson) | yes | at most 20 items |
+| `frames` | array of object, see [frame-evidence.schema.json](#frame-evidenceschemajson) | yes | Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them.; at most 40 items |
+| `files` | array of object | yes | One delivered file per frame, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.; at most 40 items |
+| `files[].evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
+| `files[].media_type` | "image/png" \| "audio/wav" | yes |  |
+| `files[].path` | string | yes | 1 to 4096 characters |
+| `partial_reason` | "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" or null | yes | Why the page stopped before its last change: session_evidence_budget (the session has no room for the next change's frames), deadline_exceeded or cancelled. The changes listed are complete and their frames committed; there is then no next_cursor, and resume says where a fresh call continues. null when the page was not stopped. |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
+| `resume` | object or null | yes | Where a fresh call (a new --from, no cursor) continues when this one cannot: from_us is the after time of the first change not listed, or the start of the first window still to analyse. reason is not_analyzed (the pages reached the end of the analysed part; a fresh call analyses from there), session_evidence_budget (continue in a new session, after session retain and ingest), deadline_exceeded or cancelled. null when the range is answered to its end, or when next_cursor continues it. |
+| `resume.from_us` | integer | yes | at least 0 |
+| `resume.reason` | "not_analyzed" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" | yes |  |
+
+### changes-stream-data.schema.json
+
+**VSift changes JSON Lines terminal data v1** ([the schema](../../../schemas/v1/changes-stream-data.schema.json))
+
+The data member of the complete or partial terminal result that ends a changes --events jsonl stream (0.3.0, ADR 0034). It is the page of changes-data.schema.json without its frames and changes: those were the preceding evidence events, first the frames (record_type frame_evidence, in order of first use), then the changes (record_type screen_change, in time order), and record_count says how many events there were. Pass next_cursor back with the same session, range and --limit to stream the next page; resume says where a fresh call continues when this one could not go on.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `range` | object | yes |  |
+| `range.from_us` | integer | yes | at least 0 |
+| `range.to_us` | integer | yes | at least 1 |
+| `index` | object | yes | The committed visual-index revision the page was read from. Each call that analyses anything commits a new revision holding every window of the one before it unchanged, so candidate identities never change. |
+| `index.index_id` | string | yes | pattern `^vix_[a-z0-9]{16,64}$` |
+| `index.number` | integer | yes | 1 to 64 |
+| `index.profile` | constant "r0-visual-v1" | yes |  |
+| `index.duration_us` | integer | yes | The video's probed duration; windows and coverage are clipped to it.; at least 1 |
+| `index.window_us` | constant 60000000 | yes |  |
+| `index.sample_interval_us` | constant 500000 | yes | Decoded frames are sampled at least this far apart (2 Hz). |
+| `index.coverage_interval_us` | constant 10000000 | yes | Every cell of this length that holds a decoded frame has at least one candidate. |
+| `profile` | object | yes | The versioned rule that finds regions. A pixel changed when any of its R, G and B differs by at least pixel_level; a tile of tile x tile displayed pixels changed when it holds at least tile_pixels changed pixels; changed tiles at most join_distance tiles apart join one region; at most max_regions regions are listed per change. Changing a threshold is a new profile. |
+| `profile.identifier` | constant "screen-change-regions-v1" | yes |  |
+| `profile.pixel_level` | constant 32 | yes |  |
+| `profile.tile` | constant 16 | yes |  |
+| `profile.tile_pixels` | constant 4 | yes |  |
+| `profile.join_distance` | constant 2 | yes |  |
+| `profile.max_regions` | constant 8 | yes |  |
+| `coverage` | object | yes |  |
+| `coverage.searched_range` | object | yes | The requested range clipped to the video. |
+| `coverage.searched_range.from_us` | integer | yes | at least 0 |
+| `coverage.searched_range.to_us` | integer | yes | at least 1 |
+| `coverage.analyzed` | array of object | yes | Parts of searched_range that analysed windows cover, merged and in start order. no_decoded_frame and candidate_budget_exhausted gaps lie inside them.; at most 100 items |
+| `coverage.analyzed[].from_us` | integer | yes | at least 0 |
+| `coverage.analyzed[].to_us` | integer | yes | at least 1 |
+| `coverage.gaps` | array of object | yes | Every typed gap of searched_range in start order; touching gaps of one reason are merged, except budget gaps, which stay per window.; at most 100 items |
+| `coverage.gaps[].from_us` | integer | yes | at least 0 |
+| `coverage.gaps[].to_us` | integer | yes | at least 1 |
+| `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
+| `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
+| `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
+| `record_count` | integer | yes | 0 to 60 |
+| `files` | array of object | yes | One delivered file per frame, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.; at most 40 items |
+| `files[].evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
+| `files[].media_type` | "image/png" \| "audio/wav" | yes |  |
+| `files[].path` | string | yes | 1 to 4096 characters |
+| `partial_reason` | "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" or null | yes | Why the page stopped before its last change: session_evidence_budget (the session has no room for the next change's frames), deadline_exceeded or cancelled. The changes listed are complete and their frames committed; there is then no next_cursor, and resume says where a fresh call continues. null when the page was not stopped. |
+| `next_cursor` | string or null | yes | 1 to 512 characters |
+| `resume` | object or null | yes | Where a fresh call (a new --from, no cursor) continues when this one cannot: from_us is the after time of the first change not listed, or the start of the first window still to analyse. reason is not_analyzed (the pages reached the end of the analysed part; a fresh call analyses from there), session_evidence_budget (continue in a new session, after session retain and ingest), deadline_exceeded or cancelled. null when the range is answered to its end, or when next_cursor continues it. |
+| `resume.from_us` | integer | yes | at least 0 |
+| `resume.reason` | "not_analyzed" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" | yes |  |
+
 ### clocks-data.schema.json
 
 **VSift clocks data v1** ([the schema](../../../schemas/v1/clocks-data.schema.json))
@@ -883,11 +989,11 @@ One evidence record in an --events jsonl stream. Evidence events precede the sin
 | `sequence` | integer | yes | at least 0 |
 | `command` | string | yes | at most 64 characters; pattern `^[a-z]+(?:-[a-z]+)*(?:[.][a-z]+(?:-[a-z]+)*)?$` |
 | `operation_id` | string or null | yes | pattern `^op_[a-z0-9]{16,64}$` |
-| `record_type` | "transcript_segment" \| "visual_candidate" \| "frame_evidence" \| "audio_evidence" | yes |  |
+| `record_type` | "transcript_segment" \| "visual_candidate" \| "frame_evidence" \| "audio_evidence" \| "screen_change" | yes |  |
 | `key` | string | yes | at most 128 characters; pattern `^[a-z]+_[a-z0-9_]+$` |
 | `record` | object | yes |  |
 
-This schema also holds 4 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/evidence-event.schema.json) for them.
+This schema also holds 5 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/evidence-event.schema.json) for them.
 
 ### frame-data.schema.json
 
@@ -1492,6 +1598,80 @@ One worker request's complete result in a job.batch --events jsonl stream (P11, 
 | `operation_id` | null | yes |  |
 | `line` | integer or null | yes | 1 to 1000 |
 | `result` | object, see [job-result.schema.json](#job-resultschemajson) | yes |  |
+
+### screen-change.schema.json
+
+**VSift screen change record v1** ([the schema](../../../schemas/v1/screen-change.schema.json))
+
+One published screen_change evidence record (changes, ADR 0034): a moment the visual index saw the screen change, the exact frame before and after it, and the rectangles where those two frames differ under the profile screen-change-regions-v1. The frames are ordinary frame_evidence records, listed in the page's frames and delivered in its files. Cite a change by its before and after evidence_id, never by change_id, which handoff check does not know. A change says which pixels differ between two frames; it never says what the change means, that nothing else changed, or exactly when it changed (only after change_window.from_us and at or before change_window.to_us). Times are integer microseconds on the normalized source timeline.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `change_id` | string | yes | The change's identity: a digest of the session, source, stream, index profile, region profile and its candidates, the same on every call.; pattern `^chg_[a-z0-9]{16,64}$` |
+| `kind` | "change" \| "motion" | yes | change: one sampled change of screen (a visual_change candidate). motion: a run of three or more changing samples, or part of one. |
+| `motion` | "run" \| "start" \| "end" or null | yes | For kind motion, which part of the run the change stands for: run (before it moved, after it settled), start (a motion_start without the candidate that ended its run: after is its first moving frame) or end (a settled_after_motion whose run start the window's budget dropped: before is the last moving frame). null for kind change. |
+| `settled` | boolean or null | yes | For kind motion, whether the after frame is a settled screen (true for run and end, false for start). null for kind change. |
+| `candidate_ids` | array of string | yes | The visual candidates the change stands for, in time order: one, or two for a whole motion run.; 1 to 2 items; each: pattern `^vcd_[a-z0-9]{16,64}$` |
+| `change_window` | object | yes | The index's bracket: the screen changed after the sampled frame at from_us and at or before the one at to_us. |
+| `change_window.from_us` | integer | yes | at least 0 |
+| `change_window.to_us` | integer | yes | at least 1 |
+| `before` | object | yes | One of the change's two frames: an actual decoded frame the index sampled, extracted as frame get extracts it. evidence_id names its frame_evidence record in the page's frames; time_us is its actual time; clock_time is the record's own, absent when the session has no time anchor. |
+| `before.evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
+| `before.time_us` | integer | yes | at least 0 |
+| `before.clock_time` | any or any | no | The clock_time member of a timestamped item: the real-world clock time of the item's position on the timeline, from the session's selected anchor (see time_anchor in ingest and session status for whether the anchors agree). at is a point's time (a frame, a candidate's representative frame, an audio clip's first decoded sample); start and end are a range's ends (a transcript segment, a candidate's span, an audio clip's planned range). Absent members do not apply to the item. clock_id names the clock on the screen the time came from, when one did. segment says which segment of the timeline the item lies in, when a gap divides it (see time_anchor.segments): after a detected gap the time may be off by that gap. The whole member is absent when the session has no anchor. |
+| `before.clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
+| `before.clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `before.clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `before.clock_time.segment` | integer | no | at least 0 |
+| `before.clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `before.clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `before.clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `before.clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `before.clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `before.clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `before.clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `before.clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `before.clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `before.clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `before.clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `before.clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `after` | object | yes | One of the change's two frames: an actual decoded frame the index sampled, extracted as frame get extracts it. evidence_id names its frame_evidence record in the page's frames; time_us is its actual time; clock_time is the record's own, absent when the session has no time anchor. |
+| `after.evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
+| `after.time_us` | integer | yes | at least 0 |
+| `after.clock_time` | any or any | no | The clock_time member of a timestamped item: the real-world clock time of the item's position on the timeline, from the session's selected anchor (see time_anchor in ingest and session status for whether the anchors agree). at is a point's time (a frame, a candidate's representative frame, an audio clip's first decoded sample); start and end are a range's ends (a transcript segment, a candidate's span, an audio clip's planned range). Absent members do not apply to the item. clock_id names the clock on the screen the time came from, when one did. segment says which segment of the timeline the item lies in, when a gap divides it (see time_anchor.segments): after a detected gap the time may be off by that gap. The whole member is absent when the session has no anchor. |
+| `after.clock_time.source` | "operator" \| "quicktime_creationdate" \| "screen_clock_confirmed" \| "container_creation_time" \| "screen_timestamp" \| "screen_clock" | yes |  |
+| `after.clock_time.confidence` | "exact" \| "high" \| "medium" | yes |  |
+| `after.clock_time.clock_id` | string | no | A clock on the screen, as the clocks command names it.; pattern `^c[1-8]$` |
+| `after.clock_time.segment` | integer | no | at least 0 |
+| `after.clock_time.at` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `after.clock_time.at.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `after.clock_time.at.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `after.clock_time.at.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `after.clock_time.start` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `after.clock_time.start.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `after.clock_time.start.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `after.clock_time.start.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `after.clock_time.end` | object or object | no | One clock reading. utc is the exact instant, when the reading names one: RFC 3339 in UTC with six fraction digits and Z. local is what the local clock showed, when the source said so: the date and time with six fraction digits and no zone. utc_offset is the local clock's offset from UTC (+HH:MM or -HH:MM), present only when both are. utc without local: the instant is known, the local zone is not. local without utc: a local time whose zone is not known, which names no instant; matching it with UTC logs needs the zone from elsewhere. |
+| `after.clock_time.end.utc` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$` |
+| `after.clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
+| `after.clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
+| `comparison` | "compared" \| "dimensions_differ" | yes | compared: the two frames have the same displayed size and were compared. dimensions_differ: they do not (a stream whose size changes), so nothing was compared and regions is empty. |
+| `regions` | array of object | yes | The largest rectangles where the frames differ, by changed_pixels, at most profile.max_regions. Each is the bounding rectangle of joined changed tiles in displayed pixels, clipped to the frame: the space crop --rect takes.; at most 8 items |
+| `regions[].x` | integer | yes | 0 to 4294967295 |
+| `regions[].y` | integer | yes | 0 to 4294967295 |
+| `regions[].width` | integer | yes | 1 to 4294967295 |
+| `regions[].height` | integer | yes | 1 to 4294967295 |
+| `regions[].changed_pixels` | integer | yes | Changed pixels in the rectangle's changed tiles.; at least 1 |
+| `regions_left_out` | integer | yes | Regions found beyond those listed.; 0 to 4294967295 |
+| `changed_area` | object or null | yes | The rectangle around every changed tile, with every changed pixel of them, so nothing is silently lost; null when the frames differ nowhere at the threshold or were not compared. |
+| `changed_area.x` | integer | yes | 0 to 4294967295 |
+| `changed_area.y` | integer | yes | 0 to 4294967295 |
+| `changed_area.width` | integer | yes | 1 to 4294967295 |
+| `changed_area.height` | integer | yes | 1 to 4294967295 |
+| `changed_area.changed_pixels` | integer | yes | Changed pixels in the rectangle's changed tiles.; at least 1 |
+| `no_region_at_threshold` | boolean | yes | true when the index saw a change but the two compared frames differ nowhere at the profile's thresholds (a change below them, or slow drift); the change is still listed. |
+
+This schema also holds 2 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/screen-change.schema.json) for them.
 
 ### screen-text-data.schema.json
 
