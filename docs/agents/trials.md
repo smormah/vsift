@@ -673,7 +673,7 @@ test it.
 **Codex.** `codex-trial.ps1 build -Published -PublishedVersion <exact>` builds two more images
 (`agent-published`, `harness-published`) whose Dockerfile stages run `vsift-agent-trials install` against
 the real registry at build time and fail the build unless the install is the published package
-(Node.js 24.21.0 by its published SHA-256 is the only other download). The agent image has no
+(Node.js 24.22.1 by its published SHA-256 is the only other download). The agent image has no
 repository, no FFmpeg, no whisper.cpp and no model, and the package's `skills/` folder and READMEs are made
 unreadable to everyone but root (the bytes are unchanged), so a cold Codex agent cannot read them;
 the harness image has the repository, FFmpeg for the clips and the readable package, and never runs a
