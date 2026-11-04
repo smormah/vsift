@@ -2149,3 +2149,13 @@ from this recording"), graded by the same rule. It runs in batch 3 from the 0.3.
 batch 1's baseline never ran it, so its result is read on its own; C-01 to C-03 and the cold grader are unchanged.
 The `cold` component of the freeze moves, so batch 3 against batch 1's freeze needs `-AllowGraderChange`, as it has
 since 2026-10-04 ([`trials.md`](../agents/trials.md), "Cold-agent mode"; [L-242](../planning/known-limits.md#l-242)).
+
+## Note, 2026-11-04 (the Codex image's Node.js: 24.22.1, #526)
+
+The sentence above that names Node.js 24.21.0 as the Codex image's only other download records what the image held for
+`0.2.0` to `0.2.3`. Since 2026-11-04 the image's `node-fetch` stage downloads Node.js 24.22.1, the version the publish
+job uses, by the SHA-256 that nodejs.org publishes for `node-v24.22.1-linux-x64.tar.xz` in `SHASUMS256.txt`. The
+tarball bundles npm 11.19.1, the npm the publish job uses, so the image adds no npm install step and still downloads
+nothing but Node.js. The Dockerfile is not part of the trial freeze (the freeze covers the skill, the harness's `src`
+and `Cargo.toml`, the scenarios, the cold and hold-out scenarios, the settings and the corpus truth), so no
+`freeze write` follows. Batch records that quote `v24.21.0` record what ran then and are not edited.
