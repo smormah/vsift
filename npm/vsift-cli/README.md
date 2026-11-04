@@ -25,7 +25,7 @@ published, so Yarn users get 0.2.4 a day after the publish (the installation gui
 
 The dist-tag `next` is for release candidates and you do not need it: it names `0.2.4-rc.1`,
 the release candidate that 0.2.4 was built from, or a later candidate or release. The older
-candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, as `0.2.4-rc.1` is once 0.2.4 is published.
+candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, as `0.2.3-rc.1` and `0.2.4-rc.1` are once 0.2.4 is published.
 The release candidates of later releases go to `next` when they are published and never to `latest`.
 
 ## What changed since 0.2.3
@@ -36,15 +36,14 @@ made since in code VSift runs (the VP8, VP9, H.264, Opus and AAC decoders, the M
 overflow). A machine set up by 0.2.3 or earlier keeps its FFmpeg, and `vsift setup check` says it is older than the
 reviewed one until you run `vsift setup plan` and `vsift setup install` again. **One flaw is not fixed:** an MP4 with
 very many `pssh` boxes (CVE-2026-107678) can keep FFmpeg busy; the fix is on FFmpeg's development line only, and
-VSift's time bound ends the work after about 15 seconds without fixing the flaw. No command or JSON field changed. The agent skill did not change.
+VSift's time bound ends the work after about 15 seconds without fixing the flaw. Five other FFmpeg security records are not fixed by this build either. No command or JSON field changed. The agent skill did not change.
 
 ## What was not tried
 
 0.2.4 is built from the same source as the release candidate `0.2.4-rc.1` and differs from it
 only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners, on a
-synthetic corpus and a synthetic voice; **only the checks that the new FFmpeg touches were run on it** (the install and upgrade checks, the managed install, the test with deliberately malformed and malicious files,
-the local speech recognition accuracy set and the dependency scan), and nine other evidence items were waived by the maintainer for this release only, among them the stress, the
-compatibility and the agent-trial runs, which run in the next window. The executables of 0.2.4 itself are checked after its publish. The accuracy set with noisy speech was not run on hosted macOS runners. The agent skill is unchanged, so its trials were not run again; in the earlier trials without the skill, a smaller model often stated the right facts without citing the
+synthetic corpus and a synthetic voice; **no long runs were made before its publish; the checks run on it were** the install and upgrade checks, the managed install, the test with deliberately malformed and malicious files,
+the local speech recognition accuracy set and the dependency scan. Seven evidence items were waived by the maintainer for this release only (among them the fuzzing hour, the stress and the agent-trial runs, which run in the next window), and two standing waivers carry. The executables of 0.2.4 itself are checked after its publish. The accuracy set with noisy speech was not run on hosted macOS runners. The agent skill is unchanged, so its trials were not run again; in the earlier trials without the skill, a smaller model often stated the right facts without citing the
 identifiers VSift returned for them (the help is to say how; the agent skill does). Two things were not tried before this release, and it ships without them:
 
 - **Windows Smart App Control, SmartScreen and macOS Gatekeeper** have not been seen reacting
