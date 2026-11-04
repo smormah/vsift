@@ -85,7 +85,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
-| `changes` | Bounded pages of what changed on screen in a range: each change's exact before and after frames as frame evidence, and the rectangles where they differ; analyses missing windows first, as `candidates` does | 0.3.0 (ADR 0034); slice 1, without `--crops` |
+| `changes` | Bounded pages of what changed on screen in a range: each change's exact before and after frames as frame evidence, and the rectangles where they differ; analyses missing windows first, as `candidates` does | 0.3.0 (ADR 0034); `--crops` cuts each change's two largest regions out of both frames |
 | `clocks` | Opt-in, bounded, resumable: finds the clocks in what `ocr` read and how each moves against the video; only `--screen-zone` and `--accept-gap`, on the user's word, change a clock time | 0.3.0 (ADR 0029, stage 2) |
 | `ocr`, `ocr search` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `ocr search` pages it with frame, time and region, with or without a transcript, and `search`'s first page shows it beside the transcript | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
@@ -3175,17 +3175,18 @@ is retained as historical v1 evidence. An abbreviated current response follows.
 vsift changes ses_0123456789abcdef --from 0 --to 14000000 --json
 vsift changes ses_0123456789abcdef --from 750000000 --to 850000000 --limit 20 --json
 vsift changes ses_0123456789abcdef --from 0 --to 14000000 --events jsonl
+vsift changes ses_0123456789abcdef --from 0 --to 14000000 --crops --json
 ```
 
-`changes <session> --from <us> --to <us> [--limit 1..20] [--cursor <token>]` pages the screen
+`changes <session> --from <us> --to <us> [--limit 1..20] [--cursor <token>] [--crops]` pages the screen
 changes of the session's video whose after frame lies in the half-open range, 10 per page by
 default ([ADR 0034](../decisions/0034-what-changed-on-screen.md)). It answers "what changed on
 the screen between these two times" in one call: each change is a moment the visual index saw
 the screen change, with the exact frame before and after it and the rectangles where those two
 frames differ. It is evidence, not interpretation. Times are position times in microseconds,
 as every other command takes them; a range that runs past the end of the video is clipped to
-it, and one that starts at or after the end is `INVALID_ARGUMENT`. This is slice 1: `--crops`
-(ADR 0034 section 4) is not part of the grammar yet.
+it, and one that starts at or after the end is `INVALID_ARGUMENT`. `--crops` (ADR 0034 section
+4) also cuts each change's largest regions out of both frames (below).
 
 **What a change is.** The changes are read from the visual index of `candidates` (above), which
 a call without `--cursor` first extends exactly as `candidates` does (missing windows in
@@ -3246,7 +3247,7 @@ recomputed from the stored frames on every call and are not stored.
 
 **Continuation and resume.** Pass `next_cursor` back with the same session, range and `--limit`.
 A call with a cursor never analyses anything. The cursor is bound to the session and its expiry
-at issue, the source, stream, index profile, region profile, range, `--limit`, the state of every
+at issue, the source, stream, index profile, region profile, range, `--limit`, `--crops`, the state of every
 window the range touches and the page's last change; any other value, a forged cursor, or a
 window in the range analysed since it was issued is `INVALID_ARGUMENT`, never a silent restart.
 `resume` says where a fresh call (a new `--from`, no cursor) continues when this one cannot:
@@ -3261,6 +3262,41 @@ their committed frames, names the stop in `partial_reason`, has no `next_cursor`
 `resume`. If not even the first change's frames fit, the call is `RESOURCE_LIMIT` with
 `frame get`'s remediation; a deadline or cancellation before the first change, with nothing
 analysed, is `DEADLINE_EXCEEDED` or `CANCELLED`.
+
+**Crops (`--crops`).** Only once every listed change has its frames and regions, each listed
+change's first two regions (the largest) are cut out of its before frame and its after frame by
+`crop` itself: the same rectangle, the source's own pixels at native size, so each crop is an
+ordinary `frame_evidence` record of kind `crop` whose parent is that frame, reused on an exact
+repeat. The changes are taken in page order, and for each region the before crop, then the after
+crop. A call makes at most 16 crops; regions past that keep their rectangle and no crop. With
+`--crops`:
+
+- a listed region carries `before_crop` and `after_crop` (evidence ids), each present only when
+  that crop was made (a stop can leave a region with its before crop alone);
+- `frames` lists the crops after the page's whole frames, each distinct crop record once, in the
+  order they were first named, and `files` delivers one file per crop in the same order, so `frames` and `files` hold at most 56
+  items with `--crops` (40 without); the stream writes them as `frame_evidence` events before the
+  `screen_change` events, and `record_count` is at most 76;
+- `data.crops` is `{"limit": 16, "made", "regions_without_crop", "stop"}`: `made` counts the
+  crop ids the regions name, a crop named twice counting twice (one change's after frame is often
+  the next change's before frame, so a region's after crop can be the same record as the next
+  change's before crop), so `frames` can hold fewer crops than `made`, and the limit of 16 counts
+  those names; `regions_without_crop` counts the first-two regions without their before or after
+  crop, and `stop` is `null`, `crop_limit` (the regions had named 16 and more remained: a published
+  bound, no warning), or `session_evidence_budget`, `deadline_exceeded` or `cancelled` (cropping
+  stopped early, with the fixed warning `Cropping stopped before every listed change's largest
+  regions were cropped ...`: run the same call again, which reuses the frames and crops already
+  made, or after `session_evidence_budget` crop in a new session).
+
+A crop stop never makes the result `partial`: the status, the envelope `coverage`,
+`partial_reason`, `resume` and `next_cursor` stay about the listing, which is whole. Cropping
+never changes which changes a page lists. A crop takes one evidence slot for its record and one
+for its image unless it repeats an earlier one, so `--crops` adds up to 32 slots a call; with
+crops on every page a session holds about 50 to 110 changes. The second region is often a few
+pixels of codec noise, and its crop then shows almost nothing. Without `--crops` no crop is
+made and neither `crops` nor any crop member is present: the answer is byte for byte the one
+without the option. The cursor is bound to `--crops`, so pass it again with `--cursor`.
+Example [`changes.crops.json`](../../schemas/v1/examples/changes.crops.json).
 
 **Coverage.** `coverage` is the index's for the range, the same shape and rules as `candidates`
 (`searched_range`, `analyzed`, `gaps` with `reason` and `dropped_candidates`, and

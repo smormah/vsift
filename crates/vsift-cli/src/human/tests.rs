@@ -1253,6 +1253,7 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "changes.partial.json",
             "changes-partial",
         ),
+        (CommandName::Changes, "changes.crops.json", "changes-crops"),
         (CommandName::FrameGet, "frame-get.json", "frame-get"),
         (
             CommandName::FrameNeighbours,

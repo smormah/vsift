@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vsift.dev/schemas/v1/screen-change.schema.json",
   "title": "VSift screen change record v1",
-  "description": "One published screen_change evidence record (changes, ADR 0034): a moment the visual index saw the screen change, the exact frame before and after it, and the rectangles where those two frames differ under the profile screen-change-regions-v1. The frames are ordinary frame_evidence records, listed in the page's frames and delivered in its files. Cite a change by its before and after evidence_id, never by change_id, which handoff check does not know. A change says which pixels differ between two frames; it never says what the change means, that nothing else changed, or exactly when it changed (only after change_window.from_us and at or before change_window.to_us). Times are integer microseconds on the normalized source timeline.",
+  "description": "One published screen_change evidence record (changes, ADR 0034): a moment the visual index saw the screen change, the exact frame before and after it, and the rectangles where those two frames differ under the profile screen-change-regions-v1. The frames are ordinary frame_evidence records, listed in the page's frames and delivered in its files. Cite a change by its before and after evidence_id, never by change_id, which handoff check does not know. With changes --crops, each of the change's two largest regions also names the crops cut out of the two frames (before_crop and after_crop, frame_evidence records of kind crop listed in the page's frames). A change says which pixels differ between two frames; it never says what the change means, that nothing else changed, or exactly when it changed (only after change_window.from_us and at or before change_window.to_us). Times are integer microseconds on the normalized source timeline.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -56,10 +56,10 @@
       "enum": ["compared", "dimensions_differ"]
     },
     "regions": {
-      "description": "The largest rectangles where the frames differ, by changed_pixels, at most profile.max_regions. Each is the bounding rectangle of joined changed tiles in displayed pixels, clipped to the frame: the space crop --rect takes.",
+      "description": "The largest rectangles where the frames differ, by changed_pixels, at most profile.max_regions. Each is the bounding rectangle of joined changed tiles in displayed pixels, clipped to the frame: the space crop --rect takes. With changes --crops, the first two may carry before_crop and after_crop.",
       "type": "array",
       "maxItems": 8,
-      "items": { "$ref": "#/$defs/region" }
+      "items": { "$ref": "#/$defs/listed_region" }
     },
     "regions_left_out": {
       "description": "Regions found beyond those listed.",
@@ -128,6 +128,31 @@
         "evidence_id": { "$ref": "#/$defs/evidence_id" },
         "time_us": { "type": "integer", "minimum": 0 },
         "clock_time": { "$ref": "time-anchor.schema.json#/$defs/clock_time" }
+      }
+    },
+    "listed_region": {
+      "description": "A listed region: its rectangle and, only with changes --crops, the crops of it. before_crop and after_crop are each present only when that crop was made: the call crops each change's first two regions, before then after, in page order, at most crops.limit a call, and stops early for the session's evidence room, the deadline or a cancellation (crops.stop says which). A crop is the source's own pixels of the rectangle at native size, cut from that frame by crop.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height", "changed_pixels"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "y": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "changed_pixels": {
+          "description": "Changed pixels in the rectangle's changed tiles.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "before_crop": {
+          "description": "The crop of this rectangle from the before frame: a frame_evidence record of kind crop whose parent is before.evidence_id.",
+          "$ref": "#/$defs/evidence_id"
+        },
+        "after_crop": {
+          "description": "The crop of this rectangle from the after frame: a frame_evidence record of kind crop whose parent is after.evidence_id.",
+          "$ref": "#/$defs/evidence_id"
+        }
       }
     },
     "region": {

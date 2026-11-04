@@ -329,6 +329,8 @@ pub(crate) const CHANGES: &str = command_help!(
     "  Each change in the first 5:00: where on the screen, and its two frames",
     "vsift changes <session> --from 90000000 --to 100000000 --limit 5 --json",
     "  The same from 1:30 to 1:40, five changes a page, for a script",
+    "vsift changes <session> --from 90000000 --to 100000000 --crops",
+    "  The same, with each change's two largest regions cut out of both frames",
 );
 
 pub(crate) const OCR: &str = command_help!(

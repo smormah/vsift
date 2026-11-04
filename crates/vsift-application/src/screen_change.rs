@@ -9,11 +9,11 @@
 use std::{error::Error, fmt, future::Future};
 
 use vsift_domain::{
-    CoverageGapReason, CursorError, CursorToken, EvidenceId, FrameComparison, FrameDimensions,
-    MediaTime, PageLimit, PageLimitError, PlannedScreenChange, QueryDigest, RgbPixels,
-    ScreenChangeError, ScreenChangeId, ScreenChangeProfile, SessionId, TimeRange,
-    VISUAL_WINDOW_MICROS, VisualCandidateId, VisualCoverageGap, VisualIndex, compare_frames,
-    plan_screen_changes,
+    ChangeRegion, CoverageGapReason, CropRect, CursorError, CursorToken, EvidenceId,
+    FrameComparison, FrameDimensions, MediaTime, PageLimit, PageLimitError, PlannedScreenChange,
+    QueryDigest, RgbPixels, ScreenChangeError, ScreenChangeId, ScreenChangeProfile, SessionId,
+    TimeRange, VISUAL_WINDOW_MICROS, VisualCandidateId, VisualCoverageGap, VisualIndex,
+    compare_frames, plan_screen_changes,
 };
 
 use crate::transcript::{derived_identity, sha256_hex};
@@ -51,8 +51,41 @@ pub struct ScreenChangePageRequest {
     pub cursor: Option<String>,
     /// Whether regions are cropped (ADR 0034 section 4); the cursor is bound
     /// to it.
-    pub crops: bool,
+    pub crops: ScreenChangeCrops,
 }
+
+/// Whether a call cuts its changes' largest regions out of their frames
+/// (ADR 0034 section 4).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ScreenChangeCrops {
+    /// Regions are listed as rectangles only: slice 1's answer.
+    #[default]
+    NoCrops,
+    /// Each listed change's [`CROPPED_REGIONS_PER_CHANGE`] largest regions are
+    /// cropped from its before and after frames, at most
+    /// [`MAX_CROPS_PER_CALL`] crops a call.
+    LargestRegions,
+}
+
+impl ScreenChangeCrops {
+    /// The word the cursor digest binds. These are exactly the words slice 1
+    /// bound for its boolean, so a cursor issued before crops existed stays
+    /// valid; changing one would reject every such cursor.
+    #[must_use]
+    pub const fn cursor_identifier(self) -> &'static str {
+        match self {
+            Self::NoCrops => "no-crops",
+            Self::LargestRegions => "crops",
+        }
+    }
+}
+
+/// Regions of one change that are cropped: the largest, by changed pixels.
+pub const CROPPED_REGIONS_PER_CHANGE: usize = 2;
+/// Most crops one call names: eight regions, each from both frames. It
+/// counts names, so a crop two regions name counts twice although it is one
+/// record (see [`CropSummary::made`]).
+pub const MAX_CROPS_PER_CALL: usize = 16;
 
 /// One page of planned changes, before their frames are taken.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -171,7 +204,7 @@ fn screen_change_query_digest(
         candidates.as_str(),
         ScreenChangeProfile::RegionsV1.identifier(),
         request.limit.get(),
-        if request.crops { "crops" } else { "no-crops" }
+        request.crops.cursor_identifier()
     );
     QueryDigest::parse(sha256_hex(material.as_bytes()))
 }
@@ -382,6 +415,14 @@ pub trait ScreenChangeFrames: Send + Sync {
     /// Returns the port's error for a stored image that changed, does not
     /// decode, or is larger than any extracted frame.
     fn pixels(&self, frame: &TakenFrame) -> Result<Vec<u8>, Self::Error>;
+
+    /// Cuts `rect`, in displayed pixels, out of a frame taken by this port:
+    /// a crop evidence item whose parent is that frame.
+    fn crop(
+        &self,
+        frame: &TakenFrame,
+        rect: CropRect,
+    ) -> impl Future<Output = Result<EvidenceId, FrameRefusal<Self::Error>>> + Send;
 }
 
 /// One change with its frames and where they differ.
@@ -395,6 +436,90 @@ pub struct ComparedChange {
     pub after: TakenFrame,
     /// Where the two differ.
     pub comparison: FrameComparison,
+    /// The crops of the change's largest regions, in region order: empty
+    /// without crops, otherwise one entry for each of the first
+    /// [`CROPPED_REGIONS_PER_CHANGE`] regions.
+    pub crops: Vec<RegionCrops>,
+}
+
+/// The crops of one region, each present only when it was made.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RegionCrops {
+    /// The region cut out of the before frame.
+    pub before: Option<EvidenceId>,
+    /// The region cut out of the after frame.
+    pub after: Option<EvidenceId>,
+}
+
+impl RegionCrops {
+    /// Whether both crops of the region were made.
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
+        self.before.is_some() && self.after.is_some()
+    }
+}
+
+/// Why a call stopped cropping before every planned region had both crops.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CropStop {
+    /// The call made [`MAX_CROPS_PER_CALL`] crops: a published bound.
+    CropLimit,
+    /// The session's evidence room is full.
+    SessionEvidenceBudget,
+    /// The call's deadline passed.
+    DeadlineExceeded,
+    /// The caller cancelled.
+    Cancelled,
+}
+
+impl CropStop {
+    /// Published identifier.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::CropLimit => "crop_limit",
+            Self::SessionEvidenceBudget => "session_evidence_budget",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    /// Whether the stop was the room, the deadline or a cancellation rather
+    /// than the published bound, so a rerun of the same call may go on.
+    #[must_use]
+    pub const fn is_interrupted(self) -> bool {
+        !matches!(self, Self::CropLimit)
+    }
+
+    const fn after(stop: ScreenChangeStop) -> Self {
+        match stop {
+            ScreenChangeStop::SessionEvidenceBudget => Self::SessionEvidenceBudget,
+            ScreenChangeStop::DeadlineExceeded => Self::DeadlineExceeded,
+            ScreenChangeStop::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+/// What a call's cropping made, and why it stopped early.
+///
+/// It never changes how the page itself is listed or continued: a crop stop
+/// leaves [`ComparedPage::stop`], and so the result's status, as the
+/// comparison set it (the planner's ruling of 2026-11-04).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CropSummary {
+    /// Crop ids the regions name: a crop named by two regions counts twice.
+    ///
+    /// One change's after frame is often the next change's before frame, so
+    /// a region's after crop can be the exact repeat of the next change's
+    /// before crop: the same crop record, named twice. The page lists each
+    /// distinct crop record once, so it can list fewer crops than this.
+    /// [`MAX_CROPS_PER_CALL`] bounds this count.
+    pub made: usize,
+    /// Planned regions (the first [`CROPPED_REGIONS_PER_CHANGE`] of each
+    /// listed change) without their before or their after crop.
+    pub regions_without_crop: usize,
+    /// Why cropping stopped before every planned region had both crops.
+    pub stop: Option<CropStop>,
 }
 
 /// The changes of a page that were compared, and why it stopped early.
@@ -459,6 +584,7 @@ pub async fn compare_screen_changes<P: ScreenChangeFrames>(
             before,
             after,
             comparison,
+            crops: Vec::new(),
         });
     }
     Ok(ComparedPage {
@@ -481,6 +607,91 @@ fn compare_pair<P: ScreenChangeFrames>(
         RgbPixels::new(before.dimensions, &before_pixels)?,
         RgbPixels::new(after.dimensions, &after_pixels)?,
     ))
+}
+
+/// The regions of a change that are cropped: its first
+/// [`CROPPED_REGIONS_PER_CHANGE`], which the comparison lists largest first.
+/// A change whose frames were not compared has none.
+fn cropped_regions(change: &ComparedChange) -> &[ChangeRegion] {
+    match &change.comparison {
+        FrameComparison::Compared(found) => found
+            .regions
+            .get(..CROPPED_REGIONS_PER_CHANGE.min(found.regions.len()))
+            .unwrap_or_default(),
+        FrameComparison::DimensionsDiffer => &[],
+    }
+}
+
+/// Crops the largest regions of a page's compared changes (ADR 0034
+/// section 4).
+///
+/// It runs after the whole page is compared, so a crop never costs a listed
+/// change its frames. The changes are taken in page order; for each, its
+/// first [`CROPPED_REGIONS_PER_CHANGE`] regions, and for each region the
+/// before crop, then the after crop, of the same rectangle. It stops at
+/// [`MAX_CROPS_PER_CALL`] crops, or when the port has no room, passes its
+/// deadline or is cancelled; a crop made before a stop is kept even when its
+/// partner is not, because it is committed evidence. Each planned region gets
+/// an entry in its change's [`ComparedChange::crops`].
+///
+/// # Errors
+///
+/// Returns the port's error for any other failure.
+pub async fn crop_screen_changes<P: ScreenChangeFrames>(
+    port: &P,
+    changes: &mut [ComparedChange],
+) -> Result<CropSummary, P::Error> {
+    let mut summary = CropSummary::default();
+    for change in changes.iter_mut() {
+        let regions: Vec<CropRect> = cropped_regions(change)
+            .iter()
+            .map(|region| region.rect)
+            .collect();
+        let mut crops = Vec::with_capacity(regions.len());
+        for rect in regions {
+            let mut region = RegionCrops::default();
+            for (frame, slot) in [
+                (&change.before, &mut region.before),
+                (&change.after, &mut region.after),
+            ] {
+                if summary.stop.is_none() {
+                    summary.stop = crop_one(port, frame, rect, slot, &mut summary.made).await?;
+                }
+            }
+            if !region.is_complete() {
+                summary.regions_without_crop += 1;
+            }
+            crops.push(region);
+        }
+        change.crops = crops;
+    }
+    Ok(summary)
+}
+
+/// Makes one crop into `slot`, or says why the call stops cropping.
+async fn crop_one<P: ScreenChangeFrames>(
+    port: &P,
+    frame: &TakenFrame,
+    rect: CropRect,
+    slot: &mut Option<EvidenceId>,
+    made: &mut usize,
+) -> Result<Option<CropStop>, P::Error> {
+    if *made >= MAX_CROPS_PER_CALL {
+        return Ok(Some(CropStop::CropLimit));
+    }
+    if let Some(stop) = port.stop() {
+        return Ok(Some(CropStop::after(stop)));
+    }
+    match port.crop(frame, rect).await {
+        Ok(evidence_id) => {
+            *slot = Some(evidence_id);
+            *made += 1;
+            Ok(None)
+        }
+        Err(FrameRefusal::NoRoom) => Ok(Some(CropStop::SessionEvidenceBudget)),
+        Err(FrameRefusal::Stopped(stop)) => Ok(Some(CropStop::after(stop))),
+        Err(FrameRefusal::Failed(error)) => Err(error),
+    }
 }
 
 #[cfg(test)]

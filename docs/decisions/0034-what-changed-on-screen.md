@@ -135,7 +135,9 @@ profile, never a silent change.
 With `--crops`, each of a change's two largest regions is cut out of the before frame and the after
 frame through the existing `crop` (the source's own pixels at native size), so a change carries up to
 four crop evidence ids. A call makes at most 16 crops; regions beyond that are listed with their
-rectangle and no crop, and the result says so. Without `--crops` no crop is made. The request carries the choice as a two-value enum, never a
+rectangle and no crop, and the result says so in `data.crops` (`made`, `regions_without_crop` and
+`stop`), never in its status: a crop stop leaves the result `complete` or `partial` exactly as the
+listing makes it (the note of 2026-11-04). Without `--crops` no crop is made. The request carries the choice as a two-value enum, never a
 boolean (AGENTS.md; the planner, 2026-11-03); the command line keeps the flag.
 
 ### 5. The answer
@@ -172,7 +174,10 @@ not (section 10).
   `candidates`' (30 windows a call); frames and regions are bounded by the page.
 - **Page:** 1 to 20 changes, 10 by default: at most 40 frames, within `frame get`'s 100 frames,
   200 megapixels, 256 MiB and the 120 s deadline, which apply to the call as they do to a burst.
-- **Regions:** 8 per change. **Crops:** 16 per call, with `--crops` only.
+- **Regions:** 8 per change. **Crops:** 16 per call, with `--crops` only. A crop takes two slots
+  (its record and its image) unless it repeats one, so `--crops` adds up to 32 slots a call, and with
+  crops on every page a session holds about 50 to 110 changes rather than 95 to 190 (the note of
+  2026-11-04).
 - **Session room.** What a page costs, checked in the code (`vsift/src/evidence.rs`,
   `EvidenceCall::known_media`, `find_reusable_record`) and as built (note of 2026-11-03 below): each
   frame is taken by one `frame get`. A request repeated exactly is reused and takes no slot; any other
@@ -350,6 +355,44 @@ costs. Whole recordings in 478 s:
 
 RM04 (5 minutes, 124 changes) and RM10 (3:21, 102 changes) each filled one session's evidence room and
 went on in a second from `resume`, as section 6a says. The thresholds stay.
+
+## Note of 2026-11-04: crops, slice 2
+
+The planner accepted the crops design on 2026-11-04 with one change (that a crop stop never makes the
+result partial). As built:
+
+- **When.** Crops are cut only after every change of the page has its frames and has been compared,
+  so a page lists the same changes with or without `--crops`, and a crop never costs a listed change
+  its frames.
+- **Which.** Each listed change's first two regions (the largest), in page order; for each, the
+  before crop, then the after crop, of the same rectangle, through `Engine::crop` with the frame's
+  evidence item as parent. At most 16 crops a call (8 regions, about 4 changes with two regions each).
+  No size floor: the second region is often a few pixels of codec noise (13 to 36% of changes on
+  RM01, RM04 and RM10), and its crop is then close to empty; a floor would be a new threshold with no
+  labels to weigh it.
+- **The answer.** A listed region gains `before_crop` and `after_crop`, each present only when made.
+  The crops are `frame_evidence` records of kind `crop`, listed in `frames` after the whole frames
+  and delivered in `files` in the same order (at most 56 of each with `--crops`). `data.crops` is
+  `{limit, made, regions_without_crop, stop}`, present only with `--crops`, so a call without it is
+  slice 1's answer byte for byte. `made` counts the crop ids the regions name: one change's after
+  frame is often the next change's before frame, so a region's after crop can be the same record as
+  the next change's before crop, named twice and counted twice but listed once in `frames`. The
+  16-crop bound counts names (the planner, on #574).
+- **Stops.** `crop_limit` is the published bound and adds no warning. `session_evidence_budget`,
+  `deadline_exceeded` and `cancelled` stop the cropping and add a fixed warning (run the same call
+  again; after `session_evidence_budget`, a new session). None of them makes the result `partial`:
+  `changes-data.schema.json` publishes that status is `partial` exactly when there is a gap or
+  `partial_reason` is set, and `partial_reason` means the listing stopped. A crop made before a stop
+  is kept even when its partner is not, because it is committed evidence.
+- **The request** carries `ScreenChangeCrops` (`NoCrops`, `LargestRegions`); the cursor digest binds
+  the same words slice 1 bound for its boolean (`no-crops`, `crops`), so a slice-1 cursor still
+  continues. No new failure code, no skill change.
+- **No hosted run** (the planner): crops reuse `crop`, already qualified, and their cost follows from
+  slice 1's runs. A local opt-in engine test makes one call that reaches the 16-crop bound on a 12 s
+  1280x720 video it generates with FFmpeg (synthetic, at a real screen's size, not a real recording),
+  whose changes come in pairs half a second apart, so crops repeat: 16 named, 12 records listed
+  (F04 has one change with regions, so it cannot reach the bound); its wall time and slots are in the
+  pull request.
 
 ## Consequences
 

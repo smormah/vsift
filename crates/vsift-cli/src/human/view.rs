@@ -1233,6 +1233,18 @@ pub(crate) struct ChangesPage {
     pub(crate) partial_reason: Option<String>,
     pub(crate) next_cursor: Option<String>,
     pub(crate) resume: Option<ChangesResume>,
+    /// Present only with `--crops`.
+    #[serde(default)]
+    pub(crate) crops: Option<ChangesCrops>,
+}
+
+/// What a `changes --crops` call's cropping made.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesCrops {
+    pub(crate) limit: u64,
+    pub(crate) made: u64,
+    pub(crate) regions_without_crop: u64,
+    pub(crate) stop: Option<String>,
 }
 
 /// The region rule of a `changes` page.
@@ -1273,13 +1285,18 @@ pub(crate) struct ChangeFrame {
     pub(crate) time_us: u64,
 }
 
-/// A rectangle where a change's two frames differ.
-#[derive(Clone, Copy, Debug, Deserialize)]
+/// A rectangle where a change's two frames differ, and with `--crops` the
+/// crops of it.
+#[derive(Clone, Debug, Deserialize)]
 pub(crate) struct ChangeRegionView {
     pub(crate) x: u64,
     pub(crate) y: u64,
     pub(crate) width: u64,
     pub(crate) height: u64,
+    #[serde(default)]
+    pub(crate) before_crop: Option<String>,
+    #[serde(default)]
+    pub(crate) after_crop: Option<String>,
 }
 
 /// The candidates a page left out, by reason, over its whole range.

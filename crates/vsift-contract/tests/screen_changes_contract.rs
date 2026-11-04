@@ -17,6 +17,10 @@
 //! session's evidence room after its first change. Delivered paths are named
 //! under the neutral placeholder root `/vsift-session-root`.
 //!
+//! `changes.crops.json` is `changes.json` asked for with `--crops`: the
+//! first change's one region and the status edit's two are cropped from both
+//! frames, and the six crops follow the four frames.
+//!
 //! After an intended contract change, run with
 //! `VSIFT_REGENERATE_CONTRACT_EXAMPLES=1` to rewrite the examples, and review
 //! the diff.
@@ -26,17 +30,19 @@ use std::{env, fs, io, num::NonZeroU32, path::PathBuf};
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_application::{
-    ComparedChange, ScreenChangePageRequest, ScreenChangeStop, TakenFrame, VisualIndexScope,
-    analysed_ranges, page_screen_changes, screen_change_id, screen_change_page_limit,
-    visual_candidate_id, visual_coverage_gaps, visual_index_id,
+    ComparedChange, CropStop, CropSummary, RegionCrops, ScreenChangeCrops, ScreenChangePageRequest,
+    ScreenChangeStop, TakenFrame, VisualIndexScope, analysed_ranges, page_screen_changes,
+    screen_change_id, screen_change_page_limit, visual_candidate_id, visual_coverage_gaps,
+    visual_index_id,
 };
 use vsift_contract::{
-    CHANGES_COVERAGE_WARNING, CHANGES_STOPPED_WARNING, DeliveredEvidenceFile, EvidenceStream,
-    LifecycleResponse, ListedScreenChange, ScreenChangeResumePresentation,
-    ScreenChangesEvidenceStream, ScreenChangesPresentation, screen_changes_response,
+    CHANGES_COVERAGE_WARNING, CHANGES_CROPS_STOPPED_WARNING, CHANGES_STOPPED_WARNING,
+    DeliveredEvidenceFile, EvidenceStream, LifecycleResponse, ListedScreenChange,
+    ScreenChangeResumePresentation, ScreenChangesEvidenceStream, ScreenChangesPresentation,
+    screen_changes_response,
 };
 use vsift_domain::{
-    ChangeRegion, CropRect, EvidenceId, EvidenceItem, EvidenceItemParts, EvidenceMedia,
+    ChangeRegion, CropRect, CropRegion, EvidenceId, EvidenceItem, EvidenceItemParts, EvidenceMedia,
     EvidenceMediaKind, EvidenceSubject, FrameComparison, FrameDimensions, FrameRef, MediaTime,
     MotionPart, PlannedScreenChange, RegionComparison, ScreenChangeId, ScreenChangeKind, SessionId,
     Sha256Hex, SourceCheck, SourceId, TimeAnchors, TimeBase, TimeRange, VISUAL_BLOCKS,
@@ -61,6 +67,7 @@ const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
 const JSON_EXAMPLE: &str = "examples/changes.json";
 const PARTIAL_EXAMPLE: &str = "examples/changes.partial.json";
 const STREAM_EXAMPLE: &str = "examples/changes.events.jsonl";
+const CROPS_EXAMPLE: &str = "examples/changes.crops.json";
 
 fn schema_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../schemas/v1")
@@ -345,6 +352,8 @@ fn region(
 struct ComparedPage {
     changes: Vec<(ScreenChangeId, ComparedChange)>,
     frames: Vec<EvidenceItem>,
+    /// Crops made by `--crops`, in the order they were made.
+    crop_items: Vec<EvidenceItem>,
 }
 
 fn compare(
@@ -373,10 +382,90 @@ fn compare(
                 before,
                 after,
                 comparison,
+                crops: Vec::new(),
             },
         ));
     }
-    Ok(ComparedPage { changes, frames })
+    Ok(ComparedPage {
+        changes,
+        frames,
+        crop_items: Vec::new(),
+    })
+}
+
+/// The crop evidence item `crop` would store for `rect` of `parent`, with a
+/// stand-in digest.
+fn crop_item(parent: &EvidenceItem, rect: CropRect) -> Built<EvidenceItem> {
+    let EvidenceSubject::Frame(frame) = parent.subject() else {
+        return Err("not a frame".into());
+    };
+    let material = format!(
+        "{} {},{},{},{}",
+        parent.id().as_str(),
+        rect.x(),
+        rect.y(),
+        rect.width(),
+        rect.height()
+    );
+    let digest = stand_in_digest(&format!("stand-in crop png of {material}"));
+    let identity = stand_in_digest(&format!("stand-in crop of {material}"));
+    Ok(EvidenceItem::new(EvidenceItemParts {
+        id: EvidenceId::parse(format!("evd_{}", identity.get(..32).ok_or("short digest")?))?,
+        subject: EvidenceSubject::Crop {
+            frame: *frame,
+            region: CropRegion {
+                parent: parent.id().clone(),
+                rect,
+                frame_rect: rect,
+            },
+        },
+        media: EvidenceMedia::new(
+            EvidenceMediaKind::FramePng,
+            Sha256Hex::parse(digest)?,
+            4_000 + u64::from(rect.width()),
+        )?,
+        tool_fingerprint: Some(Sha256Hex::parse(FINGERPRINT)?),
+        source_check: SourceCheck::Identity,
+    })?)
+}
+
+/// Crops the first two regions of each change, before then after, in page
+/// order, keeping the first `made` crops (as a call that stopped there). A
+/// crop that repeats one already made (the same parent and rectangle) is
+/// named again and counted, but its record is listed once, as the engine
+/// reuses it.
+fn with_crops(mut page: ComparedPage, made: usize) -> Built<ComparedPage> {
+    let mut count = 0;
+    for (_, change) in &mut page.changes {
+        let FrameComparison::Compared(found) = &change.comparison else {
+            continue;
+        };
+        let mut crops = Vec::new();
+        for region in found.regions.iter().take(2) {
+            let mut entry = RegionCrops::default();
+            for (frame, slot) in [
+                (&change.before, &mut entry.before),
+                (&change.after, &mut entry.after),
+            ] {
+                if count < made {
+                    let parent = page
+                        .frames
+                        .iter()
+                        .find(|item| item.id() == &frame.evidence_id)
+                        .ok_or("an unlisted parent")?;
+                    let item = crop_item(parent, region.rect)?;
+                    *slot = Some(item.id().clone());
+                    if !page.crop_items.iter().any(|known| known.id() == item.id()) {
+                        page.crop_items.push(item);
+                    }
+                    count += 1;
+                }
+            }
+            crops.push(entry);
+        }
+        change.crops = crops;
+    }
+    Ok(page)
 }
 
 fn placeholder_paths(frames: &[EvidenceItem]) -> Vec<PathBuf> {
@@ -409,6 +498,7 @@ struct PageOptions<'a> {
     resume: Option<ScreenChangeResumePresentation>,
     next_cursor: Option<&'a str>,
     anchors: &'a TimeAnchors,
+    crops: Option<CropSummary>,
 }
 
 fn render(recording: &Recording, page: &ComparedPage, options: PageOptions<'_>) -> Built<Rendered> {
@@ -418,8 +508,9 @@ fn render(recording: &Recording, page: &ComparedPage, options: PageOptions<'_>) 
         .take(options.listed)
         .map(|(id, compared)| ListedScreenChange { id, compared })
         .collect();
-    // Only the frames of the listed changes, as the engine takes them.
-    let frames: Vec<EvidenceItem> = page
+    // Only the frames of the listed changes, as the engine takes them, then
+    // with crops the crops, which are made after every frame.
+    let mut frames: Vec<EvidenceItem> = page
         .frames
         .iter()
         .filter(|frame| {
@@ -430,6 +521,9 @@ fn render(recording: &Recording, page: &ComparedPage, options: PageOptions<'_>) 
         })
         .cloned()
         .collect();
+    if options.crops.is_some() {
+        frames.extend(page.crop_items.iter().cloned());
+    }
     let paths = placeholder_paths(&frames);
     let files: Vec<DeliveredEvidenceFile<'_>> = frames
         .iter()
@@ -460,6 +554,7 @@ fn render(recording: &Recording, page: &ComparedPage, options: PageOptions<'_>) 
         gaps: &gaps,
         stop: options.stop,
         time_anchors: options.anchors,
+        crops: options.crops,
     };
     let json = serde_json::to_value(screen_changes_response(&presentation, lifecycle())?)?;
     let stream = ScreenChangesEvidenceStream::new(&presentation, lifecycle())?;
@@ -481,7 +576,7 @@ fn planned(recording: &Recording, requested: TimeRange) -> Built<Vec<PlannedScre
             range: requested,
             limit: screen_change_page_limit(None)?,
             cursor: None,
-            crops: false,
+            crops: ScreenChangeCrops::NoCrops,
         },
         NOW_US,
     )?
@@ -530,6 +625,7 @@ fn status_edit_rendered(anchors: &TimeAnchors) -> Built<Rendered> {
             resume: None,
             next_cursor: None,
             anchors,
+            crops: None,
         },
     )
 }
@@ -695,6 +791,7 @@ fn a_stopped_page_over_gaps_matches_the_frozen_example() -> TestResult {
             }),
             next_cursor: None,
             anchors: &TimeAnchors::none(),
+            crops: None,
         },
     )?
     .json;
@@ -750,6 +847,7 @@ fn gaps_alone_make_a_page_partial_with_one_warning() -> TestResult {
             }),
             next_cursor: None,
             anchors: &TimeAnchors::none(),
+            crops: None,
         },
     )?;
     validate_result(&rendered.json)?;
@@ -819,6 +917,7 @@ fn every_kind_and_comparison_is_published_as_the_schema_says() -> TestResult {
             resume: None,
             next_cursor: None,
             anchors: &TimeAnchors::none(),
+            crops: None,
         },
     )?
     .json;
@@ -929,8 +1028,289 @@ fn files_that_do_not_match_the_frames_are_refused() -> TestResult {
         gaps: &[],
         stop: None,
         time_anchors: &anchors,
+        crops: None,
     };
     assert!(screen_changes_response(&presentation, lifecycle()).is_err());
     assert!(ScreenChangesEvidenceStream::new(&presentation, lifecycle()).is_err());
+    Ok(())
+}
+
+/// The status-edit page asked for with `--crops`, keeping `made` crops and
+/// reporting `summary`.
+fn status_edit_with_crops(made: usize, summary: CropSummary) -> Built<Rendered> {
+    let (recording, page, requested) = status_edit_page()?;
+    let page = with_crops(page, made)?;
+    render(
+        &recording,
+        &page,
+        PageOptions {
+            requested,
+            listed: 2,
+            stop: None,
+            resume: None,
+            next_cursor: None,
+            anchors: &TimeAnchors::none(),
+            crops: Some(summary),
+        },
+    )
+}
+
+/// Without `--crops` nothing of crops is present: no `crops` member, no crop
+/// in any region, no crop among the frames. The frozen slice-1 examples
+/// above pin the rest byte for byte.
+#[test]
+fn a_page_without_crops_has_no_crop_member_anywhere() -> TestResult {
+    let rendered = status_edit_rendered(&TimeAnchors::none())?;
+    let data = &rendered.json["data"];
+    assert!(data.get("crops").is_none());
+    for change in data["changes"].as_array().ok_or("changes")? {
+        for region in change["regions"].as_array().ok_or("regions")? {
+            assert!(region.get("before_crop").is_none());
+            assert!(region.get("after_crop").is_none());
+        }
+    }
+    assert!(
+        data["frames"]
+            .as_array()
+            .ok_or("frames")?
+            .iter()
+            .all(|frame| frame["kind"] == "frame")
+    );
+    let terminal: Value = serde_json::from_str(rendered.lines.last().ok_or("no terminal")?)?;
+    assert!(terminal["result"]["data"].get("crops").is_none());
+    Ok(())
+}
+
+/// With `--crops`, each change's two largest regions name their before and
+/// after crops, the crops follow the frames with one file each, and the
+/// stream carries them as `frame_evidence` events before the changes.
+#[test]
+fn a_page_with_crops_matches_the_frozen_example() -> TestResult {
+    let rendered = status_edit_with_crops(
+        6,
+        CropSummary {
+            made: 6,
+            regions_without_crop: 0,
+            stop: None,
+        },
+    )?;
+    let value = rendered.json;
+    regenerate(CROPS_EXAMPLE, &pretty(&value)?)?;
+    validate_result(&value)?;
+    assert!(
+        value == load(CROPS_EXAMPLE)?,
+        "the changes --crops result differs from {CROPS_EXAMPLE}"
+    );
+    assert_eq!(value["status"], "complete");
+    assert_eq!(value["warnings"], serde_json::json!([]));
+    let data = &value["data"];
+    assert_eq!(
+        data["crops"],
+        serde_json::json!({"limit": 16, "made": 6, "regions_without_crop": 0, "stop": null})
+    );
+    let frames = data["frames"].as_array().ok_or("frames")?;
+    let files = data["files"].as_array().ok_or("files")?;
+    assert_eq!(frames.len(), 10);
+    assert_eq!(files.len(), 10);
+    assert!(frames.iter().take(4).all(|frame| frame["kind"] == "frame"));
+    assert!(frames.iter().skip(4).all(|frame| frame["kind"] == "crop"));
+    for (frame, file) in frames.iter().zip(files) {
+        assert_eq!(frame["evidence_id"], file["evidence_id"]);
+    }
+    for change in data["changes"].as_array().ok_or("changes")? {
+        for region in change["regions"].as_array().ok_or("regions")? {
+            for (side, crop) in [("before", "before_crop"), ("after", "after_crop")] {
+                let item = frames
+                    .iter()
+                    .find(|frame| frame["evidence_id"] == region[crop])
+                    .ok_or("a crop is not listed")?;
+                assert_eq!(
+                    item["crop"]["parent_evidence_id"],
+                    change[side]["evidence_id"]
+                );
+                assert_eq!(item["crop"]["x"], region["x"]);
+                assert_eq!(item["crop"]["width"], region["width"]);
+            }
+        }
+    }
+    // The stream: ten frame_evidence events, then the two changes, then the
+    // terminal event with the crops summary and the count.
+    let lines: Vec<Value> = rendered
+        .lines
+        .iter()
+        .map(|line| serde_json::from_str(line))
+        .collect::<Result<_, _>>()?;
+    for line in &lines {
+        validate_line(line)?;
+    }
+    assert_eq!(lines.len(), 13);
+    let terminal = lines.last().ok_or("no terminal")?;
+    assert_eq!(terminal["result"]["data"]["record_count"], 12);
+    assert_eq!(terminal["result"]["data"]["crops"], data["crops"]);
+    Ok(())
+}
+
+/// A crop stop for the room, the deadline or a cancellation leaves the
+/// result complete, with `partial_reason` null and coverage whole, adds the
+/// fixed crop warning, and keeps the crops made before it; the 16-crop bound
+/// adds no warning (the planner's ruling of 2026-11-04).
+#[test]
+fn a_crop_stopped_page_stays_complete() -> TestResult {
+    for stop in [
+        CropStop::SessionEvidenceBudget,
+        CropStop::DeadlineExceeded,
+        CropStop::Cancelled,
+        CropStop::CropLimit,
+    ] {
+        // Three crops: the first change's region, then only the status
+        // row's before crop; the status row lacks its after crop and the
+        // small region has none.
+        let rendered = status_edit_with_crops(
+            3,
+            CropSummary {
+                made: 3,
+                regions_without_crop: 2,
+                stop: Some(stop),
+            },
+        )?;
+        let value = rendered.json;
+        validate_result(&value)?;
+        assert_eq!(value["status"], "complete", "{stop:?}");
+        assert_eq!(value["data"]["partial_reason"], Value::Null);
+        assert_eq!(value["data"]["resume"], Value::Null);
+        assert_eq!(
+            value["coverage"],
+            serde_json::json!({"truncated": false, "gaps": [], "reasons": []})
+        );
+        assert_eq!(value["data"]["crops"]["stop"], stop.identifier());
+        let warnings = if stop.is_interrupted() {
+            serde_json::json!([CHANGES_CROPS_STOPPED_WARNING])
+        } else {
+            serde_json::json!([])
+        };
+        assert_eq!(value["warnings"], warnings, "{stop:?}");
+        let status = &value["data"]["changes"][1]["regions"];
+        assert!(status[0]["before_crop"].is_string());
+        assert!(status[0].get("after_crop").is_none());
+        assert!(status[1].get("before_crop").is_none());
+        assert_eq!(
+            value["data"]["frames"].as_array().ok_or("frames")?.len(),
+            4 + 3
+        );
+        for line in &rendered.lines {
+            validate_line(&serde_json::from_str(line)?)?;
+        }
+    }
+    assert!(CHANGES_CROPS_STOPPED_WARNING.len() <= 1024);
+    Ok(())
+}
+
+/// The crop members are published only where the schema puts them: never on
+/// `changed_area`, never with a value that is not an evidence identity, and
+/// `crops` only with its four members.
+#[test]
+fn the_crop_members_are_published_as_the_schema_says() -> TestResult {
+    let rendered = status_edit_with_crops(
+        6,
+        CropSummary {
+            made: 6,
+            regions_without_crop: 0,
+            stop: None,
+        },
+    )?;
+    let changes = rendered.json["data"]["changes"]
+        .as_array()
+        .ok_or("changes")?
+        .clone();
+    let status = changes.get(1).ok_or("the status change")?;
+    assert!(is_valid("screen-change.schema.json", status)?);
+    let mut on_area = status.clone();
+    on_area["changed_area"]["before_crop"] = status["regions"][0]["before_crop"].clone();
+    assert!(!is_valid("screen-change.schema.json", &on_area)?);
+    let mut not_an_id = status.clone();
+    not_an_id["regions"][0]["after_crop"] = Value::from("crop-1");
+    assert!(!is_valid("screen-change.schema.json", &not_an_id)?);
+    let mut data = rendered.json["data"].clone();
+    assert!(is_valid("changes-data.schema.json", &data)?);
+    data["crops"]["limit"] = Value::from(17);
+    assert!(!is_valid("changes-data.schema.json", &data)?);
+    data["crops"]["limit"] = Value::from(16);
+    data["crops"]["stop"] = Value::from("partial");
+    assert!(!is_valid("changes-data.schema.json", &data)?);
+    Ok(())
+}
+
+/// One change's after frame is the next change's before frame, and both
+/// changes differ in the same rectangle, so the after crop of the first is
+/// the before crop of the second: one crop record, named twice. `made`
+/// counts the names (4), `frames` lists the record once (3 crops), and the
+/// page validates (the planner, on #574).
+#[test]
+fn a_crop_named_twice_is_counted_twice_and_listed_once() -> TestResult {
+    let (recording, mut page, requested) = status_edit_page()?;
+    let dimensions = recording.dimensions();
+    let row = region(dimensions, (1008, 384, 400, 48), 7_140)?;
+    let one_region = || {
+        FrameComparison::Compared(RegionComparison {
+            regions: vec![row],
+            regions_left_out: 0,
+            changed_area: Some(row),
+        })
+    };
+    let shared = page
+        .changes
+        .first()
+        .map(|(_, change)| change.after.clone())
+        .ok_or("the first change")?;
+    if let Some((_, first)) = page.changes.get_mut(0) {
+        first.comparison = one_region();
+    }
+    if let Some((_, second)) = page.changes.get_mut(1) {
+        second.before = shared;
+        second.comparison = one_region();
+    }
+    let page = with_crops(page, 4)?;
+    let rendered = render(
+        &recording,
+        &page,
+        PageOptions {
+            requested,
+            listed: 2,
+            stop: None,
+            resume: None,
+            next_cursor: None,
+            anchors: &TimeAnchors::none(),
+            crops: Some(CropSummary {
+                made: 4,
+                regions_without_crop: 0,
+                stop: None,
+            }),
+        },
+    )?;
+    let value = rendered.json;
+    validate_result(&value)?;
+    let data = &value["data"];
+    assert_eq!(data["crops"]["made"], 4);
+    let changes = data["changes"].as_array().ok_or("changes")?;
+    let first_after = &changes[0]["regions"][0]["after_crop"];
+    assert!(first_after.is_string());
+    assert_eq!(*first_after, changes[1]["regions"][0]["before_crop"]);
+    let frames = data["frames"].as_array().ok_or("frames")?;
+    let crops = frames
+        .iter()
+        .filter(|frame| frame["kind"] == "crop")
+        .count();
+    assert_eq!(crops, 3);
+    assert_eq!(
+        frames
+            .iter()
+            .filter(|frame| frame["evidence_id"] == *first_after)
+            .count(),
+        1
+    );
+    assert_eq!(frames.len(), data["files"].as_array().ok_or("files")?.len());
+    for line in &rendered.lines {
+        validate_line(&serde_json::from_str(line)?)?;
+    }
     Ok(())
 }

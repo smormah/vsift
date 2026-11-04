@@ -755,7 +755,7 @@ The data member of the complete or partial terminal result that ends a candidate
 
 **VSift changes data v1** ([the schema](../../../schemas/v1/changes-data.schema.json))
 
-The data member of a complete or partial changes result (0.3.0, ADR 0034): one bounded page of the screen changes whose after frame lies in the requested range, in time order, as published screen-change records. A call without a cursor first analyses the range's missing 60 s windows as candidates does (at most 30 per call); index names the revision the changes were read from, and coverage is the index's own, as candidates reports it. Each change cites its two frames by evidence_id: frames lists each distinct frame_evidence record of the page once, in order of first use, and files delivers each frame's image as the absolute path of the committed session artifact, valid while the session exists. Cite a change by its before and after evidence_id, never by change_id. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty or partial_reason is set. Pass next_cursor back with the same session, range and --limit to continue; it never analyses anything. When this call could not go on (partial_reason set, or the pages reached the end of the analysed part), resume says where a fresh call without --cursor continues.
+The data member of a complete or partial changes result (0.3.0, ADR 0034): one bounded page of the screen changes whose after frame lies in the requested range, in time order, as published screen-change records. A call without a cursor first analyses the range's missing 60 s windows as candidates does (at most 30 per call); index names the revision the changes were read from, and coverage is the index's own, as candidates reports it. Each change cites its two frames by evidence_id: frames lists each distinct frame_evidence record of the page once, in order of first use, and files delivers each frame's image as the absolute path of the committed session artifact, valid while the session exists. Cite a change by its before and after evidence_id, never by change_id. With --crops, the page's crops follow its whole frames in frames and files, the regions they cut name them, and crops says how many were made; without --crops neither crops nor any crop is present. A crop stop never makes the result partial. Validate the envelope with operation-response.schema.json: its coverage member is truncated, and its status partial, exactly when coverage.gaps is not empty or partial_reason is set. Pass next_cursor back with the same session, range and --limit to continue; it never analyses anything. When this call could not go on (partial_reason set, or the pages reached the end of the analysed part), resume says where a fresh call without --cursor continues.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -792,8 +792,8 @@ The data member of a complete or partial changes result (0.3.0, ADR 0034): one b
 | `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
 | `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
 | `changes` | array of object, see [screen-change.schema.json](#screen-changeschemajson) | yes | at most 20 items |
-| `frames` | array of object, see [frame-evidence.schema.json](#frame-evidenceschemajson) | yes | Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them.; at most 40 items |
-| `files` | array of object | yes | One delivered file per frame, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.; at most 40 items |
+| `frames` | array of object, see [frame-evidence.schema.json](#frame-evidenceschemajson) | yes | Each distinct frame the changes cite, once, in order of first use: frame_evidence records exactly as frame get publishes them. With --crops, the crops the regions name follow, each distinct crop record once, as crop publishes them, in the order they were first named: at most 40 frames and, with --crops, 16 crops.; at most 56 items |
+| `files` | array of object | yes | One delivered file per frame, and with --crops per crop, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.; at most 56 items |
 | `files[].evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
 | `files[].media_type` | "image/png" \| "audio/wav" | yes |  |
 | `files[].path` | string | yes | 1 to 4096 characters |
@@ -802,12 +802,17 @@ The data member of a complete or partial changes result (0.3.0, ADR 0034): one b
 | `resume` | object or null | yes | Where a fresh call (a new --from, no cursor) continues when this one cannot: from_us is the after time of the first change not listed, or the start of the first window still to analyse. reason is not_analyzed (the pages reached the end of the analysed part; a fresh call analyses from there), session_evidence_budget (continue in a new session, after session retain and ingest), deadline_exceeded or cancelled. null when the range is answered to its end, or when next_cursor continues it. |
 | `resume.from_us` | integer | yes | at least 0 |
 | `resume.reason` | "not_analyzed" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" | yes |  |
+| `crops` | object | no | Present only with --crops (ADR 0034 section 4): what the call's cropping made. Each listed change's first two regions are cropped from its before and after frame, in page order, only after every listed change has its frames, so cropping never changes which changes are listed. made counts the crop ids the regions name, a crop named by two regions counting twice (one change's after frame is often the next change's before frame, so the after crop of a region can be the same crop record as the next change's before crop); frames lists each distinct crop record once, so it can hold fewer crops than made, and limit bounds made; regions_without_crop counts those first-two regions that lack their before or after crop. stop is null when every such region has both crops; crop_limit when the regions had named limit crops and more regions remained (a published bound, no warning); session_evidence_budget, deadline_exceeded or cancelled when cropping stopped early, with a fixed warning: run the same call again to continue the crops, or after session_evidence_budget crop in a new session. A crop stop never makes the result partial: status, coverage, partial_reason and resume stay about the listing. |
+| `crops.limit` | constant 16 | yes |  |
+| `crops.made` | integer | yes | 0 to 16 |
+| `crops.regions_without_crop` | integer | yes | 0 to 40 |
+| `crops.stop` | "crop_limit" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" or null | yes |  |
 
 ### changes-stream-data.schema.json
 
 **VSift changes JSON Lines terminal data v1** ([the schema](../../../schemas/v1/changes-stream-data.schema.json))
 
-The data member of the complete or partial terminal result that ends a changes --events jsonl stream (0.3.0, ADR 0034). It is the page of changes-data.schema.json without its frames and changes: those were the preceding evidence events, first the frames (record_type frame_evidence, in order of first use), then the changes (record_type screen_change, in time order), and record_count says how many events there were. Pass next_cursor back with the same session, range and --limit to stream the next page; resume says where a fresh call continues when this one could not go on.
+The data member of the complete or partial terminal result that ends a changes --events jsonl stream (0.3.0, ADR 0034). It is the page of changes-data.schema.json without its frames and changes: those were the preceding evidence events, first the frames (record_type frame_evidence, in order of first use, then with --crops the crops), then the changes (record_type screen_change, in time order), and record_count says how many events there were. Pass next_cursor back with the same session, range and --limit to stream the next page; resume says where a fresh call continues when this one could not go on.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -843,8 +848,8 @@ The data member of the complete or partial terminal result that ends a changes -
 | `coverage.gaps[].reason` | "not_analyzed" \| "deadline_exceeded" \| "undecodable" \| "no_decoded_frame" \| "candidate_budget_exhausted" | yes | not_analyzed: not analysed yet; call candidates again for the range. deadline_exceeded: the window's decode timed out in this call; a later call retries it. undecodable: the media tools could not decode the window (recorded, not retried). no_decoded_frame: a 10 s cell of an analysed window without a decoded frame. candidate_budget_exhausted: the window changed more often than its 32-candidate budget; dropped_candidates says how many change candidates were dropped. |
 | `coverage.gaps[].dropped_candidates` | integer | yes | Change candidates dropped by the window's budget; 0 for every other reason.; 0 to 65535 |
 | `coverage.ranges_truncated` | boolean | yes | True when analyzed or gaps held more than 100 entries and only the first 100 are listed. |
-| `record_count` | integer | yes | 0 to 60 |
-| `files` | array of object | yes | One delivered file per frame, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.; at most 40 items |
+| `record_count` | integer | yes | 0 to 76 |
+| `files` | array of object | yes | One delivered file per frame, and with --crops per crop, in frame order: the absolute path of the committed session artifact (ADR 0019 D2). It is valid while the session exists and must not be written to; retain the session to keep the evidence.; at most 56 items |
 | `files[].evidence_id` | string | yes | pattern `^evd_[a-z0-9]{16,64}$` |
 | `files[].media_type` | "image/png" \| "audio/wav" | yes |  |
 | `files[].path` | string | yes | 1 to 4096 characters |
@@ -853,6 +858,11 @@ The data member of the complete or partial terminal result that ends a changes -
 | `resume` | object or null | yes | Where a fresh call (a new --from, no cursor) continues when this one cannot: from_us is the after time of the first change not listed, or the start of the first window still to analyse. reason is not_analyzed (the pages reached the end of the analysed part; a fresh call analyses from there), session_evidence_budget (continue in a new session, after session retain and ingest), deadline_exceeded or cancelled. null when the range is answered to its end, or when next_cursor continues it. |
 | `resume.from_us` | integer | yes | at least 0 |
 | `resume.reason` | "not_analyzed" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" | yes |  |
+| `crops` | object | no | Present only with --crops (ADR 0034 section 4): what the call's cropping made. Each listed change's first two regions are cropped from its before and after frame, in page order, only after every listed change has its frames, so cropping never changes which changes are listed. made counts the crop ids the regions name, a crop named by two regions counting twice (one change's after frame is often the next change's before frame, so the after crop of a region can be the same crop record as the next change's before crop); frames lists each distinct crop record once, so it can hold fewer crops than made, and limit bounds made; regions_without_crop counts those first-two regions that lack their before or after crop. stop is null when every such region has both crops; crop_limit when the regions had named limit crops and more regions remained (a published bound, no warning); session_evidence_budget, deadline_exceeded or cancelled when cropping stopped early, with a fixed warning: run the same call again to continue the crops, or after session_evidence_budget crop in a new session. A crop stop never makes the result partial: status, coverage, partial_reason and resume stay about the listing. |
+| `crops.limit` | constant 16 | yes |  |
+| `crops.made` | integer | yes | 0 to 16 |
+| `crops.regions_without_crop` | integer | yes | 0 to 40 |
+| `crops.stop` | "crop_limit" \| "session_evidence_budget" \| "deadline_exceeded" \| "cancelled" or null | yes |  |
 
 ### clocks-data.schema.json
 
@@ -1603,7 +1613,7 @@ One worker request's complete result in a job.batch --events jsonl stream (P11, 
 
 **VSift screen change record v1** ([the schema](../../../schemas/v1/screen-change.schema.json))
 
-One published screen_change evidence record (changes, ADR 0034): a moment the visual index saw the screen change, the exact frame before and after it, and the rectangles where those two frames differ under the profile screen-change-regions-v1. The frames are ordinary frame_evidence records, listed in the page's frames and delivered in its files. Cite a change by its before and after evidence_id, never by change_id, which handoff check does not know. A change says which pixels differ between two frames; it never says what the change means, that nothing else changed, or exactly when it changed (only after change_window.from_us and at or before change_window.to_us). Times are integer microseconds on the normalized source timeline.
+One published screen_change evidence record (changes, ADR 0034): a moment the visual index saw the screen change, the exact frame before and after it, and the rectangles where those two frames differ under the profile screen-change-regions-v1. The frames are ordinary frame_evidence records, listed in the page's frames and delivered in its files. Cite a change by its before and after evidence_id, never by change_id, which handoff check does not know. With changes --crops, each of the change's two largest regions also names the crops cut out of the two frames (before_crop and after_crop, frame_evidence records of kind crop listed in the page's frames). A change says which pixels differ between two frames; it never says what the change means, that nothing else changed, or exactly when it changed (only after change_window.from_us and at or before change_window.to_us). Times are integer microseconds on the normalized source timeline.
 
 | Member | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -1656,12 +1666,14 @@ One published screen_change evidence record (changes, ADR 0034): a moment the vi
 | `after.clock_time.end.local` | string or null | yes | pattern `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$` |
 | `after.clock_time.end.utc_offset` | string or null | yes | pattern `^[+-][0-9]{2}:[0-9]{2}$` |
 | `comparison` | "compared" \| "dimensions_differ" | yes | compared: the two frames have the same displayed size and were compared. dimensions_differ: they do not (a stream whose size changes), so nothing was compared and regions is empty. |
-| `regions` | array of object | yes | The largest rectangles where the frames differ, by changed_pixels, at most profile.max_regions. Each is the bounding rectangle of joined changed tiles in displayed pixels, clipped to the frame: the space crop --rect takes.; at most 8 items |
+| `regions` | array of object | yes | The largest rectangles where the frames differ, by changed_pixels, at most profile.max_regions. Each is the bounding rectangle of joined changed tiles in displayed pixels, clipped to the frame: the space crop --rect takes. With changes --crops, the first two may carry before_crop and after_crop.; at most 8 items |
 | `regions[].x` | integer | yes | 0 to 4294967295 |
 | `regions[].y` | integer | yes | 0 to 4294967295 |
 | `regions[].width` | integer | yes | 1 to 4294967295 |
 | `regions[].height` | integer | yes | 1 to 4294967295 |
 | `regions[].changed_pixels` | integer | yes | Changed pixels in the rectangle's changed tiles.; at least 1 |
+| `regions[].before_crop` | string | no | The crop of this rectangle from the before frame: a frame_evidence record of kind crop whose parent is before.evidence_id.; pattern `^evd_[a-z0-9]{16,64}$` |
+| `regions[].after_crop` | string | no | The crop of this rectangle from the after frame: a frame_evidence record of kind crop whose parent is after.evidence_id.; pattern `^evd_[a-z0-9]{16,64}$` |
 | `regions_left_out` | integer | yes | Regions found beyond those listed.; 0 to 4294967295 |
 | `changed_area` | object or null | yes | The rectangle around every changed tile, with every changed pixel of them, so nothing is silently lost; null when the frames differ nowhere at the threshold or were not compared. |
 | `changed_area.x` | integer | yes | 0 to 4294967295 |

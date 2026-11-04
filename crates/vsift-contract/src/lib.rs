@@ -276,10 +276,11 @@ pub use optional_component::{
     optional_component_text,
 };
 pub use screen_changes::{
-    CHANGES_COVERAGE_WARNING, CHANGES_CURSOR_REMEDIATION, CHANGES_CURSOR_WITHOUT_INDEX_REMEDIATION,
-    CHANGES_STOPPED_WARNING, ListedScreenChange, ScreenChangeData, ScreenChangeResumePresentation,
-    ScreenChangesData, ScreenChangesEvidenceStream, ScreenChangesPresentation,
-    ScreenChangesStreamData, screen_changes_response,
+    CHANGES_COVERAGE_WARNING, CHANGES_CROPS_STOPPED_WARNING, CHANGES_CURSOR_REMEDIATION,
+    CHANGES_CURSOR_WITHOUT_INDEX_REMEDIATION, CHANGES_STOPPED_WARNING, ListedScreenChange,
+    ScreenChangeData, ScreenChangeResumePresentation, ScreenChangesData,
+    ScreenChangesEvidenceStream, ScreenChangesPresentation, ScreenChangesStreamData,
+    screen_changes_response,
 };
 pub use screen_text::{
     CANDIDATES_INCOMPLETE_REASON, FRAMES_AWAITING_ANALYSIS_REASON, FRAMES_FAILED_REASON,
