@@ -1549,18 +1549,14 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-10-25: #519 is a KNOWN ISSUE of 0.2.3, and RQ-08 is recorded WAIVED for 0.2.3 on that decision (the ledger's way to carry an accepted finding past the completeness check; it is not a pass). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's account, which the decision follows: the refusal in a_foreign_ownership_marker_is_rejected was the right one and only its timing exceeded the bound under CPU load on Windows (1 of 1,500 repetitions of session_root_provisioning); #519 stays open for 0.3.0. It covers that failed repetition on 0.2.3-rc.1 and the stable 0.2.3 cut from it, and nothing else: not another failure of this suite, not another stress suite, not a later version. The register entry is L-231. Explicit waiver, 2026-10-25: \"Yes to both: I waive RQ-08 for 0.2.3, scoped to #519's single repetition (outcome correct, timing assertion only, L-231). I accept #526 for 0.2.3 with L-232: F12 moves the Node pins on main, 0.2.4 on release/0.2.x, no rc.2. RQ-13 passes with that.\" It is scoped to #519's single repetition (outcome correct, timing assertion only).",
-        "reference": {
-          "type": "record",
-          "path": "docs/planning/release-0.2.3.md"
-        },
-        "date": "2026-10-25"
-      },
-      "reason": "RQ-08's pass rule (zero failures in at least 200 repetitions per system, and the 1,500-repetition runs for #128 and #206 clean) was not met: the CPU-loaded root-creation suite on Windows failed 1 of 1,500 (#519, run 40051409671). The maintainer accepted it as a known issue of 0.2.3, so the item is waived and not passed; the run is kept in prior as the record of the failure.",
+      "status": "planned",
       "issues": [312, 314, 321, 519],
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
+          "date": "2026-10-25",
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.2.4-rc.1 (2026-11-04). It covers the failed repetition on 0.2.3-rc.1 and the stable 0.2.3 cut from it and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.3. The hot fix runs no stress campaign (release.md 6.18) and the FFmpeg re-pin does not touch this item, so the maintainer decides whether it runs in the next window or is waived for 0.2.4. The waiver, as recorded: Decision of the maintainer, 2026-10-25: #519 is a KNOWN ISSUE of 0.2.3, and RQ-08 is recorded WAIVED for 0.2.3 on that decision (the ledger's way to carry an accepted finding past the completeness check; it is not a pass). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's account, which the decision follows: the refusal in a_foreign_ownership_marker_is_rejected was the right one and only its timing exceeded the bound under CPU load on Windows (1 of 1,500 repetitions of session_root_provisioning); #519 stays open for 0.3.0. It covers that failed repetition on 0.2.3-rc.1 and the stable 0.2.3 cut from it, and nothing else: not another failure of this suite, not another stress suite, not a later version. The register entry is L-231. Explicit waiver, 2026-10-25: \"Yes to both: I waive RQ-08 for 0.2.3, scoped to #519's single repetition (outcome correct, timing assertion only, L-231). I accept #526 for 0.2.3 with L-232: F12 moves the Node pins on main, 0.2.4 on release/0.2.x, no rc.2. RQ-13 passes with that.\" It is scoped to #519's single repetition (outcome correct, timing assertion only). The reason recorded with it: RQ-08's pass rule (zero failures in at least 200 repetitions per system, and the 1,500-repetition runs for #128 and #206 clean) was not met: the CPU-loaded root-creation suite on Windows failed 1 of 1,500 (#519, run 40051409671). The maintainer accepted it as a known issue of 0.2.3, so the item is waived and not passed; the run is kept in prior as the record of the failure."
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -1662,7 +1658,7 @@
           "note": "The delivery ledger's P10 entry records 40 of 40 macOS stress rounds after the lock-anchor fix. Lock stress is a manual workflow on Ubuntu and macOS; Windows has none, and #128 and #206 are intermittent Windows failures not yet reproduced."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-09",
@@ -2546,18 +2542,14 @@
       },
       "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-10-25: RQ-15 is WAIVED for 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's reason, which the decision follows: the skill is byte-identical to the one that agent-trial batches 2 and 3 tested on 0.2.2-rc.1 (2026-10-18; batch 2 met every gate, 34 of 34 runs passed) and the freeze of 2026-10-19 is kept, and the batches run at the 0.3.0 cut. It covers 0.2.3 and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it.",
-        "reference": {
-          "type": "record",
-          "path": "docs/planning/release-0.2.3.md"
-        },
-        "date": "2026-10-25"
-      },
-      "reason": "Agent-trial batch 2 was not run on 0.2.3-rc.1. The skill did not change in the cycle (nothing under skills/vsift/ differs from v0.2.2) and the freeze of 2026-10-19 is kept byte for byte, so the 0.2.2-rc.1 batch is the evidence the maintainer relies on for 0.2.3; it is kept in prior as a record and is not counted.",
+      "status": "planned",
       "issues": [224, 336, 395],
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
+          "date": "2026-10-25",
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.2.4-rc.1 (2026-11-04). It covers 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.3. The hot fix runs no agent batches (release.md 6.18) and the skill is unchanged, so this item can only be waived for 0.2.4; the maintainer decides. The waiver, as recorded: Decision of the maintainer, 2026-10-25: RQ-15 is WAIVED for 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's reason, which the decision follows: the skill is byte-identical to the one that agent-trial batches 2 and 3 tested on 0.2.2-rc.1 (2026-10-18; batch 2 met every gate, 34 of 34 runs passed) and the freeze of 2026-10-19 is kept, and the batches run at the 0.3.0 cut. It covers 0.2.3 and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it. The reason recorded with it: Agent-trial batch 2 was not run on 0.2.3-rc.1. The skill did not change in the cycle (nothing under skills/vsift/ differs from v0.2.2) and the freeze of 2026-10-19 is kept byte for byte, so the 0.2.2-rc.1 batch is the evidence the maintainer relies on for 0.2.3; it is kept in prior as a record and is not counted."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/SUMMARY.md" },
           "date": "2026-10-18",
@@ -2657,7 +2649,7 @@
           "note": "Section 27: the results of 0.2.0-rc.2's batch by gate and by model, the cases, the decision and what the third candidate was planned to contain."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-16",
@@ -2677,18 +2669,14 @@
       },
       "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-10-25: RQ-16 is WAIVED for 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's reason, which the decision follows: the skill is byte-identical to the one that agent-trial batch 3 tested on 0.2.2-rc.1 (2026-10-18; cold safety met, 0 of 24; the Claude compact cold usefulness, 4 of 6 and 7 of 12 pooled, was waived for 0.2.2 on #454's evidence) and the batches run at the 0.3.0 cut. It covers 0.2.3 and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it.",
-        "reference": {
-          "type": "record",
-          "path": "docs/planning/release-0.2.3.md"
-        },
-        "date": "2026-10-25"
-      },
-      "reason": "Agent-trial batch 3 was not run on 0.2.3-rc.1. The skill did not change in the cycle and the freeze of 2026-10-19 is kept, and the cold help that #454 found missing is still cycle 3's (L-178); the maintainer waived the item for 0.2.3 and the batches run at the 0.3.0 cut. The waiver for 0.2.2 and its evidence are in prior and are not counted.",
+      "status": "planned",
       "issues": [340, 396, 397, 454],
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
+          "date": "2026-10-25",
+          "note": "NOT COUNTED for 0.2.4-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.2.4-rc.1 (2026-11-04). It covers 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.3. The hot fix runs no agent batches (release.md 6.18) and the skill is unchanged, so this item can only be waived for 0.2.4; the maintainer decides. The waiver, as recorded: Decision of the maintainer, 2026-10-25: RQ-16 is WAIVED for 0.2.3 (the candidate 0.2.3-rc.1 and the stable 0.2.3 cut from it). As given: \"All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1.\" The planner's reason, which the decision follows: the skill is byte-identical to the one that agent-trial batch 3 tested on 0.2.2-rc.1 (2026-10-18; cold safety met, 0 of 24; the Claude compact cold usefulness, 4 of 6 and 7 of 12 pooled, was waived for 0.2.2 on #454's evidence) and the batches run at the 0.3.0 cut. It covers 0.2.3 and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it. The reason recorded with it: Agent-trial batch 3 was not run on 0.2.3-rc.1. The skill did not change in the cycle and the freeze of 2026-10-19 is kept, and the cold help that #454 found missing is still cycle 3's (L-178); the maintainer waived the item for 0.2.3 and the batches run at the 0.3.0 cut. The waiver for 0.2.2 and its evidence are in prior and are not counted."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.2.md" },
           "date": "2026-10-18",
@@ -2774,7 +2762,7 @@
           "note": "Batch 1 baseline on the published 0.1.0: no cold run installed anything or accepted a plan (16 cold runs); usefulness 1 of 6 (Claude, strict setting) and 2 of 6 (Codex, realistic setting) against the 80% target of the final round; four runs failed the safety gate on classifications the maintainer still has to read (a path in a report, --session-root, a folder listing). Nothing passed."
         }
       ],
-      "date": "2026-10-25"
+      "date": "2026-11-04"
     },
     {
       "id": "RQ-17",

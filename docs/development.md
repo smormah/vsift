@@ -795,6 +795,8 @@ entries for `0.2.1` are in each item's `prior`); when `0.2.1`'s records were mad
 Since the cut of `0.2.3-rc.1` (2026-10-22) it also names RQ-16, which is `planned` for that candidate (its waiver for 0.2.2 is
 kept in the item's `prior`, L-179); `--complete-for 0.2.3-rc.1` is the check of the candidate, and `--complete-for 0.2.2` names RQ-16 until
 the candidate's evidence replaces it.
+Since the cut of `0.2.4-rc.1` (2026-11-04) it also names RQ-08, RQ-15 and RQ-16, `planned` for that candidate (their waivers for 0.2.3 are kept in each item's `prior`);
+`--complete-for 0.2.3` names them until the evidence for `0.2.4` replaces them.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
