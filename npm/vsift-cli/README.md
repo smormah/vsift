@@ -42,7 +42,7 @@ VSift's time bound ends the work after about 15 seconds without fixing the flaw.
 
 0.2.4 is built from the same source as the release candidate `0.2.4-rc.1` and differs from it
 only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners, on a
-synthetic corpus and a synthetic voice; **only the checks that the new FFmpeg touches were run on it** (the install and upgrade checks, the managed install, the hostile-media set,
+synthetic corpus and a synthetic voice; **only the checks that the new FFmpeg touches were run on it** (the install and upgrade checks, the managed install, the test with deliberately malformed and malicious files,
 the local speech recognition accuracy set and the dependency scan), and nine other evidence items were waived by the maintainer for this release only, among them the stress, the
 compatibility and the agent-trial runs, which run in the next window. The executables of 0.2.4 itself are checked after its publish. The accuracy set with noisy speech was not run on hosted macOS runners. The agent skill is unchanged, so its trials were not run again; in the earlier trials without the skill, a smaller model often stated the right facts without citing the
 identifiers VSift returned for them (the help is to say how; the agent skill does). Two things were not tried before this release, and it ships without them:
