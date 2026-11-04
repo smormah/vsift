@@ -26,6 +26,7 @@ published, so Yarn users get 0.2.3 a day after the publish (the installation gui
 The dist-tag `next` is for release candidates and you do not need it: it names `0.2.3-rc.1`,
 the release candidate that 0.2.3 was built from, or a later candidate or release. The older
 candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, as `0.2.3-rc.1` is once 0.2.3 is published. The release candidates of
+the hot fix 0.2.4 (the first is `0.2.4-rc.1`) go to `next` when they are published and never to `latest`; they re-pin FFmpeg to a newer reviewed build. The release candidates of
 later releases go to `next` when they are published and never to `latest`.
 
 ## What changed since 0.2.2
