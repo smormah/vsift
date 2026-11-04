@@ -12,7 +12,7 @@ fixes of one record more (CVE-2026-107660, outside VSift's configuration). The N
 records of L-227 (CVE-2026-120243 to -120247) are unchanged by this reading:** their fixes are on FFmpeg's `master` only; the 9.0 line (`release/9.0`, head `b204e94e90fc` of 2026-11-04) and the newest
 9.0 build (`n9.0.2-47-gb204e94e90`, 2026-11-04) do not have them. **Two observations are new to this window; the planner ruled on 2026-11-04 that neither is an issue or a register entry now** (below,
 "Triage record"). **RQ-13 is recorded `passed` for `0.2.4-rc.1`** because the item's pass rule (plan section 6) is no open high or critical finding on a supported path unless fixed, mitigated, or accepted by the maintainer
-with a register entry. **The maintainer accepts the reading at the gate**; the reading is evidence for that decision, not the decision.
+with a register entry.
 
 ## What changed in the tree since the last reading
 
