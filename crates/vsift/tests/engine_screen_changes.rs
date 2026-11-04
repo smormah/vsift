@@ -331,6 +331,11 @@ fn assert_crops_follow_frames(results: &ScreenChangesResults, made: usize) -> Te
     for (item, file) in frames.iter().zip(results.files()) {
         assert_eq!(item.id(), file.evidence_id());
     }
+    // Each record once, though a crop may be named by two regions.
+    let mut ids: Vec<&str> = frames.iter().map(|item| item.id().as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), frames.len());
     Ok(())
 }
 
