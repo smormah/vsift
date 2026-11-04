@@ -31,23 +31,23 @@ from p06_windows_candidate_smoke import (
 
 FFMPEG_URL = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-08-31-13-27/"
-    "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz"
+    "autobuild-2026-10-31-12-59/"
+    "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz"
 )
 WHISPER_URL = (
     "https://github.com/ggml-org/whisper.cpp/releases/download/"
     "b5454/whisper-bin-ubuntu-x64.tar.gz"
 )
 ARCHIVES = {
-    "ffmpeg": (FFMPEG_URL, 113_372_924,
-               "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf"),
+    "ffmpeg": (FFMPEG_URL, 136_027_168,
+               "6046d6731b26f58887e953561551d254a6eec9fbca4100dfeab56e19af8328d5"),
     "whisper": (WHISPER_URL, 10_364_195,
                 "a72becf15d7917f990f6313867a52638b82b7f9ef237fb0c980dac56a135781c"),
 }
 FFMPEG_SELECTED = {
     "LICENSE.txt": (7_651, "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"),
-    "bin/ffmpeg": (116_038_416, "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc"),
-    "bin/ffprobe": (115_829_520, "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7"),
+    "bin/ffmpeg": (140_488_520, "d372f20463a8ffb9eef1675242cdbf9aae19b647503b073fc9b5b1f42b91c94a"),
+    "bin/ffprobe": (140_259_080, "9a7f735d3df4f56dd8406cd7a03a227686bec55b1edc496c25bd8b1867e44498"),
 }
 WHISPER_SELECTED = {
     "LICENSE": (1_078, "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"),

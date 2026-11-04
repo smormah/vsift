@@ -24,8 +24,8 @@ import zipfile
 
 FFMPEG_URL = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-08-31-13-27/"
-    "ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip"
+    "autobuild-2026-10-31-12-59/"
+    "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip"
 )
 WHISPER_URL = (
     "https://github.com/ggml-org/whisper.cpp/releases/download/"
@@ -39,8 +39,8 @@ MODEL_URL = (
 ARCHIVES = {
     "ffmpeg": (
         FFMPEG_URL,
-        147_007_942,
-        "2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56",
+        168_715_328,
+        "9d37c564e0d01c18cde184a079fa6ef04d7d2783ada41da81d04165cc8f1a650",
     ),
     "whisper": (
         WHISPER_URL,

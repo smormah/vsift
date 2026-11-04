@@ -12,6 +12,7 @@ On 2026-09-21 the exact set below was accepted into reviewed source for
 hosted candidate experiment into a production installer, real-speech or P06
 E2E test.
 
+**2026-11-03:** the FFmpeg row below is the pin of `0.2.3` and earlier; `0.2.4` pins the month-end build of 2026-10-31 (`n9.0.2-39`), reviewed in [the section of that date](#2026-11-03-re-pin-ffmpeg-n902-39-the-month-end-build-of-2026-10-31).
 **2026-10-18:** the whisper.cpp row below is the pin of `0.2.2` and earlier; `main` pins v1.9.5 from the build release `b5454`, reviewed in [the section of that date](#2026-10-18-re-pin-whispercpp-v195-build-b5454).
 
 | Component | Direct publisher origin | Bytes | Independently calculated SHA-256 |
@@ -463,3 +464,110 @@ selected version is not the catalogue's; the two-version lifecycle is tested wit
 crafted model file against the new loader (the hostile-media campaign on the candidate); the candidate's dated
 scan reading. The trial harness's own whisper.cpp (the Codex container's source build and scenario A-08) still
 names v1.9.2: those are frozen trial inputs and move with the next freeze.
+
+## 2026-11-03 re-pin: FFmpeg n9.0.2-39 (the month-end build of 2026-10-31)
+
+The hot fix `0.2.4` ([#272](https://github.com/smormah/vsift/issues/272), [L-132](known-limits.md#l-132); #351 stays open,
+[L-144](known-limits.md#l-144)). This section is the review of the new FFmpeg bytes, in the form of the reviews above, and the
+catalogue on `release/0.2.x` pins them (revision `ubuntu-24.04-x86_64-2026-11-03-r4`, for `0.2.4`; the published releases up to
+`0.2.3` keep the build of 2026-08-31). whisper.cpp and the models are unchanged. **The maintainer accepted the build on 2026-11-04**
+("Accept the build"): the two raised bounds and the three components the recipe added.
+
+**Which line.** BtbN's release `autobuild-2026-10-31-12-59` (published 2026-10-31T12:59:47Z; the next is 2026-11-01, so it is
+October's last and is kept for two years, to about 2028-10-31) carries the `linux64-lgpl` variant on three lines: `master`
+(`N-128227-g4811625b5f`), 9.0 (`n9.0.2-39-g7adfbe40dc`) and 8.1. The 9.0 line is the one every reading covers. Only the `master`
+build has the fix of CVE-2026-107678 (L-144), which is on FFmpeg's `master` alone; the maintainer chose the 9.0 line on 2026-11-03
+("9.0, keep #351 open"), because `master` is unreleased development code that no reading has covered.
+
+| Item | Earlier pin (`0.2.3` and before) | Re-pin |
+| --- | --- | --- |
+| Release | [`autobuild-2026-08-31-13-27`](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-08-31-13-27), month-end | [`autobuild-2026-10-31-12-59`](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-31-12-59), month-end |
+| Asset | `ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz` | `ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz` |
+| Bytes | 113,372,924 | **136,027,168** |
+| SHA-256 | `204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf` | **`6046d6731b26f58887e953561551d254a6eec9fbca4100dfeab56e19af8328d5`** (GitHub's published digest for the asset; the hosted download matched it) |
+| Build scripts (BtbN) | `8267213e26c1031621e6e1210fe3aa4867214f6a` | `5031c6f1082414e53688d39e521849905071070d` (the release tag's commit) |
+| FFmpeg source | `e47273f4d9227152dcbf543cebaf9e2430ddbcc4` (n9.0.1 plus 11) | `7adfbe40dcde598f93a6963d2f7b22cd75202ccc` (n9.0.2 plus 39; 112 commits later on `release/9.0`, a strict descendant) |
+| Entries / expanded bytes | 73 / 370,667,773 | 73 / 444,067,173 (66 regular files, 7 directories, no links); the tar stream is about 444.1 MB |
+| `bin/ffmpeg` | 116,038,416 bytes, `ed57193f…4ea20fc` | 140,488,520 bytes, `d372f20463a8ffb9eef1675242cdbf9aae19b647503b073fc9b5b1f42b91c94a` |
+| `bin/ffprobe` | 115,829,520 bytes, `0e3357be…74137b7` | 140,259,080 bytes, `9a7f735d3df4f56dd8406cd7a03a227686bec55b1edc496c25bd8b1867e44498` |
+| `LICENSE.txt` | 7,651 bytes, `da7eabb7…4464768` | the same bytes |
+
+**How the per-file values were read without a download to a developer machine.** As for the whisper.cpp re-pin:
+`tools/p06_archive_inventory.py` gained the `ubuntu-ffmpeg` target and `P06 Ubuntu candidate smoke` a step that runs it. The first
+dispatch, with the archive pin moved and the per-file pins not (run
+[41693413562](https://github.com/smormah/vsift/actions/runs/41693413562), 2026-11-03), gave the inventory and failed, as expected, at
+the Rust layout check's first per-file pin; the per-file pins were copied from it into the catalogue,
+`tools/p06_ubuntu_candidate_smoke.py` and the opt-in `p06_ffmpeg_archive` test.
+
+**Two reviewed bounds raised, each only as far as this archive needs.** `MAX_XZ_ARCHIVE_BYTES` (the ceiling on compressed XZ input)
+from 128 MiB (134,217,728) to 130 MiB (136,314,880), 287,712 bytes above the archive; and the catalogue's tar stream cap for this
+artifact from 400,000,000 to 450,000,000, about 5.9 MB above the stream. Both exist to stop a decompression bomb; each artifact is
+still read only up to its own pinned size. If the archive, the selected payload and the runtime copy exist at once, the installer's
+peak disk use for this component is about 700 MB (arithmetic from the sizes, not a measurement), under the 1 GB `install.md` advises.
+
+**What changed upstream that VSift can meet** (the commit subjects of the 112, read through GitHub's compare on 2026-11-03; nothing was
+run here): the `n9.0.2` point release and the commits after it. On the code VSift runs for a supported stream: the `mov` demuxer's keys
+atom (an entry count bounded by the atom size, a key string no longer zeroed before it is read, an array allocated without clearing),
+a leak on a failed reallocation in `mov`, a Matroska duration float-cast overflow, the VP8 decoder no longer waiting on a negative
+reference row, VP9's flush, an H.264 NULL-plane fill, Opus's SILK arrays zero-initialised and its channel pointers checked, an AAC NULL
+dereference, encryption-info init data with zero-sized key IDs refused, and `libswscale` copies; no commit to `libswscale/output.c`
+([L-122](known-limits.md#l-122) is unchanged). The fix ancestry over all 85 FFmpeg records published from June to 2026-11-03: every
+record fixed in the earlier build is fixed in this one; it adds CVE-2026-107660 (the mbedtls TLS hostname check; not reachable, VSift
+allows only the `file` protocol); CVE-2026-107675 to -107677, CVE-2026-107678 (L-144) and the five records of 2026-11-01
+([L-227](known-limits.md#l-227)) are fixed on `master` only.
+
+**The build recipe.** The `configuration` line the hosted smoke recorded (run 41699004066) differs from the shipped build's (run
+39162404765) by exactly the three components the review of 2026-10-04 found: `--enable-librsvg`, `--enable-lcms2` and
+`--enable-vapoursynth` (and the `--extra-version` date); 99 options against 96. librsvg brings GLib, Cairo, Pango and a Rust runtime
+into the static binary. It is more third-party code in a binary whose full compiled-component source and licence inventory is still
+not claimed (the catalogue's trust limit says so); the three additions are reviewed here. **The maintainer accepted the recipe with
+the build on 2026-11-04** ("Accept the build").
+
+*The three added components* (read on 2026-11-03 from BtbN's scripts at `5031c6f1` (`scripts.d/45-lcms2.sh`,
+`scripts.d/50-librsvg/*.sh`, `scripts.d/50-vapoursynth.sh`), the projects' licence files at those commits and FFmpeg's source at
+`7adfbe40dcde`, through `gh api` and the projects' raw files; nothing was downloaded as a build and nothing was run):
+
+| Component | What BtbN builds | Licence | Can VSift reach it? |
+| --- | --- | --- | --- |
+| **librsvg** (FFmpeg's `librsvg` SVG decoder) | [GNOME/librsvg](https://github.com/GNOME/librsvg) `0c074d0a` (2.63.4), static, with `cargo vendor` of its `Cargo.lock` (361 packages, the Rust crates; their licences were not read one by one) | LGPL-2.1-or-later | **No.** The decoder is `AV_CODEC_ID_SVG`; neither the `mov` tag tables (`isom_tags.c`), the Video for Windows table (`riff.c`) nor Matroska's (`matroska.c`) names that codec, and the image demuxers that would are not enabled |
+| what librsvg pulls in | [GLib](https://github.com/GNOME/glib) `50b938a3` (2.91.0, LGPL-2.1); [Cairo](https://gitlab.freedesktop.org/cairo/cairo) `74755964` (LGPL-2.1 or MPL-1.1); [Pango](https://github.com/GNOME/pango) `68e981d2` (1.58.2, LGPL-2.0); [pixman](https://gitlab.freedesktop.org/pixman/pixman) `e7fd4414` (0.46.5, MIT); [libffi](https://github.com/libffi/libffi) `bc553867` (3.8.0, MIT); [PCRE2](https://github.com/PCRE2Project/pcre2) `be940c4e` (10.50, BSD-3-Clause with the PCRE2 exception). FreeType, Fontconfig, HarfBuzz, FriBidi, libxml2 and zlib were in the earlier build already | as listed | **No:** reached only through the SVG decoder |
+| **lcms2** (ICC colour profiles) | [Little-CMS](https://github.com/mm2/Little-CMS) `1112313b` (2.20), static | MIT | **No.** FFmpeg uses it in `libavcodec/decode.c` only when a caller sets `-flags2 +icc_profiles`, and in the `iccdetect` and `iccgen` filters; VSift's arguments set no `flags2`, and its filter graphs are its own (`select`, `trim`, `format`, `crop`, `scale`, `showinfo`, and `aresample` and `asetnsamples` for audio), none of them the ICC filters |
+| **vapoursynth** (FFmpeg's `vapoursynth` demuxer) | [VapourSynth](https://github.com/vapoursynth/vapoursynth) tag `R81`: **the headers only**; no VapourSynth code is compiled in. FFmpeg loads `libvapoursynth-script` at run time (`dlopen` in `libavformat/vapoursynth.c`) when the demuxer is selected | LGPL-2.1 | **No.** Every FFmpeg and FFprobe call VSift makes forces the demuxer and the protocol: `-protocol_whitelist file` and `-f` with `mov` or `matroska` (`SourceContainer::demuxer`, `crates/vsift-infrastructure/src/source_snapshot.rs`) in `crates/vsift-infrastructure/src/ffmpeg_media.rs` (the probe, lines 210 to 218; the frame, crop and audio requests, lines 308 to 310, 523 to 525 and 590 to 592) and `ffmpeg_media/evidence.rs` (`evidence_request`, lines 510 to 512). The test `crates/vsift-infrastructure/tests/ffmpeg_input_arguments.rs` (added with this re-pin) pins it: every one of the five inputs has `-protocol_whitelist file` and then `-f` with the source's demuxer before `-i`, with no other `-f` between, and the demuxers are `mov` and `matroska` only; removing one `-f` fails it. The malicious-media campaign's `playlist-hls`, `concat-script` and `sdp-text` cases (other formats named `.mp4` or `.mkv`) show such a file refused |
+
+**Timing.** P06's F01 model-backed inference took 1.80 s against 0.90 s with the earlier build (one run each; 1.70 s on the 2026-10-04
+candidate, also a binary of about 142 MB). `P07 local ASR`'s real-time factors on Ubuntu are unchanged (`base` 0.251 against 0.248,
+`base_q5_1` 0.295 against 0.294; run 41699014254 against 39163129897), so recognition is not slower. The P06 figure is one cold run that
+likely includes paging in the larger static FFmpeg (about 140 MB against 116 MB); it was not measured further.
+
+**The supersession reason** (`security_fixes` for the build of 2026-08-31) was ruled by the planner on 2026-11-03: the 112 commits carry
+memory-safety fixes in decoders and demuxers VSift runs for supported streams.
+
+**Retention and the stop date.** Month-end, kept to about 2028-10-31; the catalogue stops issuing new plans on 2028-10-01.
+
+**Existing installs.** The build of 2026-08-31 is listed as superseded for security fixes, so `setup check` on a machine set up by
+`0.2.3` or earlier says its FFmpeg is older than the reviewed one, and `setup plan` and `setup install` then install the new build.
+
+**Hosted evidence on the re-pin's branch (2026-11-03):**
+
+- `P06 Ubuntu candidate smoke` [41699004066](https://github.com/smormah/vsift/actions/runs/41699004066), passed: the inventory of both
+  archives, the Rust layout check of the real FFmpeg archive through the production staging (73 entries, the three selected files),
+  and F01 through the new build: FFmpeg and FFprobe report `n9.0.2-39-g7adfbe40dc-20261031`, media operations and model-backed
+  inference passed (inference 1.80 s; 0.90 s with the earlier build in run 39162404765, one run each), largest child peak RSS
+  291,240 KiB (291,604 before).
+- `P13 managed smoke` [41699009267](https://github.com/smormah/vsift/actions/runs/41699009267): the pinned smoke before activation, the
+  install through the CLI and the kill-and-rerun install stage passed. **The real upgrade from `0.2.2` failed, for a reason the re-pin
+  intends:** `setup check` of this build on a machine `0.2.2` set up named its FFmpeg (`n9.0.1-11-ge47273f4d9-20260831`) as superseded
+  for security fixes beside its whisper.cpp v1.9.2, and the test expected the whisper.cpp update alone. The test now checks both
+  updates, both activations and both previous versions.
+- `P13 managed smoke` [41700245272](https://github.com/smormah/vsift/actions/runs/41700245272), on the corrected test, passed, all four
+  jobs. **The real upgrade from `0.2.2`:** its own install (`[ok] FFmpeg … n9.0.1-11-ge47273f4d9-20260831`), this build's `setup check`
+  naming both `[update, security] ffmpeg_ffprobe` and `[update, security] whisper_cli`, then `setup plan` and `setup install` activating
+  the new FFmpeg and whisper.cpp v1.9.5 (the model already current), `[ok] FFmpeg … n9.0.2-39-g7adfbe40dc-20261031`, no update left, both
+  earlier versions kept as previous, and a transcription on the upgraded tools.
+- `P07 local ASR` [41699014254](https://github.com/smormah/vsift/actions/runs/41699014254), Ubuntu 24.04 and Windows Server 2025, passed
+  (on Windows the tools are the job's own, not the catalogue's). **Accuracy on Ubuntu is identical to the earlier build's** (the
+  whisper.cpp re-pin's run 39163129897): `base` clean WER 3.25%, F08 61.53%; `base_q5_1` 4.06% and 46.15%; no unexpected miss.
+
+**Not shown:** a crafted file against the new build (the hostile-media campaign on the candidate, with the `pssh` and decoder cases);
+the candidate's dated scan reading. The Windows candidate smoke and the agent-trial container keep the 2026-08-31 build on this
+branch (Windows has no managed install in `0.2.x`; the forward-port to `main` moves the Windows pin too).
