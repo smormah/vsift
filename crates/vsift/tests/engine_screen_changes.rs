@@ -299,7 +299,7 @@ async fn f04_a_status_change_is_one_small_region_between_two_exact_frames() -> T
             FrameDimensions::new(largest.rect.width(), largest.rect.height())?
         );
     }
-    assert_crops_follow_frames(&cropped, summary.made)?;
+    assert_crops_follow_frames(&cropped)?;
     Ok(())
 }
 
@@ -316,17 +316,13 @@ fn item_dimensions(
         .ok_or_else(|| "a crop is not listed with its size".into())
 }
 
-/// The page's frames come first and its `made` crops after them, each with
+/// The page's whole frames come first and its crops after them, each with
 /// one file, in the same order.
-fn assert_crops_follow_frames(results: &ScreenChangesResults, made: usize) -> TestResult {
+fn assert_crops_follow_frames(results: &ScreenChangesResults) -> TestResult {
     let frames = results.frames();
     assert_eq!(frames.len(), results.files().len());
-    let whole = frames
-        .len()
-        .checked_sub(made)
-        .ok_or("fewer items than crops")?;
     let is_crop = |item: &EvidenceItem| matches!(item.subject(), EvidenceSubject::Crop { .. });
-    assert!(frames.iter().take(whole).all(|item| !is_crop(item)));
+    let whole = frames.iter().take_while(|item| !is_crop(item)).count();
     assert!(frames.iter().skip(whole).all(is_crop));
     for (item, file) in frames.iter().zip(results.files()) {
         assert_eq!(item.id(), file.evidence_id());
@@ -341,12 +337,15 @@ fn assert_crops_follow_frames(results: &ScreenChangesResults, made: usize) -> Te
 
 /// Generates 12 s of a 1280x720 screen whose two boxes, far apart (more
 /// than 40 tiles, where the region rule joins tiles at most 2 apart), are
-/// shown in every even second and hidden in every odd one: a change every
-/// second, each with two regions of about the same size. The size is a real
-/// screen recording's, because each crop decodes a frame of it again.
+/// shown for a second and hidden for half a second, again and again. The
+/// index samples twice a second, so it sees two changes half a second apart
+/// (hidden, then shown again), never three in a row (which would be motion):
+/// the first change's after frame is the second's before frame, and each
+/// change has two regions of about the same size. The size is a real screen
+/// recording's, because each crop decodes a frame of it again.
 fn two_box_video(root: &OwnedRoot) -> Built<PathBuf> {
     let video = root.path("two-boxes.mp4");
-    let shown = "enable='lt(mod(t,2),1)'";
+    let shown = "enable='lt(mod(t,1.5),1)'";
     let graph = format!(
         "color=c=0x404040:s=1280x720:r=10:d=12,\
          drawbox=x=64:y=64:w=384:h=256:color=white:t=fill:{shown},\
@@ -403,15 +402,33 @@ async fn one_call_reaches_the_sixteen_crop_bound() -> TestResult {
         .engine
         .session_status(&harness.session)?
         .artifact_count();
+    let crop_records = cropped
+        .frames()
+        .iter()
+        .filter(|item| matches!(item.subject(), EvidenceSubject::Crop { .. }))
+        .count();
+    let mut named: Vec<&str> = cropped
+        .changes()
+        .iter()
+        .flat_map(|item| &item.compared.crops)
+        .flat_map(|crops| [crops.before.as_ref(), crops.after.as_ref()])
+        .flatten()
+        .map(vsift::EvidenceId::as_str)
+        .collect();
+    named.sort_unstable();
+    named.dedup();
     println!(
-        "one --crops call: {} changes, {} crops, {:.1} s, {} evidence artifacts stored (session {} -> {})",
+        "one --crops call: {} changes, {} crops named ({} distinct, {} crop records listed), {:.1} s, {} evidence artifacts stored (session {} -> {})",
         cropped.changes().len(),
         cropped.crops().map_or(0, |summary| summary.made),
+        named.len(),
+        crop_records,
         elapsed.as_secs_f64(),
         after.saturating_sub(before),
         before,
         after
     );
+    assert_eq!(crop_records, named.len());
 
     // The same changes; both pages go on by cursor, and the cursors differ
     // because each is bound to whether crops were asked for.
@@ -450,12 +467,17 @@ async fn one_call_reaches_the_sixteen_crop_bound() -> TestResult {
                 .all(vsift::RegionCrops::is_complete)
         );
     }
-    assert_crops_follow_frames(&cropped, summary.made)?;
-    // A crop takes at most two artifacts, its record and its image. The after
-    // frame of one change is the before frame of the next, so the after crop
-    // of a region is the next change's before crop of it, an exact repeat
-    // that is reused and takes none.
+    assert_crops_follow_frames(&cropped)?;
+    // The after frame of one change is the before frame of the next, so the
+    // after crop of a region is that change's before crop of it: one record,
+    // named twice, listed once and counted twice in `made`.
+    assert!(
+        crop_records < summary.made,
+        "{crop_records} records, no repeat"
+    );
+    // A crop record takes at most two artifacts, its record and its image (an
+    // image the session already holds takes none); a repeat takes nothing.
     let stored = after.saturating_sub(before);
-    assert!(stored > 0 && stored < 2 * MAX_CROPS_PER_CALL, "{stored}");
+    assert!(stored > 0 && stored <= 2 * crop_records, "{stored}");
     Ok(())
 }

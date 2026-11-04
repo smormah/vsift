@@ -389,8 +389,10 @@ result partial). As built:
   continues. No new failure code, no skill change.
 - **No hosted run** (the planner): crops reuse `crop`, already qualified, and their cost follows from
   slice 1's runs. A local opt-in engine test makes one call that reaches the 16-crop bound on a 12 s
-  1280x720 video it generates with FFmpeg (synthetic, at a real screen's size, not a real recording) (F04 has one change with regions, so it cannot reach the bound); its
-  wall time and slots are in the pull request.
+  1280x720 video it generates with FFmpeg (synthetic, at a real screen's size, not a real recording),
+  whose changes come in pairs half a second apart, so crops repeat: 16 named, 12 records listed
+  (F04 has one change with regions, so it cannot reach the bound); its wall time and slots are in the
+  pull request.
 
 ## Consequences
 
