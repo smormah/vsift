@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.4-rc.1] - 2026-11-04
+
+**This is a release candidate, under qualification.** It is the first candidate for `0.2.4`, the hot fix of `0.2.3`, made on `release/0.2.x` outside the weekly window ([`docs/operations/release.md`](docs/operations/release.md) 6.18, "A hot fix"; its steps are 6.22, its plan [`docs/planning/release-0.2.4.md`](docs/planning/release-0.2.4.md)). It is `0.2.3` plus the change below and nothing else: the version strings, the plan, the runbook section and the evidence ledger are the only things its cut adds. It goes to npm `next` when it is published and is never `latest`; `0.2.3` stays `latest` until `0.2.4` is published. Nothing is announced.
+
 **The hot fix `0.2.4`, on `release/0.2.x`: the FFmpeg update and the Node.js security releases in CI.** #351 and #272 stay open.
 
 ### What changes for you, in plain English
@@ -37,7 +41,7 @@ a Matroska duration overflow. A machine set up by `0.2.3` or earlier keeps its F
 - **The register:** [L-227](docs/planning/known-limits.md#l-227) is new (five FFmpeg records of 2026-11-01 the pinned build does not fix; two of their codecs can be named by
   a file VSift ingests); [L-122](docs/planning/known-limits.md#l-122), [L-132](docs/planning/known-limits.md#l-132) and [L-144](docs/planning/known-limits.md#l-144) are read
   against the new build (L-144 is still not fixed; it is re-checked at the November month-end build for `0.3.0`).
-
+- **The cut of `0.2.4-rc.1`:** the version strings (`0.2.3` to `0.2.4-rc.1`), the guide's version marker and generated reference pages (`0.2.4`), [`docs/planning/release-0.2.4.md`](docs/planning/release-0.2.4.md), [`release.md`](docs/operations/release.md) 6.22, the evidence ledger and the two memory files. No code, dependency or workflow changes.
 
 ## [0.2.3] - 2026-10-25
 
