@@ -43,20 +43,20 @@ use vsift_domain::{
 use vsift_fuzz::{
     CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
     OCR_FUZZ_IMAGES, REQUEST_FUZZ_OPERATION, SCREEN_TEXT_FUZZ_SESSION, Target, VISUAL_FUZZ_SESSION,
-    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal,
-    png_pixels_input, png_sequence_input, visual_samples_input,
+    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal, png_pixels_input,
+    png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
     ArchiveInventoryBounds, BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice,
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
-    decode_job_record, decode_request_record, decode_screen_text_index_record,
+    decode_job_record, decode_png_pixels, decode_request_record, decode_screen_text_index_record,
     decode_transcript_parts, decode_transcript_record, decode_visual_index_record,
     encode_transcript_record, encode_visual_index_record, inspect_bzip2_tar_inventory,
     inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
     inspect_zip_inventory, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
-    decode_png_pixels, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_runner_output, parse_supplied_transcript,
+    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
+    parse_png_sequence, parse_proc_cgroup, parse_runner_output, parse_supplied_transcript,
     parse_visual_samples, parse_whisper_full_json,
 };
 
@@ -567,7 +567,11 @@ const SEEDS: &[Seed] = &[
         "F01-crop-x2.bin",
         Origin::RecordedCrops(2),
     ),
-    seed(Target::PngPixels, "F01-crop.bin", Origin::RecordedCropPixels),
+    seed(
+        Target::PngPixels,
+        "F01-crop.bin",
+        Origin::RecordedCropPixels,
+    ),
     seed(Target::ClockFace, "taskbar-minutes.txt", Origin::Written),
     seed(
         Target::ClockFace,
