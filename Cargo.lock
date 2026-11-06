@@ -2207,7 +2207,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vsift"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "jsonschema",
  "serde_json",
@@ -2238,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-application"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "proptest",
  "sha2",
@@ -2248,7 +2248,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-cli"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "anstyle-query",
  "assert_cmd",
@@ -2272,7 +2272,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-contract"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "jsonschema",
  "proptest",
@@ -2303,14 +2303,14 @@ dependencies = [
 
 [[package]]
 name = "vsift-domain"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "vsift-governance"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2319,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-infrastructure"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "bzip2",
  "cap-fs-ext",
@@ -2359,7 +2359,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-release"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "clap",
  "flate2",
@@ -2370,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "vsift-windows-security"
-version = "0.2.3-rc.1"
+version = "0.2.4"
 dependencies = [
  "windows-acl",
  "windows-sys 0.61.2",

@@ -1018,7 +1018,7 @@ runs answer `nothing frozen has changed` and the pin in `committed_freeze` is th
 state file recorded for another version: `records/`, `state-claude.json`, `state-codex.json`, `summary.json` and `SUMMARY.md` of each batch are in
 `docs/planning/p14-agent-trials/batch-2-0.2.2-rc.1/` and `batch-3-0.2.2-rc.1/`, with the file they ran under (`freeze-0.2.2-rc.1.json`, whole-freeze digest `10180cd8...`) as
 `freeze.json` there; nothing in them changed, and `batch-2/` and `batch-3/` hold only the freeze. **No batch has run on `0.2.3-rc.1`;** whether they do, against the published
-`0.2.3-rc.1` (`-Version 0.2.3-rc.1`, batch 3 with `-AllowGraderChange`), or RQ-16 is waived again, is the maintainer's decision at the window (`docs/planning/release-0.2.3.md`).
+`0.2.3-rc.1` (`-Version 0.2.3-rc.1`, batch 3 with `-AllowGraderChange`), or RQ-16 is waived again, is the maintainer's decision at the window (`docs/planning/release-0.2.3.md`). **No batch ran for the stable releases cut from candidates with this skill either:** RQ-15 and RQ-16 are waived for `0.2.3` (the maintainer's decision of 2026-10-25) and for `0.2.4` (2026-11-04), and the batches run at the `0.3.0` cut.
 
 **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** W2's pull request ([ADR 0035](../decisions/0035-search-across-kept-sessions.md), 2026-10-30) adds one line to `references/commands.md`, classing `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and the whole-freeze digest `78a332a2...` to `cdfb205e...`; the other six components are unchanged. No agent has tried the command.
 

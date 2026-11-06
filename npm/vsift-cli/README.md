@@ -18,34 +18,32 @@ or Bun 1.2 or later, runs the launcher.
 
 ## Which version you get
 
-**Version 0.2.2 is the patch release after 0.2.1**, and the commands above, without a tag, install it: it
-replaces 0.2.1 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release and 0.2.1
-(2026-10-15) the one before this. It has not been announced. Yarn 4 holds back a version for a day after it is
-published, so Yarn users get 0.2.2 a day after the publish (the installation guide has the setting that lets it through).
+**Version 0.2.4 is the hot fix of 0.2.3**, and the commands above, without a tag, install it: it
+replaces 0.2.3 under the dist-tag `latest`, where 0.2.0 (2026-10-09) was the first release and 0.2.1
+(2026-10-15), 0.2.2 (2026-10-18) and 0.2.3 (2026-10-25) the ones before this. It has not been announced. Yarn 4 holds back a version for a day after it is
+published, so Yarn users get 0.2.4 a day after the publish (the installation guide has the setting that lets it through).
 
-The dist-tag `next` is for release candidates and you do not need it: it names `0.2.2-rc.1`,
-the release candidate that 0.2.2 was built from, or a later candidate or release. The older
-candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1` and `0.2.1-rc.2` are deprecated and superseded. The release candidates of
-the next patch release, 0.2.3 (the first is `0.2.3-rc.1`), go to `next` when they are published and never to `latest`.
+The dist-tag `next` is for release candidates and you do not need it: it names `0.2.4-rc.1`,
+the release candidate that 0.2.4 was built from, or a later candidate or release. The older
+candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, and so are `0.2.3-rc.1` and `0.2.4-rc.1` since 2026-11-06.
+The release candidates of later releases go to `next` when they are published and never to `latest`.
 
-## What changed since 0.2.1
+## What changed since 0.2.3
 
-The changelog has the detail. In short: a worker host (`vsift job run`, `vsift job batch`) that is stopped while
-it recognises speech now records the stopped request as cancelled and resumable, never as a failure that says a
-tool is missing, and on Windows each tool it starts runs in a console of its own (the hosted check that failed
-twice on Windows on 0.2.1 passed on the candidate); on Windows the free space is checked before a video is
-copied; a copy that clearly cannot finish in time stops early; a named pipe, a device or a socket given as the
-video is refused without being opened; refusals and the advice for a missing tool say why and what to do; and
-`candidates --omit periodic` is a new, opt-in option. No command or JSON field was removed; the changes to the
-answers are additive. A worker's request record that 0.2.2 writes can be read as damaged by 0.2.1, so going back
-to 0.2.1 can cost such a request.
+The changelog has the detail. In short: a new managed install on Ubuntu gets a newer, reviewed FFmpeg (9.0.2 plus 39
+commits, a build of 2026-10-31, in place of the build of 2026-08-31), which carries the upstream memory-safety fixes
+made since in code VSift runs (the VP8, VP9, H.264, Opus and AAC decoders, the MP4 key atom and a Matroska duration
+overflow). A machine set up by 0.2.3 or earlier keeps its FFmpeg, and `vsift setup check` says it is older than the
+reviewed one until you run `vsift setup plan` and `vsift setup install` again. **One flaw is not fixed:** an MP4 with
+very many `pssh` boxes (CVE-2026-107678) can keep FFmpeg busy; the fix is on FFmpeg's development line only, and
+VSift's time bound ends the work after about 15 seconds without fixing the flaw. Five other FFmpeg security records are not fixed by this build either. No command or JSON field changed. The agent skill did not change.
 
 ## What was not tried
 
-0.2.2 is built from the same source as the release candidate `0.2.2-rc.1` and differs from it
-only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners and in
-trials with the agent skill, on a synthetic corpus and a synthetic voice; the executables of 0.2.2 itself are checked after
-its publish. In the trials without the skill, a smaller model often stated the right facts without citing the
+0.2.4 is built from the same source as the release candidate `0.2.4-rc.1` and differs from it
+only in its version numbers, this README and the installation guide. That candidate was tried on hosted runners, on a
+synthetic corpus and a synthetic voice; **no long runs were made before its publish; the checks run on it were** the install and upgrade checks, the managed install, the test with deliberately malformed and malicious files,
+the local speech recognition accuracy set and the dependency scan. Seven evidence items were waived by the maintainer for this release only (among them the fuzzing hour, the stress and the agent-trial runs, which run in the next window), and two standing waivers carry. The executables of 0.2.4 itself are checked after its publish. The accuracy set with noisy speech was not run on hosted macOS runners. The agent skill is unchanged, so its trials were not run again; in the earlier trials without the skill, a smaller model often stated the right facts without citing the
 identifiers VSift returned for them (the help is to say how; the agent skill does). Two things were not tried before this release, and it ships without them:
 
 - **Windows Smart App Control, SmartScreen and macOS Gatekeeper** have not been seen reacting

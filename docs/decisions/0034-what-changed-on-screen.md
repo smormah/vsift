@@ -1,6 +1,6 @@
 # ADR 0034: What changed on screen between two times
 
-- Status: **Proposed**; accepted by the planner on 2026-11-03 with three changes and three additions,
+- Status: **Accepted by the planner, 2026-11-03**, with three changes and three additions,
   which this text includes (continuation, sections 6a and 6; the evidence room, section 6; the
   decoder's memory, section 3; a budget that splits a motion run, section 2; citing, section 5; the
   fuzz target, section 3). The planner ruled every choice at the end; none went to the maintainer.
