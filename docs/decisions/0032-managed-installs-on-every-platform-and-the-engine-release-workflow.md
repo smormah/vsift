@@ -28,7 +28,7 @@ may leave out.
 The publishers' own builds were read on 2026-10-21 from their release pages and APIs only (nothing was downloaded
 to a development machine):
 
-| System | FFmpeg (the build Linux pins, `n9.0.1-11-ge47273f4d9`) | whisper.cpp v1.9.5 |
+| System | FFmpeg (the build Linux pinned on 2026-10-21, `n9.0.1-11-ge47273f4d9`; see the note of 2026-11-06) | whisper.cpp v1.9.5 |
 | --- | --- | --- |
 | Ubuntu 24.04 x64 | BtbN `autobuild-2026-08-31-13-27`, linux64 LGPL `.tar.xz` (pinned) | `b5454/whisper-bin-ubuntu-x64.tar.gz` (pinned) |
 | Windows x64 | the same release's `win64-lgpl-9.0.zip`, 147,007,942 bytes, the publisher's digest and checksum file agreeing; already reviewed (`p06-windows-artifact-candidate.md`) | `b5454/whisper-bin-x64.zip`, 8,928,640 bytes, attested upstream; built with MSVC and, most likely, the dynamic C runtime and OpenMP |
@@ -101,7 +101,7 @@ like any other, through the reviewed GitHub release route.
 - **whisper.cpp's command-line build for macOS arm64**, from tag v1.9.5 (`d1be6fde11ac`): static, Metal embedded,
   OpenMP off, no SDL. Upstream's licence is MIT; the archive carries it.
 - **An LGPL static FFmpeg for macOS arm64 (D1, the maintainer's decision of 2026-10-21)**, from FFmpeg commit
-  `e47273f4d9227152dcbf543cebaf9e2430ddbcc4`, the commit the Linux and Windows pins are built from, configured
+  `e47273f4d9227152dcbf543cebaf9e2430ddbcc4` (**moved on 2026-11-06 to `7adfbe40dcde598f93a6963d2f7b22cd75202ccc`; see the note of that date**), the commit the Linux and Windows pins were built from, configured
   without `--enable-gpl`, `--enable-version3` or `--enable-nonfree`. VSift then distributes an LGPL binary, so the
   release carries the licence text and the exact corresponding source (the source archive of that commit and the
   build recipe) beside the binary, for as long as the binary is published. **This supersedes ADR 0014's
@@ -282,3 +282,16 @@ transaction is now two independent parts, video and speech, like the optional gr
 by side, "the first failure stops the transaction" holds within a part, and speech's verified download is kept when
 video does not install. Optional components keep this record's rule: installed after a complete core, each a part of
 its own.
+
+## Implementation note, 2026-11-06 (W5a: the macOS FFmpeg moves to `n9.0.2-39` before its first publish)
+
+Decision D1 named FFmpeg commit `e47273f4d9` (`n9.0.1-11`), the commit the Linux and Windows pins were built from on
+2026-10-21. The `0.2.4` hot fix ([#571](https://github.com/smormah/vsift/pull/571), [#573](https://github.com/smormah/vsift/pull/573);
+[#272](https://github.com/smormah/vsift/issues/272) is the open tracking issue) moved Ubuntu and Windows to BtbN's
+`autobuild-2026-10-31-12-59`, FFmpeg `n9.0.2-39-g7adfbe40dc`. The planner ruled on 2026-11-06 that a macOS build must not ship one FFmpeg
+release behind them, and the macOS engine had published nothing, so the recipe moved before any tag: `ffmpeg-macos` is built from
+`7adfbe40dcde598f93a6963d2f7b22cd75202ccc` (a strict descendant of the earlier commit, 112 commits later on `release/9.0`, read with
+`gh api` on 2026-11-06), its engine version is `9.0.2.39-r1` (tag `ffmpeg-macos-v9.0.2.39-r1`), and its reviewed banner is
+`n9.0.2-39-g7adfbe40dc-vsift-r1`. Nothing else in decision D1 changes: the configuration, the licence and the corresponding-source
+duty stand. [L-227](../planning/known-limits.md#l-227) and [L-216](../planning/known-limits.md#l-216) record what the newer commit does
+and does not fix.
