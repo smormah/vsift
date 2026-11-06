@@ -260,6 +260,27 @@
       "note": "The file name of the maintainer checklist for the stable release 0.2.2 (docs/planning/release-0.2.2-stable-steps.md), which section 6.20 points at; a name, not a quality."
     },
     {
+      "kind": "non_claim",
+      "id": "NC-813",
+      "documents": ["docs/operations/release.md"],
+      "text": "0.2.3 stable steps",
+      "note": "The file name of the maintainer checklist for the stable release 0.2.3 (docs/planning/release-0.2.3-stable-steps.md), which section 6.23 names as its model; a name, not a quality."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-814",
+      "documents": ["docs/operations/release.md"],
+      "text": "0.2.4 stable steps",
+      "note": "The file name of the maintainer checklist for the stable release 0.2.4 (docs/planning/release-0.2.4-stable-steps.md), which sections 6.22 and 6.23 point at; a name, not a quality."
+    },
+    {
+      "kind": "non_claim",
+      "id": "NC-815",
+      "documents": ["docs/operations/release.md"],
+      "text": "a stable release",
+      "note": "Part of the npm deprecation message of the two superseded candidates, \"Superseded by a stable release. Install vsift-cli.\"; it names the kind of release that replaced them, not a quality."
+    },
+    {
       "kind": "claim",
       "id": "CL-002",
       "rung": "now",
