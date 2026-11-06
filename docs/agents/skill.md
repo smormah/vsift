@@ -40,7 +40,7 @@ The skill is the same folder everywhere: the repository's `skills/vsift/`, the
 `skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
 of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
-the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.2 is published, as
+the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.4 is published, as
 `npm install --global vsift-cli` (no tag) and as archives on GitHub Releases; building from
 source also works).
 

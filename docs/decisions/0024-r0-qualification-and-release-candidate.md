@@ -2142,6 +2142,19 @@ This note records decisions of the maintainer, made on 2026-10-18 in chat, about
 2. **The repeat items have their own entries for `0.2.2`** from the hosted checks of its bytes on the tag (RQ-01 to RQ-06, RQ-19), the Governance job at the stable commit (RQ-18) and the dated reading of 2026-10-18 with the hosted part on `0.2.2` (RQ-13); RQ-05 is `passed` for `0.2.2` (the journeys passed on all three systems, the Windows shutdown stage of #404 included). `release-evidence --complete-for 0.2.2 --commit 0dadc69df4f5c5c3264be72f04be26a600620fe1` passes.
 3. **The waivers for `0.2.2` stand as decided on 2026-10-18** (RQ-14, RQ-16's usefulness part, RQ-17), none a pass; the check cannot see that they cover `0.2.2` only (L-179), so the cut of `0.2.3-rc.1` sets RQ-16 back to `planned`.
 
+## Implementation note, 2026-10-25 (the patch release `0.2.3`: the evidence on `0.2.3-rc.1` and the maintainer's decisions of the day)
+
+This note records decisions of the maintainer, made on 2026-10-25 in the planner's session, about the evidence on the first candidate of `0.2.3`, `0.2.3-rc.1` (tag `v0.2.3-rc.1` at `09e40398894f` on `release/0.2.x`, published 2026-10-24 by Release run 40038576713); the evidence and the full texts are in [`release-0.2.3.md`](../planning/release-0.2.3.md) ("The evidence on 0.2.3-rc.1") and in the `decision` fields of the ledger. It is work record only, recorded by a pull request to `release/0.2.x`: no code, tool, workflow, schema, skill, grader, scenario, setting, `freeze.json` or public claim changed, and the claims rung is still `candidate`. The decision, as quoted: "All as recommended for 0.2.3: carry RQ-14 and RQ-17, waive RQ-15 and RQ-16 (skill unchanged, batches at the 0.3.0 cut), #519 a known issue, I accept the RQ-13 reading at the gate, deprecate only 0.2.3-rc.1."
+
+1. **RQ-14 and RQ-17 carry to `0.2.3`** (decision E, option 4, until #188 in R1; decision H, until the try-out with LOKI in cycle 3).
+2. **RQ-15 and RQ-16 are waived for `0.2.3`:** the skill is byte-identical to the one that agent-trial batches 2 and 3 tested on `0.2.2-rc.1`, the freeze of 2026-10-19 is kept, and the batches run at the `0.3.0` cut. The waivers name `0.2.3` only (L-179).
+3. **#519 is a known issue of `0.2.3`** (a stress repetition that failed on a timing bound, the refusal itself being correct); RQ-08 is recorded `waived` for `0.2.3` on that decision, not passed. #519 stays open for `0.3.0`; its register entry is L-231.
+4. **"I accept the RQ-13 reading at the gate"** was said before the Node.js finding was filed (#526), so it was put to him again, with the next item.
+5. **The answers that followed, as quoted:** "Yes to both: I waive RQ-08 for 0.2.3, scoped to #519's single repetition (outcome correct, timing assertion only, L-231). I accept #526 for 0.2.3 with L-232: F12 moves the Node pins on main, 0.2.4 on release/0.2.x, no rc.2. RQ-13 passes with that." RQ-08 is `waived` for `0.2.3`, scoped to #519's single repetition (L-231); #526 (the pinned Node.js versions are older than the security releases of 2026-10-20; tooling only) is accepted for `0.2.3` with L-232, the pins moving on `main` (F12) and on `release/0.2.x` with `0.2.4`, and RQ-13 is `passed` on that.
+6. **Only `0.2.3-rc.1` is deprecated** when the stable is published.
+
+**What is weaker than it sounds.** Five of the twenty items are `waived` for `0.2.3` (RQ-08, RQ-14, RQ-15, RQ-16, RQ-17) and none of them is a pass; the completeness check passes a waived item for any version, so each decision's text, not the check, limits it.
+
 ## Note, 2026-10-29 (the cold mode gains C-04; ADR 0038 section 5)
 
 The cold scenarios gain `C-04-f05-bug-report`: C-01's situation asked as an outcome ("Write a bug report, with times,
@@ -2159,3 +2172,14 @@ tarball bundles npm 11.19.1, the npm the publish job uses, so the image adds no 
 nothing but Node.js. The Dockerfile is not part of the trial freeze (the freeze covers the skill, the harness's `src`
 and `Cargo.toml`, the scenarios, the cold and hold-out scenarios, the settings and the corpus truth), so no
 `freeze write` follows. Batch records that quote `v24.21.0` record what ran then and are not edited.
+
+## Implementation note, 2026-11-04 (the hot fix `0.2.4`: the evidence on `0.2.4-rc.1` and the maintainer's decisions of the day)
+
+This note records decisions of the maintainer, made on 2026-11-04 and relayed to the records pull request by the coordinator, about the evidence on the first candidate of the hot fix `0.2.4`, `0.2.4-rc.1` (tag `v0.2.4-rc.1` at `d44d71532967` on `release/0.2.x`, published 2026-11-04 by Release run 41822398268); the evidence and the full texts are in [`release-0.2.4.md`](../planning/release-0.2.4.md) ("The evidence on 0.2.4-rc.1") and in the `decision` fields of the ledger. It is work record only, recorded by a pull request to `release/0.2.x`: no code, tool, workflow, schema, skill, grader, scenario, setting, `freeze.json` or public claim changed, and the claims rung is still `candidate`. The answers, as quoted:
+
+1. **RQ-05.** "Should the Mac rerun with newer tests count for 0.2.4, with no second candidate?" - "Yes, count it". There is no `0.2.4-rc.2`; the journeys evidence is `P14 journeys` run 41837876046 on `main`, as for `0.2.3` (#520, L-230).
+2. "Waive the six long runs for 0.2.4 and run them in the next window?" - "Yes, waive all six": RQ-04's `P14 compatibility` and `P14 local upgrade`, RQ-07, RQ-09, RQ-11 and RQ-12, for `0.2.4` only.
+3. "Waive the stress test and both agent-trial batches for 0.2.4?" - "Yes, waive all three": RQ-08, RQ-15 and RQ-16, for `0.2.4` only (#519 stays a known issue, L-231; the skill is unchanged and the batches run at the `0.3.0` cut).
+4. "Keep the two standing waivers in place for 0.2.4?" - "Yes, keep both": RQ-14 and RQ-17 carry to `0.2.4`.
+
+**What is weaker than it sounds.** Nine of the twenty items are `waived` for `0.2.4` and two long runs of RQ-04 are waived inside a `passed` item; none of them is a pass. The completeness check passes a waived item for any version (L-179), so each decision's text, not the check, limits it, and the next cut sets each item back to `planned`.
