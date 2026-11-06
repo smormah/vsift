@@ -2,6 +2,15 @@ name: P07 local ASR
 
 on:
   workflow_dispatch:
+    inputs:
+      vsift_whisper_windows_tag:
+        description: 'Windows leg only: the tag of a published VSift-built whisper.cpp (whisper-cli-windows-v<version>-r<n>) to test in place of upstream b5454. Leave empty for the reviewed upstream build.'
+        type: string
+        default: ''
+      vsift_whisper_windows_archive_sha256:
+        description: 'With the tag: the archive SHA-256 from its .inventory.json (the run fetches the archive and inventory from the release and refuses any disagreement).'
+        type: string
+        default: ''
   schedule:
     # Weekly, Monday 04:17 UTC: the reviewed binaries and models are pinned,
     # so a change here means a runner image or VSift change, not new inputs.
@@ -37,6 +46,9 @@ jobs:
         run: python -m unittest discover -s tools -p test_p07_local_asr_tools.py
 
       - name: Stage pinned FFmpeg, whisper.cpp v1.9.5 and both pinned models
+        env:
+          VSIFT_WHISPER_WINDOWS_TAG: ${{ inputs.vsift_whisper_windows_tag }}
+          VSIFT_WHISPER_WINDOWS_ARCHIVE_SHA256: ${{ inputs.vsift_whisper_windows_archive_sha256 }}
         run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-p07-local-asr"
 
       - name: Show toolchain and host
