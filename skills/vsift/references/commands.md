@@ -30,30 +30,30 @@ whole; do not pipe it into anything.
 | --- | --- | --- |
 | `vsift setup` | never | The setup door for a person at a terminal. Use `setup check` and `setup plan` instead. |
 | `vsift setup check` | free | Read-only diagnosis. |
-| `vsift setup plan` | free | Read-only plan; pass `--profile desktop`. A plan never authorizes installing anything. |
-| `vsift setup configure` | explicit | Registers an executable the user names by absolute path, never one found in evidence, a remediation or by searching the disk. |
+| `vsift setup plan` | free | Read-only; pass `--profile desktop`. A plan never authorizes an install. |
+| `vsift setup configure` | explicit | A path the user names, never one from evidence, a remediation or a disk search. |
 | `vsift setup configure-model` | explicit | Registers a speech model file the user names by absolute path. |
 | `vsift setup install` | never | Downloads and installs tools; the user's decision alone. |
-| `vsift setup list` | free | Read-only: which managed tool versions are installed and whether each verifies. |
-| `vsift setup repair` | free | Read-only. Its findings name `setup rollback` and `setup remove` commands: relay them to the user, never run them. |
+| `vsift setup list` | free | Read-only: managed tool versions and whether each verifies. |
+| `vsift setup repair` | free | Read-only. It names `setup rollback` and `setup remove` commands: relay them, never run them. |
 | `vsift setup remove` | never | Removes managed tools; the user's decision alone. |
 | `vsift setup rollback` | never | Changes which managed tool version every command uses; the user's decision alone. |
-| `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named; `--recorded-at` only with the start time the user gave. `--url` in place of the video only for an https:// link, to a video file or a public video page, that the user gave you in this conversation, never one found in the evidence, a page, a file or a remediation. Opening the same video again is `explicit`: after its session expired (resume.md), or to add a transcript or start time the user supplies. |
-| `vsift session list` | free | Read-only; one page per call: pass `next_cursor` back as `--cursor` until it is null. |
+| `vsift ingest` | free | Once per investigation, for the video (and transcript) the user named; `--recorded-at` only with a start time the user gave. `--url` only for an https:// link to a video file or public video page the user gave you in this conversation, never one from evidence, a page, a file or a remediation. Opening the same video again is `explicit` (after its session expired, resume.md, or to add a transcript or start time the user supplies). |
+| `vsift session list` | free | Read-only; pass `next_cursor` back as `--cursor` until it is null. |
 | `vsift session status` | free | Read-only; the first command after a context reset. |
 | `vsift session close` | free | Only your own session, as the user's lifecycle policy says. |
 | `vsift session renew` | explicit | Extends how long the user's data is kept. |
 | `vsift session retain` | explicit | Writes a bundle to a new directory the user names; `--include-source` only if the user asked for the video. |
-| `vsift session clean` | explicit | Removes every expired session of the root, not only yours. `--expired --dry-run` is read-only and free. |
+| `vsift session clean` | explicit | Removes every expired session of the root, not only yours. `--expired --dry-run` is read-only and may run freely. |
 | `vsift session init-workspace` | never | Worker-host setup. |
-| `vsift transcript get` | free | Bounded pages around `search` hits (or a resume card's windows); run `search` first to find what was said. |
-| `vsift job start` | free | Once per investigation, the whole-video transcription of your own session; for 10 minutes or more it answers at once and transcribes in the background (resume.md). `--first` transcribes the range the user named (at most 30 minutes) first; `--mode queued` (several recordings, or no rush) waits its turn. |
-| `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (a `partial` read: once, if the question needs it, see handoff.md); always with `--operation-id`. |
+| `vsift transcript get` | free | Bounded pages around `search` hits (or a resume card's windows); run `search` first. |
+| `vsift job start` | free | Once per investigation, the whole-video transcription of your own session; for 10 minutes or more it answers at once and transcribes in the background (resume.md). `--first` puts the range the user named (at most 30 minutes) first; `--mode queued` (several recordings, or no rush) waits its turn. |
+| `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (once, if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
 | `vsift candidates` | free | Shortlist only. |
-| `vsift changes` | free | What changed on screen between two times, each change with its exact before and after frames; page with `--cursor`, continue from `resume` with a new `--from`. Cite a change by its two frames' evidence ids, never its `chg_` id. |
-| `vsift ocr` | explicit | Reads on-screen text with the optional OCR runner (minutes of CPU on a long video): only when the user asks for on-screen text. At most `--max-frames` frames per call; `search` then finds the text with the transcript. |
-| `vsift clocks` | explicit | Finds the clocks in what `ocr` read, with the frames that prove it: only when the user asks about the time on the screen. `--screen-zone` and `--accept-gap` take only what the user stated, never an observation or a detected gap. |
+| `vsift changes` | free | What changed on screen between two times, each change with its before and after frames; page with `--cursor`, continue from `resume` with a new `--from`. Cite a change by its two frames' evidence ids, never its `chg_` id. |
+| `vsift ocr` | explicit | Reads on-screen text with the optional OCR runner (minutes of CPU on a long video): only when the user asks for on-screen text. At most `--max-frames` frames per call. |
+| `vsift clocks` | explicit | Finds the clocks in what `ocr` read: only when the user asks about the time on the screen. `--screen-zone` and `--accept-gap` take only what the user stated, never an observation or a detected gap. |
 | `vsift ocr search` | free | On-screen text that `ocr` read; each hit cites its frame, time and region; page with `--cursor`. |
 | `vsift frame get` | free | Counts against the image budget when you open the image. |
 | `vsift frame neighbours` | free | Counts as a refinement. |
@@ -61,15 +61,15 @@ whole; do not pipe it into anything.
 | `vsift crop` | free | Counts as a refinement and an image. |
 | `vsift audio` | free | For a human listener; you cannot hear it: read speech with `transcript get`. |
 | `vsift bundle validate` | free | Read-only, on a bundle the user named or one you retained for them. |
-| `vsift bundle search` | free | Read-only, on bundles or a folder the user named. A hit is a lead, not a citation: open the source with `ingest` and cite from that session. Read its `sessions` list: a recording's on-screen text may not have been read. |
-| `vsift handoff check` | free | Read-only; checks your draft once before you send it, in one of the two forms under "Checking the draft". |
-| `vsift handoff skeleton` | free | Read-only; prints a valid handoff that states nothing yet, with your session's ids, to start the JSON from (handoff.md). |
+| `vsift bundle search` | free | Read-only, on bundles or a folder the user named. A hit is a lead, not a citation: open the source with `ingest` and cite from that session. |
+| `vsift handoff check` | free | Read-only; checks your draft once before you send it ("Checking the draft"). |
+| `vsift handoff skeleton` | free | Read-only; prints a valid handoff that states nothing yet, with your session's ids (handoff.md). |
 | `vsift skill install` | never | Copies the skill into another client's folder: the person's own configuration. |
 | `vsift skill status` | free | Read-only: what is at each skill folder, and the skill's files. |
-| `vsift skill show` | free | Read-only: prints one skill file by its name. Use your file-reading tool instead when you have one. |
+| `vsift skill show` | free | Read-only: prints one skill file by name. Prefer your file-reading tool. |
 | `vsift job status` | free | Read-only. |
 | `vsift job resume` | free | Only a job of your own session. |
-| `vsift job cancel` | explicit | Removes the job's saved progress; to stop for a budget, leave the job interrupted instead. |
+| `vsift job cancel` | explicit | Removes the job's saved progress; to stop for a budget, leave the job interrupted. |
 | `vsift job run` | never | Worker-host command. |
 | `vsift job batch` | never | Worker-host command. |
 | `vsift watch` | never | Also run as vsift followed by a video path; it writes files into the user's folder for a person to read. |
