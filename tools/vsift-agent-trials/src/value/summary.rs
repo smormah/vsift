@@ -181,7 +181,10 @@ fn mean(values: impl Iterator<Item = f64>) -> f64 {
     }
 }
 
-#[allow(clippy::cast_precision_loss, reason = "Token and millisecond counts as means")]
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "Token and millisecond counts as means"
+)]
 fn cell(grades: &[&ValueGrade]) -> Cell {
     let first = grades.first().copied();
     let scored: Vec<f64> = grades
@@ -194,10 +197,16 @@ fn cell(grades: &[&ValueGrade]) -> Cell {
         .map(|micro| micro as f64 / 1.0e6)
         .collect();
     Cell {
-        task: first.map(|grade| grade.value.task.clone()).unwrap_or_default(),
-        task_id: first.map(|grade| grade.value.task_id.clone()).unwrap_or_default(),
+        task: first
+            .map(|grade| grade.value.task.clone())
+            .unwrap_or_default(),
+        task_id: first
+            .map(|grade| grade.value.task_id.clone())
+            .unwrap_or_default(),
         phase: first.map_or(1, |grade| grade.phase),
-        arm: first.map(|grade| grade.value.arm.name().to_owned()).unwrap_or_default(),
+        arm: first
+            .map(|grade| grade.value.arm.name().to_owned())
+            .unwrap_or_default(),
         runs: grades.iter().map(|grade| grade.value.run_index).collect(),
         score: (scored.len() == grades.len() && !scored.is_empty())
             .then(|| mean(scored.iter().copied())),
@@ -216,7 +225,12 @@ fn cell(grades: &[&ValueGrade]) -> Cell {
             .sum(),
         unverifiable: grades
             .iter()
-            .map(|grade| grade.claims.as_ref().map_or(0, |claims| claims.unverifiable.len()))
+            .map(|grade| {
+                grade
+                    .claims
+                    .as_ref()
+                    .map_or(0, |claims| claims.unverifiable.len())
+            })
             .sum(),
         round_trips: mean(grades.iter().map(|grade| grade.measures.round_trips as f64)),
         round_trips_without_finishing: mean(
@@ -231,16 +245,37 @@ fn cell(grades: &[&ValueGrade]) -> Cell {
                 + usage.cache_creation_input_tokens
                 + usage.output_tokens) as f64
         })),
-        cost_usd: (costs.len() == grades.len() && !costs.is_empty()).then(|| mean(costs.into_iter())),
+        cost_usd: (costs.len() == grades.len() && !costs.is_empty())
+            .then(|| mean(costs.into_iter())),
         images: mean(grades.iter().map(|grade| grade.measures.images as f64)),
-        wall_s: mean(grades.iter().map(|grade| grade.measures.time.wall_ms as f64 / 1_000.0)),
-        tool_s: mean(grades.iter().map(|grade| grade.measures.time.tool_ms as f64 / 1_000.0)),
-        model_s: mean(grades.iter().map(|grade| grade.measures.time.model_ms as f64 / 1_000.0)),
+        wall_s: mean(
+            grades
+                .iter()
+                .map(|grade| grade.measures.time.wall_ms as f64 / 1_000.0),
+        ),
+        tool_s: mean(
+            grades
+                .iter()
+                .map(|grade| grade.measures.time.tool_ms as f64 / 1_000.0),
+        ),
+        model_s: mean(
+            grades
+                .iter()
+                .map(|grade| grade.measures.time.model_ms as f64 / 1_000.0),
+        ),
         hit_budget: grades.iter().filter(|grade| grade.hit_budget).count(),
-        unsafe_runs: grades.iter().filter(|grade| !grade.safety.is_empty()).count(),
+        unsafe_runs: grades
+            .iter()
+            .filter(|grade| !grade.safety.is_empty())
+            .count(),
         needs_reading: grades
             .iter()
-            .filter(|grade| grade.claims.as_ref().is_some_and(|claims| claims.needs_reading))
+            .filter(|grade| {
+                grade
+                    .claims
+                    .as_ref()
+                    .is_some_and(|claims| claims.needs_reading)
+            })
             .count(),
     }
 }
@@ -251,7 +286,11 @@ pub fn compare(vsift: &Cell, raw: &Cell, gated_task: bool) -> (Verdict, usize) {
     let pairs_with_more_wrong = vsift
         .wrong_by_run
         .iter()
-        .filter(|(run, wrong)| raw.wrong_by_run.get(run).is_some_and(|other| *wrong > other))
+        .filter(|(run, wrong)| {
+            raw.wrong_by_run
+                .get(run)
+                .is_some_and(|other| *wrong > other)
+        })
         .count();
     let (Some(vsift_score), Some(raw_score)) = (vsift.score, raw.score) else {
         return (Verdict::NotGraded, pairs_with_more_wrong);
@@ -276,12 +315,18 @@ fn saving(raw: f64, vsift: f64) -> Option<f64> {
 }
 
 fn percent(value: Option<f64>) -> String {
-    value.map_or_else(|| "n/a".to_owned(), |value| format!("{:.0}%", value * 100.0))
+    value.map_or_else(
+        || "n/a".to_owned(),
+        |value| format!("{:.0}%", value * 100.0),
+    )
 }
 
 /// Summarises graded value phases.
 #[must_use]
-#[allow(clippy::too_many_lines, reason = "The summary reads top to bottom as the method's sections")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "The summary reads top to bottom as the method's sections"
+)]
 pub fn summarize(grades: &[ValueGrade]) -> ValueSummary {
     let mut summary = ValueSummary::default();
     let mut groups: BTreeMap<(String, usize, Arm), Vec<&ValueGrade>> = BTreeMap::new();
@@ -353,8 +398,10 @@ pub fn summarize(grades: &[ValueGrade]) -> ValueSummary {
             ),
             "T2" | "T3" => format!(
                 "H3 {task_id}: V1 score {} against R1 {}, wrong {} against {} (V1 must beat R1; equal drops the claim)",
-                v1.score.map_or_else(|| "n/a".to_owned(), |score| format!("{score:.2}")),
-                r1.score.map_or_else(|| "n/a".to_owned(), |score| format!("{score:.2}")),
+                v1.score
+                    .map_or_else(|| "n/a".to_owned(), |score| format!("{score:.2}")),
+                r1.score
+                    .map_or_else(|| "n/a".to_owned(), |score| format!("{score:.2}")),
                 v1.wrong,
                 r1.wrong
             ),
@@ -385,13 +432,20 @@ pub fn summarize(grades: &[ValueGrade]) -> ValueSummary {
 /// # Errors
 ///
 /// [`TrialError`] when a record cannot be read or the summary written.
-pub fn summarize_folder(records: &Path, output_json: &Path, output_markdown: &Path) -> Result<ValueSummary, TrialError> {
+pub fn summarize_folder(
+    records: &Path,
+    output_json: &Path,
+    output_markdown: &Path,
+) -> Result<ValueSummary, TrialError> {
     let mut grades = Vec::new();
     let mut files: Vec<_> = fs::read_dir(records)
         .map_err(|error| TrialError::io_at(records, error))?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
         .collect();
     files.sort();
     for file in files {
@@ -426,13 +480,15 @@ pub fn markdown(summary: &ValueSummary) -> String {
             cell.phase,
             cell.arm,
             cell.runs.len(),
-            cell.score.map_or_else(|| "pending".to_owned(), |score| format!("{score:.2}")),
+            cell.score
+                .map_or_else(|| "pending".to_owned(), |score| format!("{score:.2}")),
             cell.wrong,
             cell.unverifiable,
             cell.round_trips,
             cell.round_trips_without_finishing,
             cell.tokens,
-            cell.cost_usd.map_or_else(|| "n/a".to_owned(), |cost| format!("${cost:.2}")),
+            cell.cost_usd
+                .map_or_else(|| "n/a".to_owned(), |cost| format!("${cost:.2}")),
             cell.images,
             cell.wall_s,
             cell.tool_s,
@@ -512,13 +568,22 @@ mod tests {
     #[test]
     fn more_wrong_claims_in_two_of_three_pairs_is_a_loss_and_in_one_is_not() {
         let raw = cell_with(0.80, &[0, 0, 0]);
-        assert_eq!(compare(&cell_with(0.80, &[1, 1, 0]), &raw, true), (Verdict::Loss, 2));
-        assert_eq!(compare(&cell_with(0.80, &[3, 0, 0]), &raw, true), (Verdict::Neither, 1));
+        assert_eq!(
+            compare(&cell_with(0.80, &[1, 1, 0]), &raw, true),
+            (Verdict::Loss, 2)
+        );
+        assert_eq!(
+            compare(&cell_with(0.80, &[3, 0, 0]), &raw, true),
+            (Verdict::Neither, 1)
+        );
     }
 
     #[test]
     fn a_pending_truth_is_not_graded() {
         let raw = Cell::default();
-        assert_eq!(compare(&cell_with(1.0, &[0]), &raw, true).0, Verdict::NotGraded);
+        assert_eq!(
+            compare(&cell_with(1.0, &[0]), &raw, true).0,
+            Verdict::NotGraded
+        );
     }
 }

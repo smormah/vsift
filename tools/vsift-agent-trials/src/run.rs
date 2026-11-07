@@ -542,9 +542,10 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         .map_err(|error| TrialError::Process(format!("the client did not start: {error}")))?;
     // The harness reads stdout itself so that each line gets its arrival
     // time (crate::timing); the bytes written are the client's, unchanged.
-    let client_stdout = child.stdout().take().ok_or_else(|| {
-        TrialError::Process("the client's stdout could not be read".to_owned())
-    })?;
+    let client_stdout = child
+        .stdout()
+        .take()
+        .ok_or_else(|| TrialError::Process("the client's stdout could not be read".to_owned()))?;
     let copier = tokio::spawn(crate::timing::copy_with_times(
         client_stdout,
         stdout,
@@ -574,7 +575,11 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     match tokio::time::timeout(Duration::from_secs(30), copier).await {
         Ok(Ok(Ok(()))) | Err(_) => abort.abort(),
         Ok(Ok(Err(error))) => {
-            return Err(TrialError::io_step("copying the client's stdout to", &stdout_path, error));
+            return Err(TrialError::io_step(
+                "copying the client's stdout to",
+                &stdout_path,
+                error,
+            ));
         }
         Ok(Err(error)) => {
             return Err(TrialError::Process(format!(

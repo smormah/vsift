@@ -134,7 +134,9 @@ impl Bench {
     /// The stream the stand-in replays, kept outside the workspace so that
     /// a cold arm's workspace stays cold.
     fn behave(&self, layout: &TrialLayout, answer: &str, name: &str) -> TestResult {
-        let replay = self.scratch.write(&format!("replays/{name}.jsonl"), &stream(answer))?;
+        let replay = self
+            .scratch
+            .write(&format!("replays/{name}.jsonl"), &stream(answer))?;
         let stub = layout.workspace().join(".stub");
         fs::create_dir_all(&stub)?;
         fs::write(
@@ -154,14 +156,20 @@ fn path_of(environment: &[(String, OsString)]) -> Vec<PathBuf> {
 }
 
 fn line_count(path: &Path) -> Result<usize, Box<dyn Error>> {
-    Ok(fs::read_to_string(path)?.lines().filter(|line| !line.is_empty()).count())
+    Ok(fs::read_to_string(path)?
+        .lines()
+        .filter(|line| !line.is_empty())
+        .count())
 }
 
 #[tokio::test]
 async fn every_arm_runs_with_the_tools_on_path_the_task_budget_and_arrival_times() -> TestResult {
     let bench = Bench::new("value-arms")?;
     let task = tasks_folder().join("T2-f04-order-1017.json");
-    let stub_folder = Path::new(STUB).parent().ok_or("no stub folder")?.to_path_buf();
+    let stub_folder = Path::new(STUB)
+        .parent()
+        .ok_or("no stub folder")?
+        .to_path_buf();
     for arm in Arm::ALL {
         let layout = prepare(&bench.request(&task, arm))?;
         let manifest = read_manifest(&layout)?;
@@ -169,19 +177,40 @@ async fn every_arm_runs_with_the_tools_on_path_the_task_budget_and_arrival_times
         assert_eq!(value.arm, arm);
         assert_eq!(value.guide_name, "recording-evidence");
         assert_eq!(value.guide_sha256.len(), 64, "every arm names the guide");
-        assert_eq!(value.method_sha256.len(), 64, "every arm names the method note");
-        assert!(layout.workspace().join("models").join("ggml-base.bin").is_file());
+        assert_eq!(
+            value.method_sha256.len(),
+            64,
+            "every arm names the method note"
+        );
+        assert!(
+            layout
+                .workspace()
+                .join("models")
+                .join("ggml-base.bin")
+                .is_file()
+        );
         assert!(layout.workspace().join("recording.mp4").is_file());
         assert!(layout.workspace().join("recording.srt").is_file());
         let skills = layout.workspace().join(".claude").join("skills");
-        assert_eq!(skills.join("recording-evidence").is_dir(), arm == Arm::R1, "{arm:?}");
+        assert_eq!(
+            skills.join("recording-evidence").is_dir(),
+            arm == Arm::R1,
+            "{arm:?}"
+        );
         assert_eq!(skills.join("vsift").is_dir(), arm == Arm::V1, "{arm:?}");
 
         bench.behave(&layout, ANSWER, arm.name())?;
         let request = bench.run_request(&layout, 1);
         let path = path_of(&client_environment(&request, &layout, &manifest)?);
-        assert!(path.contains(&value.tools_directory), "{arm:?}: tools folder not on PATH");
-        assert_eq!(path.contains(&stub_folder), arm.has_vsift(), "{arm:?}: vsift's folder");
+        assert!(
+            path.contains(&value.tools_directory),
+            "{arm:?}: tools folder not on PATH"
+        );
+        assert_eq!(
+            path.contains(&stub_folder),
+            arm.has_vsift(),
+            "{arm:?}: vsift's folder"
+        );
 
         let record = run(&request).await?;
         let max_turns = record
@@ -190,7 +219,10 @@ async fn every_arm_runs_with_the_tools_on_path_the_task_budget_and_arrival_times
             .position(|argument| argument == "--max-turns")
             .and_then(|index| record.arguments.get(index + 1))
             .ok_or("no --max-turns")?;
-        assert_eq!(max_turns, "60", "{arm:?}: the task's budget replaces the operator's");
+        assert_eq!(
+            max_turns, "60",
+            "{arm:?}: the task's budget replaces the operator's"
+        );
         let times = record.stdout.with_file_name("stdout.times");
         assert_eq!(line_count(&times)?, line_count(&record.stdout)?, "{arm:?}");
 
@@ -207,7 +239,10 @@ async fn every_arm_runs_with_the_tools_on_path_the_task_budget_and_arrival_times
         let client_home = bench.path("client-home");
         write_record(&layout, 1, &output, Some(client_home.as_path()), &[])?;
         let text = fs::read_to_string(&output)?;
-        for local in [bench.scratch.path().to_path_buf(), value.tools_directory.clone()] {
+        for local in [
+            bench.scratch.path().to_path_buf(),
+            value.tools_directory.clone(),
+        ] {
             let local = local.to_string_lossy().into_owned();
             assert!(
                 !text.contains(&local) && !text.contains(&local.replace('\\', "\\\\")),
@@ -255,11 +290,21 @@ async fn the_second_phase_finds_the_first_answer_in_the_workspace() -> TestResul
     let earlier = layout.workspace().join(EARLIER_ANSWER_FILE);
     assert!(!earlier.exists(), "no earlier answer before phase 2");
 
-    bench.behave(&layout, "At 0:11 order 1017 changes to failed (frame frames/f-011.png).", "phase-2")?;
+    bench.behave(
+        &layout,
+        "At 0:11 order 1017 changes to failed (frame frames/f-011.png).",
+        "phase-2",
+    )?;
     let second = run(&bench.run_request(&layout, 2)).await?;
     assert_eq!(fs::read_to_string(&earlier)?.trim_end(), ANSWER);
-    let prompt = second.arguments.iter().find(|argument| argument.contains(EARLIER_ANSWER));
-    assert!(prompt.is_some(), "phase 2's prompt names the earlier answer");
+    let prompt = second
+        .arguments
+        .iter()
+        .find(|argument| argument.contains(EARLIER_ANSWER));
+    assert!(
+        prompt.is_some(),
+        "phase 2's prompt names the earlier answer"
+    );
     let grade = grade_phase(&layout, 2, &repository())?;
     assert_eq!(grade.phase, 2);
     assert!(grade.claims.is_some());
@@ -272,7 +317,10 @@ fn the_committed_task_files_are_valid_and_only_the_corpus_tasks_may_be_counted()
     let mut files: Vec<PathBuf> = fs::read_dir(tasks_folder())?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
         .collect();
     files.sort();
     assert_eq!(files.len(), 9);
@@ -280,10 +328,23 @@ fn the_committed_task_files_are_valid_and_only_the_corpus_tasks_may_be_counted()
         let task = Task::load(file)?;
         task.validate(&corpus, false)?;
         let corpus_task = ["T1", "T2", "T3"].contains(&task.task.as_str());
-        assert_eq!(task.validate(&corpus, true).is_ok(), corpus_task, "{}", task.id);
+        assert_eq!(
+            task.validate(&corpus, true).is_ok(),
+            corpus_task,
+            "{}",
+            task.id
+        );
         let expected = if corpus_task { (900, 60) } else { (1_800, 80) };
-        assert_eq!((task.budget.timeout_s, task.budget.max_turns), expected, "{}", task.id);
-        let named = file.file_stem().and_then(|stem| stem.to_str()).unwrap_or_default();
+        assert_eq!(
+            (task.budget.timeout_s, task.budget.max_turns),
+            expected,
+            "{}",
+            task.id
+        );
+        let named = file
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or_default();
         assert_eq!(named, task.id);
     }
     Ok(())
@@ -293,8 +354,14 @@ fn the_committed_task_files_are_valid_and_only_the_corpus_tasks_may_be_counted()
 fn freeze_repository(scratch: &Scratch) -> TestResult {
     for (relative, text) in [
         ("tools/vsift-agent-trials/value/tasks/T1.json", "{}"),
-        ("tools/vsift-agent-trials/value/raw-guide/SKILL.md", "---\nname: guide\n---\n"),
-        ("tools/vsift-agent-trials/claude-value-trial-settings.json", "{}"),
+        (
+            "tools/vsift-agent-trials/value/raw-guide/SKILL.md",
+            "---\nname: guide\n---\n",
+        ),
+        (
+            "tools/vsift-agent-trials/claude-value-trial-settings.json",
+            "{}",
+        ),
         ("tools/vsift-agent-trials/src/lib.rs", "//! grader\n"),
         ("tools/vsift-agent-trials/Cargo.toml", "[package]\n"),
         ("docs/planning/value-measurement/method.md", "# Method\n"),
@@ -317,7 +384,10 @@ fn the_value_freeze_holds_until_a_frozen_input_moves() -> TestResult {
     assert_eq!(freeze::check(scratch.path(), &file)?, Vec::<String>::new());
 
     for (relative, component) in [
-        ("tools/vsift-agent-trials/value/raw-guide/SKILL.md", "raw_guide"),
+        (
+            "tools/vsift-agent-trials/value/raw-guide/SKILL.md",
+            "raw_guide",
+        ),
         ("docs/planning/value-measurement/method.md", "method"),
         ("tools/vsift-agent-trials/src/lib.rs", "grader"),
         ("tools/vsift-agent-trials/value/tasks/T1.json", "tasks"),
@@ -325,12 +395,21 @@ fn the_value_freeze_holds_until_a_frozen_input_moves() -> TestResult {
         scratch.write(relative, "changed\n")?;
         let problems = freeze::check(scratch.path(), &file)?;
         assert!(
-            problems.iter().any(|problem| problem.starts_with(component)),
+            problems
+                .iter()
+                .any(|problem| problem.starts_with(component)),
             "{component}: {problems:?}"
         );
     }
 
-    fs::remove_file(scratch.path().join("tools/vsift-agent-trials/value/raw-guide/SKILL.md"))?;
-    assert!(freeze::compute(scratch.path(), "x").is_err(), "no freeze without the guide");
+    fs::remove_file(
+        scratch
+            .path()
+            .join("tools/vsift-agent-trials/value/raw-guide/SKILL.md"),
+    )?;
+    assert!(
+        freeze::compute(scratch.path(), "x").is_err(),
+        "no freeze without the guide"
+    );
     Ok(())
 }

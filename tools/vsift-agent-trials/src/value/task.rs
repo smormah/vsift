@@ -256,8 +256,17 @@ pub const EARLIER_ANSWER_FILE: &str = "answer-1.md";
 /// Words a question may not hold: a tool, the skill's vocabulary or an
 /// instruction that would differ between arms.
 const FORBIDDEN_IN_QUESTION: [&str; 11] = [
-    "vsift", "ffmpeg", "ffprobe", "whisper", "skill", "handoff", "session", "guide", "budget",
-    "evidence id", "--",
+    "vsift",
+    "ffmpeg",
+    "ffprobe",
+    "whisper",
+    "skill",
+    "handoff",
+    "session",
+    "guide",
+    "budget",
+    "evidence id",
+    "--",
 ];
 
 impl Task {
@@ -338,9 +347,17 @@ impl Task {
     /// # Errors
     ///
     /// [`TrialError`] when an event is unknown or a fact has no words.
-    pub fn truth_items(&self, phase: usize, corpus: &CorpusTruth) -> Result<Vec<TruthItem>, TrialError> {
+    pub fn truth_items(
+        &self,
+        phase: usize,
+        corpus: &CorpusTruth,
+    ) -> Result<Vec<TruthItem>, TrialError> {
         let Some(spec) = self.phases.get(phase) else {
-            return Err(TrialError::Invalid(format!("{} has no phase {}", self.id, phase + 1)));
+            return Err(TrialError::Invalid(format!(
+                "{} has no phase {}",
+                self.id,
+                phase + 1
+            )));
         };
         match &spec.truth {
             PhaseTruth::PendingM2 => Ok(Vec::new()),
@@ -379,7 +396,8 @@ impl Task {
                                 )));
                             }
                             let mut alternatives = time_alternatives(&fact.term);
-                            alternatives.extend(fact.alternatives.iter().map(|text| fact_words(text)));
+                            alternatives
+                                .extend(fact.alternatives.iter().map(|text| fact_words(text)));
                             Ok(KeyFact {
                                 event: item.id.clone(),
                                 term: fact.term.clone(),
@@ -423,7 +441,11 @@ impl Task {
     /// [`TrialError::Invalid`] when the phase does not exist.
     pub fn prompt(&self, phase: usize, arm: Arm, guide_name: &str) -> Result<String, TrialError> {
         let Some(spec) = self.phases.get(phase) else {
-            return Err(TrialError::Invalid(format!("{} has no phase {}", self.id, phase + 1)));
+            return Err(TrialError::Invalid(format!(
+                "{} has no phase {}",
+                self.id,
+                phase + 1
+            )));
         };
         let mut question = spec.question.replace("{{video}}", &self.video_name());
         if let Some(name) = self.transcript_name() {
@@ -508,7 +530,10 @@ mod tests {
             .collect();
         assert_eq!(prompts.len(), 4);
         for prompt in &prompts {
-            assert!(prompt.contains("What does recording.mp4 show at the start?"), "{prompt}");
+            assert!(
+                prompt.contains("What does recording.mp4 show at the start?"),
+                "{prompt}"
+            );
             assert!(prompt.ends_with(REPORT_REQUIREMENT), "{prompt}");
             assert!(prompt.contains(MODEL_IN_WORKSPACE), "{prompt}");
         }
@@ -525,7 +550,10 @@ mod tests {
             "What does the vsift session of {{video}} hold?",
         ] {
             let corpus = CorpusTruth::default();
-            assert!(task(question).validate(&corpus, false).is_err(), "{question}");
+            assert!(
+                task(question).validate(&corpus, false).is_err(),
+                "{question}"
+            );
         }
     }
 

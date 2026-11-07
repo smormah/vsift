@@ -18,7 +18,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use super::task::{Arm, Media, MODEL_IN_WORKSPACE, Task, TaskBudget, Transcript};
+use super::task::{Arm, MODEL_IN_WORKSPACE, Media, Task, TaskBudget, Transcript};
 use crate::{
     cold::assert_cold_workspace,
     error::{TrialError, write_json},
@@ -146,10 +146,14 @@ pub fn guide_name(guide: &Path) -> Result<String, TrialError> {
                     .all(|character| character.is_ascii_alphanumeric() || character == '-')
         })
         .ok_or_else(|| {
-            TrialError::Invalid("the guide's SKILL.md has no usable `name:` in its front matter".to_owned())
+            TrialError::Invalid(
+                "the guide's SKILL.md has no usable `name:` in its front matter".to_owned(),
+            )
         })?;
     if name.to_ascii_lowercase().contains("vsift") {
-        return Err(TrialError::Invalid("the guide's name may not mention VSift".to_owned()));
+        return Err(TrialError::Invalid(
+            "the guide's name may not mention VSift".to_owned(),
+        ));
     }
     Ok(name)
 }
@@ -185,7 +189,9 @@ fn absolute_file(path: &Path, what: &str) -> Result<(), TrialError> {
     if path.is_absolute() && path.is_file() {
         Ok(())
     } else {
-        Err(TrialError::Refused(format!("--{what} must be an absolute path to a file")))
+        Err(TrialError::Refused(format!(
+            "--{what} must be an absolute path to a file"
+        )))
     }
 }
 
@@ -230,7 +236,9 @@ pub fn prepare(request: &ValuePrepareRequest) -> Result<TrialLayout, TrialError>
     let trial_id = format!("run-{}", random_hex(4)?);
     let layout = TrialLayout::new(request.root.join(&trial_id));
     if layout.trial().exists() {
-        return Err(TrialError::Refused("the trial directory already exists".to_owned()));
+        return Err(TrialError::Refused(
+            "the trial directory already exists".to_owned(),
+        ));
     }
     let workspace = layout.workspace();
     create(&workspace)?;
@@ -263,7 +271,9 @@ pub fn prepare(request: &ValuePrepareRequest) -> Result<TrialLayout, TrialError>
         match spec {
             Transcript::FromScript => {
                 let Media::Corpus { fixture, .. } = &task.media else {
-                    return Err(TrialError::Invalid("a script transcript needs a corpus fixture".to_owned()));
+                    return Err(TrialError::Invalid(
+                        "a script transcript needs a corpus fixture".to_owned(),
+                    ));
                 };
                 let fixture = corpus.fixture(fixture)?;
                 let span = corpus.speech_span(&fixture.id).ok_or_else(|| {
@@ -305,7 +315,11 @@ pub fn prepare(request: &ValuePrepareRequest) -> Result<TrialLayout, TrialError>
         ("ffprobe", &request.ffprobe),
         ("whisper-cli", &request.whisper),
     ] {
-        let file_name = if cfg!(windows) { format!("{name}.exe") } else { name.to_owned() };
+        let file_name = if cfg!(windows) {
+            format!("{name}.exe")
+        } else {
+            name.to_owned()
+        };
         place(source, &tools_directory.join(file_name))?;
     }
 
@@ -323,10 +337,10 @@ pub fn prepare(request: &ValuePrepareRequest) -> Result<TrialLayout, TrialError>
             (SkillSource::Repository, directory_digest(&request.guide)?)
         }
         Arm::V1 => {
-            let source = request
-                .install
-                .as_ref()
-                .map_or_else(|| repository_skill.clone(), |proof| proof.package_root.join("skills").join("vsift"));
+            let source = request.install.as_ref().map_or_else(
+                || repository_skill.clone(),
+                |proof| proof.package_root.join("skills").join("vsift"),
+            );
             if directory_digest(&source)? != directory_digest(&repository_skill)? {
                 return Err(TrialError::Invalid(
                     "the skill inside the installed package differs from the checkout's".to_owned(),
@@ -355,10 +369,27 @@ pub fn prepare(request: &ValuePrepareRequest) -> Result<TrialLayout, TrialError>
     let vsift_sha256 = match &binary {
         Some(binary) => {
             let cli = VsiftCli::new(binary, &layout)?;
-            for (dependency, path) in [("ffmpeg", &request.ffmpeg), ("ffprobe", &request.ffprobe), ("whisper", &request.whisper)] {
-                cli.ok(&arguments(&[&"setup", &"configure", &dependency, &"--executable", path, &"--json"]))?;
+            for (dependency, path) in [
+                ("ffmpeg", &request.ffmpeg),
+                ("ffprobe", &request.ffprobe),
+                ("whisper", &request.whisper),
+            ] {
+                cli.ok(&arguments(&[
+                    &"setup",
+                    &"configure",
+                    &dependency,
+                    &"--executable",
+                    path,
+                    &"--json",
+                ]))?;
             }
-            cli.ok(&arguments(&[&"setup", &"configure-model", &"--file", &request.model, &"--json"]))?;
+            cli.ok(&arguments(&[
+                &"setup",
+                &"configure-model",
+                &"--file",
+                &request.model,
+                &"--json",
+            ]))?;
             file_digest(binary)?
         }
         None => "none".to_owned(),
@@ -442,9 +473,14 @@ pub fn write_earlier_answer(layout: &TrialLayout, phase: usize) -> Result<(), Tr
     let record = crate::run::read_run(layout, earlier)?;
     let (stdout, _) = crate::run::raw_output(&record)?;
     let trace = crate::trace::parse(record.client, &stdout)?;
-    let answer = trace.final_message.filter(|text| !text.trim().is_empty()).ok_or_else(|| {
-        TrialError::Invalid(format!("phase {earlier} gave no answer to carry into phase {phase}"))
-    })?;
+    let answer = trace
+        .final_message
+        .filter(|text| !text.trim().is_empty())
+        .ok_or_else(|| {
+            TrialError::Invalid(format!(
+                "phase {earlier} gave no answer to carry into phase {phase}"
+            ))
+        })?;
     let file = layout.workspace().join(super::task::EARLIER_ANSWER_FILE);
     fs::write(&file, format!("{}\n", answer.trim_end()))
         .map_err(|error| TrialError::io_at(&file, error))
@@ -514,7 +550,10 @@ mod tests {
         let _ = fs::create_dir_all(&folder);
         let write = |text: &str| fs::write(folder.join("SKILL.md"), text);
         assert!(write("---\nname: recording-evidence\ndescription: x\n---\nBody\n").is_ok());
-        assert_eq!(guide_name(&folder).ok(), Some("recording-evidence".to_owned()));
+        assert_eq!(
+            guide_name(&folder).ok(),
+            Some("recording-evidence".to_owned())
+        );
         assert!(write("---\nname: vsift-raw\n---\n").is_ok());
         assert!(guide_name(&folder).is_err());
         assert!(write("No front matter\n").is_ok());
@@ -533,7 +572,12 @@ mod tests {
         let settings = settings.unwrap_or_default();
         let allowed: Vec<String> = settings["permissions"]["allow"]
             .as_array()
-            .map(|rules| rules.iter().filter_map(|rule| rule.as_str().map(str::to_owned)).collect())
+            .map(|rules| {
+                rules
+                    .iter()
+                    .filter_map(|rule| rule.as_str().map(str::to_owned))
+                    .collect()
+            })
             .unwrap_or_default();
         let mut expected: Vec<String> = ["vsift"]
             .iter()

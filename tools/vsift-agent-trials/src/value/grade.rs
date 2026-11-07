@@ -127,9 +127,9 @@ fn programs(command: &str) -> Vec<String> {
 
 fn is_finishing(command: &str) -> bool {
     let words: Vec<&str> = command.split_whitespace().collect();
-    words
-        .windows(3)
-        .any(|window| window[0].ends_with("vsift") && window[1] == "handoff" && FINISHING.contains(&window[2]))
+    words.windows(3).any(|window| {
+        window[0].ends_with("vsift") && window[1] == "handoff" && FINISHING.contains(&window[2])
+    })
 }
 
 fn image_path(call: &crate::trace::ToolCall) -> Option<&str> {
@@ -168,7 +168,11 @@ pub fn measure(trace: &Trace, workspace: &Path, time: TimeSplit) -> Measures {
         let words: Vec<String> = command
             .map(|text| text.split_whitespace().take(2).map(str::to_owned).collect())
             .unwrap_or_default();
-        if previous_failure.as_ref().is_some_and(|previous| *previous == words) && !words.is_empty() {
+        if previous_failure
+            .as_ref()
+            .is_some_and(|previous| *previous == words)
+            && !words.is_empty()
+        {
             measures.retried_calls += 1;
         }
         previous_failure = failed.then_some(words);
@@ -180,10 +184,10 @@ pub fn measure(trace: &Trace, workspace: &Path, time: TimeSplit) -> Measures {
         }
         if let Some(command) = command {
             let run = programs(command);
-            measures.media_tool_calls += u64::from(
-                run.iter()
-                    .any(|program| ["ffmpeg", "ffprobe", "whisper-cli"].contains(&program.as_str())),
-            );
+            measures.media_tool_calls +=
+                u64::from(run.iter().any(|program| {
+                    ["ffmpeg", "ffprobe", "whisper-cli"].contains(&program.as_str())
+                }));
             measures.vsift_calls += u64::from(run.iter().any(|program| program == "vsift"));
         }
         if let Some(path) = image_path(call) {
@@ -192,7 +196,12 @@ pub fn measure(trace: &Trace, workspace: &Path, time: TimeSplit) -> Measures {
             measures.image_bytes += fs::metadata(&resolved).map_or(0, |metadata| metadata.len());
         }
     }
-    let answer = u64::from(trace.final_message.as_deref().is_some_and(|text| !text.trim().is_empty()));
+    let answer = u64::from(
+        trace
+            .final_message
+            .as_deref()
+            .is_some_and(|text| !text.trim().is_empty()),
+    );
     let count = |set: &BTreeSet<usize>| u64::try_from(set.len()).unwrap_or(u64::MAX);
     measures.round_trips = count(&steps) + answer;
     measures.round_trips_without_finishing = count(&steps_with_other_calls) + answer;
@@ -205,7 +214,11 @@ pub fn measure(trace: &Trace, workspace: &Path, time: TimeSplit) -> Measures {
 ///
 /// [`TrialError`] when the trial is not a value trial or a record cannot be
 /// read.
-pub fn grade_phase(layout: &TrialLayout, phase: usize, repository: &Path) -> Result<ValueGrade, TrialError> {
+pub fn grade_phase(
+    layout: &TrialLayout,
+    phase: usize,
+    repository: &Path,
+) -> Result<ValueGrade, TrialError> {
     let manifest = read_manifest(layout)?;
     let value = manifest
         .value
@@ -246,8 +259,20 @@ pub fn grade_phase(layout: &TrialLayout, phase: usize, repository: &Path) -> Res
     let references = SkillReferences::load(repository)?;
     let skill_directories = match value.arm {
         Arm::R0 | Arm::V0 => Vec::new(),
-        Arm::R1 => vec![layout.workspace().join(".claude").join("skills").join(&value.guide_name)],
-        Arm::V1 => vec![layout.workspace().join(".claude").join("skills").join("vsift")],
+        Arm::R1 => vec![
+            layout
+                .workspace()
+                .join(".claude")
+                .join("skills")
+                .join(&value.guide_name),
+        ],
+        Arm::V1 => vec![
+            layout
+                .workspace()
+                .join(".claude")
+                .join("skills")
+                .join("vsift"),
+        ],
     };
     let scope = ReadScope {
         workspace: layout.workspace(),

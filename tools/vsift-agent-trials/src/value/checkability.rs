@@ -157,7 +157,11 @@ fn with_invented_claim(handoff: &Value, mut citation: Value, id: &str) -> Option
     let model = changed["claims"]
         .as_array()?
         .iter()
-        .find(|claim| claim["citations"].as_array().is_some_and(|ids| !ids.is_empty()))?
+        .find(|claim| {
+            claim["citations"]
+                .as_array()
+                .is_some_and(|ids| !ids.is_empty())
+        })?
         .clone();
     let mut claim = model;
     claim["id"] = json!(format!("c{id}"));
@@ -203,7 +207,11 @@ fn vsift_cases(
     };
     let Some(model) = handoff["citations"]
         .as_array()
-        .and_then(|citations| citations.iter().find(|citation| citation["evidence_id"].is_string()))
+        .and_then(|citations| {
+            citations
+                .iter()
+                .find(|citation| citation["evidence_id"].is_string())
+        })
         .cloned()
     else {
         return not_run("the V1 handoff cites no evidence id".to_owned());
@@ -231,9 +239,7 @@ fn vsift_cases(
                 ),
             }
         }
-        None => CheckVerdict::NotRun(
-            "the cited evidence carries no actual_us to move".to_owned(),
-        ),
+        None => CheckVerdict::NotRun("the cited evidence carries no actual_us to move".to_owned()),
     };
     Ok((
         Some(baseline),
@@ -303,7 +309,10 @@ fn raw_cases(layout: &TrialLayout) -> Result<Vec<Case>, TrialError> {
     };
     Ok(vec![
         case("a statement citing a frame file that does not exist", first),
-        case("a statement citing a real frame file at a wrong time", second),
+        case(
+            "a statement citing a real frame file at a wrong time",
+            second,
+        ),
     ])
 }
 
@@ -313,7 +322,11 @@ fn raw_cases(layout: &TrialLayout) -> Result<Vec<Case>, TrialError> {
 ///
 /// [`TrialError`] when a trial or its log cannot be read, or `vsift` cannot
 /// be started.
-pub fn demonstrate(v1_trial: &Path, r1_trial: &Path, vsift: &Path) -> Result<Demonstration, TrialError> {
+pub fn demonstrate(
+    v1_trial: &Path,
+    r1_trial: &Path,
+    vsift: &Path,
+) -> Result<Demonstration, TrialError> {
     let v1 = TrialLayout::new(v1_trial);
     let r1 = TrialLayout::new(r1_trial);
     let task = |layout: &TrialLayout| {
@@ -353,7 +366,9 @@ pub fn markdown(demonstration: &Demonstration) -> String {
             baseline.detail()
         );
     }
-    text.push_str("| Report | Invented | Check | Verdict | Detail |\n| --- | --- | --- | --- | --- |\n");
+    text.push_str(
+        "| Report | Invented | Check | Verdict | Detail |\n| --- | --- | --- | --- | --- |\n",
+    );
     for case in &demonstration.cases {
         let _ = writeln!(
             text,
@@ -380,7 +395,8 @@ pub fn write(
     output: &Path,
 ) -> Result<Demonstration, TrialError> {
     let demonstration = demonstrate(v1_trial, r1_trial, vsift)?;
-    fs::write(output, markdown(&demonstration)).map_err(|error| TrialError::io_at(output, error))?;
+    fs::write(output, markdown(&demonstration))
+        .map_err(|error| TrialError::io_at(output, error))?;
     let json_file: PathBuf = output.with_extension("json");
     crate::error::write_json(&json_file, &demonstration)?;
     Ok(demonstration)
@@ -392,13 +408,15 @@ mod tests {
 
     #[test]
     fn cited_images_are_found_once_in_order() {
-        let report = "At 0:07 (frames/f-007.png) the row turns red; see ./frames/f-007.png and shot_2.JPG.";
+        let report =
+            "At 0:07 (frames/f-007.png) the row turns red; see ./frames/f-007.png and shot_2.JPG.";
         assert_eq!(cited_images(report), vec!["frames/f-007.png", "shot_2.JPG"]);
     }
 
     #[test]
     fn a_script_catches_a_missing_file_but_not_a_wrong_time() {
-        let folder = std::env::temp_dir().join(format!("value-checkability-{}", std::process::id()));
+        let folder =
+            std::env::temp_dir().join(format!("value-checkability-{}", std::process::id()));
         let frames = folder.join("frames");
         assert!(fs::create_dir_all(&frames).is_ok());
         assert!(fs::write(frames.join("real.png"), b"png").is_ok());
@@ -407,7 +425,10 @@ mod tests {
         let _ = fs::remove_dir_all(&folder);
         assert_eq!(missing.word(), "refused");
         assert_eq!(wrong_time.word(), "accepted");
-        assert_eq!(raw_script_check("At 0:07 it changes.", Path::new(".")).word(), "not run");
+        assert_eq!(
+            raw_script_check("At 0:07 it changes.", Path::new(".")).word(),
+            "not run"
+        );
     }
 
     #[test]
@@ -416,7 +437,11 @@ mod tests {
             "claims": [{"id": "c1", "statement": "x", "citations": ["e1"]}],
             "citations": [{"id": "e1", "type": "frame", "evidence_id": "evd_0000000000000001"}]
         });
-        let changed = with_invented_claim(&handoff, json!({"type": "frame", "evidence_id": "evd_ffff"}), "e901");
+        let changed = with_invented_claim(
+            &handoff,
+            json!({"type": "frame", "evidence_id": "evd_ffff"}),
+            "e901",
+        );
         let changed = changed.unwrap_or_default();
         assert_eq!(changed["claims"][1]["citations"], json!(["e901"]));
         assert_eq!(changed["citations"][1]["id"], json!("e901"));

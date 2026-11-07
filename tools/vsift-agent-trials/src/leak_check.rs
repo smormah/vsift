@@ -116,10 +116,18 @@ mod tests {
     #[test]
     fn a_passed_secret_in_the_output_is_found_and_a_short_setting_is_not_a_secret() {
         let secret = "sk-test-0000000000000000000000000000".to_owned();
-        let clean = with_passed_values(LeakCheck::default(), &[secret.clone(), "1".to_owned()], &["no secret here"]);
+        let clean = with_passed_values(
+            LeakCheck::default(),
+            &[secret.clone(), "1".to_owned()],
+            &["no secret here"],
+        );
         assert_eq!(clean.values_checked, 1);
         assert!(!clean.found);
-        let leaked = with_passed_values(LeakCheck::default(), std::slice::from_ref(&secret), &[&format!("key={secret}")]);
+        let leaked = with_passed_values(
+            LeakCheck::default(),
+            std::slice::from_ref(&secret),
+            &[&format!("key={secret}")],
+        );
         assert!(leaked.found);
     }
 

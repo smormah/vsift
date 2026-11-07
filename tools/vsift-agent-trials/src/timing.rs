@@ -15,12 +15,7 @@
 //! why Claude Code's own `duration_api_ms` is kept beside the split as a
 //! check.
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::Path,
-    time::Instant,
-};
+use std::{collections::BTreeMap, fs, path::Path, time::Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

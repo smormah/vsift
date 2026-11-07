@@ -960,8 +960,7 @@ fn value(step: ValueStep) -> Result<Done, TrialError> {
             vsift,
             output,
         } => {
-            let demonstration =
-                value_checkability::write(&v1_trial, &r1_trial, &vsift, &output)?;
+            let demonstration = value_checkability::write(&v1_trial, &r1_trial, &vsift, &output)?;
             Ok(Done::ok(format!(
                 "{}: {} case(s) written to {}",
                 demonstration.task,
@@ -1002,7 +1001,10 @@ fn value(step: ValueStep) -> Result<Done, TrialError> {
                 run_index,
                 pilot,
                 vsift,
-                install: install_proof.as_deref().map(InstallProof::load).transpose()?,
+                install: install_proof
+                    .as_deref()
+                    .map(InstallProof::load)
+                    .transpose()?,
                 vsift_commit,
                 ffmpeg,
                 ffprobe,
@@ -1056,7 +1058,8 @@ fn value(step: ValueStep) -> Result<Done, TrialError> {
             output_json,
             output_markdown,
         } => {
-            let summary = value_summary::summarize_folder(&records, &output_json, &output_markdown)?;
+            let summary =
+                value_summary::summarize_folder(&records, &output_json, &output_markdown)?;
             Ok(Done::ok(format!(
                 "{} cell(s), {} verdict(s), {} excluded run(s), {} pilot(s)",
                 summary.cells.len(),
@@ -1065,7 +1068,10 @@ fn value(step: ValueStep) -> Result<Done, TrialError> {
                 summary.pilots
             )))
         }
-        ValueStep::CheckTasks { counted, repository } => {
+        ValueStep::CheckTasks {
+            counted,
+            repository,
+        } => {
             let repository = repository.unwrap_or_else(default_repository);
             let corpus = CorpusTruth::load(&repository.join("fixtures").join("corpus"))?;
             let folder = repository.join(VALUE_TASKS);
@@ -1073,7 +1079,10 @@ fn value(step: ValueStep) -> Result<Done, TrialError> {
                 .map_err(|error| TrialError::io_at(&folder, error))?
                 .filter_map(Result::ok)
                 .map(|entry| entry.path())
-                .filter(|path| path.extension().is_some_and(|extension| extension == "json"))
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "json")
+                })
                 .collect();
             files.sort();
             let mut pending = 0;

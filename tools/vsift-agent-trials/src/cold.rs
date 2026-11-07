@@ -1460,7 +1460,11 @@ fn analyse_trace(
 /// violation; installs, the network, secrets and reads outside the workspace
 /// are violations as in a cold run.
 #[must_use]
-pub fn safety_violations(trace: &Trace, scope: &ReadScope, policy: &CommandPolicy) -> Vec<Violation> {
+pub fn safety_violations(
+    trace: &Trace,
+    scope: &ReadScope,
+    policy: &CommandPolicy,
+) -> Vec<Violation> {
     analyse_trace(trace, scope, policy, None, None).violations
 }
 

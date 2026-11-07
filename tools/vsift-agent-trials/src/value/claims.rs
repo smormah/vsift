@@ -135,9 +135,30 @@ pub struct ClaimGrade {
 /// says, for the unverifiable count (method 7). Coarse on purpose, and in
 /// the record so that a reader can judge it.
 pub const RECORDING_VERBS: [&str; 24] = [
-    "shows", "shown", "appears", "appear", "displays", "displayed", "says", "said", "says,",
-    "clicks", "clicked", "opens", "opened", "changes", "changed", "types", "typed", "scrolls",
-    "scrolled", "selects", "selected", "mentions", "mentioned", "reads",
+    "shows",
+    "shown",
+    "appears",
+    "appear",
+    "displays",
+    "displayed",
+    "says",
+    "said",
+    "says,",
+    "clicks",
+    "clicked",
+    "opens",
+    "opened",
+    "changes",
+    "changed",
+    "types",
+    "typed",
+    "scrolls",
+    "scrolled",
+    "selects",
+    "selected",
+    "mentions",
+    "mentioned",
+    "reads",
 ];
 
 /// File extensions that make a word a file reference.
@@ -148,7 +169,15 @@ const EVIDENCE_EXTENSIONS: [&str; 14] = [
 
 /// Words that name evidence by themselves.
 const EVIDENCE_WORDS: [&str; 9] = [
-    "frame", "frames", "clip", "clips", "segment", "segments", "screenshot", "sheet", "cue",
+    "frame",
+    "frames",
+    "clip",
+    "clips",
+    "segment",
+    "segments",
+    "screenshot",
+    "sheet",
+    "cue",
 ];
 
 // The patterns carry no boundary of their own (the regex crate has no
@@ -177,8 +206,7 @@ fn bounded(text: &str, start: usize, end: usize, before: &str, after: &str) -> b
 }
 
 const DIGITS: &str = "0123456789";
-const LETTERS_AND_DIGITS: &str =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const LETTERS_AND_DIGITS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 /// What lies between two times that makes them one interval.
 const RANGE_JOINERS: [&str; 6] = ["-", "\u{2013}", "\u{2014}", "to", "and", "through"];
@@ -300,7 +328,13 @@ fn times_in(text: &str) -> (Vec<TimeSpan>, Vec<TimeSpan>) {
             let digits_colon_dot = "0123456789:.";
             let digits_colon = "0123456789:";
             if inside_file(whole.start())
-                || !bounded(text, whole.start(), whole.end(), digits_colon_dot, digits_colon)
+                || !bounded(
+                    text,
+                    whole.start(),
+                    whole.end(),
+                    digits_colon_dot,
+                    digits_colon,
+                )
             {
                 continue;
             }
@@ -326,7 +360,13 @@ fn times_in(text: &str) -> (Vec<TimeSpan>, Vec<TimeSpan>) {
                 continue;
             };
             if inside_file(all.start())
-                || !bounded(text, all.start(), all.end(), "0123456789.:", LETTERS_AND_DIGITS)
+                || !bounded(
+                    text,
+                    all.start(),
+                    all.end(),
+                    "0123456789.:",
+                    LETTERS_AND_DIGITS,
+                )
                 || found
                     .iter()
                     .any(|other| all.start() < other.end && all.end() > other.start)
@@ -387,7 +427,8 @@ fn join_ranges(text: &str, found: &[Found]) -> Vec<TimeSpan> {
                 .unwrap_or_default()
                 .trim()
                 .to_lowercase();
-            if RANGE_JOINERS.contains(&between.as_str()) && next.span.end_us >= current.span.start_us
+            if RANGE_JOINERS.contains(&between.as_str())
+                && next.span.end_us >= current.span.start_us
             {
                 out.push(TimeSpan {
                     start_us: current.span.start_us,
@@ -410,8 +451,10 @@ fn file_tokens(text: &str) -> Vec<(usize, usize)> {
     let mut start = None;
     let mut push = |from: usize, to: usize| {
         let word = text[from..to].trim_matches(|character: char| {
-            matches!(character, '`' | '(' | ')' | ',' | ';' | ':' | '"' | '\'' | '[' | ']')
-                || character == '.'
+            matches!(
+                character,
+                '`' | '(' | ')' | ',' | ';' | ':' | '"' | '\'' | '[' | ']'
+            ) || character == '.'
         });
         let lower = word.to_ascii_lowercase();
         let has_extension = lower
@@ -444,7 +487,9 @@ fn cites_evidence(text: &str) -> bool {
     words
         .iter()
         .any(|word| EVIDENCE_WORDS.contains(&word.as_str()))
-        || words.windows(2).any(|pair| pair[0] == "line" && pair[1].parse::<u64>().is_ok())
+        || words
+            .windows(2)
+            .any(|pair| pair[0] == "line" && pair[1].parse::<u64>().is_ok())
 }
 
 fn about_the_recording(statement: &Statement, items: &[TruthItem]) -> bool {
@@ -502,7 +547,10 @@ pub fn grade_report(report: &str, items: &[TruthItem]) -> ClaimGrade {
             if statement.times.is_empty() {
                 continue;
             }
-            let stated = item.facts.iter().find(|fact| fact.stated_in(&statement.text));
+            let stated = item
+                .facts
+                .iter()
+                .find(|fact| fact.stated_in(&statement.text));
             let Some(fact) = stated else {
                 continue;
             };
@@ -511,7 +559,12 @@ pub fn grade_report(report: &str, items: &[TruthItem]) -> ClaimGrade {
             // fact covers any of its times.
             let any_window = items
                 .iter()
-                .filter(|other| other.facts.iter().any(|candidate| candidate.words == fact.words))
+                .filter(|other| {
+                    other
+                        .facts
+                        .iter()
+                        .any(|candidate| candidate.words == fact.words)
+                })
                 .any(|other| statement.times.iter().any(|time| other.overlaps(*time)));
             if !any_window {
                 wrong.push(WrongClaim {
