@@ -5738,13 +5738,13 @@ Linux install is unproven until the pilot.**
   comparable with the Windows trials' medians that the method's estimate used. Claude Code 2.1.284 is installed
   from npm with `--ignore-scripts`, its package checked against the registry's advertised integrity; no
   integrity is pinned in the repository yet, and whether that package runs on Linux without its install script
-  is unchecked.
+  is unchecked. The workflow also sets Claude Code's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`, which on Linux runs Bash in a PID namespace of its own; whether the runner allows that is unchecked too.
 - **Evidence:** `.github/workflows/value-trials.yml`; [trials.md](../agents/trials.md#the-value-measurement-030-phase-1).
 - **Impact: low by the rubric:** all four arms run on the same runner image, so the comparison between them is
   fair; only comparisons with earlier trials are affected.
 - **Mitigation:** the records name the runner image, the client's version and the model; public text compares
   arms with each other, never with the Windows trials.
-- **Next step:** the pilots settle the install. If the package runs, its integrity is pinned in the workflow and
+- **Next step:** the pilots settle the install and the scrub (if the scrub cannot run there, it is dropped and the leak check stays). If the package runs, its integrity is pinned in the workflow and
   the install part of this entry is removed; if not, the workflow pins the native build by size and SHA-256.
 - **Owner:** the value measurement (M1). **Issue:** none. **Status:** open. **Review:** pending.
 

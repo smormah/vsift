@@ -9,14 +9,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::{
-    grade::{ValueGrade, read_grade},
+    grade::{SIGN_IN_LEAKED, ValueGrade, read_grade},
     task::Arm,
 };
 use crate::{
     error::{TrialError, read_json, write_json},
     layout::TrialLayout,
     record::{MAX_RECORD_BYTES, Redactions},
-    run::read_manifest,
+    run::{read_manifest, read_run},
 };
 
 /// The schema name every value record carries.
@@ -33,7 +33,10 @@ pub const GATED_TASKS: [&str; 4] = ["T2", "T4", "T5", "T6"];
 ///
 /// # Errors
 ///
-/// [`TrialError`] when the grade is missing or the record is too large.
+/// [`TrialError`] when the grade is missing or the record is too large, and
+/// [`TrialError::Refused`] with [`SIGN_IN_LEAKED`] when the sign-in's value
+/// appeared in the run's output: then the trial's raw logs are removed and
+/// no record is written.
 pub fn write_record(
     layout: &TrialLayout,
     phase: usize,
@@ -42,6 +45,20 @@ pub fn write_record(
     user_names: &[String],
 ) -> Result<Value, TrialError> {
     let manifest = read_manifest(layout)?;
+    if read_run(layout, phase)?
+        .sign_in_leak_check
+        .is_some_and(|scan| scan.found)
+    {
+        // The value is in the raw logs: they go before anything could copy
+        // them, and no record of the run is written.
+        for earlier in 1..=manifest.prompts.len().max(phase) {
+            let raw = layout.raw(earlier);
+            if raw.is_dir() {
+                fs::remove_dir_all(&raw).map_err(|error| TrialError::io_at(&raw, error))?;
+            }
+        }
+        return Err(TrialError::Refused(SIGN_IN_LEAKED.to_owned()));
+    }
     let grade = read_grade(layout, phase)?;
     let mut extra = vec![(grade.value.tools_directory.clone(), "<tools>")];
     if let Some(home) = client_home {

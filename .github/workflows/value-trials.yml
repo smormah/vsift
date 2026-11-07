@@ -285,8 +285,13 @@ jobs:
           FREEZE: ${{ inputs.freeze }}
           RUN_INDEX: ${{ matrix.run }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Claude Code keeps the key out of the environment of the commands
+          # its Bash tool runs (its documented subprocess scrub). The leak
+          # check below stays whatever this does.
+          CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1"
         run: |
           set -euo pipefail
+          leaked=0
           if [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "the value-trials environment holds no ANTHROPIC_API_KEY secret"
             exit 1
@@ -346,7 +351,20 @@ jobs:
                 # failures, with the reason written in the record.
                 "$harness" run --trial "$trial" --phase "$phase" --client claude-code \
                   --executable "$claude" --model "$MODEL" --client-home "$home" \
-                  --path-dir "$node_folder" --pass-env ANTHROPIC_API_KEY || echo "run exited $? ($task $arm phase $phase)"
+                  --path-dir "$node_folder" --pass-env ANTHROPIC_API_KEY \
+                  --pass-env CLAUDE_CODE_SUBPROCESS_ENV_SCRUB || echo "run exited $? ($task $arm phase $phase)"
+                # The run scanned its own logs for the key. If the key is in
+                # them, nothing of this trial may reach an artifact: a public
+                # repository's artifacts can be downloaded by any signed-in
+                # user, and GitHub masks secrets in logs, not in artifacts. The
+                # trial goes, no other run starts, and the job fails.
+                if jq -e '.sign_in_leak_check.found == true' "$trial/harness/phase-$phase/run.json" >/dev/null 2>&1; then
+                  rm -rf "$trial"
+                  echo "- $task $arm phase $phase: **sign-in leaked: revoke the key**" >> "$GITHUB_STEP_SUMMARY"
+                  echo "::error::sign-in leaked: revoke the key"
+                  leaked=1
+                  break 3
+                fi
                 line=$("$harness" value grade --trial "$trial" --phase "$phase" || echo "grade failed")
                 echo "- $line" >> "$GITHUB_STEP_SUMMARY"
                 "$harness" value record --trial "$trial" --phase "$phase" --client-home "$home" \
@@ -369,6 +387,9 @@ jobs:
             esac
             unset trial_of
           done
+          if [ "$leaked" = 1 ]; then
+            exit 1
+          fi
 
       - name: Keep the bounded records
         if: always()

@@ -17,6 +17,7 @@ use std::{
 use common::{Scratch, repository};
 use serde_json::{Value, json};
 use vsift_agent_trials::{
+    TrialError,
     layout::TrialLayout,
     roots::RootPolicy,
     run::{RunRequest, client_environment, read_manifest, run},
@@ -24,7 +25,7 @@ use vsift_agent_trials::{
     truth::CorpusTruth,
     value::{
         freeze,
-        grade::grade_phase,
+        grade::{SIGN_IN_LEAKED, grade_phase},
         prepare::{ValuePrepareRequest, prepare},
         summary::write_record,
         task::{Arm, EARLIER_ANSWER, EARLIER_ANSWER_FILE, Task},
@@ -410,6 +411,70 @@ fn the_value_freeze_holds_until_a_frozen_input_moves() -> TestResult {
     assert!(
         freeze::compute(scratch.path(), "x").is_err(),
         "no freeze without the guide"
+    );
+    Ok(())
+}
+
+/// Every file below a folder that holds `needle`.
+fn files_holding(folder: &Path, needle: &str) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    let mut found = Vec::new();
+    let mut pending = vec![folder.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if String::from_utf8_lossy(&fs::read(&path)?).contains(needle) {
+                found.push(path);
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The planner's review of #587: a run whose output holds the sign-in's
+/// value is a safety finding, gets no record, and keeps no raw log, so the
+/// hosted job has nothing of it to upload.
+#[tokio::test]
+async fn a_run_that_leaks_the_sign_in_gets_no_record_and_keeps_no_raw_log() -> TestResult {
+    let bench = Bench::new("value-leak")?;
+    let secret = "sk-test-not-a-key-0000000000000000000000000000";
+    bench.scratch.write(
+        "client-home/.credentials.json",
+        &json!({"testOnly": {"accessToken": secret}}).to_string(),
+    )?;
+    let task = tasks_folder().join("T2-f04-order-1017.json");
+    let layout = prepare(&bench.request(&task, Arm::R0))?;
+    bench.behave(
+        &layout,
+        &format!("At 0:07 order 1017 shows queued (frame frames/f-008.png). Found: {secret}"),
+        "leak",
+    )?;
+    let record = run(&bench.run_request(&layout, 1)).await?;
+    assert!(record.sign_in_leak_check.is_some_and(|scan| scan.found));
+
+    let grade = grade_phase(&layout, 1, &repository())?;
+    assert!(grade.sign_in_leaked);
+    assert!(
+        grade
+            .safety
+            .iter()
+            .any(|violation| violation.detail == SIGN_IN_LEAKED)
+    );
+
+    let output = bench.path("records/leak.json");
+    let client_home = bench.path("client-home");
+    let refused = write_record(&layout, 1, &output, Some(client_home.as_path()), &[]);
+    assert!(
+        matches!(&refused, Err(TrialError::Refused(why)) if why == SIGN_IN_LEAKED),
+        "{refused:?}"
+    );
+    assert!(!output.exists(), "a record was written");
+    assert!(!layout.raw(1).exists(), "the raw logs are still there");
+    assert_eq!(
+        files_holding(&layout.harness(), secret)?,
+        Vec::<PathBuf>::new(),
+        "a harness file still holds the value"
     );
     Ok(())
 }
