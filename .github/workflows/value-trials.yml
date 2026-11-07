@@ -1,0 +1,437 @@
+name: Value trials
+
+# The value measurement, phase 1 (docs/planning/value-measurement/method.md;
+# docs/agents/trials.md, "The value measurement"): the same assistant answers
+# the same questions about the same recordings with FFmpeg, FFprobe and
+# whisper-cli alone (arms r0 and r1) and with VSift (v0 and v1), and the
+# harness grades every arm's report the same way.
+#
+# Triggers: a pull request that changes the harness, its task files or this
+# workflow runs the harness's tests, which drive every arm against a stand-in
+# client (no model, no secret, no network beyond the crates). A manual
+# dispatch runs real trials:
+#
+#   gh workflow run value-trials.yml --ref main \
+#     -f tasks="T2-f04-order-1017 T5-rm10-small-text" -f runs=1 -f pilot=true
+#
+# The trial jobs run in the `value-trials` environment: no trial starts, and
+# no allowance is spent, until the environment's required reviewer approves
+# the dispatch (one approval covers its jobs). The environment holds the one
+# sign-in secret the client needs, ANTHROPIC_API_KEY or
+# CLAUDE_CODE_OAUTH_TOKEN; the harness passes it to the client by name only
+# and scans every log for its value. A counted batch (pilot=false) runs only
+# under the committed value freeze, checked before anything starts.
+#
+# Run pairs are by run index (the planner's ruling, question 8): one job per
+# run index, each running every requested arm of every task in turn, the arms'
+# order turned by one place per index, so run k of each arm falls in the same
+# window and no arm always goes first.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/value-trials.yml
+      - tools/vsift-agent-trials/**
+      - docs/planning/value-measurement/**
+  workflow_dispatch:
+    inputs:
+      tasks:
+        description: Task ids separated by spaces (file names in tools/vsift-agent-trials/value/tasks, without .json)
+        type: string
+        required: true
+      arms:
+        description: Arms separated by spaces
+        type: string
+        default: "r0 r1 v0 v1"
+      runs:
+        description: Runs per cell (run pairs are by index)
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+        default: "1"
+      model:
+        description: The model the client runs
+        type: string
+        default: claude-sonnet-5-5
+      vsift:
+        description: '"build" (this commit, release build) or an exact published version such as 0.3.0-rc.1'
+        type: string
+        default: build
+      pilot:
+        description: A pilot never counts and may run a task whose truth is pending; a counted batch needs the value freeze
+        type: boolean
+        default: true
+      freeze:
+        description: The committed value freeze file (required when pilot is false)
+        type: string
+        default: tools/vsift-agent-trials/value/freeze.json
+
+permissions: {}
+
+concurrency:
+  group: value-trials-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NODE_VERSION: "22.23.4"
+  # The client of the recorded medians (method section 9). Its npm package is
+  # checked against the registry's advertised integrity; once a pilot has
+  # recorded that value it is pinned here and a mismatch fails the job (L-251).
+  CLAUDE_CODE_VERSION: "2.1.284"
+  CLAUDE_CODE_INTEGRITY: ""
+  TASKS_DIR: tools/vsift-agent-trials/value/tasks
+
+jobs:
+  harness-tests:
+    name: Harness tests (stand-in client)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the harness, every arm against the stand-in client included
+        run: cargo test --locked -p vsift-agent-trials
+
+      - name: Check the value task files
+        run: cargo run --locked -p vsift-agent-trials -- value check-tasks
+
+  plan:
+    name: Check the dispatch
+    if: github.event_name == 'workflow_dispatch'
+    needs: harness-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      runs: ${{ steps.plan.outputs.runs }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the inputs, the budget and the truth
+        id: plan
+        env:
+          TASKS: ${{ inputs.tasks }}
+          ARMS: ${{ inputs.arms }}
+          RUNS: ${{ inputs.runs }}
+          VSIFT: ${{ inputs.vsift }}
+          MODEL: ${{ inputs.model }}
+          PILOT: ${{ inputs.pilot }}
+        run: |
+          set -euo pipefail
+          case "$MODEL" in claude-[a-z0-9-]*) ;; *) echo "the model is a Claude model id"; exit 1;; esac
+          case "$VSIFT" in build|[0-9]*.[0-9]*.[0-9]*) ;; *) echo "vsift is \"build\" or an exact version"; exit 1;; esac
+          for arm in $ARMS; do
+            case "$arm" in r0|r1|v0|v1) ;; *) echo "an arm is r0, r1, v0 or v1"; exit 1;; esac
+          done
+          [ -n "$ARMS" ] || { echo "no arm"; exit 1; }
+          arm_count=$(wc -w <<<"$ARMS")
+          seconds=0
+          for task in $TASKS; do
+            case "$task" in T[0-9]*-[a-z0-9-]*) ;; *) echo "a task id is a file name of $TASKS_DIR"; exit 1;; esac
+            file="$TASKS_DIR/$task.json"
+            [ -f "$file" ] || { echo "$task: no such task file"; exit 1; }
+            if [ "$PILOT" != "true" ] && jq -e 'any(.phases[]; .truth.kind == "pending_m2")' "$file" >/dev/null; then
+              echo "$task: its truth is pending (M2); it may only be piloted"
+              exit 1
+            fi
+            per_arm=$(jq '(.phases | length) * .budget.timeout_s' "$file")
+            seconds=$((seconds + per_arm * arm_count))
+          done
+          [ -n "$TASKS" ] || { echo "no task"; exit 1; }
+          # A job runs every arm of every task once, one after another, each
+          # within its budget plus a few minutes of preparation and grading.
+          minutes=$(( seconds / 60 + 5 * arm_count * $(wc -w <<<"$TASKS") ))
+          echo "worst case per job: $minutes minutes"
+          if [ "$minutes" -gt 330 ]; then
+            echo "the dispatch could run past the 6-hour job limit; split it by task group"
+            exit 1
+          fi
+          echo "runs=$(jq -cn --argjson n "$RUNS" '[range(1; $n + 1)]')" >> "$GITHUB_OUTPUT"
+
+      - name: Check the value freeze (a counted batch)
+        if: ${{ !inputs.pilot }}
+        env:
+          FREEZE: ${{ inputs.freeze }}
+        run: |
+          set -euo pipefail
+          [ -f "$FREEZE" ] || { echo "a counted batch needs the committed value freeze ($FREEZE)"; exit 1; }
+          cargo run --locked -p vsift-agent-trials -- value freeze check --file "$FREEZE"
+
+  trials:
+    name: Trials, run ${{ matrix.run }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    environment: value-trials
+    timeout-minutes: 350
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        run: ${{ fromJSON(needs.plan.outputs.runs) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Refuse a runner that already has a media tool or vsift on the system PATH
+        run: |
+          set -euo pipefail
+          for tool in ffmpeg ffprobe whisper-cli vsift; do
+            for folder in /usr/bin /bin; do
+              if [ -e "$folder/$tool" ]; then
+                echo "$folder/$tool exists: every arm must run the pinned tools only"
+                exit 1
+              fi
+            done
+          done
+
+      - name: Stage pinned FFmpeg, whisper.cpp and the base model (as P07 local ASR)
+        run: python tools/p07_local_asr_tools.py "${{ runner.temp }}/vsift-tools"
+
+      - name: Fetch the recordings the tasks name (as P14 real media)
+        env:
+          TASKS: ${{ inputs.tasks }}
+        run: |
+          set -euo pipefail
+          items=""
+          for task in $TASKS; do
+            item=$(jq -r '.media.item // empty' "$TASKS_DIR/$task.json")
+            if [ -n "$item" ]; then items="$items --item $item"; fi
+          done
+          mkdir -p "$RUNNER_TEMP/real-media"
+          if [ -n "$items" ]; then
+            # shellcheck disable=SC2086
+            node tools/p14-campaigns/real-media.cjs fetch "$RUNNER_TEMP/real-media" $items
+          fi
+
+      - name: Build the harness
+        run: cargo build --release --locked -p vsift-agent-trials
+
+      - name: Build this commit's vsift
+        if: inputs.vsift == 'build'
+        run: |
+          set -euo pipefail
+          cargo build --release --locked -p vsift-cli
+          echo "VSIFT_ARGUMENTS=--vsift $GITHUB_WORKSPACE/target/release/vsift" >> "$GITHUB_ENV"
+          echo "VSIFT_EXECUTABLE=$GITHUB_WORKSPACE/target/release/vsift" >> "$GITHUB_ENV"
+
+      - name: Install the published vsift
+        if: inputs.vsift != 'build'
+        env:
+          VERSION: ${{ inputs.vsift }}
+        run: |
+          set -euo pipefail
+          node_bin=$(command -v node)
+          npm_cli="$(dirname "$(dirname "$node_bin")")/lib/node_modules/npm/bin/npm-cli.js"
+          target/release/vsift-agent-trials install --version "$VERSION" \
+            --prefix "$RUNNER_TEMP/vsift-install" --node "$node_bin" --npm-cli "$npm_cli" \
+            --proof "$RUNNER_TEMP/install-proof.json"
+          echo "VSIFT_ARGUMENTS=--install-proof $RUNNER_TEMP/install-proof.json" >> "$GITHUB_ENV"
+          echo "VSIFT_EXECUTABLE=$(jq -r '.native_executable' "$RUNNER_TEMP/install-proof.json")" >> "$GITHUB_ENV"
+
+      - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }} from npm, integrity checked
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/claude-pack" "$RUNNER_TEMP/claude-code"
+          cd "$RUNNER_TEMP/claude-pack"
+          advertised=$(npm view "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" dist.integrity)
+          if [ -n "$CLAUDE_CODE_INTEGRITY" ] && [ "$advertised" != "$CLAUDE_CODE_INTEGRITY" ]; then
+            echo "the registry advertises another integrity than the pinned one"
+            exit 1
+          fi
+          npm pack "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" --silent > pack.txt
+          tarball=$(tail -n 1 pack.txt)
+          actual="sha512-$(openssl dgst -sha512 -binary "$tarball" | base64 -w 0)"
+          if [ "$actual" != "$advertised" ]; then
+            echo "the package does not match the integrity the registry advertises"
+            exit 1
+          fi
+          npm install --global --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/claude-code" "./$tarball"
+          "$RUNNER_TEMP/claude-code/bin/claude" --version
+          { echo "## Client"; echo; echo "Claude Code $CLAUDE_CODE_VERSION, integrity \`$actual\`"; echo; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the trials
+        env:
+          TASKS: ${{ inputs.tasks }}
+          ARMS: ${{ inputs.arms }}
+          MODEL: ${{ inputs.model }}
+          PILOT: ${{ inputs.pilot }}
+          FREEZE: ${{ inputs.freeze }}
+          RUN_INDEX: ${{ matrix.run }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            sign_in=ANTHROPIC_API_KEY
+          elif [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            sign_in=CLAUDE_CODE_OAUTH_TOKEN
+          else
+            echo "the value-trials environment holds no sign-in secret"
+            exit 1
+          fi
+          harness="$GITHUB_WORKSPACE/target/release/vsift-agent-trials"
+          claude="$RUNNER_TEMP/claude-code/bin/claude"
+          node_folder=$(dirname "$(command -v node)")
+          ffmpeg=$(command -v ffmpeg)
+          ffprobe=$(command -v ffprobe)
+          # The trial root may not lie under the home folder or name the
+          # account (the harness's root policy), and nothing above a workspace
+          # may hold a skill or a checkout, so it is a fresh folder at /.
+          root=/t
+          sudo mkdir -m 0755 "$root"
+          sudo chown "$(id -u):$(id -g)" "$root"
+          records="$RUNNER_TEMP/records"
+          raw="$RUNNER_TEMP/raw"
+          mkdir -p "$records" "$raw"
+          freeze_arguments=()
+          if [ "$PILOT" != "true" ]; then freeze_arguments=(--freeze "$GITHUB_WORKSPACE/$FREEZE"); fi
+          pilot_arguments=()
+          if [ "$PILOT" = "true" ]; then pilot_arguments=(--pilot); fi
+          read -r -a vsift_arguments <<<"$VSIFT_ARGUMENTS"
+          read -r -a arms <<<"$ARMS"
+          # Turn the arms' order by one place per run index.
+          shift_by=$(( (RUN_INDEX - 1) % ${#arms[@]} ))
+          ordered=("${arms[@]:$shift_by}" "${arms[@]:0:$shift_by}")
+          echo "## Run $RUN_INDEX" >> "$GITHUB_STEP_SUMMARY"
+          for task in $TASKS; do
+            file="$GITHUB_WORKSPACE/$TASKS_DIR/$task.json"
+            phases=$(jq '.phases | length' "$file")
+            media_arguments=()
+            media_file=$(jq -r 'if .media.source == "test_media_release" then .media.file else empty end' "$file")
+            if [ -n "$media_file" ]; then media_arguments=(--media "$RUNNER_TEMP/real-media/$media_file"); fi
+            transcript_file=$(jq -r 'if .transcript.source == "file" then .transcript.file else empty end' "$file")
+            if [ -n "$transcript_file" ]; then
+              media_arguments+=(--transcript "$GITHUB_WORKSPACE/tools/vsift-agent-trials/value/transcripts/$transcript_file")
+            fi
+            declare -A trial_of=()
+            for arm in "${ordered[@]}"; do
+              home="$RUNNER_TEMP/client-home-$task-$arm"
+              mkdir -p "$home"
+              trial_vsift=()
+              if [ "$arm" = v0 ] || [ "$arm" = v1 ]; then trial_vsift=("${vsift_arguments[@]}"); fi
+              if ! trial=$("$harness" value prepare --root "$root" --task "$file" --arm "$arm" \
+                --run-index "$RUN_INDEX" --vsift-commit "$GITHUB_SHA" \
+                --ffmpeg "$ffmpeg" --ffprobe "$ffprobe" \
+                --whisper "$VSIFT_TEST_WHISPER_CLI" --model "$VSIFT_TEST_WHISPER_MODEL" \
+                "${trial_vsift[@]}" "${media_arguments[@]}" "${pilot_arguments[@]}" "${freeze_arguments[@]}"); then
+                echo "- $task $arm: preparation failed (an infrastructure failure; no run)" >> "$GITHUB_STEP_SUMMARY"
+                continue
+              fi
+              trial_of[$arm]="$trial"
+              for phase in $(seq 1 "$phases"); do
+                # A run that stops at a usage limit (exit 75) or fails is
+                # still graded: the grade excludes only infrastructure
+                # failures, with the reason written in the record.
+                "$harness" run --trial "$trial" --phase "$phase" --client claude-code \
+                  --executable "$claude" --model "$MODEL" --client-home "$home" \
+                  --path-dir "$node_folder" --pass-env "$sign_in" || echo "run exited $? ($task $arm phase $phase)"
+                line=$("$harness" value grade --trial "$trial" --phase "$phase" || echo "grade failed")
+                echo "- $line" >> "$GITHUB_STEP_SUMMARY"
+                "$harness" value record --trial "$trial" --phase "$phase" --client-home "$home" \
+                  --output "$records/$task-$arm-run$RUN_INDEX-phase$phase.json" || echo "record failed ($task $arm phase $phase)"
+              done
+              mkdir -p "$raw/$task-$arm"
+              cp -r "$trial/harness" "$raw/$task-$arm/"
+            done
+            # The checkability demonstration (method section 8), on T2 and T5
+            # when both a V1 and an R1 run of the task exist. No model runs.
+            case "$task" in
+              T2-*|T5-*)
+                if [ -n "${trial_of[v1]:-}" ] && [ -n "${trial_of[r1]:-}" ]; then
+                  mkdir -p "$records/checkability"
+                  "$harness" value checkability --v1-trial "${trial_of[v1]}" --r1-trial "${trial_of[r1]}" \
+                    --vsift "$VSIFT_EXECUTABLE" --output "$records/checkability/$task-run$RUN_INDEX.md" \
+                    || echo "checkability failed ($task)"
+                fi
+                ;;
+            esac
+            unset trial_of
+          done
+
+      - name: Keep the bounded records
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: value-records-run${{ matrix.run }}
+          path: ${{ runner.temp }}/records
+          if-no-files-found: warn
+          retention-days: 90
+
+      # The raw logs hold the prompts and the model's output, never the
+      # sign-in (each run scans for it). They are kept a week for a person to
+      # read a disagreement, and never committed.
+      - name: Keep the raw logs for a week
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: value-raw-run${{ matrix.run }}
+          path: ${{ runner.temp }}/raw
+          if-no-files-found: warn
+          retention-days: 7
+
+  summarize:
+    name: Summarise the batch
+    if: always() && needs.trials.result != 'skipped'
+    needs: trials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Collect the records
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: value-records-run*
+          path: ${{ runner.temp }}/records
+          merge-multiple: true
+
+      - name: Summarise
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/summary"
+          cargo run --release --locked -p vsift-agent-trials -- value summarize \
+            --records "$RUNNER_TEMP/records" \
+            --output-json "$RUNNER_TEMP/summary/summary.json" \
+            --output-markdown "$RUNNER_TEMP/summary/SUMMARY.md"
+          cat "$RUNNER_TEMP/summary/SUMMARY.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d "$RUNNER_TEMP/records/checkability" ]; then
+            cp -r "$RUNNER_TEMP/records/checkability" "$RUNNER_TEMP/summary/"
+          fi
+
+      - name: Keep the summary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: value-summary
+          path: ${{ runner.temp }}/summary
+          retention-days: 90

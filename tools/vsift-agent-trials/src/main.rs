@@ -28,8 +28,8 @@ use vsift_agent_trials::{
     trace::ClientKind,
     truth::CorpusTruth,
     value::{
-        grade as value_grade, prepare as value_prepare, summary as value_summary,
-        task as value_task,
+        checkability as value_checkability, freeze as value_freeze, grade as value_grade,
+        prepare as value_prepare, summary as value_summary, task as value_task,
     },
 };
 
@@ -194,6 +194,31 @@ enum FreezeStep {
 }
 
 #[derive(Subcommand)]
+enum ValueFreezeStep {
+    /// Records the value freeze of the repository.
+    Write {
+        /// The commit under test, as the operator names it.
+        #[arg(long)]
+        commit: String,
+        /// The freeze file to write.
+        #[arg(long)]
+        output: PathBuf,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
+    },
+    /// Fails when anything frozen has changed since the freeze file.
+    Check {
+        /// The freeze file.
+        #[arg(long)]
+        file: PathBuf,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
 enum ValueStep {
     /// Prepares one run of a task in one arm.
     Prepare {
@@ -287,6 +312,28 @@ enum ValueStep {
         /// Where to write SUMMARY.md.
         #[arg(long)]
         output_markdown: PathBuf,
+    },
+    /// Records or checks the value freeze (tasks, raw guide, settings,
+    /// grader, method note, skill, corpus truth).
+    Freeze {
+        #[command(subcommand)]
+        step: ValueFreezeStep,
+    },
+    /// The checkability demonstration (method section 8): invented
+    /// citations added to a finished V1 and R1 run, and what a check says.
+    Checkability {
+        /// A finished V1 trial of the task.
+        #[arg(long)]
+        v1_trial: PathBuf,
+        /// A finished R1 trial of the same task.
+        #[arg(long)]
+        r1_trial: PathBuf,
+        /// The vsift executable the V1 run used (absolute).
+        #[arg(long)]
+        vsift: PathBuf,
+        /// Where to write checkability.md (its JSON goes beside it).
+        #[arg(long)]
+        output: PathBuf,
     },
     /// Checks every value task file against the corpus truth.
     CheckTasks {
@@ -869,14 +916,51 @@ async fn execute(step: Step) -> Result<Done, TrialError> {
     }
 }
 
-/// The repository's raw guide, once it is frozen there.
-const RAW_GUIDE: &str = "tools/vsift-agent-trials/value/raw-guide";
-
-/// The value task files.
-const VALUE_TASKS: &str = "tools/vsift-agent-trials/value/tasks";
-
 fn value(step: ValueStep) -> Result<Done, TrialError> {
+    use value_freeze::{RAW_GUIDE, VALUE_TASKS};
     match step {
+        ValueStep::Freeze { step } => match step {
+            ValueFreezeStep::Write {
+                commit,
+                output,
+                repository,
+            } => {
+                let freeze = value_freeze::write(
+                    &repository.unwrap_or_else(default_repository),
+                    &commit,
+                    &output,
+                )?;
+                Ok(Done::ok(format!(
+                    "value freeze {} written to {}",
+                    freeze.freeze_sha256,
+                    output.display()
+                )))
+            }
+            ValueFreezeStep::Check { file, repository } => {
+                let problems =
+                    value_freeze::check(&repository.unwrap_or_else(default_repository), &file)?;
+                if problems.is_empty() {
+                    Ok(Done::ok("nothing in the value freeze has changed"))
+                } else {
+                    Err(TrialError::Refused(problems.join("; ")))
+                }
+            }
+        },
+        ValueStep::Checkability {
+            v1_trial,
+            r1_trial,
+            vsift,
+            output,
+        } => {
+            let demonstration =
+                value_checkability::write(&v1_trial, &r1_trial, &vsift, &output)?;
+            Ok(Done::ok(format!(
+                "{}: {} case(s) written to {}",
+                demonstration.task,
+                demonstration.cases.len(),
+                output.display()
+            )))
+        }
         ValueStep::Prepare {
             root,
             task,

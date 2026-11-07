@@ -10,7 +10,9 @@
 //! for a value trial it puts the tools on `PATH`, applies the task's budget
 //! and, before a second phase, writes the first answer to the workspace.
 
+pub mod checkability;
 pub mod claims;
+pub mod freeze;
 pub mod grade;
 pub mod prepare;
 pub mod summary;

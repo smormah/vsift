@@ -232,7 +232,10 @@ pub fn grade_phase(layout: &TrialLayout, phase: usize, repository: &Path) -> Res
             .as_deref()
             .is_some_and(|outcome| outcome.contains("max_turns"));
 
-    let items = task.truth_items(phase - 1, &corpus)?;
+    let phase_index = phase
+        .checked_sub(1)
+        .ok_or_else(|| TrialError::Invalid("phases are counted from 1".to_owned()))?;
+    let items = task.truth_items(phase_index, &corpus)?;
     let claims = (!items.is_empty())
         .then(|| grade_report(trace.final_message.as_deref().unwrap_or_default(), &items));
 

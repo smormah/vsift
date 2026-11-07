@@ -1,5 +1,5 @@
 {
-  "$comment": "Project permission rules of the value measurement: the same file for all four arms (R0, R1, V0, V1).",
+  "$comment": "Project permission rules.",
   "permissions": {
     "defaultMode": "dontAsk",
     "allow": [

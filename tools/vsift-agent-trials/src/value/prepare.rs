@@ -434,7 +434,11 @@ pub fn prepare(request: &ValuePrepareRequest) -> Result<TrialLayout, TrialError>
 /// [`TrialError`] when the earlier phase's run or log cannot be read or
 /// gave no answer.
 pub fn write_earlier_answer(layout: &TrialLayout, phase: usize) -> Result<(), TrialError> {
-    let earlier = phase - 1;
+    let Some(earlier) = phase.checked_sub(1).filter(|earlier| *earlier >= 1) else {
+        return Err(TrialError::Invalid(format!(
+            "phase {phase} has no earlier phase to carry an answer from"
+        )));
+    };
     let record = crate::run::read_run(layout, earlier)?;
     let (stdout, _) = crate::run::raw_output(&record)?;
     let trace = crate::trace::parse(record.client, &stdout)?;
@@ -442,8 +446,8 @@ pub fn write_earlier_answer(layout: &TrialLayout, phase: usize) -> Result<(), Tr
         TrialError::Invalid(format!("phase {earlier} gave no answer to carry into phase {phase}"))
     })?;
     let file = layout.workspace().join(super::task::EARLIER_ANSWER_FILE);
-    fs::write(&file, format!("{}
-", answer.trim_end())).map_err(|error| TrialError::io_at(&file, error))
+    fs::write(&file, format!("{}\n", answer.trim_end()))
+        .map_err(|error| TrialError::io_at(&file, error))
 }
 
 /// The client's `PATH` for a value trial: `vsift`'s folder (V arms only),

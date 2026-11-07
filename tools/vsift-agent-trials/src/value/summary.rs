@@ -19,6 +19,9 @@ use crate::{
     run::read_manifest,
 };
 
+/// The schema name every value record carries.
+pub const VALUE_RECORD_SCHEMA: &str = "vsift-value-record/1";
+
 /// The score margin of ruling 12.2.
 pub const SCORE_MARGIN: f64 = 0.10;
 
@@ -46,7 +49,7 @@ pub fn write_record(
     }
     let redactions = Redactions::for_trial(layout, &manifest, &extra, user_names);
     let record = json!({
-        "schema": "vsift-value-record/1",
+        "schema": VALUE_RECORD_SCHEMA,
         "trial_id": manifest.trial_id,
         "vsift_commit": manifest.vsift_commit,
         "vsift_sha256": manifest.vsift_sha256,
@@ -393,6 +396,11 @@ pub fn summarize_folder(records: &Path, output_json: &Path, output_markdown: &Pa
     files.sort();
     for file in files {
         let record = read_json(&file)?;
+        // The folder may hold other files of the batch (a checkability
+        // page's JSON); only value records are summarised.
+        if record["schema"] != VALUE_RECORD_SCHEMA {
+            continue;
+        }
         let grade: ValueGrade = serde_json::from_value(record["grade"].clone())
             .map_err(|error| TrialError::json("a value record's grade", error))?;
         grades.push(grade);

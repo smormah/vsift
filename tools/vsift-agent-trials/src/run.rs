@@ -582,7 +582,12 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
             )));
         }
     }
-    let sign_in_leak_check = check_sign_in_leak(&request.client_home, &stdout_path, &stderr_path)?;
+    let sign_in_leak_check = check_sign_in_leak(
+        &request.client_home,
+        &request.pass_environment,
+        &stdout_path,
+        &stderr_path,
+    )?;
     let (stdout_text, stderr_text) = (
         fs::read(&stdout_path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
@@ -658,6 +663,7 @@ fn check_before_start(
 /// [`TrialError::Io`] when a raw log cannot be read.
 fn check_sign_in_leak(
     client_home: &Path,
+    pass_environment: &[String],
     stdout: &Path,
     stderr: &Path,
 ) -> Result<LeakCheck, TrialError> {
@@ -667,7 +673,15 @@ fn check_sign_in_leak(
             .map_err(|error| TrialError::io_step("reading the raw log", path, error))
     };
     let (out, err) = (read(stdout)?, read(stderr)?);
-    Ok(leak_check::scan(client_home, &[&out, &err]))
+    let passed: Vec<String> = pass_environment
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .collect();
+    Ok(leak_check::with_passed_values(
+        leak_check::scan(client_home, &[&out, &err]),
+        &passed,
+        &[&out, &err],
+    ))
 }
 
 /// Changes the client home needs before this trial starts, described for

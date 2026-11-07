@@ -90,8 +90,39 @@ pub fn scan(client_home: &Path, outputs: &[&str]) -> LeakCheck {
     result
 }
 
+/// Adds to a scan the values of the environment variables passed to the
+/// client by name (`run --pass-env`): on a hosted runner the sign-in is a
+/// secret in the environment, not a file in the client home (the value
+/// measurement's `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`). Values
+/// shorter than [`MIN_VALUE_CHARS`] are ordinary settings, not secrets.
+#[must_use]
+pub fn with_passed_values(mut result: LeakCheck, values: &[String], outputs: &[&str]) -> LeakCheck {
+    let secrets: Vec<&String> = values
+        .iter()
+        .filter(|value| value.chars().count() >= MIN_VALUE_CHARS)
+        .collect();
+    result.values_checked += secrets.len();
+    if secrets
+        .iter()
+        .any(|value| outputs.iter().any(|output| output.contains(value.as_str())))
+    {
+        result.found = true;
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_passed_secret_in_the_output_is_found_and_a_short_setting_is_not_a_secret() {
+        let secret = "sk-test-0000000000000000000000000000".to_owned();
+        let clean = with_passed_values(LeakCheck::default(), &[secret.clone(), "1".to_owned()], &["no secret here"]);
+        assert_eq!(clean.values_checked, 1);
+        assert!(!clean.found);
+        let leaked = with_passed_values(LeakCheck::default(), &[secret.clone()], &[&format!("key={secret}")]);
+        assert!(leaked.found);
+    }
+
     use serde_json::json;
 
     use super::*;
