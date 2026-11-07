@@ -508,12 +508,10 @@ fn about_the_recording(statement: &Statement, items: &[TruthItem]) -> bool {
             .any(|fact| fact.stated_in(&statement.text))
 }
 
-/// Grades one report against a task phase's truth.
-#[must_use]
-pub fn grade_report(report: &str, items: &[TruthItem]) -> ClaimGrade {
-    let statements = statements(report);
+/// Each key fact of the truth, with the first timed statement that states
+/// it inside its item's widened window.
+fn matched_facts(statements: &[Statement], items: &[TruthItem]) -> Vec<FactResult> {
     let mut facts = Vec::new();
-    let mut wrong = Vec::new();
     for item in items {
         for fact in &item.facts {
             let matched = statements.iter().find(|statement| {
@@ -528,7 +526,14 @@ pub fn grade_report(report: &str, items: &[TruthItem]) -> ClaimGrade {
             });
         }
     }
-    for statement in &statements {
+    facts
+}
+
+/// The wrong claims: a statement holding a `contradicts` term, or a timed
+/// statement of a fact whose every time lies outside every window of it.
+fn wrong_claims(statements: &[Statement], items: &[TruthItem]) -> Vec<WrongClaim> {
+    let mut wrong = Vec::new();
+    for statement in statements {
         let words = fact_words(&statement.text);
         for item in items {
             if let Some(term) = item
@@ -576,6 +581,15 @@ pub fn grade_report(report: &str, items: &[TruthItem]) -> ClaimGrade {
             }
         }
     }
+    wrong
+}
+
+/// Grades one report against a task phase's truth.
+#[must_use]
+pub fn grade_report(report: &str, items: &[TruthItem]) -> ClaimGrade {
+    let statements = statements(report);
+    let facts = matched_facts(&statements, items);
+    let wrong = wrong_claims(&statements, items);
     let unverifiable = statements
         .iter()
         .filter(|statement| {
