@@ -1257,8 +1257,8 @@ machine. A dispatch names the tasks, arms, runs (1 to 3), model, vsift (`build` 
 published version) and whether it is a pilot. The `plan` job checks the inputs, refuses a counted dispatch of a
 task whose truth is pending or a dispatch that could pass the 6-hour job limit, and, for a counted batch, runs
 `value freeze check` on the committed value freeze. The `trials` jobs run in the `value-trials` environment, so
-nothing starts until its required reviewer approves the dispatch; it holds the one sign-in secret,
-`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`, which the harness passes by name only and whose value it adds to
+nothing starts until its required reviewer approves the dispatch; it holds the one sign-in secret, `ANTHROPIC_API_KEY`,
+an API key with a spending limit of about $150 that the maintainer creates after this merges and before the pilots (their choice of 2026-11-07, "API key, capped"; no other sign-in is used), which the harness passes by name only and whose value it adds to
 the sign-in leak scan of every log. There is one job per run index; each runs every requested arm of every task in
 turn, the arms' order turned by one place per index, so run k of each arm falls in the same window (ruling,
 question 8). Tools come from the `P07 local ASR` staging script and recordings from the test-media release as

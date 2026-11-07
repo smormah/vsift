@@ -93,7 +93,7 @@ pub fn scan(client_home: &Path, outputs: &[&str]) -> LeakCheck {
 /// Adds to a scan the values of the environment variables passed to the
 /// client by name (`run --pass-env`): on a hosted runner the sign-in is a
 /// secret in the environment, not a file in the client home (the value
-/// measurement's `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`). Values
+/// measurement's `ANTHROPIC_API_KEY`). Values
 /// shorter than [`MIN_VALUE_CHARS`] are ordinary settings, not secrets.
 #[must_use]
 pub fn with_passed_values(mut result: LeakCheck, values: &[String], outputs: &[&str]) -> LeakCheck {
