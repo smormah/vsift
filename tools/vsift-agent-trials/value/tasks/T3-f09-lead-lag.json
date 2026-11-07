@@ -1,0 +1,30 @@
+{
+  "id": "T3-f09-lead-lag",
+  "task": "T3",
+  "kind": "timing_trap",
+  "media": {
+    "source": "corpus",
+    "fixture": "F09",
+    "file": "F09-speech.mkv"
+  },
+  "transcript": {
+    "source": "from_script"
+  },
+  "phases": [
+    {
+      "question": "When does the marker the speaker mentions in {{video}} first appear on screen? The transcript is {{transcript}}.",
+      "truth": {
+        "kind": "events",
+        "events": [
+          {
+            "id": "F09-E01"
+          }
+        ]
+      }
+    }
+  ],
+  "budget": {
+    "timeout_s": 900,
+    "max_turns": 60
+  }
+}

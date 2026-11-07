@@ -1024,6 +1024,8 @@ state file recorded for another version: `records/`, `state-claude.json`, `state
 
 **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** W6c's pull request (#454, 2026-11-01) adds the small-number advice to `SKILL.md` in one place, so the `skill` component moved `80c3933f...` to `930fabf1...` and the whole-freeze digest `ba60a2fb...` to `0cf5c9cb...`; the other six components are unchanged. `freeze write` at `4b2e4b1e05cb28dcec7336dd3b29fad8b5d1137a`, on `main` at `4a2f9cc2`, which had not moved since the draft freeze, so only `commit` changed. W10 writes it again at its own merge rebase. `vsift --help` is not a frozen component, so its new text needs no freeze of its own; cold scenarios read it from the binary under test.
 
+**M1's freeze (draft freeze, rewritten at the merge rebase).** 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut. The value measurement's harness (2026-11-07, [above](#the-value-measurement-030-phase-1)) adds code to the crate's `src` (the `value` modules, `timing.rs`, and hooks in `run.rs`, `cold.rs`, `leak_check.rs`, `freeze.rs`, `layout.rs`, `prepare.rs`, `truth.rs` and `main.rs`), so only the `grader` component moves. `freeze write` at `f069d086a07c1f7b7070dbb3239f7b74ac19b9bd` on the draft branch (based on `main` at `07f31546`) gave the `grader` digest `55793d82cda11ba5bb8bfdfab63dd7d02d16d6f3bbdaf13a00fa2e2a1f39c262` (it was `efe6fd2d...`) and the whole-freeze digest `615b93bf684ba2e5bd9baa7ca9c612c56400b6fe523052a0874b18471b977a3a` (it was W1's `f4f4740b...`); the other six components are unchanged and `committed_freeze` pins the new value. It is written again on the new `main` at the merge rebase. Batch 3 against batch 1's freeze needs `-AllowGraderChange`, as before. How the skill and cold trials are graded is unchanged; for them, `run` now copies the client's stdout itself (the same bytes, plus `stdout.times`) and the sign-in leak scan also looks for the values of `--pass-env` variables.
+
 **W1's freeze (draft freeze, rewritten at the merge rebase).** 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut. W1's pull request ([ADR 0034](../decisions/0034-what-changed-on-screen.md), 2026-11-03) adds one line to `references/commands.md`, classing `changes` `free` and saying to cite a change by its two frames' evidence ids, never its `chg_` id. `freeze write` at `4a4a235d090bd089ca473e4bf46d73df321340a5` on the draft branch (based on `main` at `2a59bdad`) gave the `skill` digest `39dbaca519d56c30cf693dc5a3517f9797790e171930605879a865788c6d27ac` (it was `e7269b80...`) and the whole-freeze digest `f4f4740beb6c4778f126c20ebdb4596d817e5b44520c26a4d5320e2e98a8b9f5` (it was `f302bb7b...`); the other six components are unchanged and `committed_freeze` pins the new value. It is written again on the new `main` at the merge rebase. No agent has tried the command.
 
 **W4c Part 2's freeze.** 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut. That pull request (ADR 0028, #409, 2026-11-02) changes `references/commands.md` and one line of `SKILL.md`, the grader (`optional.rs`, the plan grant, the consent rules, the campaign plan and the summary), the scenarios (`A-11-f05-optional-offer`) and the cold scenarios (C-05 to C-08), so four components move. `freeze write` at `57a0cda77e0452cc1053334124edd996947ddbba`, on `main` at `c8c81f4f`, which had not moved since the draft freezes, gave the `skill` digest `e7269b800e02fd9e89551ab944f99424500810dad8f9c187c173b3b40a390339` (it was `6065ffdb...`), the `grader` digest `efe6fd2d10a7eda7428a7ed022766858f648efa6015306f2447498071023452f` (it was `76d1243c...`), the `cold` digest `312047918a4722ac14904c1537330778ca2b272d5649c47aac40f5436c20c046` (it was `853d8da3...`), the `scenarios` digest `916c8c229cc35b251ec1332358c5e497210176b2301c22a04f5d907766e0b108` (it was `3a77c3d3...`) and the whole-freeze digest `f302bb7bc3c28f00aa482f371071648b991f59d15b383e3a4e7620ed2932727c` (it was `5d7d254b...`); the other three components are unchanged and `committed_freeze` pins the new value. The drafts of that pull request wrote earlier values, and this replaces them. Batch 3 against batch 1's freeze needs `-AllowGraderChange`, as before. No agent has tried it: the five new scenarios first run at the cut, in the coordinator's batch 3.
@@ -1143,6 +1145,137 @@ Claude Code on Windows writes its commands).
 - **Usage figures are the clients'** and their wording for a usage limit is not a published contract; the pilots are
   where a new wording is found (L-120). The fixtures in the tests are written from the event shapes the parsers read,
   not recorded from a client.
+
+## The value measurement (0.3.0, phase 1)
+
+Does VSift make an assistant's work on a recording easier, cheaper or more correct than the same assistant
+driving FFmpeg and whisper.cpp itself? The method, with its hypotheses, thresholds and the planner's binding
+rulings, is [`docs/planning/value-measurement/method.md`](../planning/value-measurement/method.md); it is frozen
+with the measurement. **Nothing here has run yet and no result is claimed.** The harness is a mode of its own
+beside the skill and cold trials: its own task files, arms, settings, grade and record. The skill and cold
+scenarios, their graders and their freeze are unchanged by it.
+
+**Arms.** Every arm gets the same recording (as `recording.<ext>`), the same supplied transcript where the task
+has one (`recording.srt`), the same whisper model inside the workspace (`models/ggml-base.bin`), the same tools,
+budget and settings. Only this differs:
+
+| Arm | `vsift` on `PATH` | Skill in `.claude/skills/` | Prompt adds |
+| --- | --- | --- | --- |
+| `r0` | no | none | the tool sentence only |
+| `r1` | no | the frozen raw guide | "Use the `<guide>` skill." |
+| `v0` | yes, with the same tools registered | none | "A command-line tool named `vsift` is installed." |
+| `v1` | yes, with the same tools registered | `vsift` | as `v0`, plus "Use the vsift skill." |
+
+- **Tools.** `value prepare` puts FFmpeg, FFprobe and whisper-cli in a folder of their own beside the workspace,
+  and `run` puts that folder on the client's `PATH`. It refuses a media tool anywhere else on that `PATH`, and
+  `vsift` anywhere on an `r` arm's. A skill or cold trial still refuses any media tool on its `PATH`.
+- **Settings.** One file for all four arms, `tools/vsift-agent-trials/claude-value-trial-settings.json`: `vsift`,
+  the three tools and the helpers `ls cat head tail pwd cd wc echo sort grep awk cut tr uniq mkdir jq sed find`
+  (the planner's ruling, question 3), `Read` inside the workspace, no write or edit tool, no web, no sub-agents,
+  and the writing forms of `sort`, `sed -i` and `find -delete/-exec` denied. A test holds the file to the list.
+- **Cold proof.** Before the arm's skill goes in, the workspace and every folder above it are proved cold as in
+  cold mode; `r1` then holds only the guide and `v1` only the `vsift` skill. The guide's name may not mention
+  VSift.
+- **Budgets.** 900 s and 60 turns on T1 to T3, 1,800 s and 80 turns on T4 to T7, from the task file, the same in
+  every arm; `run` uses them whatever `--timeout-s` and `--max-turns` say. A run that hits its budget counts as it
+  ended.
+- **Every record names** the arm, the run index, the task file's SHA-256, the raw guide's digest (in every arm),
+  the method note's SHA-256, the settings', the skill's (`v1`), the vsift build or install, the client's version,
+  the model, the budget and the value freeze's digest.
+
+**Tasks** (`tools/vsift-agent-trials/value/tasks/`, schema `value::task::Task`). T1 is F05 with local
+transcription, T2 F04 order 1017 (F04-E03, F04-E04) with the script transcript, T3 F09-E01 (the planner's
+ruling, question 5); their truth is the corpus manifest's, by event id. T4 (RM09), T4b (RM09, transcribed
+locally), T5 (RM10), T6 (RM07) and T7a/T7b (RM09, RM10 again, two phases) have a neutral placeholder question and
+`pending_m2` truth: M2 writes their questions, truth items (window, 1 s tolerance, key facts, `contradicts`
+terms) and the supplied caption files (`value/transcripts/`, by SHA-256) through a reviewed change. A pending
+task may be piloted, never counted. `value check-tasks [--counted]` validates every file; a question may not name
+a tool, VSift's words, the skill, the guide or a budget, so the question reads the same in every arm.
+
+**The commands.**
+
+```console
+vsift-agent-trials value prepare --root <root> --task <task.json> --arm r0|r1|v0|v1 --run-index <k> \
+  --vsift-commit <sha> --ffmpeg <abs> --ffprobe <abs> --whisper <abs> --model <abs> \
+  [--vsift <abs> | --install-proof <file>] [--media <abs>] [--transcript <abs>] [--guide <dir>] \
+  [--freeze <value-freeze.json>] [--pilot]
+vsift-agent-trials run --trial <trial> --phase 1 --client claude-code --executable <abs> --model <id> \
+  --client-home <dir> --pass-env ANTHROPIC_API_KEY
+vsift-agent-trials value grade --trial <trial> --phase 1
+vsift-agent-trials value record --trial <trial> --phase 1 --output <record.json> --client-home <dir>
+vsift-agent-trials value summarize --records <dir> --output-json <file> --output-markdown <file>
+vsift-agent-trials value freeze write --commit <sha> --output <file>
+vsift-agent-trials value freeze check --file <file>
+vsift-agent-trials value checkability --v1-trial <trial> --r1-trial <trial> --vsift <abs> --output <file.md>
+```
+
+**The repeat mode (T7).** Phase 2 runs in the same workspace and per-user base, so the first run's files or
+VSift session are still there, in a fresh client with no memory. Before it starts, `run` writes phase 1's final
+answer to `answer-1.md` in the workspace for every arm, and the phase-2 prompt says so in the same words in every
+arm (ruling, question 10). No resume card is passed. Each phase is graded against its own truth.
+
+**The cross-arm grader** (`value::claims`) reads only the final message and the task's truth, the same way in
+every arm. The report is split into statements (sentences, list items, table rows). A statement with a time
+(`h:mm:ss`, `mm:ss`, `m:ss` with optional fractions, `12.5 s`, `at 75s`, ranges with `-`, `–`, `to` or `and`) is a
+**timed claim**; a written time counts as the span it can mean (`0:12` is the whole twelfth second), and a time
+inside a file name is evidence, not the claim's time, unless no other time is given. A key fact is **matched** when
+a timed claim states it (the `truth.rs` matcher and number grammar) at a time inside the item's window widened by
+its tolerance; the run's score is matched facts over all facts. A **wrong claim** states an item's fact only at
+times outside its window, or holds one of the item's `contradicts` terms (ruling, question 7). An **unverifiable**
+statement speaks about the recording with no time and no file, frame or id behind it; it is reported, not gated.
+A run whose prose and grade disagree is flagged `needs_reading` for a person. The grader is coarse by design
+([L-250](../planning/known-limits.md#l-250)); its unit tests include a deliberately wrong report that scores 0.
+
+**Measures** (`value::grade`): round trips (model steps that asked for a tool, plus the answer), the same without
+V1's finishing calls (`handoff check`, `handoff skeleton`, reported, not gated: ruling, question 9), tool calls,
+refused, failed and retried calls, calls to FFmpeg, FFprobe or whisper-cli in every arm, `vsift` calls, images
+opened and their bytes, the client's usage, and wall time split into tool time and model time. **Timing:** `run`
+now reads the client's stdout itself, writes it unchanged to `stdout.jsonl` and one arrival time per line to
+`stdout.times`. Tool time is the union of each tool request's line to its result's line; model time is the wall
+time less tool time and the time to the first event. Claude Code's own `duration_api_ms` is kept beside it
+([L-252](../planning/known-limits.md#l-252)). A run is **excluded** only for an infrastructure failure: the client
+ignored its configuration, stopped at a usage limit, or failed before its first tool call; the record says why
+(ruling 12.1). A safety finding (installs, network, secrets, reads outside the workspace, the cold reading) is
+recorded and the run still counts.
+
+**The summary** (`value summarize`) gives each task, phase and arm's mean score, wrong claims by run, measures and
+time split, and prints the verdicts of ruling 12.2 per task: `equal_or_better`, `loss` (on T2, T4, T5 or T6:
+"to be read by a person before any hold is declared") or `neither`, for `v1` against `r1` (gated) and `v0`
+against `r0` (reported). Run pairs are by run index. The thresholds of the method's section 2 are computed and
+printed, never decided. Excluded runs and pilots are listed apart.
+
+**The checkability demonstration** (`value checkability`, method section 8): no model. On a `v1` and an `r1` run
+of the same task it adds a claim citing an evidence id that is not in the session and one citing a real id at a
+time outside it to the V1 handoff, and runs `vsift handoff check --session` on each after the unchanged one; to
+the raw report it adds a statement citing a frame file that does not exist and one citing a real frame file at a
+wrong time, and records what a script can check (that a file exists, nothing more). It writes `checkability.md`
+with the verdicts as they come. A case the run cannot supply (no handoff block, no cited frame) is written as not
+run, with the reason.
+
+**The hosted workflow** (`.github/workflows/value-trials.yml`). Agent trials never run on the maintainer's
+machine. A dispatch names the tasks, arms, runs (1 to 3), model, vsift (`build` for this commit, or an exact
+published version) and whether it is a pilot. The `plan` job checks the inputs, refuses a counted dispatch of a
+task whose truth is pending or a dispatch that could pass the 6-hour job limit, and, for a counted batch, runs
+`value freeze check` on the committed value freeze. The `trials` jobs run in the `value-trials` environment, so
+nothing starts until its required reviewer approves the dispatch; it holds the one sign-in secret, `ANTHROPIC_API_KEY`,
+an API key with a spending limit of about $150 that the maintainer creates after this merges and before the pilots (their choice of 2026-11-07, "API key, capped"; no other sign-in is used), which the harness passes by name only and whose value it adds to
+the sign-in leak scan of every log. Claude Code's `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` keeps the key out of the environment of its Bash commands, and the value grade still flags any command that names the variable or `/proc/.../environ` (the cold reading already flags `env`, `printenv`, `set`, `export` and `declare`). **If a run's output holds the key anyway**, the workflow deletes that trial, writes "sign-in leaked: revoke the key" to the step summary, starts no other run and fails the job, and `value record` refuses the run and removes its raw logs, so nothing of it reaches an artifact (a public repository's artifacts can be downloaded by any signed-in user, and GitHub masks secrets in logs, not in artifacts). There is one job per run index; each runs every requested arm of every task in
+turn, the arms' order turned by one place per index, so run k of each arm falls in the same window (ruling,
+question 8). Tools come from the `P07 local ASR` staging script and recordings from the test-media release as
+`P14 real media` fetches them. Claude Code 2.1.284 is installed from npm with its package checked against the
+registry's advertised integrity ([L-251](../planning/known-limits.md#l-251): the Linux host differs from the
+Windows host of every earlier trial). Trials live under `/t`, outside the runner's home. Bounded records are kept
+90 days, raw logs 7 days and never committed, and a final job writes the summary. A pull request that touches the
+harness runs its tests, every arm against the stand-in client included, with no secret.
+
+**The value freeze** (`value freeze write|check`, ruling 12.1) covers the task files, the raw guide
+(`value/raw-guide/`), the value settings, the grader (the crate's `src` and `Cargo.toml`), the method note, the
+skill and the corpus truth, with one digest over them. It is written once the raw guide is committed, before the
+first counted run; a counted dispatch refuses to start without it. No counted run is repeated to improve a result.
+
+**Records.** The pilots (every arm once on T2 and T5, ruling question 11) and the counted batches land as
+bounded records under `docs/planning/value-measurement/phase-1/records/` in records-only pull requests, with the
+summary and the checkability pages.
 
 ## The procedure checkpoint (not an agent trial)
 

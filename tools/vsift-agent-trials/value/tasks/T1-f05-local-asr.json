@@ -1,0 +1,28 @@
+{
+  "id": "T1-f05-local-asr",
+  "task": "T1",
+  "kind": "short_speech",
+  "media": {
+    "source": "corpus",
+    "fixture": "F05",
+    "file": "F05-speech.mp4"
+  },
+  "transcript": null,
+  "phases": [
+    {
+      "question": "This is a screen recording of a walkthrough of submitting an invoice, {{video}}; there is no transcript. What went wrong: what did the presenter expect, what actually happened, and when?",
+      "truth": {
+        "kind": "events",
+        "events": [
+          {
+            "id": "F05-E03"
+          }
+        ]
+      }
+    }
+  ],
+  "budget": {
+    "timeout_s": 900,
+    "max_turns": 60
+  }
+}

@@ -272,6 +272,7 @@ pub async fn prepare(request: &PrepareRequest) -> Result<TrialLayout, TrialError
         freeze_sha256: request.freeze_sha256.clone(),
         cold_assertions,
         cold_variant: (mode == TrialMode::Cold).then_some(request.cold_variant),
+        value: None,
     };
     write_json(&layout.manifest(), &manifest)?;
     Ok(layout)
@@ -378,7 +379,7 @@ pub fn blur_filter(region: [u32; 4]) -> String {
 }
 
 /// A `SubRip` time.
-fn srt_time(micros: u64) -> String {
+pub(crate) fn srt_time(micros: u64) -> String {
     let millis = micros / 1_000;
     format!(
         "{:02}:{:02}:{:02},{:03}",

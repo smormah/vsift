@@ -60,7 +60,14 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **0.3.0 development freeze, written at W4c Part 2's merge rebase (#409); the final freeze is recorded at the 0.3.0
+/// **M1's freeze: 0.3.0 draft freeze, rewritten at the merge rebase; the final freeze is recorded at the 0.3.0 cut**
+/// (2026-11-07): the value measurement's harness adds `src/value/`, `src/timing.rs` and hooks in `run.rs`,
+/// `cold.rs`, `leak_check.rs` and the rest of the crate's `src`, so only the `grader` component moved,
+/// `efe6fd2d...` to `55793d82...`, and this digest `f4f4740b...` (W1's draft freeze, `changes` classed `free`) to
+/// the value below; the other six components are unchanged. No skill, scenario or settings file of the P14 trials
+/// changed.
+///
+/// The freeze before W1's: **0.3.0 development freeze, written at W4c Part 2's merge rebase (#409); the final freeze is recorded at the 0.3.0
 /// cut** (2026-11-02): the skill gains the step for a video on a web page, the grader the consent rules and the plan
 /// grant, and the scenarios C-05 to C-08 and A-11, so four components moved: `skill` `6065ffdb...` to `e7269b80...`,
 /// `grader` `76d1243c...` to `efe6fd2d...`, `cold` `853d8da3...` to `31204791...` and `scenarios` `3a77c3d3...` to
@@ -179,7 +186,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "f4f4740beb6c4778f126c20ebdb4596d817e5b44520c26a4d5320e2e98a8b9f5";
+const CUT_FREEZE_SHA256: &str = "615b93bf684ba2e5bd9baa7ca9c612c56400b6fe523052a0874b18471b977a3a";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
