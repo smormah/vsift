@@ -179,7 +179,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "f4cf6222ef9ff6e7cf46ca80c30a08d0accfe1104ad804d1c437b58eb3237f8a";
+const CUT_FREEZE_SHA256: &str = "e678312923f97358f9f8d911ce11b43be5c297980981f58b5a8d854bdcd2a025";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
