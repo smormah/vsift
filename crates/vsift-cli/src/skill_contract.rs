@@ -53,6 +53,10 @@ const RETIRED_IMAGE_CODE_PARTS: [[&str; 2]; 1] = [["OK", "API 6281"]];
 /// Upper bound on `SKILL.md`, which every client loads whole into its context.
 const MAX_SKILL_LINES: usize = 300;
 
+/// Upper bound on `SKILL.md` in bytes (M5a, 2026-11-07: it was 20,989 and is read on every run). A rule goes into a
+/// reference before this grows.
+const MAX_SKILL_BYTES: usize = 18_500;
+
 /// Upper bound on the check image, which a one-image client pays for.
 const MAX_IMAGE_CHECK_BYTES: usize = 8 * 1024;
 
@@ -631,9 +635,31 @@ fn check_console_command(
 }
 
 #[test]
+fn the_trial_grader_reads_the_dry_run_of_session_clean_as_free() -> Result<(), String> {
+    let text = read_text(&skill_directory().join("references").join("commands.md"))?;
+    let row = text
+        .lines()
+        .find(|line| line.starts_with("| `vsift session clean` |"))
+        .ok_or("commands.md has no session clean row")?;
+    if !row.contains("may run freely") || !row.contains("`--expired --dry-run`") {
+        return Err(
+            "the session clean row must say `--expired --dry-run` may run freely: the trial grader reads that wording"
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn skill_md_has_front_matter_states_and_a_size_bound() -> Result<(), String> {
     let text = read_text(&skill_directory().join("SKILL.md"))?;
     let mut problems = Problems::default();
+    if text.len() > MAX_SKILL_BYTES {
+        problems.add(format!(
+            "SKILL.md has {} bytes, above {MAX_SKILL_BYTES}",
+            text.len()
+        ));
+    }
     let lines: Vec<&str> = text.lines().collect();
     if lines.len() > MAX_SKILL_LINES {
         problems.add(format!(
