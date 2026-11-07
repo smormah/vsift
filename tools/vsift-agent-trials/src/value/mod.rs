@@ -1,6 +1,6 @@
 //! The value measurement, phase 1 (`docs/planning/value-measurement/method.md`):
 //! the same assistant answering the same questions about the same
-//! recordings with FFmpeg, FFprobe and whisper-cli alone (R0, R1) and with
+//! recordings with `FFmpeg`, `FFprobe` and whisper-cli alone (R0, R1) and with
 //! `VSift` (V0, V1).
 //!
 //! It is a mode of its own beside the skill and cold trials, which it does

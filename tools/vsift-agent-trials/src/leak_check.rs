@@ -119,7 +119,7 @@ mod tests {
         let clean = with_passed_values(LeakCheck::default(), &[secret.clone(), "1".to_owned()], &["no secret here"]);
         assert_eq!(clean.values_checked, 1);
         assert!(!clean.found);
-        let leaked = with_passed_values(LeakCheck::default(), &[secret.clone()], &[&format!("key={secret}")]);
+        let leaked = with_passed_values(LeakCheck::default(), std::slice::from_ref(&secret), &[&format!("key={secret}")]);
         assert!(leaked.found);
     }
 

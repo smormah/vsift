@@ -314,7 +314,7 @@ fn the_value_freeze_holds_until_a_frozen_input_moves() -> TestResult {
     let file = scratch.path().join("value-freeze.json");
     let written = freeze::write(scratch.path(), "0123456789ab", &file)?;
     assert_eq!(written.components.len(), freeze::VALUE_COMPONENTS.len());
-    assert!(freeze::check(scratch.path(), &file)?.is_empty());
+    assert_eq!(freeze::check(scratch.path(), &file)?, Vec::<String>::new());
 
     for (relative, component) in [
         ("tools/vsift-agent-trials/value/raw-guide/SKILL.md", "raw_guide"),

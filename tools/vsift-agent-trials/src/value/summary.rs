@@ -3,7 +3,7 @@
 //! the thresholds of method section 2, computed and printed, never decided
 //! (a loss is read by a person against the runs before any hold).
 
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::BTreeMap, fmt::Write as _, fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -419,8 +419,9 @@ pub fn markdown(summary: &ValueSummary) -> String {
         "# Value measurement: batch summary\n\nComputed by `vsift-agent-trials value summarize`. Nothing here is a public claim; a loss is read by a person against the runs before any hold is declared.\n\n## Cells\n\n| Task | Phase | Arm | Runs | Score | Wrong | Unverifiable | Round trips (without finishing) | Tokens | Cost | Images | Wall / tool / model s | Hit budget | Unsafe | Read |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n",
     );
     for cell in &summary.cells {
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} | {} | {:.1} ({:.1}) | {:.0} | {} | {:.1} | {:.0} / {:.0} / {:.0} | {} | {} | {} |\n",
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {} | {} | {} | {:.1} ({:.1}) | {:.0} | {} | {:.1} | {:.0} / {:.0} / {:.0} | {} | {} | {} |",
             cell.task_id,
             cell.phase,
             cell.arm,
@@ -439,26 +440,28 @@ pub fn markdown(summary: &ValueSummary) -> String {
             cell.hit_budget,
             cell.unsafe_runs,
             cell.needs_reading
-        ));
+        );
     }
     out.push_str("\n## Verdicts (ruling 12.2)\n\n| Task | Phase | Pair | Gated | Verdict | Pairs with more wrong |\n| --- | --- | --- | --- | --- | --- |\n");
     for comparison in &summary.comparisons {
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {:?} | {} |\n",
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {:?} | {} |",
             comparison.task,
             comparison.phase,
             comparison.pair,
             if comparison.gated { "yes" } else { "reported" },
             comparison.verdict,
             comparison.pairs_with_more_wrong
-        ));
+        );
     }
     out.push_str("\n## Thresholds (method section 2, computed, not decided)\n\n");
     for line in &summary.thresholds {
-        out.push_str(&format!("- {line}\n"));
+        let _ = writeln!(out, "- {line}");
     }
-    out.push_str(&format!(
-        "\n## Excluded runs (ruling 12.1)\n\n{}\n\nPilot runs (never counted): {}\n",
+    let _ = writeln!(
+        out,
+        "\n## Excluded runs (ruling 12.1)\n\n{}\n\nPilot runs (never counted): {}",
         if summary.excluded.is_empty() {
             "None.".to_owned()
         } else {
@@ -470,7 +473,7 @@ pub fn markdown(summary: &ValueSummary) -> String {
                 .join("\n")
         },
         summary.pilots
-    ));
+    );
     out
 }
 

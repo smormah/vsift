@@ -219,6 +219,10 @@ enum ValueFreezeStep {
 }
 
 #[derive(Subcommand)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Parsed once per process; boxing the preparation flags would only obscure the clap derive"
+)]
 enum ValueStep {
     /// Prepares one run of a task in one arm.
     Prepare {
@@ -243,7 +247,7 @@ enum ValueStep {
         /// An install proof, for V arms on a published version.
         #[arg(long)]
         install_proof: Option<PathBuf>,
-        /// The VSift commit under test.
+        /// The `VSift` commit under test.
         #[arg(long)]
         vsift_commit: String,
         /// The ffmpeg executable (absolute).
@@ -522,7 +526,7 @@ enum Step {
         step: CampaignStep,
     },
     /// The value measurement (method in docs/planning/value-measurement):
-    /// raw arms against VSift arms, graded the same way.
+    /// raw arms against `VSift` arms, graded the same way.
     Value {
         #[command(subcommand)]
         step: ValueStep,
@@ -916,6 +920,10 @@ async fn execute(step: Step) -> Result<Done, TrialError> {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "One match over the value steps keeps each step next to its flags"
+)]
 fn value(step: ValueStep) -> Result<Done, TrialError> {
     use value_freeze::{RAW_GUIDE, VALUE_TASKS};
     match step {

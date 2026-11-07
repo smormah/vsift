@@ -23,7 +23,7 @@ use crate::{
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum Arm {
-    /// Raw, cold: FFmpeg, FFprobe and whisper-cli, a neutral prompt.
+    /// Raw, cold: `FFmpeg`, `FFprobe` and whisper-cli, a neutral prompt.
     R0,
     /// Raw, guided: R0 plus the frozen raw method guide as a skill.
     R1,
