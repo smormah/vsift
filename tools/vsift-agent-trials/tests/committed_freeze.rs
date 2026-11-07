@@ -63,7 +63,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// **M1's freeze: 0.3.0 draft freeze, rewritten at the merge rebase; the final freeze is recorded at the 0.3.0 cut**
 /// (2026-11-07): the value measurement's harness adds `src/value/`, `src/timing.rs` and hooks in `run.rs`,
 /// `cold.rs`, `leak_check.rs` and the rest of the crate's `src`, so only the `grader` component moved,
-/// `efe6fd2d...` to `ff6e6080...`, and this digest `f4f4740b...` (W1's draft freeze, `changes` classed `free`) to
+/// `efe6fd2d...` to `55793d82...`, and this digest `f4f4740b...` (W1's draft freeze, `changes` classed `free`) to
 /// the value below; the other six components are unchanged. No skill, scenario or settings file of the P14 trials
 /// changed.
 ///
@@ -186,7 +186,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "b43b3dbf7c9e1cb9aee495b11f52765b08d53a00c9c76ab49aeff50bfb87e9d5";
+const CUT_FREEZE_SHA256: &str = "615b93bf684ba2e5bd9baa7ca9c612c56400b6fe523052a0874b18471b977a3a";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
