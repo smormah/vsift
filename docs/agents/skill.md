@@ -548,6 +548,42 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The freeze:** the `skill`, `grader`, `scenarios` and `cold` components move once, written at the merge rebase. The
   fuzz seed and the plugin's copy stay byte-identical.
 
+## The change for 0.3.0: a lighter skill (M5a, 2026-11-07)
+
+- **Why.** The value measurement (phase 1, run on `0.3.0-rc.1`) compares an assistant that drives FFmpeg and
+  whisper.cpp itself with the same assistant using VSift, and most of VSift's cost is round trips; the skill's text
+  adds about a third to each. The maintainer chose "Steps and text" on 2026-11-06; this is the text part. The
+  planner's ruling of 2026-11-07 measures what a typical run loads: `SKILL.md` plus the four references that
+  all 89 recorded Claude Code skill runs read (`safety.md`, `handoff.md`, `commands.md`, `lifecycle.md`; `resume.md`
+  8 of 89, `budgets.md` 4 of 89), 76,635 bytes before, with a target of at least 30% less.
+- **What changed, in bytes** (checked with `wc -c`; `SKILL.md` carries the guard's pinned sentences, the
+  allowed-words table, the skeleton and the description unchanged):
+
+  | File | Before | After |
+  | --- | --- | --- |
+  | `SKILL.md` | 20,989 | 17,983 |
+  | `references/safety.md` | 5,370 | 5,107 |
+  | `references/handoff.md` | 21,697 | 19,732 |
+  | `references/commands.md` | 25,197 | 21,280 |
+  | `references/lifecycle.md` | 3,382 | 2,886 |
+  | The five a typical run loads | 76,635 | 66,988 |
+
+  `resume.md` grew by 260 bytes (the form for a VSift before 0.3.0, moved there from `SKILL.md`'s PREPARE).
+- **Reading on a trigger.** Wording alone gives −12%. The rest comes from reading less: `SKILL.md` rule 2 says the
+  commands the skill shows are `free` and that `commands.md` is read before any other command, on a failure and for
+  the PowerShell form of the draft check; CLOSE_OR_RETAIN says `lifecycle.md` is read only to retain, renew or
+  clean. A run that reads only `SKILL.md`, `safety.md` and `handoff.md` loads 42,822 bytes (−44%). Whether agents do
+  so is what the trial records show (the usage each reports and the skill files it read).
+- **Kept as it was in meaning:** every safety rule (the wording is shorter, no rule weaker), the handoff format, the
+  allowed-words table, the retain-only-on-request rule, the pinned sentences of the guard and every rule the trials
+  grade. No command, flag, failure code or schema changed.
+- **Not done:** the allowed-words table stays whole in `SKILL.md` (the maintainer asked for it on 2026-09-29 and the
+  planner kept it), the description is unchanged (it drives the trigger), and `handoff.md` still repeats those 15
+  members in its own table because the guard holds that table to the whole schema.
+- **The freeze:** the `skill` component moves; written at the merge ([`trials.md`](trials.md)). **Untried:** the hosted
+  skill trials on this text are dispatched by the coordinator; the comparison with the last accepted batch is in the
+  pull request.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo
