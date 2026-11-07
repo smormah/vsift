@@ -1,0 +1,24 @@
+{
+  "id": "T4b-rm09-local-asr",
+  "task": "T4",
+  "kind": "long_speech",
+  "media": {
+    "source": "test_media_release",
+    "item": "RM09",
+    "file": "RM09-nasa-crew-8-arrival.mp4",
+    "sha256": "ee5501f1e25c8240a8e2dae61eebabf9446615d4c3558c3efbb098a1cc4bf41a"
+  },
+  "transcript": null,
+  "phases": [
+    {
+      "question": "What changes on screen in {{video}}, and when?",
+      "truth": {
+        "kind": "pending_m2"
+      }
+    }
+  ],
+  "budget": {
+    "timeout_s": 1800,
+    "max_turns": 80
+  }
+}

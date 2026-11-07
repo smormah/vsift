@@ -1,0 +1,30 @@
+{
+  "id": "T7b-rm10-second-question",
+  "task": "T7",
+  "kind": "second_question",
+  "media": {
+    "source": "test_media_release",
+    "item": "RM10",
+    "file": "RM10-census-map-from-table.mp4",
+    "sha256": "a035daeb8df36e75f138edaf58b31d4cdc3d1514592063d2842063b58bb8bf90"
+  },
+  "transcript": null,
+  "phases": [
+    {
+      "question": "What changes on screen in {{video}}, and when?",
+      "truth": {
+        "kind": "pending_m2"
+      }
+    },
+    {
+      "question": "What changes on screen in {{video}}, and when?",
+      "truth": {
+        "kind": "pending_m2"
+      }
+    }
+  ],
+  "budget": {
+    "timeout_s": 1800,
+    "max_turns": 80
+  }
+}

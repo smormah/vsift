@@ -1,0 +1,33 @@
+{
+  "id": "T2-f04-order-1017",
+  "task": "T2",
+  "kind": "short_visual_change",
+  "media": {
+    "source": "corpus",
+    "fixture": "F04",
+    "file": "F04-speech.mp4"
+  },
+  "transcript": {
+    "source": "from_script"
+  },
+  "phases": [
+    {
+      "question": "In {{video}}, what happens to order 1017, and when? The transcript is {{transcript}}.",
+      "truth": {
+        "kind": "events",
+        "events": [
+          {
+            "id": "F04-E03"
+          },
+          {
+            "id": "F04-E04"
+          }
+        ]
+      }
+    }
+  ],
+  "budget": {
+    "timeout_s": 900,
+    "max_turns": 60
+  }
+}

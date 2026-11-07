@@ -44,9 +44,11 @@ pub mod shell;
 pub mod shim;
 pub mod skill;
 pub mod summary;
+pub mod timing;
 pub mod trace;
 pub mod truth;
 pub mod usage_limit;
+pub mod value;
 pub mod vsift_cli;
 
 pub use error::TrialError;

@@ -127,6 +127,7 @@ impl Trial {
             freeze_sha256: None,
             cold_assertions: Vec::new(),
             cold_variant: None,
+            value: None,
             prompts: parsed
                 .phases
                 .iter()
@@ -257,7 +258,7 @@ async fn run_passes_an_explicit_argument_list_and_a_cleared_environment() -> Tes
         )?)?)?,
         1,
     )?;
-    let expected = client_arguments(&request, &trial.layout, &scenario, &prompt);
+    let expected = client_arguments(&request, &trial.layout, scenario.image_policy, &prompt);
     assert_eq!(invocation["arguments"], json!(expected));
     assert_eq!(expected[0], "-p");
     for flag in [
