@@ -564,9 +564,9 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   | `SKILL.md` | 20,989 | 17,983 |
   | `references/safety.md` | 5,370 | 5,107 |
   | `references/handoff.md` | 21,697 | 19,732 |
-  | `references/commands.md` | 25,197 | 21,680 |
+  | `references/commands.md` | 25,197 | 21,732 |
   | `references/lifecycle.md` | 3,382 | 2,886 |
-  | The five a typical run loads | 76,635 | 67,388 |
+  | The five a typical run loads | 76,635 | 67,440 |
 
   `resume.md` grew by 260 bytes (the form for a VSift before 0.3.0, moved there from `SKILL.md`'s PREPARE).
 - **Reading on a trigger.** Wording alone gives −12%. The rest comes from reading less: `SKILL.md` rule 2 says the
