@@ -105,7 +105,7 @@ jobs:
         run: cargo test --locked -p vsift-agent-trials
 
       - name: Check the value task files
-        run: cargo run --locked -p vsift-agent-trials -- value check-tasks
+        run: cargo run --locked -p vsift-agent-trials --bin vsift-agent-trials -- value check-tasks
 
   plan:
     name: Check the dispatch
@@ -171,7 +171,7 @@ jobs:
         run: |
           set -euo pipefail
           [ -f "$FREEZE" ] || { echo "a counted batch needs the committed value freeze ($FREEZE)"; exit 1; }
-          cargo run --locked -p vsift-agent-trials -- value freeze check --file "$FREEZE"
+          cargo run --locked -p vsift-agent-trials --bin vsift-agent-trials -- value freeze check --file "$FREEZE"
 
   trials:
     name: Trials, run ${{ matrix.run }}
@@ -420,7 +420,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/summary"
-          cargo run --release --locked -p vsift-agent-trials -- value summarize \
+          cargo run --release --locked -p vsift-agent-trials --bin vsift-agent-trials -- value summarize \
             --records "$RUNNER_TEMP/records" \
             --output-json "$RUNNER_TEMP/summary/summary.json" \
             --output-markdown "$RUNNER_TEMP/summary/SUMMARY.md"
