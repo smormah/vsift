@@ -211,9 +211,9 @@ fn literal_folder(word: &str) -> Option<String> {
 fn is_plain_folder(word: &str) -> bool {
     !word.is_empty()
         && !word.starts_with('-')
-        && word.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/')
-        })
+        && word
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/'))
         && !word.split('/').any(|name| name == "..")
 }
 

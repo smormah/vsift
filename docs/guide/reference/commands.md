@@ -55,6 +55,7 @@
 - [vsift handoff](#vsift-handoff): Start or check a report that cites its evidence
 - [vsift handoff check](#vsift-handoff-check): Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
 - [vsift handoff skeleton](#vsift-handoff-skeleton): Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
+- [vsift handoff finish](#vsift-handoff-finish): Check a draft report with the session's records and, only when it passes, retain the session to the new directory --retain names or close it (--close); without either, check only. Reads the draft from standard input unless --file names it
 - [vsift skill](#vsift-skill): Add the skill to your AI assistant, or print one of its files
 - [vsift skill install](#vsift-skill-install): Copy this release's skill into the folder each named client reads (once per folder); a folder that holds something else is left as it is unless --replace is given
 - [vsift skill status](#vsift-skill-status): Show what is at each skill folder, read only, and the skill's files
@@ -231,7 +232,7 @@ Check and set up what you need (run it any time).
 Plain `vsift setup`, in a terminal, shows what works and what is missing, offers to install what can be installed here, with each download's source, size and licence, and installs nothing until you type yes. Without a terminal it only reports. The commands below are what AI assistants and scripts use; they never ask anything.
 
 Usage: vsift setup [OPTIONS]
-       vsift setup <COMMAND>
+       vsift.exe setup <COMMAND>
 
 Commands:
   check            Inspect local dependencies without changing the machine
@@ -1606,7 +1607,7 @@ Read on-screen text.
 With the optional OCR runner, opt-in and bounded: each call reads at most --max-frames frames of the range's plan (every visual candidate's frame and one frame every --period-us), then stops; run it again to continue. The answer counts the frames read, failed and pending, and is partial until the plan is read. ocr search then pages the text it read, each hit citing its frame, time and region, with or without a transcript (search's first page shows it beside the transcript).
 
 Usage: vsift ocr [OPTIONS] <SESSION>
-       vsift ocr <COMMAND>
+       vsift.exe ocr <COMMAND>
 
 Commands:
   search  Page the on-screen text ocr has read for a literal query
@@ -2725,6 +2726,7 @@ Usage: vsift handoff [OPTIONS] <COMMAND>
 Commands:
   check     Check a draft report and its vsift-handoff block against the skill's handoff schema and rules; reads the draft from standard input unless --file names it
   skeleton  Print a valid handoff that states nothing yet, with the session's ids filled in, to fill in instead of building the JSON from a template
+  finish    Check a draft report with the session's records and, only when it passes, retain the session to the new directory --retain names or close it (--close); without either, check only. Reads the draft from standard input unless --file names it
   help      Print this message or the help of the given subcommand(s)
 
 Options:
@@ -2852,6 +2854,65 @@ Options:
 Examples:
   vsift handoff skeleton <session> --question <words>
     Starts a report with the session's ids filled in
+
+Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
+```
+
+## vsift handoff finish
+
+Check a draft report with the session's records and, only when it passes, retain the session to the new directory --retain names or close it (--close); without either, check only. Reads the draft from standard input unless --file names it.
+
+```text
+Check a draft report with the session's records and, only when it passes, retain the session to the new directory --retain names or close it (--close); without either, check only. Reads the draft from standard input unless --file names it
+
+Usage: vsift handoff finish [OPTIONS] <SESSION>
+
+Arguments:
+  <SESSION>
+          Session the draft reports on. Every cited segment and evidence id must resolve in its records; it is read without renewing it
+
+Options:
+      --json
+          Machine-readable output: one versioned JSON result
+
+      --retain <NEW_DIRECTORY>
+          Only on the user's explicit request: after a passing draft that states lifecycle.action retained, retain the session to this new directory, exactly as session retain --output does
+
+      --events <EVENTS>
+          Emit versioned evidence, progress and terminal records as JSON Lines
+
+          Possible values:
+          - jsonl: One bounded JSON object per line
+
+      --include-source
+          With --retain only, and only if the user asked for the video: also copy the private source snapshot into the bundle
+
+      --close
+          After a passing draft that states lifecycle.action closed, close the session, exactly as session close does
+
+      --session-root <SESSION_ROOT>
+          For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
+
+      --file <FILE>
+          Absolute path of a file holding the whole draft report (at most 128 KiB of UTF-8); without it the draft is read from standard input
+
+      --host-isolation <HOST_ISOLATION>
+          For operators who run a worker host; an agent leaves it out. Isolation to run under; strict-linux is attested before any work
+
+          Possible values:
+          - process-only: Per-process containment only; no strict boundary is claimed
+          - strict-linux: The strict Linux worker boundary: accepted only when the kernel attests a cgroup v2 with CPU, memory and process limits, a read-only root and no network but loopback; otherwise `ISOLATION_UNAVAILABLE` before any work
+
+          [default: process-only]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+Examples:
+  vsift handoff finish <session> --file /tmp/report.md
+    Checks the report with the session's records; writes nothing
+  vsift handoff finish <session> --retain ./evidence --file /tmp/report.md
+    Then, only if it passes, keeps the session in a new folder
 
 Guide: https://github.com/smormah/vsift/blob/main/docs/guide/let-your-agent-investigate.md
 ```
