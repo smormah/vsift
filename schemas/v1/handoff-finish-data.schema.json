@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/handoff-finish-data.schema.json",
+  "title": "VSift handoff.finish data v1",
+  "description": "The data member of a complete handoff.finish result (0.3.0, M5b; ADR 0023 note of 2026-11-09). vsift handoff finish <session> reads a draft report exactly as handoff check does, checks it with the session's committed records always resolved (check is the handoff.check data, with session never null), and then, only when the draft has no error and, for a write, its lifecycle.action states that write, makes at most one write: --retain <new-directory> retains the session as session retain does (ADR 0013; the bundle is revalidated before success, so bundle_validated is true and no bundle validate is needed), --close closes it as session close does. requested names the write asked for (check when none). finished is true exactly when every requested step was done; stopped_at says why a request stopped before any write: draft (check.errors is not empty) or lifecycle (the draft's lifecycle.action is not the requested write's; lifecycle says both). A stop writes nothing and is still complete with exit 0, so a script tests finished, not the exit status, before relying on a write. A write that fails is not a complete result: the command fails with that write's own code and exit, as the standalone command would, and a session that is closed, expired or not found with a write requested is such a failure. Without a write, a session that cannot be read is check.session.gap, as for handoff check --session. lifecycle.stated and lifecycle.requested are closed words only, never draft text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "finished",
+    "stopped_at",
+    "requested",
+    "check",
+    "lifecycle",
+    "retain",
+    "bundle_validated",
+    "close"
+  ],
+  "properties": {
+    "finished": { "type": "boolean" },
+    "stopped_at": { "enum": [null, "draft", "lifecycle"] },
+    "requested": { "enum": ["check", "retain", "close"] },
+    "check": { "$ref": "handoff-check-data.schema.json" },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stated", "requested", "agrees"],
+      "properties": {
+        "stated": { "$ref": "#/$defs/action_or_null" },
+        "requested": { "enum": [null, "retained", "closed"] },
+        "agrees": {
+          "description": "False only when a write was requested and the draft does not state its action.",
+          "type": "boolean"
+        }
+      }
+    },
+    "retain": {
+      "description": "session retain's data: the retained bundle as its revalidation read it; null when nothing was retained.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/bundle" }]
+    },
+    "bundle_validated": { "type": "boolean" },
+    "close": {
+      "description": "session close's data: the session's committed status after the close; null when nothing was closed.",
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/closed" }]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "stopped_at": { "enum": ["draft", "lifecycle"] } } },
+      "then": {
+        "properties": {
+          "finished": { "const": false },
+          "retain": { "type": "null" },
+          "bundle_validated": { "const": false },
+          "close": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "stopped_at": { "const": "draft" } } },
+      "then": { "properties": { "check": { "properties": { "valid": { "const": false } } } } }
+    },
+    {
+      "if": { "properties": { "stopped_at": { "const": "lifecycle" } } },
+      "then": {
+        "properties": {
+          "check": { "properties": { "valid": { "const": true } } },
+          "lifecycle": { "properties": { "agrees": { "const": false } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "finished": { "const": true } } },
+      "then": {
+        "properties": {
+          "stopped_at": { "type": "null" },
+          "check": { "properties": { "valid": { "const": true } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "finished": { "const": true }, "requested": { "const": "retain" } }
+      },
+      "then": {
+        "properties": {
+          "retain": { "$ref": "#/$defs/bundle" },
+          "bundle_validated": { "const": true },
+          "close": { "type": "null" },
+          "lifecycle": { "properties": { "requested": { "const": "retained" } } }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "finished": { "const": true }, "requested": { "const": "close" } }
+      },
+      "then": {
+        "properties": {
+          "retain": { "type": "null" },
+          "bundle_validated": { "const": false },
+          "close": { "$ref": "#/$defs/closed" },
+          "lifecycle": { "properties": { "requested": { "const": "closed" } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "requested": { "const": "check" } } },
+      "then": {
+        "properties": {
+          "stopped_at": { "enum": [null, "draft"] },
+          "retain": { "type": "null" },
+          "bundle_validated": { "const": false },
+          "close": { "type": "null" },
+          "lifecycle": { "properties": { "requested": { "type": "null" }, "agrees": { "const": true } } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "action_or_null": {
+      "enum": [null, "left_open", "closed", "retained", "not_opened", "expired"]
+    },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "source_id",
+        "source_bytes",
+        "source_included",
+        "artifact_count",
+        "artifact_bytes",
+        "reextraction_requires_matching_original",
+        "publication"
+      ],
+      "properties": {
+        "session_id": { "$ref": "frame-data.schema.json#/$defs/session_id" },
+        "source_id": { "$ref": "frame-data.schema.json#/$defs/source_id" },
+        "source_bytes": { "type": "integer", "minimum": 0 },
+        "source_included": { "type": "boolean" },
+        "artifact_count": { "type": "integer", "minimum": 0 },
+        "artifact_bytes": { "type": "integer", "minimum": 0 },
+        "reextraction_requires_matching_original": { "type": "boolean" },
+        "publication": { "const": "process_crash_consistent" }
+      }
+    },
+    "closed": {
+      "description": "The committed status session close returns; time_anchor and origin appear as in session status.",
+      "type": "object",
+      "required": [
+        "session_id",
+        "state",
+        "source_id",
+        "source_bytes",
+        "artifact_count",
+        "artifact_bytes",
+        "generation",
+        "expires_at"
+      ],
+      "properties": {
+        "session_id": { "$ref": "frame-data.schema.json#/$defs/session_id" },
+        "state": { "enum": ["initializing", "open", "expired", "closed", "unavailable"] },
+        "source_id": { "$ref": "frame-data.schema.json#/$defs/source_id" },
+        "source_bytes": { "type": "integer", "minimum": 0 },
+        "artifact_count": { "type": "integer", "minimum": 0 },
+        "artifact_bytes": { "type": "integer", "minimum": 0 },
+        "generation": { "type": "integer", "minimum": 0 },
+        "expires_at": { "type": "string" }
+      }
+    }
+  }
+}

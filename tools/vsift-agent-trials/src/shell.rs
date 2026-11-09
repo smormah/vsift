@@ -18,6 +18,9 @@
 //! here-string piped in for PowerShell. Each has one more shape, with
 //! `--session <id>` before `--json` (0.3.0, ADR 0029 decision 28), for a report
 //! that states a clock time; `<id>` is a literal session id and nothing else.
+//! The same two forms may also run `vsift handoff finish <id>` (0.3.0, M5b),
+//! with nothing, `--close`, or `--retain <folder>` (one literal word, plain
+//! or single-quoted) and optionally `--include-source`, before `--json`.
 //! A script that is exactly the form of the dialect it is read in, at any
 //! wrapper depth, is that one `vsift handoff check` command; its body is the
 //! draft, data that is never read as commands. The form of the other shell is
@@ -126,18 +129,88 @@ fn is_session_id(text: &str) -> bool {
     })
 }
 
-/// The arguments of `command` when it is exactly one of the two commands a
+/// The arguments of `command` when it is exactly one of the commands a
 /// draft form may run. It is compared as text, so a quote, a variable or a
 /// substitution is simply not one of them.
 fn handoff_check_argv(command: &str) -> Option<Vec<String>> {
     if command == HANDOFF_CHECK {
         return Some(command.split(' ').map(str::to_owned).collect());
     }
+    if let Some(argv) = handoff_finish_argv(command) {
+        return Some(argv);
+    }
     command
         .strip_prefix(HANDOFF_CHECK_SESSION_PREFIX)?
         .strip_suffix(HANDOFF_CHECK_SESSION_SUFFIX)
         .filter(|session| is_session_id(session))?;
     Some(command.split(' ').map(str::to_owned).collect())
+}
+
+/// What comes before the session id in a `handoff finish` draft form.
+const HANDOFF_FINISH_PREFIX: &str = "vsift handoff finish ";
+
+/// The arguments of `command` when it is exactly a `handoff finish` a draft
+/// form may run (0.3.0, M5b): `vsift handoff finish <id>`, then nothing,
+/// `--close`, or `--retain <folder>` with or without `--include-source`,
+/// then `--json`, each word separated by one space. `<id>` is a literal
+/// session id; `<folder>` is one plain word ([`is_plain_folder`]) or one
+/// single-quoted word without a quote, line break or control character,
+/// which neither shell expands. Anything else is not the form.
+fn handoff_finish_argv(command: &str) -> Option<Vec<String>> {
+    let rest = command
+        .strip_prefix(HANDOFF_FINISH_PREFIX)?
+        .strip_suffix(HANDOFF_CHECK_SESSION_SUFFIX)?;
+    let (session, options) = rest.split_once(' ').unwrap_or((rest, ""));
+    if !is_session_id(session) {
+        return None;
+    }
+    let mut argv: Vec<String> = ["vsift", "handoff", "finish", session]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    match options {
+        "" => {}
+        "--close" => argv.push("--close".to_owned()),
+        _ => {
+            let folder_text = options.strip_prefix("--retain ")?;
+            let (folder_text, include_source) = folder_text
+                .strip_suffix(" --include-source")
+                .map_or((folder_text, false), |folder| (folder, true));
+            argv.push("--retain".to_owned());
+            argv.push(literal_folder(folder_text)?);
+            if include_source {
+                argv.push("--include-source".to_owned());
+            }
+        }
+    }
+    argv.push("--json".to_owned());
+    Some(argv)
+}
+
+/// The folder a `--retain` word names, when it is one literal word.
+fn literal_folder(word: &str) -> Option<String> {
+    if let Some(quoted) = word
+        .strip_prefix('\'')
+        .and_then(|rest| rest.strip_suffix('\''))
+    {
+        let literal = !quoted.is_empty()
+            && !quoted
+                .chars()
+                .any(|character| character == '\'' || character.is_control());
+        return literal.then(|| quoted.to_owned());
+    }
+    is_plain_folder(word).then(|| word.to_owned())
+}
+
+/// Whether `word` is a folder name no shell changes: ASCII letters, digits,
+/// `.`, `_`, `-` and `/`, not starting with `-`, and never `..` as a name.
+fn is_plain_folder(word: &str) -> bool {
+    !word.is_empty()
+        && !word.starts_with('-')
+        && word.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/')
+        })
+        && !word.split('/').any(|name| name == "..")
 }
 
 /// The arguments of the draft form `text` is, in `dialect`: the quoted heredoc
@@ -624,6 +697,84 @@ mod tests {
     }
 
     const CHECKED_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+
+    /// 0.3.0, M5b: the same two forms may run `handoff finish` with one
+    /// literal write; it is one command, and its body is still data.
+    #[test]
+    fn each_draft_form_may_run_handoff_finish() {
+        let id = CHECKED_SESSION;
+        for (options, expected) in [
+            ("", vec![]),
+            ("--close ", vec!["--close"]),
+            (
+                "--retain evidence-bundle-phase-1 ",
+                vec!["--retain", "evidence-bundle-phase-1"],
+            ),
+            (
+                "--retain 'kept evidence' --include-source ",
+                vec!["--retain", "kept evidence", "--include-source"],
+            ),
+        ] {
+            let command = format!("vsift handoff finish {id} {options}--json");
+            let mut argv = vec!["vsift", "handoff", "finish", id];
+            argv.extend(expected);
+            argv.push("--json");
+            for (script, dialect) in [
+                (heredoc().replace(HANDOFF_CHECK, &command), Dialect::Posix),
+                (
+                    here_string().replace(HANDOFF_CHECK, &command),
+                    Dialect::PowerShell,
+                ),
+            ] {
+                let parsed = parse_script(&script, dialect);
+                assert_eq!(parsed.opaque, None, "{script}");
+                assert!(!parsed.expands_variables, "{script}");
+                assert_eq!(argvs(&parsed), vec![argv.clone()], "{script}");
+            }
+        }
+    }
+
+    /// Anything wider than the finish form is ordinary shell text: the draft
+    /// is then read as commands, and the grader stays strict.
+    #[test]
+    fn a_finish_form_with_anything_more_is_not_the_form() {
+        let id = CHECKED_SESSION;
+        for command in [
+            format!("vsift handoff finish {id} --json --close"),
+            format!("vsift handoff finish {id} --close --retain b --json"),
+            format!("vsift handoff finish {id} --include-source --json"),
+            format!("vsift handoff finish {id} --retain --json"),
+            format!("vsift handoff finish {id} --retain $DIR --json"),
+            format!("vsift handoff finish {id} --retain \"b\" --json"),
+            format!("vsift handoff finish {id} --retain 'it'\"'\"'s' --json"),
+            format!("vsift handoff finish {id} --retain ../outside --json"),
+            format!("vsift handoff finish {id} --retain -b --json"),
+            format!("vsift handoff finish {id} --retain b c --json"),
+            format!("vsift handoff finish {id} --retain=b --json"),
+            format!("vsift handoff finish {id} --file x --json"),
+            format!("vsift handoff finish {id}  --json"),
+            "vsift handoff finish $SESSION --json".to_owned(),
+            "vsift handoff finish ses_short --json".to_owned(),
+            format!("vsift handoff finish {id}"),
+        ] {
+            let posix = heredoc().replace(HANDOFF_CHECK, &command);
+            let powershell = here_string().replace(HANDOFF_CHECK, &command);
+            assert!(!is_handoff_check_form(&posix, Dialect::Posix), "{command}");
+            assert!(
+                !is_handoff_check_form(&powershell, Dialect::PowerShell),
+                "{command}"
+            );
+        }
+        let command = format!("vsift handoff finish {id} --close --json");
+        assert!(!is_handoff_check_form(
+            &heredoc().replace(HANDOFF_CHECK, &command),
+            Dialect::PowerShell
+        ));
+        assert!(!is_handoff_check_form(
+            &here_string().replace(HANDOFF_CHECK, &command),
+            Dialect::Posix
+        ));
+    }
 
     /// ADR 0029 decision 28: each form has one more shape, for a report that
     /// states a clock time. It is still one command, and its body still data.

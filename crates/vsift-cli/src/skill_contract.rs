@@ -163,13 +163,15 @@ const HELP_FLAG: &str = "--help";
 /// The heredoc delimiter of the POSIX `handoff check` form.
 const HANDOFF_DELIMITER: &str = "VSIFT_HANDOFF";
 
-/// The only two forms in which the skill passes text into a command (ADR
-/// 0023 decision G, P13 PR 5): the draft report, as a quoted heredoc in a
-/// POSIX shell, or as a single-quoted here-string piped in PowerShell. Both
-/// pass the text without expansion. `<report>` stands for the draft; the
-/// fence's info string names the shell. The trial grader recognises exactly
-/// these two forms too; nothing wider is accepted here or there.
-const HANDOFF_CHECK_FORMS: [(&str, &str); 2] = [
+/// The only forms in which the skill passes text into a command (ADR 0023
+/// decision G, P13 PR 5; `handoff finish` since 0.3.0, M5b): the draft
+/// report, as a quoted heredoc in a POSIX shell, or as a single-quoted
+/// here-string piped in PowerShell, into `handoff check` (the first two) or
+/// `handoff finish` (the last two). Each passes the text without expansion.
+/// `<report>` stands for the draft; the fence's info string names the shell.
+/// The trial grader recognises exactly these forms too; nothing wider is
+/// accepted here or there.
+const HANDOFF_CHECK_FORMS: [(&str, &str); 4] = [
     (
         "sh",
         "vsift handoff check --json <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
@@ -178,10 +180,21 @@ const HANDOFF_CHECK_FORMS: [(&str, &str); 2] = [
         "powershell",
         "@'\n<report>\n'@ | vsift handoff check --json",
     ),
+    (
+        "sh",
+        "vsift handoff finish <session> --json <<'VSIFT_HANDOFF'\n<report>\nVSIFT_HANDOFF",
+    ),
+    (
+        "powershell",
+        "@'\n<report>\n'@ | vsift handoff finish <session> --json",
+    ),
 ];
 
-/// The command both forms run, as its arguments.
+/// The command the two `handoff check` forms run, as its arguments.
 const HANDOFF_CHECK_COMMAND: &str = "vsift handoff check --json";
+
+/// The command the two `handoff finish` forms run, with its placeholder.
+const HANDOFF_FINISH_COMMAND: &str = "vsift handoff finish <session> --json";
 
 /// Fence info strings that hold shell text other than a `console` example.
 const SHELL_FENCES: [&str; 6] = ["sh", "bash", "shell", "powershell", "pwsh", "ps1"];
@@ -1055,10 +1068,11 @@ fn console_examples_are_one_vsift_command_each() -> Result<(), String> {
     problems.into_result()
 }
 
-/// The draft forms of `handoff check` are the skill's one input exception
-/// (P13 PR 5): every shell fence of the skill is exactly one of the two
-/// forms, `commands.md` shows both and `SKILL.md`'s REPORT the POSIX one,
-/// and their command parses as the `free` operation `handoff.check`.
+/// The draft forms of `handoff check` and `handoff finish` are the skill's
+/// one input exception (P13 PR 5; 0.3.0, M5b): every shell fence of the
+/// skill is exactly one of the forms, `commands.md` shows all four and
+/// `SKILL.md`'s REPORT the POSIX `handoff finish` one, and their commands
+/// parse as the `free` operations `handoff.check` and `handoff.finish`.
 #[test]
 fn the_handoff_check_forms_are_the_only_input_exception() -> Result<(), String> {
     let mut problems = Problems::default();
@@ -1079,11 +1093,30 @@ fn the_handoff_check_forms_are_the_only_input_exception() -> Result<(), String> 
             other = other.map(|(identifier, _)| identifier)
         )),
     }
-    for (_, form) in HANDOFF_CHECK_FORMS {
-        if form.matches(HANDOFF_CHECK_COMMAND).count() != 1 {
-            problems.add(format!(
-                "{form:?} does not run {HANDOFF_CHECK_COMMAND:?} once"
-            ));
+    let finish = split_arguments(&substitute(HANDOFF_FINISH_COMMAND)?)?;
+    match Cli::try_parse_from(&finish) {
+        Ok(cli) if cli.json => {}
+        _ => problems.add(format!(
+            "{HANDOFF_FINISH_COMMAND:?} does not parse with --json"
+        )),
+    }
+    match resolve_operation(&finish) {
+        Some((identifier, _))
+            if identifier == CommandName::HandoffFinish.identifier()
+                && policy.get(&identifier) == Some(&Class::Free) => {}
+        other => problems.add(format!(
+            "the finish forms run {other:?}, not the free handoff.finish",
+            other = other.map(|(identifier, _)| identifier)
+        )),
+    }
+    for (index, (_, form)) in HANDOFF_CHECK_FORMS.iter().enumerate() {
+        let command = if index < 2 {
+            HANDOFF_CHECK_COMMAND
+        } else {
+            HANDOFF_FINISH_COMMAND
+        };
+        if form.matches(command).count() != 1 {
+            problems.add(format!("{form:?} does not run {command:?} once"));
         }
     }
     let mut forms_by_file: BTreeMap<String, BTreeSet<usize>> = BTreeMap::new();
@@ -1118,17 +1151,17 @@ fn the_handoff_check_forms_are_the_only_input_exception() -> Result<(), String> 
             .iter()
             .any(|(name, forms)| name.ends_with(suffix) && forms.contains(&form))
     };
-    if !(shows("commands.md", 0) && shows("commands.md", 1)) {
-        problems.add("commands.md does not show both handoff check forms".to_owned());
+    if !(0..HANDOFF_CHECK_FORMS.len()).all(|form| shows("commands.md", form)) {
+        problems.add("commands.md does not show every handoff check and finish form".to_owned());
     }
-    if !shows("SKILL.md", 0) {
-        problems.add("SKILL.md's REPORT does not show the POSIX handoff check form".to_owned());
+    if !shows("SKILL.md", 2) {
+        problems.add("SKILL.md's REPORT does not show the POSIX handoff finish form".to_owned());
     }
     let flat = flattened_skill_md()?;
     if !flat
-        .contains("run `vsift handoff check` on your draft once, fix what it reports, then send")
+        .contains("run `vsift handoff finish` on your draft once, fix what it reports, then send")
     {
-        problems.add("SKILL.md's REPORT does not say to check the draft once".to_owned());
+        problems.add("SKILL.md's REPORT does not say to finish the draft once".to_owned());
     }
     problems.into_result()
 }

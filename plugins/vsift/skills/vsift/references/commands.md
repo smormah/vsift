@@ -11,7 +11,7 @@ Every public `vsift` command has exactly one class. The class decides who may st
 Always pass `--json`. Use `--events jsonl` only for a long transcription (`vsift transcript retranscribe`) or
 `vsift job resume`, and read only the last line, the terminal event, whose `result` is the envelope `--json` would
 print: end that command with `| tail -n 1` (PowerShell `| Select-Object -Last 1`). That, and passing your draft
-report to `vsift handoff check` in one of the two forms under "Checking the draft", are the only things ever added
+report to `vsift handoff finish` or `check` in a form under "Checking the draft", are the only things ever added
 to a `vsift` command line.
 
 Run each command on its own, as one tool call: never chain with `&&`, `||` or `;`, pipe into anything else, or
@@ -63,6 +63,7 @@ whole; do not pipe it into anything.
 | `vsift bundle validate` | free | Read-only, on a bundle the user named or one you retained for them. |
 | `vsift bundle search` | free | Read-only, on bundles or a folder the user named. A hit is a lead, not a citation: open the source with `ingest` and cite from that session. |
 | `vsift handoff check` | free | Read-only; checks your draft once before you send it ("Checking the draft"). |
+| `vsift handoff finish` | free | Checks your draft with your session, then at most one write: `--close` as `session close`; `--retain` is `explicit`, as `session retain`. |
 | `vsift handoff skeleton` | free | Read-only; prints a valid handoff that states nothing yet, with your session's ids (handoff.md). |
 | `vsift skill install` | never | Copies the skill into another client's folder: the person's own configuration. |
 | `vsift skill status` | free | Read-only: what is at each skill folder, and the skill's files. |
@@ -146,13 +147,21 @@ vsift <namespace> <operation> --help
 
 ### Checking the draft
 
-Before you send the report, check it once with `vsift handoff check`. Pass your whole final message, unchanged, in
-place of `<report>`, in exactly one of these two forms: no other command in the same call, no file, no variable. The
-one addition allowed is `--session <session>` before `--json`, when your report states a clock time
-([handoff.md](handoff.md), "Citations"). The quoted `VSIFT_HANDOFF` and the single quotes of `@'` keep your text
-exactly as written. Each form belongs to one shell. **On Windows use the PowerShell form whenever your client has a
-PowerShell tool** (Claude Code does): it takes a long report whole, where Git Bash cuts a long command. In bash or sh
-(Claude Code's Bash tool, Codex, Git Bash):
+Before you send the report, check it once: with `vsift handoff finish <session>`, which checks it against your
+session and then makes the one write CLOSE_OR_RETAIN names (`--close`, or `--retain <new-directory>` and
+`--include-source` only if asked, before `--json`); with no session, with `vsift handoff check`. Pass your whole final
+message, unchanged, in place of `<report>`, in exactly one of these forms: no other command in the same call, no
+file, no variable. `handoff check` takes one addition, `--session <session>` before `--json`, when your report states
+a clock time ([handoff.md](handoff.md), "Citations"). The quoted `VSIFT_HANDOFF` and the single quotes of `@'` keep
+your text exactly as written. Each form belongs to one shell. **On Windows use the PowerShell form whenever your
+client has a PowerShell tool** (Claude Code does): it takes a long report whole, where Git Bash cuts a long command.
+In bash or sh (Claude Code's Bash tool, Codex, Git Bash):
+
+```sh
+vsift handoff finish <session> --json <<'VSIFT_HANDOFF'
+<report>
+VSIFT_HANDOFF
+```
 
 ```sh
 vsift handoff check --json <<'VSIFT_HANDOFF'
@@ -162,6 +171,12 @@ VSIFT_HANDOFF
 
 Only in PowerShell itself (in bash, `@'` is no here-string: the first apostrophe in your report would end the
 quoting and the rest would run as commands):
+
+```powershell
+@'
+<report>
+'@ | vsift handoff finish <session> --json
+```
 
 ```powershell
 @'
@@ -178,14 +193,18 @@ use PowerShell if you can, otherwise parts of at most about 5,500. Elsewhere in 
 `vsift` starts, use parts the same way.
 
 The parts: the text above the `vsift-handoff` block, cut only at the end of a line into as few pieces as the size
-allows, each in its own call, then the block alone (never cut inside the JSON). A text part is expected to answer
+allows, each in its own call with `handoff check`, then the block alone (never cut inside the JSON) with `handoff
+finish` when you have a session. A text part is expected to answer
 `handoff_block_missing`: ignore that one; its other findings (a path, a web link, a hidden character) matter, each
 with its `line` from the part's first line. The block part answers the schema and the rules (`pointer` names the
 member), its `line` from the opening fence. Fix what either part reports, then send the whole message.
 
-The result is `data.valid`. When false, fix each item of `data.errors` (`pointer` names the JSON member, `line` the
-line of your report, `allowed` the words the schema accepts) and send; do not check again and again.
-`data.case_notes` are values read in another letter case: write them as listed. The check never repeats your text.
+The result is `data.valid` (`handoff finish`: `data.check.valid`, and `data.finished`; when that is false nothing was
+written, and `data.stopped_at` says why: `draft`, or `lifecycle` when `lifecycle.action` is not the write's; a
+bundle it retained is already validated). When false, fix each item of `data.errors` (`pointer` names the JSON
+member, `line` the line of your report, `allowed` the words the schema accepts) and send; do not check again and
+again. `data.case_notes` are values read in another letter case: write them as listed. The check never repeats your
+text.
 
 Only on the user's explicit instruction:
 
