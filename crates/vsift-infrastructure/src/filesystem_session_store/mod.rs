@@ -243,6 +243,12 @@ pub struct FilesystemAdmissionPermit {
     /// makes an ordinary caller who finds the slots taken wait for them
     /// instead of being refused: one list, so the permit stays as small as
     /// before.
+    ///
+    /// **The marker must stay last.** A list drops its elements in order, so
+    /// the slots are released before the marker, and a caller that reads the
+    /// marker as gone knows the slots are free; the wait for queued work takes
+    /// the slots once more on that reading (`root::wait_for_queued_work`).
+    /// Putting the marker first would bring the refusal with free slots back.
     _slots: Vec<HeldFileLock>,
 }
 
