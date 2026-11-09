@@ -364,9 +364,9 @@ vsift setup check                                  # video and speech now say re
 
 - **The plan** is read-only and lists, for each component still needed, the publisher, the
   exact address, the exact size, the SHA-256, the licence and notice link, and every file
-  it will install. The three components are the FFmpeg and FFprobe build from BtbN
-  FFmpeg-Builds (136 MB; FFmpeg 9.0.2 plus 39 commits, the month-end build of
-  2026-10-31), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
+  it will install. The three components are the FFmpeg and FFprobe build from
+  FFmpeg-Builds, BtbN's builds repository (136 MB; FFmpeg 9.0.2 plus 39 commits, the
+  month-end build of 2026-10-31), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
   release's binaries are under its build release `b5454`) and the multilingual `base`
   model from the whisper.cpp model repository (148 MB): about 295 MB in three downloads.
   `0.2.3` and earlier install the FFmpeg build of 2026-08-31, and `0.2.2` and earlier

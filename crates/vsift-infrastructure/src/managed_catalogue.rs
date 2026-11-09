@@ -24,16 +24,30 @@ use crate::{
 
 /// Revision `r4` (2026-10-21) added the optional online-video components
 /// (#409); `r5` (2026-11-04) re-pins `FFmpeg` to the month-end build of
-/// 2026-10-31 (`n9.0.2-39`, the `0.2.4` hot fix).
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-04-r5";
+/// 2026-10-31 (`n9.0.2-39`, the `0.2.4` hot fix); `r6` (2026-11-09) points the
+/// `FFmpeg` pin at the repository's new owner (see [`FFMPEG_BUILDS_PUBLISHER`]).
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-09-r6";
 /// The Windows x86-64 catalogue (ADR 0032): `FFmpeg` and the model;
 /// whisper.cpp joins with `VSift`'s own build. `r2` (2026-11-04) re-pins
-/// `FFmpeg` to the same month-end build as Ubuntu.
-const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-04-r2";
-const WINDOWS_FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip";
+/// `FFmpeg` to the same month-end build as Ubuntu; `r3` (2026-11-09) points it
+/// at the repository's new owner, like Ubuntu's `r6`.
+const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-09-r3";
+/// The reviewed `FFmpeg` publisher: the maintainer of the `FFmpeg-Builds`
+/// repository, whose month-end builds both `FFmpeg` pins come from.
+///
+/// On 2026-11-07 that repository was transferred from the user account `BtbN`
+/// to the organisation `FFmpeg-Builds`: the repository id (292087234), its
+/// creation date, the tag commit `5031c6f1` and both assets' sizes and SHA-256
+/// digests are unchanged, so it is the same publisher and the same bytes. The
+/// pins moved to the new address and nothing else changed;
+/// `reviewed_redirect` still refuses the old address's redirect, on purpose
+/// (ADR 0032, note of 2026-11-09). The display name keeps the old account name
+/// so a reader of a plan can still recognise the publisher.
+const FFMPEG_BUILDS_PUBLISHER: &str = "FFmpeg-Builds (BtbN)";
+const WINDOWS_FFMPEG_URL: &str = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip";
 const STOP_NEW_PLANS_AT: u64 = 1_853_971_200;
 const STOP_NEW_PLANS_DATE: &str = "2028-10-01T00:00:00Z";
-const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz";
+const FFMPEG_URL: &str = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz";
 const WHISPER_URL: &str =
     "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
@@ -202,7 +216,7 @@ pub fn accepted_host_catalogue() -> Result<Option<AcceptedManagedCatalogue>, Man
 }
 
 /// The accepted Windows x86-64 catalogue (ADR 0032): `FFmpeg` and `FFprobe`
-/// from the same `BtbN` month-end release as the Ubuntu pin, as its LGPL zip,
+/// from the same `FFmpeg-Builds` month-end release as the Ubuntu pin, as its LGPL zip,
 /// and the same model. whisper.cpp is not offered yet: upstream's Windows build
 /// needs the Visual C++ runtime (D2), and `VSift`'s own build joins this
 /// catalogue once it is published and pinned; until then the plan leaves
@@ -874,7 +888,7 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
         version: String::from("n9.0.2-39-g7adfbe40dc-20261031"),
-        publisher: String::from("BtbN FFmpeg Builds"),
+        publisher: String::from(FFMPEG_BUILDS_PUBLISHER),
         source_url: String::from(FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::TarXz,
@@ -908,7 +922,7 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
         licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
         notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.2/COPYING.LGPLv3"),
         source_code_url: String::from(
-            "https://github.com/BtbN/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
+            "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
         ),
         trust_limit: String::from(
             "Third-party static build: the archive LGPLv3 notice and hosted F01 media operations were checked; a complete compiled-component source/licence inventory and legal clearance are not claimed.",
@@ -1172,7 +1186,7 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
         version: String::from("n9.0.2-39-g7adfbe40dc-20261031-win64"),
-        publisher: String::from("BtbN FFmpeg Builds"),
+        publisher: String::from(FFMPEG_BUILDS_PUBLISHER),
         source_url: String::from(WINDOWS_FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::Zip,
@@ -1192,7 +1206,7 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
         licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
         notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.2/COPYING.LGPLv3"),
         source_code_url: String::from(
-            "https://github.com/BtbN/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
+            "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
         ),
         trust_limit: String::from(
             "Third-party static build of the same source as the Ubuntu pin: the archive's LGPLv3 notice, its inventory and imports were read on a hosted Windows runner; a complete compiled-component source and licence inventory and legal clearance are not claimed.",
@@ -1375,7 +1389,7 @@ mod tests {
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
-        ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction, accepted_catalogue,
+        FFMPEG_BUILDS_PUBLISHER, ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction, accepted_catalogue,
         accepted_ubuntu_catalogue, accepted_windows_catalogue, detect_managed_target,
         every_accepted_artifact, pinned_whisper_model, reviewed_whisper_models, validate_layout,
         whisper_model_profile,
@@ -1722,6 +1736,57 @@ mod tests {
                 .iter()
                 .all(|artifact| vsift_domain::is_canonical_managed_key(&artifact.version))
         );
+        Ok(())
+    }
+
+    /// The repository each GitHub-hosted publisher record stands for. A
+    /// pinned release URL and the record must name the same owner and
+    /// repository, so a repository move (as `FFmpeg-Builds` made on
+    /// 2026-11-07) cannot leave the URLs and the record apart: the move is made
+    /// here and in the catalogue together, after a person has read it.
+    const PUBLISHER_REPOSITORIES: [(&str, &str); 4] = [
+        (FFMPEG_BUILDS_PUBLISHER, "FFmpeg-Builds/FFmpeg-Builds"),
+        ("ggml-org whisper.cpp", "ggml-org/whisper.cpp"),
+        ("Deno Land deno", "denoland/deno"),
+        ("yt-dlp", "yt-dlp/yt-dlp"),
+    ];
+
+    #[test]
+    fn every_github_release_url_names_the_repository_of_its_publisher_record()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut checked = 0_usize;
+        for artifact in every_accepted_artifact()? {
+            let Some(path) = artifact.source_url.strip_prefix("https://github.com/") else {
+                continue;
+            };
+            let Some((_, repository)) = PUBLISHER_REPOSITORIES
+                .iter()
+                .find(|(publisher, _)| *publisher == artifact.publisher)
+            else {
+                return Err(format!(
+                    "no repository is recorded for the publisher {:?} of {}",
+                    artifact.publisher, artifact.source_url
+                )
+                .into());
+            };
+            assert!(
+                path.starts_with(&format!("{repository}/releases/download/")),
+                "{} is not a release of {repository}, the repository of {:?}",
+                artifact.source_url,
+                artifact.publisher
+            );
+            assert!(
+                artifact
+                    .source_code_url
+                    .starts_with(&format!("https://github.com/{repository}/")),
+                "{} is not a page of {repository}, the repository of {:?}",
+                artifact.source_code_url,
+                artifact.publisher
+            );
+            checked += 1;
+        }
+        // Ubuntu: FFmpeg, whisper.cpp, Deno, yt-dlp; Windows: FFmpeg.
+        assert_eq!(checked, 5);
         Ok(())
     }
 

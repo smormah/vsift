@@ -30,7 +30,7 @@ from p06_windows_candidate_smoke import (
 
 
 FFMPEG_URL = (
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
+    "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/"
     "autobuild-2026-10-31-12-59/"
     "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz"
 )

@@ -258,7 +258,7 @@ size and SHA-256 before you unpack it, and put them in `C:\vsift-tools\`:
 
 | Tool | Where | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
-| FFmpeg and FFprobe (BtbN, LGPL, n9.0.1-11, 2026-08-31) | <https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip> | 147,007,942 | `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56` |
+| FFmpeg and FFprobe (BtbN, LGPL, n9.0.1-11, 2026-08-31) | <https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip> | 147,007,942 | `2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56` |
 | whisper.cpp v1.9.2 (`whisper-cli.exe`) | <https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-bin-x64.zip> | 8,194,445 | `49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a` |
 | The `base` model, `ggml-base.bin` | <https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin> | 147,951,465 | `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe` |
 

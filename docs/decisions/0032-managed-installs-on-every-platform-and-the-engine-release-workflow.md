@@ -295,3 +295,36 @@ release behind them, and the macOS engine had published nothing, so the recipe m
 `n9.0.2-39-g7adfbe40dc-vsift-r1`. Nothing else in decision D1 changes: the configuration, the licence and the corresponding-source
 duty stand. [L-227](../planning/known-limits.md#l-227) and [L-216](../planning/known-limits.md#l-216) record what the newer commit does
 and does not fix.
+
+## Implementation note, 2026-11-09 (H1: the FFmpeg builds repository moved to a new owner)
+
+On 2026-11-07 the repository the Ubuntu and Windows FFmpeg pins come from, `BtbN/FFmpeg-Builds`, was transferred to a new
+organisation, `FFmpeg-Builds/FFmpeg-Builds`. The old release addresses now answer `301` to the new owner's `github.com`
+address, which then answers `302` to `release-assets.githubusercontent.com`. `reviewed_redirect` allows only that last
+host, so VSift refuses the extra `github.com` hop (`download redirect_policy`), and the managed FFmpeg install failed on
+`main` (Nightly 42439681932, 8 November). The refusal is the design working: a pin is a URL, a size and a SHA-256, and a
+repository that moves must be read by a person before VSift follows it.
+
+*Evidence that it is the same publisher and the same bytes* (read with `gh api` on 2026-11-08 and 2026-11-09, nothing
+downloaded to a development machine):
+
+- `repos/BtbN/FFmpeg-Builds` resolves to `FFmpeg-Builds/FFmpeg-Builds`, with repository id 292087234 and creation date
+  2020-09-01 unchanged, and the `302`'s asset path carries the same id: a transfer, not a new repository.
+- The organisation was created on 2026-11-07 at 17:36 UTC and lists no public members; the three commits made after the
+  transfer (7 November) are authored by `BtbN`. This is consistent with the same maintainer moving their own repository
+  into an organisation. It is not proof: the membership is not public.
+- Release `autobuild-2026-10-31-12-59` under the new owner lists the Linux and Windows archives with the pinned sizes
+  (136,027,168 and 168,715,328 bytes) and the pinned SHA-256 digests; the build-scripts commit `5031c6f1` that the
+  catalogue's source link names resolves under the new owner. The release of 2026-08-31 that `0.2.3` and earlier pin,
+  and that the Codex container and the Windows tryout sheet use, likewise lists its pinned sizes and digests.
+- A hosted run downloaded both `autobuild-2026-10-31-12-59` archives from the new address and checked size and SHA-256
+  against the catalogue (recorded in pull request description of H1).
+
+*What changed:* the two `FFmpeg` source addresses and the two source-code links in the catalogue name
+`FFmpeg-Builds/FFmpeg-Builds`; the publisher's display name is "FFmpeg-Builds (BtbN)"; the catalogue revisions are
+`ubuntu-24.04-x86_64-2026-11-09-r6` and `windows-x86_64-2026-11-09-r3`. The pinned release tag, file names, sizes,
+SHA-256 digests, archive bounds and file inventories are **unchanged**. The test
+`every_github_release_url_names_the_repository_of_its_publisher_record` keeps the URLs and the publisher record from
+drifting apart again. **`reviewed_redirect` is not widened**, and its tests are unchanged. The earlier planning records
+(`p06-*`, the P14 scan readings) keep their `BtbN/FFmpeg-Builds` links as written: GitHub redirects them, and they
+describe what was read at the time. See [L-254](../planning/known-limits.md#l-254).
