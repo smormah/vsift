@@ -160,7 +160,11 @@ fn handoff_finish_argv(command: &str) -> Option<Vec<String>> {
     let rest = command
         .strip_prefix(HANDOFF_FINISH_PREFIX)?
         .strip_suffix(HANDOFF_CHECK_SESSION_SUFFIX)?;
-    let (session, options) = rest.split_once(' ').unwrap_or((rest, ""));
+    let (session, options) = match rest.split_once(' ') {
+        Some((session, options)) if !options.is_empty() => (session, options),
+        Some(_) => return None,
+        None => (rest, ""),
+    };
     if !is_session_id(session) {
         return None;
     }

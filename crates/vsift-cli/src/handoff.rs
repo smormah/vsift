@@ -122,7 +122,7 @@ impl<'a> FinishWrite<'a> {
                 Err(CommandFailure::from(FailureCode::InvalidArgument))
             }
             (Some(output), false, include_source) => Ok(Self::Retain {
-                output,
+                output: output.as_path(),
                 retention: if include_source {
                     SourceRetention::IncludeSource
                 } else {
