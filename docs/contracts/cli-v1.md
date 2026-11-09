@@ -97,6 +97,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
 | `handoff check` | Check an agent's draft report against the skill's handoff schema and rules, answering `data.valid` with typed findings that never repeat the draft | Implemented in P13 PR 5 |
 | `handoff skeleton` | Print a valid handoff that states nothing yet, with one open session's ids filled in, for an agent to fill in instead of building the JSON from a template | Implemented in 0.3.0 (ADR 0038) |
+| `handoff finish` | Check a draft with the session's records and, only when it passes and states the write, retain the session to the new directory `--retain` names or close it (`--close`): the closing steps in one call | Implemented in 0.3.0 (M5b; ADR 0023 note of 2026-11-09) |
 | `skill install` | Copy the skill this binary was built with into the folders the named AI coding clients read, never replacing anything without `--replace` | Implemented in 0.3.0 (ADR 0038) |
 | `skill status` | Report what is at each skill folder, read without following a link, and the skill's files | Implemented in 0.3.0 (ADR 0038) |
 | `skill show` | Print one text file of the embedded skill, by its manifest name | Implemented in 0.3.0 (ADR 0038) |
@@ -3434,6 +3435,60 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   so the command and the grader cannot disagree. Its schema validator implements
   exactly the JSON Schema features the handoff schema uses and refuses any other at
   compile time; a differential test holds it to a general validator.
+
+### 0.3.0 `handoff finish`
+
+`vsift handoff finish <session> [--retain <new-directory> [--include-source] | --close] [--file
+<absolute-path>]` folds the skill's closing steps into one call (M5b, [ADR
+0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md) note of 2026-11-09,
+[ADR 0013](../decisions/0013-retained-bundle-publication.md) note of 2026-11-09). In the recorded
+agent trials, `handoff check`, `session retain` and `bundle validate` (or `session close`) took three
+to four round trips with no decision between them. Additive: a new command identifier,
+`handoff.finish`, and a new data schema; `handoff check` is unchanged and stays read only.
+
+- **Input.** The draft exactly as for `handoff check`: standard input (the skill's quoted heredoc or
+  single-quoted here-string, now naming `handoff finish <session>`) or `--file`, at most 128 KiB of
+  strict UTF-8; a larger draft, bytes that are not UTF-8 or an unusable `--file` are
+  `INVALID_ARGUMENT` (exit 2) and nothing is checked or written. `--retain` with `--close`, or
+  `--include-source` without `--retain`, is refused by the parser (`INVALID_ARGUMENT`, exit 2).
+- **In order.** (1) The `handoff check` of the draft, with the session's committed records always
+  resolved (as `--session` does; read only, never renewed). (2) With a write requested, the draft's
+  `lifecycle.action` must state it: `retained` for `--retain`, `closed` for `--close`. Without a write
+  nothing is compared. (3) Only when the draft has no error and (2) holds, at most one write, through
+  the same engine call as the standalone command: `--retain` exactly as `session retain --output`
+  (a new owner-private directory, manifest last, revalidated before success: that revalidation is
+  `bundle validate`'s check), `--close` exactly as `session close`.
+- **Result.** `complete` (exit 0) with `data` per `schemas/v1/handoff-finish-data.schema.json`:
+  `finished`, `stopped_at`, `requested` (`check`, `retain`, `close`), `check` (the `handoff.check`
+  data, `session` never null), `lifecycle` (`stated` and `requested`, closed words only, and
+  `agrees`), `retain` (`session retain`'s data, or null), `bundle_validated` (true exactly when it
+  retained) and `close` (`session close`'s data, or null). The envelope's `lifecycle` is `retained`
+  after a retention and the session's after a close. The frozen example is
+  `schemas/v1/examples/handoff-finish.json`.
+- **A stop before any write is an answer, not a failure** (decision H1): `stopped_at` `draft` (the
+  check found errors) or `lifecycle` (the action disagrees) is `complete`, exit 0, `finished` false,
+  and nothing is written: no bundle directory exists afterwards and the session is not closed.
+  **Scripts test `data.finished`, not the exit status, before relying on a write.** The human output's
+  first line says so plainly ("Not retained: the draft did not pass (3 problem(s)) ...").
+- **A write that fails is the standalone write's failure.** After a passing draft, `--retain` to a
+  folder that exists answers `INVALID_ARGUMENT` (exit 2) as `session retain` does, an open revision
+  `BUSY`, a disk `STORAGE_IO` (exit 7); with a write requested, a session that is not found, closed
+  or expired answers exactly as `session retain` or `session close` would on it. No new failure code.
+  An interrupted retention leaves what `session retain` leaves (ADR 0013).
+- **Without a write** the command is `handoff check --session`: a session that is not found, closed
+  or expired is `check.session.gap`, not a failure, and `finished` is the draft's verdict.
+- **One write per call** ([L-253](../planning/known-limits.md#l-253)): retaining and then closing
+  takes `handoff finish --retain`, then `session close`.
+- **The skill** classes it `free`; `--retain` is `explicit` exactly as `session retain` is, and only
+  to the new directory the user named. Its REPORT state shows the POSIX form; `commands.md` shows both
+  forms. A run that opened no session keeps `handoff check`.
+- **Tests.** `handoff_finish_contract` (the frozen example; every published shape validates; forged
+  shapes are refused), the `finish` unit tests of `vsift-contract` (the lifecycle rule; a draft with
+  errors stops first; only closed words are published), the human renderer's tests (the first line of
+  each stop) and `handoff_finish_cli_contract` through the binary (without a write it answers as
+  `handoff check --session` for an open, missing, closed and expired session; a retention in one call
+  that `bundle validate` agrees with; a `draft` or `lifecycle` stop writes nothing; a failed retention
+  and a write on an unavailable session answer as the standalone write; a close; conflicting flags).
 
 ### 0.3.0 `handoff skeleton`
 

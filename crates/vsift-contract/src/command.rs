@@ -109,6 +109,9 @@ pub enum CommandName {
     /// `changes` (ADR 0034): what changed on screen between two times, with
     /// the exact frames before and after each change.
     Changes,
+    /// `handoff finish` (0.3.0, M5b): check a draft with the session's
+    /// records and, only when it passes, make at most one write.
+    HandoffFinish,
 }
 
 impl CommandName {
@@ -117,7 +120,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 46] = [
+    pub const ALL: [Self; 47] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -164,6 +167,7 @@ impl CommandName {
         Self::BundleSearch,
         Self::Clocks,
         Self::Changes,
+        Self::HandoffFinish,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -206,6 +210,7 @@ impl CommandName {
             Self::SessionInitWorkspace => "session.init-workspace",
             Self::HandoffCheck => "handoff.check",
             Self::HandoffSkeleton => "handoff.skeleton",
+            Self::HandoffFinish => "handoff.finish",
             Self::SkillInstall => "skill.install",
             Self::SkillStatus => "skill.status",
             Self::SkillShow => "skill.show",
@@ -275,6 +280,7 @@ impl CommandName {
             Self::BundleSearch => 43,
             Self::Clocks => 44,
             Self::Changes => 45,
+            Self::HandoffFinish => 46,
         }
     }
 }

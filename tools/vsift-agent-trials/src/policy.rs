@@ -63,6 +63,18 @@ pub const HELP_OPERATION: &str = "help";
 /// may run (`commands_only`) always allows it, as it allows the help forms.
 pub const HANDOFF_CHECK_OPERATION: &str = "handoff.check";
 
+/// The operation of `vsift handoff finish` (0.3.0, M5b): `handoff check` with
+/// the session's records, then at most one write.
+pub const HANDOFF_FINISH_OPERATION: &str = "handoff.finish";
+
+/// The writes `handoff finish` can make, each by its flag, with the
+/// operation whose class and authority it carries: `--retain` is
+/// `session retain` and `--close` is `session close`, whatever class the
+/// table gives `handoff finish` itself (the planner's ruling of
+/// 2026-11-09). The CLI runs the same engine call for each.
+pub const HANDOFF_FINISH_WRITES: [(&str, &str); 2] =
+    [("--retain", "session.retain"), ("--close", "session.close")];
+
 /// The console lines of `commands.md` that make the help forms free.
 const HELP_FORMS: [&str; 2] = ["vsift --help", "vsift <namespace> <operation> --help"];
 
@@ -274,6 +286,9 @@ impl CommandPolicy {
             .ok_or_else(|| PolicyViolation::UnknownOperation {
                 words: operation.clone(),
             })?;
+        if operation == HANDOFF_FINISH_OPERATION && class == CommandClass::Free {
+            return self.check_finish_writes(operation, arguments, granted);
+        }
         match class {
             CommandClass::Free => Ok(AllowedCommand { operation, class }),
             CommandClass::Never => Err(PolicyViolation::NeverCommand { operation }),
@@ -295,6 +310,52 @@ impl CommandPolicy {
                 }
             }
         }
+    }
+
+    /// A `free` `handoff finish`: each write flag it carries is decided as
+    /// the operation it stands for, so `--retain` needs the scenario's
+    /// `session.retain` authority exactly as `session retain` does. The call
+    /// is `explicit` when a granted explicit write rides on it.
+    fn check_finish_writes(
+        &self,
+        operation: String,
+        arguments: &[String],
+        granted: &BTreeSet<String>,
+    ) -> Result<AllowedCommand, PolicyViolation> {
+        let mut class = CommandClass::Free;
+        for (flag, carried) in HANDOFF_FINISH_WRITES {
+            let present = arguments.iter().any(|argument| {
+                argument == flag
+                    || argument
+                        .strip_prefix(flag)
+                        .is_some_and(|rest| rest.starts_with('='))
+            });
+            if !present {
+                continue;
+            }
+            match self.class_of(carried) {
+                Some(CommandClass::Free) => {}
+                Some(CommandClass::Explicit) if granted.contains(carried) => {
+                    class = CommandClass::Explicit;
+                }
+                Some(CommandClass::Explicit) => {
+                    return Err(PolicyViolation::ExplicitWithoutAuthority {
+                        operation: carried.to_owned(),
+                    });
+                }
+                Some(CommandClass::Never) => {
+                    return Err(PolicyViolation::NeverCommand {
+                        operation: carried.to_owned(),
+                    });
+                }
+                None => {
+                    return Err(PolicyViolation::UnknownOperation {
+                        words: carried.to_owned(),
+                    });
+                }
+            }
+        }
+        Ok(AllowedCommand { operation, class })
     }
 }
 
@@ -470,6 +531,57 @@ vsift <namespace> <operation> --help
 
     fn words(line: &str) -> Vec<String> {
         line.split_whitespace().map(str::to_owned).collect()
+    }
+
+    /// `handoff finish` (0.3.0, M5b): free on its own; `--retain` carries
+    /// `session retain`'s class and authority, `--close` `session close`'s.
+    #[test]
+    fn a_finish_write_carries_its_standalone_class() -> Result<(), TrialError> {
+        let table = TABLE.replace(
+            "| `vsift frame get` | free | Frames. |",
+            "| `vsift frame get` | free | Frames. |\n\
+             | `vsift session close` | free | Your own session. |\n\
+             | `vsift handoff finish` | free | Then at most one write. |",
+        );
+        let policy = CommandPolicy::from_commands_md(&table)?;
+        let none = BTreeSet::new();
+        let granted: BTreeSet<String> = ["session.retain".to_owned()].into();
+        let finish = |class| {
+            Ok(AllowedCommand {
+                operation: HANDOFF_FINISH_OPERATION.to_owned(),
+                class,
+            })
+        };
+        let session = "handoff finish ses_0123456789abcdef";
+        for line in [
+            format!("{session} --json"),
+            format!("{session} --close --json"),
+        ] {
+            assert_eq!(
+                policy.check(&words(&line), &none),
+                finish(CommandClass::Free),
+                "{line}"
+            );
+        }
+        for line in [
+            format!("{session} --retain bundle --json"),
+            format!("{session} --retain bundle --include-source --json"),
+            format!("{session} --retain=bundle --json"),
+        ] {
+            assert_eq!(
+                policy.check(&words(&line), &none),
+                Err(PolicyViolation::ExplicitWithoutAuthority {
+                    operation: "session.retain".to_owned()
+                }),
+                "{line}"
+            );
+            assert_eq!(
+                policy.check(&words(&line), &granted),
+                finish(CommandClass::Explicit),
+                "{line}"
+            );
+        }
+        Ok(())
     }
 
     #[test]

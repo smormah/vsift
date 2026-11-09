@@ -1436,3 +1436,30 @@ ADR 0036 (decision 1, section 6) as superseding, for the unattended door only, t
 accepted only by its quoted digest; the text above stays as accepted, and every download stays pinned and verified. ADR 0036 also makes video
 and speech independent parts of the transaction; until its second pull request lands, the transaction's order and
 its first-failure rule are as described here.
+
+## Note, 2026-11-09 (0.3.0, M5b: `handoff finish`, the closing steps in one call)
+
+Accepted by the planner on 2026-11-09 (with changes, all below). Decision G's one exception to the skill's no-pipe rule
+now covers two operations, `handoff check` and `handoff finish`, each in the same two literal forms (the quoted heredoc
+for POSIX shells, the single-quoted here-string for PowerShell). `vsift handoff finish <session>` runs the check of
+section 6 with the session's records always resolved, then, only when the draft has no error and its
+`lifecycle.action` states the write, makes at most one write: `--retain <new-directory>` (ADR 0013, unchanged) or
+`--close`, each through the same engine call as `session retain` and `session close`.
+
+- A draft that does not pass (`stopped_at` `draft`) or whose action disagrees (`stopped_at` `lifecycle`) is an answer,
+  as decision H1 has it: `complete`, exit 0, `finished` false, and nothing is written. Scripts test `finished`, not
+  the exit status, and the human output's first line says plainly that nothing was retained or closed.
+- A failed write answers exactly as the standalone command: its code and exit. With a write requested, a session that
+  is not found, closed or expired is such a failure. No failure code is added.
+- Without a write the command is `handoff check --session`: a session that cannot be read is a gap, not a failure.
+- One write per call: retaining and then closing takes a second call ([L-253](../planning/known-limits.md#l-253)).
+- `handoff check` is unchanged and stays read only and `free`. `handoff finish` is `free` in the skill; its
+  `--retain` is `explicit` exactly as `session retain` is, and the trial grader holds it to the scenario's
+  `session.retain` authority and to the folder the user named.
+
+*Why:* in 257 recorded P14 runs the closing steps (`handoff check`, `session retain`, `bundle validate`, or
+`session close`) took three or four round trips after the last evidence command in most runs, with every input known
+before the first and no decision between them. The second `bundle validate` repeated the revalidation `retain` had
+already done. *Why a sibling command, not a flag on `handoff check`:* the check is documented as writing nothing; a
+write flag would change its class, contract and literal forms. The contract is in
+[cli-v1.md](../contracts/cli-v1.md#030-handoff-finish).

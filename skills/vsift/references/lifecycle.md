@@ -13,8 +13,8 @@ Before or during the investigation, the user may say what should happen afterwar
 | The user said | You do at CLOSE_OR_RETAIN |
 | --- | --- |
 | Nothing (`default`) | Leave the session open so the user can check your citations; report `lifecycle.expires_at` and how to close it. |
-| "Close it" / "clean up when done" | `vsift session close <session> --json` on your own session. |
-| "Keep the evidence" / "save a bundle to D" | After your last evidence command, `vsift session retain <session> --output <new-directory> --json` with the new directory the user named; `--include-source` only if they asked for the video. Then `vsift bundle validate <bundle-directory> --json`. The bundle holds the session as it was when you retained it: cite nothing you extract later. |
+| "Close it" / "clean up when done" | `--close` on `vsift handoff finish` (SKILL.md, REPORT); if it still stops after a second run, `vsift session close <session> --json` on your own session. |
+| "Keep the evidence" / "save a bundle to D" | After your last evidence command, `--retain <new-directory>` on `vsift handoff finish` with the new directory the user named; `--include-source` only if they asked for the video. Its result is already validated. If it still stops after a second run, `vsift session retain <session> --output <new-directory> --json`, then `vsift bundle validate <bundle-directory> --json`. The bundle holds the session as it was when you retained it: cite nothing you extract later. |
 | "Keep it open longer" | `vsift session renew <session> --json` while the session is still open; an expired session cannot be renewed. |
 | "Reopen if it expires" | As stated in [resume.md](resume.md). |
 
