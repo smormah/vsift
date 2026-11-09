@@ -1231,7 +1231,7 @@ mod tests {
     /// unauthorized. A finish without `--retain` is untouched.
     #[test]
     fn a_finish_retains_only_into_the_named_folder() {
-        let workspace = PathBuf::from(if cfg!(windows) { "C:\w" } else { "/w" });
+        let workspace = PathBuf::from(if cfg!(windows) { r"C:\w" } else { "/w" });
         let finish = |extra: &[&str]| {
             let mut arguments: Vec<String> = ["handoff", "finish", "ses_0123456789abcdef"]
                 .into_iter()
