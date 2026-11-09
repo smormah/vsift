@@ -125,7 +125,7 @@ RUN cmake -S /build/whisper.cpp -B /build/out \
 # ---------------------------------------------------------------------------
 # FFmpeg and FFprobe: the reviewed BtbN build, archive and files verified.
 FROM build-base AS ffmpeg-fetch
-ARG FFMPEG_URL=https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz
+ARG FFMPEG_URL=https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz
 ARG FFMPEG_SIZE=113372924
 ARG FFMPEG_SHA256=204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf
 ARG FFMPEG_ROOT=ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0
