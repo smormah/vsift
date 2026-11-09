@@ -5791,7 +5791,11 @@ arrived.**
   (`0.2.3`, `0.2.4` and earlier; no published version has a Windows catalogue) until `0.3.0`; installs that already
   completed are not affected, and nothing unverified is ever run. The two published-binary scenarios of the
   test suite, `P13 managed smoke`'s "Managed upgrade from a published release" and `P14 local upgrade`'s RQ-04
-  (baseline `0.1.0`), fail for the same reason until their set-up is changed (H1b).
+  (baseline `0.1.0`), failed for the same reason until H1b changed their set-up: they use the old release
+  only as a starting point, so a hosted step now fetches the files that release's own plan names (following the
+  move, each checked against that plan's size and SHA-256) and hands them over with `--artifact-dir`. The published
+  binary's own download is what `P13 managed smoke` with `published_version` (and its weekly schedule) tests, and
+  that stays red for `0.2.3` and `0.2.4` until a release pins the new address, which is the truth.
 - **Mitigation:** the catalogue now names the new owner (`ubuntu-24.04-x86_64-2026-11-09-r6`,
   `windows-x86_64-2026-11-09-r3`); a test keeps every GitHub release address and its publisher record on one
   owner and repository; the Nightly's real-binary jobs are the detector that found this within a day.
@@ -5804,8 +5808,8 @@ arrived.**
   `PATH`, the plan then offers only whisper.cpp and the model, and `setup check` ends `ready`. The distribution's FFmpeg is
   not one VSift has reviewed.
 - **Next step:** the maintainer decided on 2026-11-09 that there is no `0.2.5`: the fix ships with `0.3.0`, and the
-  workaround above covers the published line until then. H1b changes the two test scenarios so they hand an old
-  baseline its FFmpeg archive. A later move is handled the same way: read it, move the pins, keep the policy. Pre-publication, a scheduled read-only check
+  workaround above covers the published line until then. H1b changed the two test scenarios so they hand an old
+  baseline the files of its plan. A later move is handled the same way: read it, move the pins, keep the policy. Pre-publication, a scheduled read-only check
   that the pinned addresses answer without a redirect would find a move before the Nightly does.
 - **Owner:** the `0.3.0` cut (the fix) and H1b (the test set-up). **Issue:** none. **Status:** open. **Review:** pending.
 

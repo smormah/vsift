@@ -17,9 +17,9 @@ use std::{
 };
 
 use published_binary::{
-    BINARY_VARIABLE, BinaryError, COMMIT_VARIABLE, Expectation, Selected, VERSION_VARIABLE,
-    VersionLine, check_version_line, is_older, override_older_than, parse_version_output,
-    read_override, select,
+    ARTIFACT_DIR_VARIABLE, BINARY_VARIABLE, BinaryError, COMMIT_VARIABLE, Expectation, Selected,
+    VERSION_VARIABLE, VersionLine, artifact_dir_arguments_from, check_version_line, is_older,
+    override_older_than, parse_version_output, read_override, select,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -427,5 +427,45 @@ fn the_command_builder_runs_the_cargo_built_binary_by_default() -> TestResult {
     assert!(String::from_utf8(output.stdout)?.starts_with("vsift "));
     assert!(!published_binary::is_override()?);
     assert_eq!(published_binary::report()?["source"], "cargo_built");
+    Ok(())
+}
+
+/// L-254: an earlier release is handed the files of its own plan only through
+/// an existing absolute folder, and only when it is the binary under test.
+#[test]
+fn the_artifact_folder_reaches_only_an_earlier_release_and_only_as_an_existing_absolute_folder()
+-> TestResult {
+    let folder = env::temp_dir();
+    let nothing: Vec<OsString> = Vec::new();
+    assert_eq!(
+        artifact_dir_arguments_from(None, true)?,
+        nothing,
+        "unset: nothing is added, for an override or not"
+    );
+    assert_eq!(artifact_dir_arguments_from(None, false)?, nothing);
+    assert_eq!(
+        artifact_dir_arguments_from(Some(folder.clone().into_os_string()), true)?,
+        [
+            OsString::from("--artifact-dir"),
+            folder.clone().into_os_string()
+        ]
+    );
+    let build = artifact_dir_arguments_from(Some(folder.into_os_string()), false);
+    assert!(
+        build.is_err_and(|error| error.to_string().contains(ARTIFACT_DIR_VARIABLE)),
+        "this build's own downloads are not routed around"
+    );
+    for refused in [
+        OsString::from("relative/folder"),
+        existing_file()?,
+        env::temp_dir()
+            .join("a-folder-that-does-not-exist-h1b")
+            .into_os_string(),
+    ] {
+        assert!(
+            artifact_dir_arguments_from(Some(refused), true).is_err(),
+            "not an existing absolute folder"
+        );
+    }
     Ok(())
 }
