@@ -118,6 +118,10 @@ struct ServerState {
     routes: BTreeMap<String, VecDeque<Reply>>,
     fallback: Option<Reply>,
     requests: Vec<Recorded>,
+    /// How many replies have reached their stall: the body they declared
+    /// is partly sent and the connection now waits (see
+    /// `TestServer::wait_for_a_stall`).
+    stalls: usize,
 }
 
 struct TestServer {
@@ -167,6 +171,23 @@ impl TestServer {
     fn requests(&self) -> Vec<Recorded> {
         lock(&self.state).requests.clone()
     }
+
+    /// A handle that resolves, once a reply has reached its stall, so that a
+    /// test can cancel at that event instead of after a guessed time. It
+    /// gives up after `limit`, so that a test whose stall never comes still
+    /// goes on to fail on its assertions rather than hang.
+    fn stall_signal(
+        &self,
+        limit: Duration,
+    ) -> impl std::future::Future<Output = ()> + Send + use<> {
+        let state = Arc::clone(&self.state);
+        async move {
+            let started = std::time::Instant::now();
+            while lock(&state).stalls == 0 && started.elapsed() < limit {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    }
 }
 
 fn serve(stream: TcpStream, state: &Mutex<ServerState>) -> std::io::Result<()> {
@@ -211,10 +232,14 @@ fn serve(stream: TcpStream, state: &Mutex<ServerState>) -> std::io::Result<()> {
         });
         routed.or_else(|| state.fallback.clone())
     };
-    write_reply(stream, reply)
+    write_reply(stream, reply, state)
 }
 
-fn write_reply(mut stream: TcpStream, reply: Option<Reply>) -> std::io::Result<()> {
+fn write_reply(
+    mut stream: TcpStream,
+    reply: Option<Reply>,
+    state: &Mutex<ServerState>,
+) -> std::io::Result<()> {
     match reply {
         Some(Reply::Body(body)) => {
             write!(
@@ -241,6 +266,7 @@ fn write_reply(mut stream: TcpStream, reply: Option<Reply>) -> std::io::Result<(
             )?;
             stream.write_all(&body[..sent.min(body.len())])?;
             stream.flush()?;
+            lock(state).stalls += 1;
             thread::sleep(Duration::from_secs(20));
         }
         Some(Reply::Partial(body)) => {
@@ -1223,8 +1249,11 @@ async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
     let root = TestRoot::new()?;
     let cancellation = ProcessCancellation::new();
     let canceller = cancellation.clone();
+    // Cancels when the media download has stalled mid-body, the event the
+    // test is about, not after a guessed time (#596).
+    let stalled = server.stall_signal(Duration::from_secs(30));
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        stalled.await;
         canceller.cancel();
     });
     let mut run = Run::new(

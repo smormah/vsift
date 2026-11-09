@@ -3574,6 +3574,9 @@ between components), `reason`, `failure_code` and, for a smoke, `smoke_check`
 (`layout`, `banner`, `media_fixture`, `speech_fixture`, `recheck`); `stage` says what
 cleanup did with its private stage (`discarded`, or `retained` with
 `retention_reason` `ownership_unproved`, `unexpected_content` or `storage_failure`).
+A component whose download finished before a cancellation reached the installation is
+`failed` with reason `cancelled` (step null, its stage `discarded`), never `blocked`;
+`blocked` follows only a failure that is not a cancellation.
 A failed transaction is a failure result whose `error` carries the first failure's
 code and a fixed-prose remediation, with the same `data` beside it, so a caller always
 sees what is installed. Human mode lists the components on stdout and the error on
