@@ -1,0 +1,81 @@
+name: H1 published 0.2.4 probe (temporary)
+
+# TEMPORARY, H1 (the FFmpeg builds repository moved): removed before the pull request merges.
+#
+# Runs the PUBLISHED v0.2.4 Linux binary's own `setup plan` and `setup install` in an empty
+# home, read-only and on a disposable runner, and records what happened: does the FFmpeg
+# download still work now that the pinned address redirects to the repository's new owner?
+# The job always ends green; the answer is in the step summary. It reads the public release
+# over HTTPS with a neutral client name, sends no identity, uses no token and no secret, and
+# publishes, tags and changes nothing. The binary is checked against the release's own
+# SHA256SUMS before it runs.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/h1-published-0-2-4-probe.yml
+
+permissions: {}
+
+jobs:
+  probe:
+    name: Published 0.2.4 Linux binary, FFmpeg install (Ubuntu 24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Fetch the published binary and check it against the release's checksums
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/probe/download" "$RUNNER_TEMP/probe/bin"
+          cd "$RUNNER_TEMP/probe/download"
+          base="https://github.com/smormah/vsift/releases/download/v0.2.4"
+          archive="vsift-0.2.4-x86_64-unknown-linux-gnu.tar.gz"
+          for name in "$archive" SHA256SUMS; do
+            curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+              --user-agent vsift-maintenance-check --max-filesize 10000000 \
+              --output "$name" "$base/$name"
+          done
+          grep " $archive\$" SHA256SUMS > wanted.sha256
+          test "$(wc -l < wanted.sha256)" = 1
+          sha256sum --check --strict wanted.sha256
+          tar -xzf "$archive" -C ../bin
+          binary="$(find ../bin -type f -name vsift | head -n 1)"
+          test -n "$binary"
+          chmod +x "$binary"
+          echo "VSIFT_PUBLISHED=$(realpath "$binary")" >> "$GITHUB_ENV"
+
+      - name: Plan and install with the published binary in an empty home
+        run: |
+          set -uo pipefail
+          home="$RUNNER_TEMP/probe/home"
+          mkdir -p "$home" "$RUNNER_TEMP/probe/out"
+          export HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" \
+            XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
+          out="$RUNNER_TEMP/probe/out"
+          "$VSIFT_PUBLISHED" --version | tee "$out/version.txt"
+          "$VSIFT_PUBLISHED" setup plan --profile desktop --json > "$out/plan.json"
+          digest="$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1]))["data"]; print(d["plan_digest"])' "$out/plan.json")"
+          python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1]))["data"]; print("catalogue", d.get("catalogue_revision")); [print(a["component"], a["source_url"]) for a in d["actions"]]' "$out/plan.json" | tee "$out/plan-summary.txt"
+          timeout 1200 "$VSIFT_PUBLISHED" setup install --plan "$out/plan.json" \
+            --accept-plan "$digest" --json > "$out/install.json" 2> "$out/install.err"
+          code=$?
+          echo "$code" > "$out/exit-code.txt"
+          {
+            echo "## Published 0.2.4 Linux binary: managed install on 2026-11 (after the FFmpeg-Builds move)"
+            echo
+            echo '```'
+            cat "$out/version.txt"
+            cat "$out/plan-summary.txt"
+            echo "setup install exit status: $code"
+            echo '```'
+            echo
+            echo "Install result (JSON, trimmed to 4000 characters):"
+            echo '```json'
+            head -c 4000 "$out/install.json"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          head -c 4000 "$out/install.json"
+          # The answer is recorded, not asserted: this probe never fails the pull request.
+          exit 0
