@@ -7,7 +7,9 @@
 //! 1. **The earlier release** (the published binary that `VSIFT_E2E_BINARY`
 //!    selects, checked by `published_binary`; `0.2.2` in the workflow) plans
 //!    and installs its own catalogue from the publishers: `FFmpeg`, whisper.cpp
-//!    v1.9.2 and the model.
+//!    v1.9.2 and the model. Where its catalogue pins an address that has since
+//!    moved (the `FFmpeg` builds repository, L-254), the workflow hands it the
+//!    files of its own plan with `VSIFT_E2E_ARTIFACT_DIR` (`--artifact-dir`).
 //! 2. **This build's `setup check`** must use that install and name its
 //!    `FFmpeg` (the build of 2026-08-31) and its whisper.cpp as superseded
 //!    (`managed_updates`: each earlier key, each pin, `security_fixes`), in
@@ -42,6 +44,7 @@ mod published_binary;
 use std::{
     env,
     error::Error,
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     process::Output,
@@ -122,6 +125,7 @@ fn plan_and_install(
     base: &Base,
     mut binary: impl FnMut() -> Result<Command, Box<dyn Error>>,
     name: &str,
+    install_arguments: &[OsString],
 ) -> Result<Value, Box<dyn Error>> {
     let plan = binary()?
         .args(["setup", "plan", "--profile", "desktop", "--json"])
@@ -153,6 +157,7 @@ fn plan_and_install(
     let install = binary()?
         .args(["setup", "install", "--plan", path_text(&plan_path)?])
         .args(["--accept-plan", &digest, "--json"])
+        .args(install_arguments)
         .output()?;
     let install_value = json(&install)?;
     println!(
@@ -215,13 +220,16 @@ fn an_earlier_releases_managed_install_upgrades_to_the_current_pins() -> TestRes
     fs::create_dir(&base.0)?;
 
     // 1. The earlier release installs its own catalogue.
-    let earlier = plan_and_install(&base, || base.earlier(), "earlier")?;
+    // L-254: the earlier release pins an address that has since moved and
+    // cannot be changed, so the job hands it the files of its own plan.
+    let earlier_files = published_binary::artifact_dir_arguments()?;
+    let earlier = plan_and_install(&base, || base.earlier(), "earlier", &earlier_files)?;
     assert_eq!(statuses(&earlier), ["activated", "activated", "activated"]);
 
     assert_superseded_before_the_upgrade(&base)?;
 
     // 3. This build's plan installs only the new FFmpeg and whisper.cpp.
-    let upgrade = plan_and_install(&base, || base.current(), "current")?;
+    let upgrade = plan_and_install(&base, || base.current(), "current", &[])?;
     assert_eq!(
         statuses(&upgrade),
         ["activated", "activated", "already_current"]

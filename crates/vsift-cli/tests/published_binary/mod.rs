@@ -64,6 +64,11 @@ pub(crate) const VERSION_VARIABLE: &str = "VSIFT_E2E_EXPECTED_VERSION";
 /// The source commit the selected executable must name.
 pub(crate) const COMMIT_VARIABLE: &str = "VSIFT_E2E_EXPECTED_COMMIT";
 
+/// The folder of files an earlier release's own plan names, fetched for it
+/// (L-254): `setup install --artifact-dir` hands them to that release, which
+/// can no longer download them itself.
+pub(crate) const ARTIFACT_DIR_VARIABLE: &str = "VSIFT_E2E_ARTIFACT_DIR";
+
 /// How long `--version` may take: a start, not a journey.
 const VERSION_DEADLINE: Duration = Duration::from_secs(60);
 /// A release build shows this many digits of its commit.
@@ -424,6 +429,49 @@ pub(crate) fn path() -> Result<PathBuf, BinaryError> {
 /// Whether the binary under test is an accepted override.
 pub(crate) fn is_override() -> Result<bool, BinaryError> {
     Ok(matches!(selected()?, Selected::Override { .. }))
+}
+
+/// `setup install` arguments that hand an earlier release the files of its own
+/// plan, from the variable [`ARTIFACT_DIR_VARIABLE`], or nothing when it is
+/// unset (L-254).
+///
+/// A published release pins the exact address of every managed artifact and
+/// refuses any redirect it has not reviewed, so when the `FFmpeg` builds
+/// repository moved, the releases that pin the old address could no longer
+/// download it. A scenario that needs such a release only as its starting
+/// point has the workflow fetch the plan's files, each checked against the
+/// plan (`tools/p14-published/fetch-plan-artifacts.cjs`), and passes the
+/// folder with `--artifact-dir`; the release still checks every file's size
+/// and SHA-256. The variable is refused unless it names an existing absolute
+/// folder, and unless the binary under test is an accepted override: this
+/// build's own downloads are never routed around.
+pub(crate) fn artifact_dir_arguments() -> Result<Vec<OsString>, Box<dyn Error>> {
+    artifact_dir_arguments_from(env::var_os(ARTIFACT_DIR_VARIABLE), is_override()?)
+}
+
+/// [`artifact_dir_arguments`] for a given variable value and override state.
+pub(crate) fn artifact_dir_arguments_from(
+    value: Option<OsString>,
+    override_selected: bool,
+) -> Result<Vec<OsString>, Box<dyn Error>> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    if !override_selected {
+        return Err(format!(
+            "{ARTIFACT_DIR_VARIABLE} is set but no earlier release is selected with {BINARY_VARIABLE}: this build's own downloads are not routed around"
+        )
+        .into());
+    }
+    let folder = PathBuf::from(&value);
+    if !folder.is_absolute() || !folder.is_dir() {
+        return Err(format!(
+            "{ARTIFACT_DIR_VARIABLE} must name an existing absolute folder, not {}",
+            folder.display()
+        )
+        .into());
+    }
+    Ok(vec![OsString::from("--artifact-dir"), value])
 }
 
 /// One dot-separated part of a pre-release, ordered as `SemVer` orders it: a

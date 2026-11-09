@@ -427,6 +427,16 @@ jobs:
           python tools/p14_journeys.py select-source --version "$VERSION" --tag-source "$GITHUB_WORKSPACE/tag-source" --workflow-source "$GITHUB_WORKSPACE" --tests-from workflow-ref
           python tools/p14_journeys.py install --export-environment
 
+      # L-254: a published release pins the exact address of each managed artifact and refuses a
+      # redirect it has not reviewed, so a release that pins the FFmpeg builds repository's old
+      # address (it moved to a new owner on 2026-11-07) cannot download its own FFmpeg. This job
+      # needs the earlier release only as its starting point, so the files its own plan names are
+      # fetched here, each checked against that plan's size and SHA-256, and handed to it with
+      # `--artifact-dir`. Nothing is fetched when the plan names no moved address. The redirect
+      # policy of VSift is not involved.
+      - name: Fetch the files the earlier release's plan names, where its repository moved to
+        run: node tools/p14-published/fetch-plan-artifacts.cjs --binary "$VSIFT_E2E_BINARY" --folder "$RUNNER_TEMP/earlier-plan-files" >> "$GITHUB_ENV"
+
       - name: Show toolchain and host
         run: |
           rustup show active-toolchain

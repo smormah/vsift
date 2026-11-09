@@ -13,13 +13,14 @@ credential in reach is the job's default read-only GitHub token, which only `gh`
 | `archive.cjs` | RQ-02 | The three release archives: checksums, attestations, extraction, `--version` and `setup check --json` with no Node.js on `PATH`, the shipped skill against the tag's |
 | `offline-install.cjs` | RQ-03 | The real reviewed artifacts fetched by the published binary's own plan, then `setup install --artifact-dir` in a container with no network; the tamper, missing-file and relative-folder refusals |
 | `upgrade.cjs` | RQ-04 | Install the from-version, make sessions and a configuration, upgrade, compare, and walk `install.md` section 8. `--mode registry` (real registry) or `--mode local` (a loopback registry serving the pull request's own build) |
+| `fetch-plan-artifacts.cjs` | RQ-04, `P13 managed smoke` | For a published binary whose plan names an address that moved (L-254): fetches the files the plan names, each checked against that plan, into a folder; the job then hands it to the binary with `--artifact-dir` (`VSIFT_E2E_ARTIFACT_DIR`). `upgrade.cjs` does the same inside its own run |
 | `assemble-local-packages.cjs` | RQ-04 | The four packages of the local mode: the checkout's launcher, the published platform packages as a skeleton, the pull request's executables |
 | `verify-release.cjs` | RQ-19 | The second verification of a publish: dist-tags, npm provenance, signatures, attestations, checksums, release flags and files; for a stable version also the candidate-to-stable delta (read from the publish run's `publish-plan` artifact, which GitHub keeps seven days) and `latest` on all four packages |
 
 `lib/` holds the shared pieces, each with a test: `scrub.cjs` (the scrubbed `PATH`), `hostile.cjs`
 (the hostile names and arguments), `sec02.cjs` (planted tools), `verify.cjs` (the rules of RQ-19 and
 where a stable version's two extra checks register), `release.cjs`, `download.cjs`, `upgrade.cjs`,
-`archive.cjs`, `managers.cjs`, `local-registry.cjs`, `common.cjs`.
+`archive.cjs`, `managers.cjs`, `local-registry.cjs`, `plan-artifacts.cjs`, `common.cjs`.
 
 ```console
 node --test "tools/p14-published/test/*.test.cjs"
