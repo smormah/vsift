@@ -81,3 +81,74 @@ jobs:
           head -c 4000 "$out/install.json"
           # The answer is recorded, not asserted: this probe never fails the pull request.
           exit 0
+
+      # Workaround A: the published binary installs from files placed in a folder
+      # (`--artifact-dir`), the FFmpeg archive taken from the repository's new address.
+      - name: Workaround A, the plan's files in a folder (--artifact-dir)
+        run: |
+          set +e
+          set -u -o pipefail
+          home="$RUNNER_TEMP/probe/home-a"
+          out="$RUNNER_TEMP/probe/out-a"
+          files="$RUNNER_TEMP/probe/files"
+          mkdir -p "$home" "$out" "$files"
+          export HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" \
+            XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
+          "$VSIFT_PUBLISHED" setup plan --profile desktop --json > "$out/plan.json"
+          digest="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["plan_digest"])' "$out/plan.json")"
+          python3 -I -c 'import json,sys; [print(a["source_url"].replace("github.com/BtbN/FFmpeg-Builds/", "github.com/FFmpeg-Builds/FFmpeg-Builds/")) for a in json.load(open(sys.argv[1]))["data"]["actions"]]' "$out/plan.json" > "$out/urls.txt"
+          while read -r url; do
+            name="${url##*/}"
+            curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+              --user-agent vsift-maintenance-check --max-filesize 200000000 \
+              --output "$files/$name" "$url" || echo "download failed: $url"
+          done < "$out/urls.txt"
+          ls -l "$files"
+          timeout 1200 "$VSIFT_PUBLISHED" setup install --plan "$out/plan.json" \
+            --accept-plan "$digest" --artifact-dir "$files" --json > "$out/install.json" 2> "$out/install.err"
+          code=$?
+          "$VSIFT_PUBLISHED" setup check --json > "$out/check.json" 2> "$out/check.err"
+          {
+            echo "## Workaround A: --artifact-dir with the FFmpeg archive from the new address"
+            echo '```'
+            ls -l "$files"
+            echo "setup install exit status: $code"
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("status", d.get("status")); [print(c["component"], c["status"], c.get("reason")) for c in d["data"]["components"]]' "$out/install.json"
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("setup check status", d.get("status"))' "$out/check.json"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      # Workaround B: FFmpeg and FFprobe already on the PATH (from the distribution), then the
+      # published binary's own install for the rest.
+      - name: Workaround B, FFmpeg and FFprobe on the PATH
+        run: |
+          set +e
+          set -u -o pipefail
+          sudo apt-get update -qq > /dev/null 2>&1
+          sudo apt-get install -y -qq ffmpeg > /dev/null 2>&1
+          command -v ffmpeg ffprobe
+          home="$RUNNER_TEMP/probe/home-b"
+          out="$RUNNER_TEMP/probe/out-b"
+          mkdir -p "$home" "$out"
+          export HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" \
+            XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
+          "$VSIFT_PUBLISHED" setup check --json > "$out/check-before.json" 2> /dev/null
+          "$VSIFT_PUBLISHED" setup plan --profile desktop --json > "$out/plan.json"
+          digest="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["plan_digest"])' "$out/plan.json")"
+          timeout 1200 "$VSIFT_PUBLISHED" setup install --plan "$out/plan.json" \
+            --accept-plan "$digest" --json > "$out/install.json" 2> "$out/install.err"
+          code=$?
+          "$VSIFT_PUBLISHED" setup check --json > "$out/check.json" 2> /dev/null
+          {
+            echo "## Workaround B: FFmpeg and FFprobe on the PATH (distribution package)"
+            echo '```'
+            ffmpeg -version | head -n 1
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("check before:", d.get("status")); [print("  ", i["dependency"], i["status"], i.get("lookup")) for i in d["dependencies"]]' "$out/check-before.json"
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1]))["data"]; print("plan actions:", [(a["component"], a["state"]) for a in d["actions"]])' "$out/plan.json"
+            echo "setup install exit status: $code"
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("install status", d.get("status")); [print(c["component"], c["status"], c.get("reason")) for c in d["data"]["components"]]' "$out/install.json"
+            python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print("check after:", d.get("status")); [print("  ", i["dependency"], i["status"], i.get("lookup")) for i in d["dependencies"]]' "$out/check.json"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 0
