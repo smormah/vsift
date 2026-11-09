@@ -86,6 +86,11 @@ These files are the machine-readable public v1 boundary:
   findings (each a pointer, a line, a closed `rule`, the schema's `allowed` values and
   fixed prose, never text from the draft), `truncated` and, with `--session`, how the
   session was used (`resolved`, a `gap`, `identities_checked`);
+- `handoff-finish-data.schema.json` — the `data` of a complete `handoff.finish` result
+  (0.3.0, M5b): the `handoff.check` data with the session always resolved, whether every
+  requested step was done (`finished`), why it stopped before any write (`stopped_at`), the
+  lifecycle action stated against the one asked for, and `session retain`'s or `session
+  close`'s data when that one write was made;
 - `handoff-skeleton-data.schema.json` — the `data` of a complete `handoff.skeleton`
   result (0.3.0, ADR 0038): a valid handoff that states nothing yet, with one open
   session's ids filled in, and `fill`, the members only the agent can supply;
