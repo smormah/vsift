@@ -425,75 +425,107 @@ async fn a_failed_retention_answers_as_session_retain() -> TestResult {
 /// of 2026-11-09, change 1).
 #[tokio::test]
 async fn a_write_on_an_unavailable_session_answers_as_the_standalone_write() -> TestResult {
-    let missing = OwnedRoot::new()?;
-    let expired = OwnedRoot::new()?;
-    let expired_segment = seed_session(&expired, EXPIRED_AGO).await?;
-    let closed = OwnedRoot::new()?;
-    let closed_segment = seed_session(&closed, 0).await?;
-    envelope(&vsift(
-        &closed,
-        &["session", "close", SESSION, "--json"],
-        b"",
-    )?)?;
-    for (root, segment) in [
-        (&missing, "tsg_0123456789abcdef0123456789abcdef"),
-        (&expired, expired_segment.as_str()),
-        (&closed, closed_segment.as_str()),
+    for state in [
+        Unavailable::Missing,
+        Unavailable::Expired,
+        Unavailable::Closed,
     ] {
-        let bundle = root.path("evidence bundle");
-        let finish = vsift(
-            root,
-            &[
-                "handoff",
-                "finish",
-                SESSION,
-                "--retain",
-                path_text(&bundle)?,
-                "--json",
-            ],
-            report(&handoff(segment, "retained")).as_bytes(),
-        )?;
-        let finish_bundle_written = bundle.exists();
-        let finish_answer = if exit(&finish) == Some(0) {
-            None
-        } else {
-            Some(failure(&finish)?)
-        };
-        if finish_bundle_written {
-            fs::remove_dir_all(&bundle)?;
-        }
-        let standalone = vsift(
-            root,
-            &[
-                "session",
-                "retain",
-                SESSION,
-                "--output",
-                path_text(&bundle)?,
-                "--json",
-            ],
-            b"",
-        )?;
-        let standalone_answer = if exit(&standalone) == Some(0) {
-            None
-        } else {
-            Some(failure(&standalone)?)
-        };
-        assert_eq!(finish_answer, standalone_answer, "retain");
-        assert_eq!(finish_bundle_written, bundle.exists(), "retain");
-
-        let finish = vsift(
-            root,
-            &["handoff", "finish", SESSION, "--close", "--json"],
-            report(&handoff(segment, "closed")).as_bytes(),
-        )?;
-        let standalone = vsift(root, &["session", "close", SESSION, "--json"], b"")?;
-        assert_eq!(exit(&finish), exit(&standalone), "close");
-        if exit(&finish) != Some(0) {
-            assert_eq!(failure(&finish)?, failure(&standalone)?, "close");
+        for write in [Write::Retain, Write::Close] {
+            // Each side gets its own fresh session, so the first write
+            // cannot change what the second one finds.
+            let (finish_root, segment) = unavailable_session(state).await?;
+            let (standalone_root, _) = unavailable_session(state).await?;
+            let finish_bundle = finish_root.path("evidence bundle");
+            let standalone_bundle = standalone_root.path("evidence bundle");
+            let (finish, standalone) = match write {
+                Write::Retain => (
+                    vsift(
+                        &finish_root,
+                        &[
+                            "handoff",
+                            "finish",
+                            SESSION,
+                            "--retain",
+                            path_text(&finish_bundle)?,
+                            "--json",
+                        ],
+                        report(&handoff(&segment, "retained")).as_bytes(),
+                    )?,
+                    vsift(
+                        &standalone_root,
+                        &[
+                            "session",
+                            "retain",
+                            SESSION,
+                            "--output",
+                            path_text(&standalone_bundle)?,
+                            "--json",
+                        ],
+                        b"",
+                    )?,
+                ),
+                Write::Close => (
+                    vsift(
+                        &finish_root,
+                        &["handoff", "finish", SESSION, "--close", "--json"],
+                        report(&handoff(&segment, "closed")).as_bytes(),
+                    )?,
+                    vsift(
+                        &standalone_root,
+                        &["session", "close", SESSION, "--json"],
+                        b"",
+                    )?,
+                ),
+            };
+            let context = format!("{state:?} {write:?}");
+            assert_eq!(exit(&finish), exit(&standalone), "{context}");
+            if exit(&finish) == Some(0) {
+                assert_eq!(finish_json(&finish)?["data"]["finished"], true, "{context}");
+            } else {
+                assert_eq!(failure(&finish)?, failure(&standalone)?, "{context}");
+            }
+            assert_eq!(
+                finish_bundle.exists(),
+                standalone_bundle.exists(),
+                "{context}"
+            );
         }
     }
     Ok(())
+}
+
+/// A session that a write cannot use as an open one.
+#[derive(Clone, Copy, Debug)]
+enum Unavailable {
+    Missing,
+    Expired,
+    Closed,
+}
+
+/// The write a comparison makes.
+#[derive(Clone, Copy, Debug)]
+enum Write {
+    Retain,
+    Close,
+}
+
+/// A fresh root holding a session in `state`, and a segment id to cite.
+async fn unavailable_session(state: Unavailable) -> Built<(OwnedRoot, String)> {
+    let root = OwnedRoot::new()?;
+    let segment = match state {
+        Unavailable::Missing => "tsg_0123456789abcdef0123456789abcdef".to_owned(),
+        Unavailable::Expired => seed_session(&root, EXPIRED_AGO).await?,
+        Unavailable::Closed => {
+            let segment = seed_session(&root, 0).await?;
+            envelope(&vsift(
+                &root,
+                &["session", "close", SESSION, "--json"],
+                b"",
+            )?)?;
+            segment
+        }
+    };
+    Ok((root, segment))
 }
 
 /// A close after a passing draft closes the session once.

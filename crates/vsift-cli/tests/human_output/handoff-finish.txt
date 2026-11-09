@@ -1,0 +1,9 @@
+Retained: the draft passed, and the bundle was written and validated
+Handoff version: 1
+Session: ses_0123456789abcdef0123456789abcdef, 2 cited identities checked
+
+Retained session ses_0123456789abcdef0123456789abcdef to the folder you named: 4 artifacts (262144 bytes)
+Source copy: not included; re-extraction needs the matching original video
+Bundle: validated; no bundle validate is needed
+
+Lifecycle: retained, never cleaned up automatically
