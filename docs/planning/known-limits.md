@@ -254,7 +254,7 @@ Each entry has these fields:
 | [L-250](#l-250) | The value measurement's prose grader reads written times and words, not meaning: times in words are not claims, a right answer in other words is missed, and a wrong claim is only a fact at a wrong time or a listed contradicting term | process/CI | medium | value measurement | none | open |
 | [L-251](#l-251) | The value measurement runs Claude Code on a hosted Linux runner, unlike every earlier agent trial, and its npm install there is unproven until the pilot | process/CI | low | value measurement | none | open |
 | [L-252](#l-252) | The value measurement's tool time and model time come from when each line of the client's stream arrived, so the client's own work counts as the model's | process/CI | low | value measurement | none | open |
-| [L-254](#l-254) | An upstream repository move breaks the managed installs of already-published versions until a patch ships, because a pin is a URL and a strict redirect policy refuses an address nobody has read | security/trust | medium | patch decision | none | open |
+| [L-254](#l-254) | An upstream repository move breaks the managed installs of already-published versions until `0.3.0` (the maintainer decided on 2026-11-09 that there is no `0.2.5`), because a pin is a URL and a strict redirect policy refuses an address nobody has read | security/trust | medium | `0.3.0` cut | none | open |
 | [L-242](#l-242) | The six workflows, the Claude Code plugin, `vsift skill install` and the help's ready-made outcomes are untried by agents until the 0.3.0 cut: the text ships and its commands are held to the CLI by tests, but how agents follow it is unmeasured; C-04, the cold scenario that asks for a bug report, first runs in batch 3 at the cut and has no baseline | process/CI | low | 0.3.0 cut | none | open |
 
 Counts: 1 high, 60 medium, 148 low (209 entries), recounted on 2026-11-09 from the entries (the `### L-` sections); the table, the sections and this line agree.
@@ -5770,7 +5770,7 @@ arrived.**
 
 ### L-254
 
-**An upstream repository move breaks the managed installs of already-published versions until a patch ships.**
+**An upstream repository move breaks the managed installs of already-published versions until `0.3.0`.**
 
 - **What:** a managed pin is an exact HTTPS address, a size and a SHA-256, and the download refuses any redirect
   that has not been reviewed (`reviewed_redirect` allows only `release-assets.githubusercontent.com` after a
@@ -5784,18 +5784,30 @@ arrived.**
   a hosted run on 2026-11-09 (H1, pull request 589, run 42540769420) took the published `0.2.4` Linux binary, planned
   with catalogue `ubuntu-24.04-x86_64-2026-11-03-r4` (FFmpeg from the `BtbN` address) and ran `setup install`: exit
   status 7, `DOWNLOAD_FAILED`, reason `redirect_policy`, step `download` of `ffmpeg_ffprobe`, with `whisper_cli` and
-  `whisper_model` reported `blocked` (the install stops and nothing is installed). ADR 0032, note of 2026-11-09, has
+  `whisper_model` reported `blocked` (the install stops and nothing is installed). The two workarounds below
+  were tried with that published binary in run 42610842957. ADR 0032, note of 2026-11-09, has
   the evidence that the move is the same repository and the same bytes.
-- **Impact: medium by the rubric:** a new managed FFmpeg install on Ubuntu or Windows fails for a published
-  version until the user installs FFmpeg another way (`setup` still names the bring-your-own route); installs
-  that already completed are not affected, and nothing unverified is ever run.
+- **Impact: medium by the rubric:** a new managed FFmpeg install on Ubuntu 24.04 fails for a published version
+  (`0.2.3`, `0.2.4` and earlier; no published version has a Windows catalogue) until `0.3.0`; installs that already
+  completed are not affected, and nothing unverified is ever run. The two published-binary scenarios of the
+  test suite, `P13 managed smoke`'s "Managed upgrade from a published release" and `P14 local upgrade`'s RQ-04
+  (baseline `0.1.0`), fail for the same reason until their set-up is changed (H1b).
 - **Mitigation:** the catalogue now names the new owner (`ubuntu-24.04-x86_64-2026-11-09-r6`,
   `windows-x86_64-2026-11-09-r3`); a test keeps every GitHub release address and its publisher record on one
   owner and repository; the Nightly's real-binary jobs are the detector that found this within a day.
-- **Next step:** the maintainer decides whether to cut a `0.2.5` patch for the published line. A later move is
-  handled the same way: read it, move the pins, keep the policy. Pre-publication, a scheduled read-only check
+  **The workaround for `0.2.x` on Ubuntu 24.04, until `0.3.0`** (both tried with the published `0.2.4` binary on a
+  hosted runner on 2026-11-09, run 42610842957; [`install.md`](../operations/install.md) section 5.1 has the steps):
+  (1) download the three files the plan names, with the FFmpeg archive taken from `github.com/FFmpeg-Builds/FFmpeg-Builds`
+  instead of `github.com/BtbN/FFmpeg-Builds` (same release and file name), put them in one folder and run `setup install`
+  with `--artifact-dir`; VSift checks each file's size and SHA-256 against its own pins (install `complete`, `setup check`
+  `ready`); or (2) install FFmpeg and FFprobe with the distribution (`sudo apt-get install ffmpeg`): they are found on the
+  `PATH`, the plan then offers only whisper.cpp and the model, and `setup check` ends `ready`. The distribution's FFmpeg is
+  not one VSift has reviewed.
+- **Next step:** the maintainer decided on 2026-11-09 that there is no `0.2.5`: the fix ships with `0.3.0`, and the
+  workaround above covers the published line until then. H1b changes the two test scenarios so they hand an old
+  baseline its FFmpeg archive. A later move is handled the same way: read it, move the pins, keep the policy. Pre-publication, a scheduled read-only check
   that the pinned addresses answer without a redirect would find a move before the Nightly does.
-- **Owner:** the maintainer (the patch decision). **Issue:** none. **Status:** open. **Review:** pending.
+- **Owner:** the `0.3.0` cut (the fix) and H1b (the test set-up). **Issue:** none. **Status:** open. **Review:** pending.
 
 ## Review workflow
 

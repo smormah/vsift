@@ -317,8 +317,14 @@ downloaded to a development machine):
   (136,027,168 and 168,715,328 bytes) and the pinned SHA-256 digests; the build-scripts commit `5031c6f1` that the
   catalogue's source link names resolves under the new owner. The release of 2026-08-31 that `0.2.3` and earlier pin,
   and that the Codex container and the Windows tryout sheet use, likewise lists its pinned sizes and digests.
-- A hosted run downloaded both `autobuild-2026-10-31-12-59` archives from the new address and checked size and SHA-256
-  against the catalogue (recorded in pull request description of H1).
+- Hosted runs of the branch installed both `autobuild-2026-10-31-12-59` archives from the new address through the
+  catalogue, which refuses any size or SHA-256 that differs from the pin: `Guide` run 42540792882 (Ubuntu) and
+  `P13 managed smoke` run 42540599893 (Ubuntu and Windows). Only the two scenarios that install with an older
+  *published* binary stay red, for the cause above (H1b changes their set-up).
+- The published `0.2.4` Linux binary, run on a hosted runner (run 42540769420), plans FFmpeg from the old address and
+  ends `setup install` with `download_failed` (`redirect_policy`). The maintainer decided on 2026-11-09 that there is
+  no `0.2.5`; the fix ships with `0.3.0`, and [`install.md`](../operations/install.md) section 5.1 gives the
+  workaround for `0.2.x` that run 42610842957 tried.
 
 *What changed:* the two `FFmpeg` source addresses and the two source-code links in the catalogue name
 `FFmpeg-Builds/FFmpeg-Builds`; the publisher's display name is "FFmpeg-Builds (BtbN)"; the catalogue revisions are

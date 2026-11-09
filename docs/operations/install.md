@@ -407,6 +407,19 @@ vsift setup check                                  # video and speech now say re
   folder and run `vsift setup install --plan plan.json --accept-plan <digest>
   --artifact-dir /absolute/path/to/folder`. The files go through the same size and SHA-256
   check as a download; you supply only the folder, never an address or a checksum.
+- **If `setup install` stops with `download_failed` and the reason `redirect_policy` on FFmpeg (`0.2.3`, `0.2.4`
+  and earlier; until `0.3.0`).** On 2026-11-07 the repository these versions download FFmpeg from moved to a new
+  owner, and they refuse the redirect on purpose. `0.3.0` points at the new address; until then use one of two
+  ways, both tried with the published `0.2.4` binary on a hosted Ubuntu 24.04 runner:
+  1. Take the three files by hand. Download each file the plan names, with the FFmpeg address changed from
+     `https://github.com/BtbN/FFmpeg-Builds/releases/download/...` to
+     `https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/...` (the rest of the address and the file
+     name stay the same), put the three files in one folder and run
+     `vsift setup install --plan plan.json --accept-plan <digest> --artifact-dir /absolute/path/to/folder`.
+     VSift checks each file's size and SHA-256 against its own pins, as for a download.
+  2. Install FFmpeg and FFprobe with your distribution (`sudo apt-get install ffmpeg`). VSift finds tools on the
+     `PATH`, so `vsift setup plan` then offers only whisper.cpp and the model, and `setup check` ends `ready`.
+     VSift has not reviewed the distribution's FFmpeg (section 5.2).
 - **Managing what is installed.** VSift keeps each component's current and previous
   version, and never removes one that a running job holds.
 
