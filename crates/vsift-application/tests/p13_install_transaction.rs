@@ -548,6 +548,48 @@ async fn a_companion_that_cannot_be_fetched_discards_the_staged_recognizer() -> 
     Ok(())
 }
 
+/// #596: when the cancellation reaches the model's fetch after the
+/// recognizer's fetch finished, the recognizer's download is discarded and
+/// reported cancelled, as it is when the cancellation arrives after both
+/// fetches (`a_cancelled_run_keeps_no_speech_download`). It used to stay
+/// `blocked`, so the outcome depended on which fetch the cancellation met.
+/// The scripted fetch failure stands for the cancellation; no clock is read.
+#[tokio::test]
+async fn a_cancellation_during_the_model_fetch_cancels_the_recognizer_fetched_before_it()
+-> TestResult {
+    let actions = accepted_actions(&RuntimeDependency::ALL)?;
+    let mut installer = FakeInstaller::new();
+    installer.stage_failures.insert(
+        key(MODEL),
+        StageFailure {
+            failure: ComponentInstallFailure::at(
+                InstallStep::Download,
+                InstallFailureReason::Cancelled,
+            ),
+            stage: None,
+        },
+    );
+
+    let report =
+        install_managed_components(&installer, &actions, &RecordedProgress::default()).await;
+
+    assert_eq!(
+        outcomes(&report),
+        [
+            ComponentInstallOutcome::Activated,
+            failed(None, InstallFailureReason::Cancelled),
+            failed(Some(InstallStep::Download), InstallFailureReason::Cancelled),
+        ]
+    );
+    assert_eq!(report.components[1].stage, Some(StageDisposal::Discarded));
+    assert_eq!(report.failure_code(), Some(FailureCode::Cancelled));
+    let journal = installer.journal();
+    assert_eq!(journal.discarded, [WHISPER]);
+    assert_eq!(journal.kept, [] as [ManagedComponent; 0]);
+    assert_eq!(journal.activated, [MEDIA]);
+    Ok(())
+}
+
 /// D-06: a failed smoke reports every candidate of its unit with the
 /// check, the reason and the stage's disposal; nothing of it activates.
 #[tokio::test]

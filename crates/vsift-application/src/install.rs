@@ -158,7 +158,9 @@ pub enum InstallFailureReason {
     /// The caller cancelled the installation (`CANCELLED`).
     Cancelled,
     /// Not activated because an earlier component of the plan failed or was
-    /// cancelled first; carries no code of its own.
+    /// cancelled first; carries no code of its own. It never describes a
+    /// download that a cancelled installation discarded: that is
+    /// [`Self::Cancelled`].
     Blocked,
 }
 
@@ -787,7 +789,10 @@ impl<'plan> Part<'plan, '_> {
     }
 
     /// Records a part's fetches: on a failure, the failed component's
-    /// report, the downloads made before it discarded, and `None`.
+    /// report, the downloads made before it discarded, and `None`. When the
+    /// failure is a cancellation those downloads are reported cancelled, as
+    /// for a cancellation that arrives after the fetches; for any other
+    /// failure they stay `blocked`.
     fn settle_fetch<D: StagedManagedComponent>(
         &mut self,
         fetched: Fetched<D>,
@@ -801,10 +806,18 @@ impl<'plan> Part<'plan, '_> {
                 failure,
                 fetched,
             }) => {
+                let cancelled_install = failure.failure.reason == InstallFailureReason::Cancelled;
                 self.record_failure(index, failure.failure, failure.stage, observer);
                 counter.finish(1);
-                for (fetched_index, download) in fetched {
-                    self.reports[fetched_index].stage = Some(download.discard());
+                if cancelled_install {
+                    // One handling for a cancelled install, whichever step
+                    // it reached: a download that finished is discarded and
+                    // reported cancelled, never `blocked` (ADR 0036, #596).
+                    self.fail_downloads(fetched, cancelled(), observer, counter);
+                } else {
+                    for (fetched_index, download) in fetched {
+                        self.reports[fetched_index].stage = Some(download.discard());
+                    }
                 }
                 None
             }
