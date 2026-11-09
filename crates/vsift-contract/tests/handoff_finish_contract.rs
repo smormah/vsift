@@ -228,10 +228,8 @@ fn forged_shapes_are_refused() -> TestResult {
     forged["finished"] = json!(true);
     assert!(!is_valid(&forged)?);
 
-    let retained = serde_json::to_value(HandoffFinishData::retained(
-        checked("retained")?,
-        bundle()?,
-    ))?;
+    let retained =
+        serde_json::to_value(HandoffFinishData::retained(checked("retained")?, bundle()?))?;
     let mut forged = retained.clone();
     forged["retain"] = Value::Null;
     assert!(!is_valid(&forged)?);

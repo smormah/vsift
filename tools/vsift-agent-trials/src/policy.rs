@@ -72,10 +72,8 @@ pub const HANDOFF_FINISH_OPERATION: &str = "handoff.finish";
 /// `session retain` and `--close` is `session close`, whatever class the
 /// table gives `handoff finish` itself (the planner's ruling of
 /// 2026-11-09). The CLI runs the same engine call for each.
-pub const HANDOFF_FINISH_WRITES: [(&str, &str); 2] = [
-    ("--retain", "session.retain"),
-    ("--close", "session.close"),
-];
+pub const HANDOFF_FINISH_WRITES: [(&str, &str); 2] =
+    [("--retain", "session.retain"), ("--close", "session.close")];
 
 /// The console lines of `commands.md` that make the help forms free.
 const HELP_FORMS: [&str; 2] = ["vsift --help", "vsift <namespace> <operation> --help"];
@@ -555,7 +553,10 @@ vsift <namespace> <operation> --help
             })
         };
         let session = "handoff finish ses_0123456789abcdef";
-        for line in [format!("{session} --json"), format!("{session} --close --json")] {
+        for line in [
+            format!("{session} --json"),
+            format!("{session} --close --json"),
+        ] {
             assert_eq!(
                 policy.check(&words(&line), &none),
                 finish(CommandClass::Free),

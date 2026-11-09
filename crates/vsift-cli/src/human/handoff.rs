@@ -341,8 +341,8 @@ mod tests {
     /// The frozen `handoff finish` example (a retention) renders; its
     /// snapshot is what a person reads.
     #[test]
-    fn the_frozen_finish_example_renders_as_readable_text()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn the_frozen_finish_example_renders_as_readable_text() -> Result<(), Box<dyn std::error::Error>>
+    {
         let rendered =
             render_value(CommandName::HandoffFinish, &finish_example()?)?.ok_or("no renderer")?;
         let text = rendered.as_str();

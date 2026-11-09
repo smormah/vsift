@@ -185,7 +185,10 @@ fn report(handoff: &Value) -> String {
 async fn seed_session(root: &OwnedRoot, ago: u64) -> Built<String> {
     let source = root.path("stand-in.mp4");
     fs::write(&source, b"\0\0\0\x18ftypisomhandoff-finish-contract")?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs().saturating_sub(ago);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)?
+        .as_secs()
+        .saturating_sub(ago);
     let session_id = SessionId::parse(SESSION)?;
     let opener = OperationId::parse("op_0123456789abcdef")?;
     let store = FilesystemSessionStore::provision_default(root.sessions())?;
@@ -233,7 +236,8 @@ async fn seed_session(root: &OwnedRoot, ago: u64) -> Built<String> {
 }
 
 fn path_text(path: &Path) -> Built<&str> {
-    path.to_str().ok_or_else(|| "a non-UTF-8 temporary path".into())
+    path.to_str()
+        .ok_or_else(|| "a non-UTF-8 temporary path".into())
 }
 
 /// The error code and exit of a failed result.
@@ -249,7 +253,10 @@ fn failure(output: &Output) -> Built<(Value, Option<i32>)> {
 #[tokio::test]
 async fn without_a_write_it_answers_as_handoff_check_with_the_session() -> TestResult {
     let missing = OwnedRoot::new()?;
-    let draft = report(&handoff("tsg_0123456789abcdef0123456789abcdef", "left_open"));
+    let draft = report(&handoff(
+        "tsg_0123456789abcdef0123456789abcdef",
+        "left_open",
+    ));
     let open = OwnedRoot::new()?;
     let segment = seed_session(&open, 0).await?;
     let open_draft = report(&handoff(&segment, "left_open"));
@@ -357,7 +364,13 @@ async fn a_stop_writes_nothing_and_says_so() -> TestResult {
 
         let human = vsift(
             &root,
-            &["handoff", "finish", SESSION, "--retain", path_text(&bundle)?],
+            &[
+                "handoff",
+                "finish",
+                SESSION,
+                "--retain",
+                path_text(&bundle)?,
+            ],
             draft.as_bytes(),
         )?;
         assert_eq!(exit(&human), Some(0));
