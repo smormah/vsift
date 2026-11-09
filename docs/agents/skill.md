@@ -327,6 +327,18 @@ CLI's own advice for a missing tool changed in the same pull request (#396, [L-1
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
 has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
 
+### `handoff finish`: the closing steps in one call (M5b; 2026-11-09, 0.3.0 draft)
+
+REPORT ends with `vsift handoff finish <session>` in place of `handoff check`, with CLOSE_OR_RETAIN's flag before
+`--json`: nothing (leave the session to expire), `--close`, or `--retain <new-directory>` only on the user's explicit
+request, to the folder they named. It checks the draft with the session's records, then makes that one write, so the
+`session retain`, `bundle validate` and `session close` calls go. A run with no session keeps `handoff check`.
+`commands.md` shows both shells' forms of both commands and classes `handoff finish` `free`, its `--retain` `explicit`
+as `session retain`; `lifecycle.md` keeps the standalone commands as the fallback when `finished` stays false. The
+skill grew by about 300 bytes on M5a's text. **No agent has run this text:** it is measured in one batch 2 on the pull
+request's head, against M5a's batch 2 ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
+note of 2026-11-09).
+
 ### A long report's check on Windows (#366; 2026-10-17, released in `0.2.2`)
 
 The skill's two draft forms of `vsift handoff check` stay the only ones, and the check still reads a draft from standard

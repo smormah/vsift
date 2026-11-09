@@ -1063,3 +1063,9 @@ checks that an agent without the skill does not accept a setup plan on its own.
 *Note, 2026-10-27 ([ADR 0036](0036-the-setup-door.md)):* the never class gains plain `vsift setup`, the setup door
 for a person, which asks a question and installs on the answer. The skill keeps `setup check` and `setup plan`, and
 the user's own `setup install`.
+
+*Note, 2026-11-09 (0.3.0, M5b; [ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md), note of
+2026-11-09):* the skill's REPORT state finishes with `vsift handoff finish <session>`, which checks the draft with the
+session's records and then makes the one write the user asked for (`--retain` or `--close`); a run with no session
+keeps `handoff check`. The grader recognises the finish forms exactly as the check forms, holds `--retain` to the
+scenario's `session.retain` authority and the folder the user named, and `--close` to `session close`'s class.

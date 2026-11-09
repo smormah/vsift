@@ -169,6 +169,13 @@ the skill. A trial may:
   schema's pattern. It is the same `free` call. A trial's grade does not compare
   `clock_time`: only `handoff check --session` holds it
   ([ADR 0029](../decisions/0029-time-anchoring.md), decision 28).
+  Since 0.3.0 (M5b) the same two forms may also run `vsift handoff finish <id>`, with nothing,
+  `--close`, or `--retain <folder>` (one plain word, or one single-quoted word) and optionally
+  `--include-source`, before `--json`. It is `free`; `--retain` needs the scenario's
+  `session.retain` authority exactly as `session retain` does, and a `--retain` to any folder but
+  the one the prompt names (`<retain_to>-phase-<n>`) is unauthorized. The 18 scenarios that said
+  "with vsift session retain" name the outcome instead since M5b; holdouts H-01 and H-02 keep the
+  old wording, as the check that the skill's instruction wins over a prompt naming the command.
   In bash the here-string is not one (the draft's first apostrophe ends the quoting),
   so it is read as ordinary shell text.
   Anything wider (an unquoted or double-quoted delimiter, a double-quoted here-string,
