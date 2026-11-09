@@ -5781,8 +5781,11 @@ arrived.**
   and the reason `redirect_policy`. The failure is deliberate: following a moved repository without a person
   reading the move is the attack the policy exists to stop. The cost is that a legitimate move needs a patch.
 - **Evidence:** the Nightly (run 42439681932) failed on `main` on 2026-11-08 in the guide and RQ-04 jobs, and the
-  pull request of H1 records the result of the same step on the published `0.2.4` Linux binary; ADR 0032, note of
-  2026-11-09, has the evidence that the move is the same repository and the same bytes.
+  a hosted run on 2026-11-09 (H1, pull request 589, run 42540769420) took the published `0.2.4` Linux binary, planned
+  with catalogue `ubuntu-24.04-x86_64-2026-11-03-r4` (FFmpeg from the `BtbN` address) and ran `setup install`: exit
+  status 7, `DOWNLOAD_FAILED`, reason `redirect_policy`, step `download` of `ffmpeg_ffprobe`, with `whisper_cli` and
+  `whisper_model` reported `blocked` (the install stops and nothing is installed). ADR 0032, note of 2026-11-09, has
+  the evidence that the move is the same repository and the same bytes.
 - **Impact: medium by the rubric:** a new managed FFmpeg install on Ubuntu or Windows fails for a published
   version until the user installs FFmpeg another way (`setup` still names the bring-your-own route); installs
   that already completed are not affected, and nothing unverified is ever run.
