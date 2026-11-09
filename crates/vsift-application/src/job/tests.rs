@@ -2056,7 +2056,9 @@ impl Harness {
 #[tokio::test]
 async fn a_bounded_admission_wait_polls_until_the_capacity_frees() -> TestResult {
     let harness = Harness::new()?;
-    harness.store.with(|shared| shared.busy_admissions = 3)?;
+    // Each round asks twice: the attempt, and the one more once no queued
+    // work is found to hold the capacity (the window of ADR 0033 section 6).
+    harness.store.with(|shared| shared.busy_admissions = 6)?;
     let waits = WaitRecorder::default();
     let budget = AdmissionBudget::new(Duration::from_secs(5))?;
     let committed = harness
@@ -2076,7 +2078,7 @@ async fn a_bounded_admission_wait_polls_until_the_capacity_frees() -> TestResult
         harness
             .store
             .with(|shared| shared.admitted_weights.clone())?,
-        vec![4, 4, 4, 4]
+        vec![4; 7]
     );
     Ok(())
 }
@@ -2164,6 +2166,66 @@ async fn an_ordinary_run_says_it_waits_for_queued_work() -> TestResult {
     assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
     assert_eq!(waits.capacity.load(Ordering::SeqCst), 0);
     assert_eq!(harness.store.with(|shared| shared.demands)?, 1);
+    Ok(())
+}
+
+/// ADR 0033 section 6, the window at the first look: the capacity is found
+/// taken, and queued work gives it back before the run is told who held it
+/// (the script: the first admission is busy, no queued work is found). The run
+/// asks for the capacity once more and is admitted at once, with no wait and
+/// no retry. Before the fix it was refused and left to the retry policy's
+/// 100 ms backoff.
+#[tokio::test]
+async fn queued_work_that_yielded_before_the_first_look_admits_the_run_at_once() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| shared.busy_admissions = 1)?;
+    let waits = QueuedWaitRecorder::default();
+    let committed = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    assert_eq!(harness.timer.sleeps(), Vec::<Duration>::new());
+    assert_eq!(committed.report.admission_wait, Duration::ZERO);
+    assert_eq!(
+        harness.store.with(|shared| shared.admitted_weights.len())?,
+        2
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+/// The same window inside the wait: queued work holds when the run first
+/// asks and demands the capacity, a poll finds it taken, and queued work has
+/// given it back by the time the run is told who holds it. The run asks once
+/// more and is admitted after the one poll. Before the fix it was refused and
+/// left to the retry policy's 100 ms backoff.
+#[tokio::test]
+async fn queued_work_that_yielded_after_a_poll_admits_the_run_at_once() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| {
+        // The first admission and the poll's are busy, the one more is not.
+        shared.busy_admissions = 2;
+        // Queued work holds at the demand, and has gone at the look after the poll.
+        shared.queued_holds = [true, false].into();
+    })?;
+    let waits = QueuedWaitRecorder::default();
+    let committed = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    assert_eq!(
+        harness.timer.sleeps(),
+        vec![vsift_domain::QUEUED_YIELD_POLL]
+    );
+    assert_eq!(
+        committed.report.admission_wait,
+        vsift_domain::QUEUED_YIELD_POLL
+    );
+    assert_eq!(
+        harness.store.with(|shared| shared.admitted_weights.len())?,
+        3
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
     Ok(())
 }
 
@@ -2283,7 +2345,9 @@ async fn an_immediate_admission_keeps_the_bounded_retries() -> TestResult {
 async fn busy_contention_is_retried_twice_then_left_resumable() -> TestResult {
     let harness = Harness::new()?;
     harness.store.with(|shared| {
-        shared.busy_admissions = 1;
+        // The attempt and the one more it makes (ADR 0033 section 6) are both
+        // busy, so the first attempt is refused and retried.
+        shared.busy_admissions = 2;
         shared
             .publish_faults
             .push_back(PublishFault::Refuses(SessionStorageError::Busy));

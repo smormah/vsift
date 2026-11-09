@@ -969,8 +969,21 @@ pub(super) fn acquire_admission(
     capacity: u16,
     weight: u16,
 ) -> Result<FilesystemAdmissionPermit, SessionStorageError> {
+    acquire_admission_observed(root, capacity, weight, &mut || {})
+}
+
+/// [`acquire_admission`] with `after_busy` called each time the slots have
+/// just been found taken, before the queued work's marker is read. Production
+/// passes a no-op; a test passes what makes queued work yield at exactly that
+/// instant, which is the window the race needs (see [`wait_for_queued_work`]).
+pub(super) fn acquire_admission_observed(
+    root: &Dir,
+    capacity: u16,
+    weight: u16,
+    after_busy: &mut dyn FnMut(),
+) -> Result<FilesystemAdmissionPermit, SessionStorageError> {
     match acquire_slots(root, capacity, weight) {
-        Err(SessionStorageError::Busy) => wait_for_queued_work(root, capacity, weight),
+        Err(SessionStorageError::Busy) => wait_for_queued_work(root, capacity, weight, after_busy),
         other => other,
     }
 }
@@ -981,16 +994,31 @@ pub(super) fn acquire_admission(
 /// (a generation, an artifact) and the media adapter's admission; a
 /// recognition waits in the application instead, where it is announced
 /// (`RevisionStore::demand_capacity`).
+///
+/// **The window.** The slots are found taken, and only afterwards is the queued
+/// work's marker read. Queued work can give both back between the two: reading
+/// the marker as gone then says nothing about the slots, which are free, and
+/// refusing the caller there would be refusing it with nothing in its way.
+/// Queued work releases its slots before its marker (the marker is the last
+/// lock of the permit's list, and a list drops in order), so a marker read as
+/// gone means the slots are free, and one more attempt takes them. Whatever it
+/// returns is the answer: it is not repeated, because by now someone else
+/// taking the slots is ordinary contention.
 fn wait_for_queued_work(
     root: &Dir,
     capacity: u16,
     weight: u16,
+    after_busy: &mut dyn FnMut(),
 ) -> Result<FilesystemAdmissionPermit, SessionStorageError> {
     let coordination = root
         .open_dir_nofollow(COORDINATION_DIRECTORY)
         .map_err(map_storage_io)?;
+    after_busy();
     if !super::queue::queued_work_holds(&coordination) {
-        return Err(SessionStorageError::Busy);
+        // The marker is gone, and the permit drops its slots before its
+        // marker (`FilesystemAdmissionPermit` keeps the marker last), so the
+        // slots are free now: one more attempt, answered as it answers.
+        return acquire_slots(root, capacity, weight);
     }
     let _demand = super::queue::demand_capacity(&coordination);
     let started = std::time::Instant::now();
@@ -1000,11 +1028,13 @@ fn wait_for_queued_work(
             Err(SessionStorageError::Busy) => {}
             other => return other,
         }
-        // Queued work gave its slots back and someone else took them, or the
-        // wait is over: the caller is refused, as for any contention.
-        if !super::queue::queued_work_holds(&coordination)
-            || started.elapsed() >= vsift_domain::QUEUED_YIELD_WAIT
-        {
+        after_busy();
+        if !super::queue::queued_work_holds(&coordination) {
+            // Given back between the attempt and the look: the same reading.
+            return acquire_slots(root, capacity, weight);
+        }
+        // The wait is over: the caller is refused, as for any contention.
+        if started.elapsed() >= vsift_domain::QUEUED_YIELD_WAIT {
             return Err(SessionStorageError::Busy);
         }
     }

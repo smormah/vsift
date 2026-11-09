@@ -371,10 +371,12 @@ mod tests {
         time::{Duration, Instant},
     };
 
+    use vsift_application::SessionStorageError;
     use vsift_domain::{JobId, SessionId};
 
     use super::super::{
         FilesystemSessionStore,
+        root::acquire_admission_observed,
         tests::{Fixture, TestResult},
     };
 
@@ -502,6 +504,84 @@ mod tests {
         assert_eq!(admitted, Ok(()));
         waiter.join().map_err(|_| "waiter panicked")?;
         assert!(!store.capacity_demanded());
+        Ok(())
+    }
+
+    /// ADR 0033 section 6, the window between "the slots are taken" and "who
+    /// holds them": queued work that yields at exactly that instant, at the
+    /// first look, must not leave the caller refused with the slots free. The
+    /// seam runs where the slots have just been found taken, and the test makes
+    /// the queued work yield there, so the window is hit every time.
+    #[test]
+    fn queued_work_yielding_just_after_the_first_refusal_admits_the_caller() -> TestResult {
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let mut queued = Some(store.try_admit_queued(4)?);
+        let mut looks = 0_u32;
+
+        let result =
+            acquire_admission_observed(&store.root, store.admission_capacity, 1, &mut || {
+                looks += 1;
+                drop(queued.take());
+            });
+
+        assert!(
+            result.is_ok(),
+            "refused with the slots free: {:?}",
+            result.as_ref().err()
+        );
+        assert_eq!(looks, 1);
+        Ok(())
+    }
+
+    /// The same window inside the wait: the first look finds queued work
+    /// holding, the caller demands and polls, and queued work yields just after
+    /// a poll found the slots taken.
+    #[test]
+    fn queued_work_yielding_just_after_a_poll_refusal_admits_the_caller() -> TestResult {
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let mut queued = Some(store.try_admit_queued(4)?);
+        let mut looks = 0_u32;
+
+        let result =
+            acquire_admission_observed(&store.root, store.admission_capacity, 1, &mut || {
+                looks += 1;
+                if looks == 2 {
+                    drop(queued.take());
+                }
+            });
+
+        assert!(
+            result.is_ok(),
+            "refused with the slots free: {:?}",
+            result.as_ref().err()
+        );
+        assert_eq!(looks, 2);
+        Ok(())
+    }
+
+    /// The one more attempt is not a promise: when queued work has yielded and
+    /// someone else took the slots, the caller is refused as for any
+    /// contention, and no further attempt is made.
+    #[test]
+    fn slots_taken_by_someone_else_after_queued_work_yielded_still_refuse() -> TestResult {
+        let fixture = Fixture::new()?;
+        let store = FilesystemSessionStore::open_existing(&fixture.path)?;
+        let mut queued = Some(store.try_admit_queued(4)?);
+        let mut taken_by_another = None;
+        let mut looks = 0_u32;
+
+        let result =
+            acquire_admission_observed(&store.root, store.admission_capacity, 1, &mut || {
+                looks += 1;
+                drop(queued.take());
+                taken_by_another = store.try_admit_without_waiting(4).ok();
+            });
+
+        assert!(taken_by_another.is_some(), "the other caller took nothing");
+        assert!(matches!(result, Err(SessionStorageError::Busy)));
+        assert_eq!(looks, 1);
         Ok(())
     }
 
