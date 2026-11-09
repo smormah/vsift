@@ -1389,10 +1389,10 @@ mod tests {
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
-        FFMPEG_BUILDS_PUBLISHER, ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction, accepted_catalogue,
-        accepted_ubuntu_catalogue, accepted_windows_catalogue, detect_managed_target,
-        every_accepted_artifact, pinned_whisper_model, reviewed_whisper_models, validate_layout,
-        whisper_model_profile,
+        FFMPEG_BUILDS_PUBLISHER, ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction,
+        accepted_catalogue, accepted_ubuntu_catalogue, accepted_windows_catalogue,
+        detect_managed_target, every_accepted_artifact, pinned_whisper_model,
+        reviewed_whisper_models, validate_layout, whisper_model_profile,
     };
 
     /// D6: the quantized profile sits beside the default, in the same
