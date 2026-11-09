@@ -1314,6 +1314,12 @@ pub(crate) enum HandoffCommand {
     /// ids filled in, to fill in instead of building the JSON from a template.
     #[command(after_help = help_text::HANDOFF_SKELETON)]
     Skeleton(HandoffSkeletonArguments),
+    /// Check a draft report with the session's records and, only when it
+    /// passes, retain the session to the new directory --retain names or
+    /// close it (--close); without either, check only. Reads the draft from
+    /// standard input unless --file names it.
+    #[command(after_help = help_text::HANDOFF_FINISH)]
+    Finish(HandoffFinishArguments),
 }
 
 impl HandoffCommand {
@@ -1322,8 +1328,39 @@ impl HandoffCommand {
         match self {
             Self::Check(_) => CommandName::HandoffCheck,
             Self::Skeleton(_) => CommandName::HandoffSkeleton,
+            Self::Finish(_) => CommandName::HandoffFinish,
         }
     }
+}
+
+/// The session a draft is finished in, where the draft comes from, and the
+/// one write asked for, if any (0.3.0, M5b).
+///
+/// `--retain` and `--close` are flags at this edge only: the command turns
+/// them into one [`vsift_contract::HandoffFinishRequest`], and clap refuses
+/// both together and `--include-source` without `--retain`.
+#[derive(Args, Debug)]
+pub(crate) struct HandoffFinishArguments {
+    /// Session the draft reports on. Every cited segment and evidence id
+    /// must resolve in its records; it is read without renewing it.
+    pub session: SessionId,
+    /// Only on the user's explicit request: after a passing draft that
+    /// states lifecycle.action retained, retain the session to this new
+    /// directory, exactly as session retain --output does.
+    #[arg(long, value_name = "NEW_DIRECTORY", conflicts_with = "close")]
+    pub retain: Option<PathBuf>,
+    /// With --retain only, and only if the user asked for the video: also
+    /// copy the private source snapshot into the bundle.
+    #[arg(long, requires = "retain")]
+    pub include_source: bool,
+    /// After a passing draft that states lifecycle.action closed, close the
+    /// session, exactly as session close does.
+    #[arg(long)]
+    pub close: bool,
+    /// Absolute path of a file holding the whole draft report (at most
+    /// 128 KiB of UTF-8); without it the draft is read from standard input.
+    #[arg(long)]
+    pub file: Option<PathBuf>,
 }
 
 /// Where the draft comes from, and the session to resolve it in.

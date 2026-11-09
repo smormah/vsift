@@ -99,6 +99,8 @@
 //!   and the report-text rules; [`HandoffCheckData`] is the `handoff.check`
 //!   data, whose findings never repeat the draft. The trial grader uses the
 //!   same checker, so the command and the grader cannot disagree.
+//!   [`HandoffFinishData`] is the `handoff.finish` data (0.3.0, M5b): the
+//!   check with the session's records and at most one write after it.
 //!   [`HandoffSkeletonData`] is the `handoff.skeleton` data (ADR 0038): a
 //!   valid handoff that states nothing yet, written by `VSift`.
 //! - **Worker requests (P11):** the strict bounded document decoder
@@ -223,7 +225,9 @@ pub use handoff::{
     COMPACT_BUDGET, HANDOFF_DRAFT_NOT_UTF8_REMEDIATION, HANDOFF_DRAFT_TOO_LARGE_REMEDIATION,
     HANDOFF_FILE_REMEDIATION, HANDOFF_SCHEMA_JSON, HANDOFF_SKELETON_FILL,
     HANDOFF_SKELETON_QUESTION_REMEDIATION, HANDOFF_VERSION, HandoffBudgetLimits, HandoffCheck,
-    HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding, HandoffRule,
+    HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding, HandoffFinishData,
+    HandoffFinishDecision, HandoffFinishLifecycle, HandoffFinishRequest, HandoffFinishStop,
+    HandoffLifecycleAction, HandoffRule,
     HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck, HandoffSessionGap,
     HandoffSessionRecords, HandoffSkeletonData, HandoffSkeletonError, HandoffSkeletonFacts,
     HandoffTranscriptBasis, HandoffVocabulary, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES,

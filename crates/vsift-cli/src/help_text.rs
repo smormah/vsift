@@ -459,6 +459,13 @@ pub(crate) const HANDOFF_CHECK: &str = command_help!(
     "vsift handoff check --file /tmp/report.md --session <session>",
     "  Lists what to fix before you send the report",
 );
+pub(crate) const HANDOFF_FINISH: &str = command_help!(
+    "guide/let-your-agent-investigate.md",
+    "vsift handoff finish <session> --file /tmp/report.md",
+    "  Checks the report with the session's records; writes nothing",
+    "vsift handoff finish <session> --retain ./evidence --file /tmp/report.md",
+    "  Then, only if it passes, keeps the session in a new folder",
+);
 pub(crate) const HANDOFF_SKELETON: &str = command_help!(
     "guide/let-your-agent-investigate.md",
     "vsift handoff skeleton <session> --question <words>",
