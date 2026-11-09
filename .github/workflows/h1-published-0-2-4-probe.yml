@@ -47,7 +47,9 @@ jobs:
 
       - name: Plan and install with the published binary in an empty home
         run: |
-          set -uo pipefail
+          # The runner's shell has -e; the install is expected to fail and its result is recorded.
+          set +e
+          set -u -o pipefail
           home="$RUNNER_TEMP/probe/home"
           mkdir -p "$home" "$RUNNER_TEMP/probe/out"
           export HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" \
