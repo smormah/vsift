@@ -73,6 +73,19 @@ the default.
   addresses in special ranges and internal-looking names (`localhost`, single-label names,
   `.local`, `.localhost`, `.internal`, `.lan`, `.home.arpa`, `.corp`), and records
   `address_check: "proxy_resolved"` in the origin; L-208 says what that leaves.
+  *(Amended 2026-11-10, Fable review T-1 and T-2: **the proxy's own address is trusted, the
+  link's is not.** The proxy is the person's configuration, so its name is resolved without
+  the public-address screen and may be private, as a company proxy usually is; before this, a
+  proxy named by a host name went through the link's resolver and was refused with
+  `address_refused`. The link's names and every hop's are still screened whenever VSift
+  resolves them, and since that trust is by name, a link or hop that would go direct to the
+  proxy's own name is refused. **Each request routes by its own host:** `NO_PROXY` is decided
+  for the link and again for every redirect hop, so a hop it lists goes direct and is
+  screened, and any other hop goes through the proxy, with the internal-name rule. One client
+  does both (reqwest's per-request custom proxy, consulted with the same rule the redirect
+  policy checks first). A hop that needs a named but unusable proxy is refused with
+  `proxy_unusable`. The origin says `proxy_resolved` when any request of the fetch went
+  through the proxy.)*
 - **Caps (decided):** connect 15 s; no byte for 30 s stops the transfer; the whole transfer
   30 minutes by default (`--max-download-seconds`, at most 4 hours); 4 GiB by default
   (`--max-download-bytes`, at most the 20 GiB source maximum). Bytes are counted as they

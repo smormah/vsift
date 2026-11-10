@@ -341,8 +341,11 @@ The link itself is never printed or stored.
 matched by host name only: an entry is a host (`videos.example.org`), a domain whose hosts it covers (`example.org` or
 `.example.org`), or `*` for every host. Other forms that some tools accept are not read: a wildcard inside an entry
 (`*.example.org`), an IP address or a CIDR range, and an entry with a port. A host they were meant to exclude is sent
-through the proxy. Through a proxy, VSift cannot see the address a name resolves to, so it refuses internal-looking
-names (one label, `localhost`, `.local`, `.internal`, `.corp` and the like), on the link and on every redirect.
+through the proxy. VSift decides this for the link and again for each redirect, by that address's own host, so a
+redirect can go direct while the link went through the proxy, or the other way round. Through a proxy, VSift cannot
+see the address a name resolves to, so it refuses internal-looking names (one label, `localhost`, `.local`,
+`.internal`, `.corp` and the like) on each request the proxy carries. The proxy itself may have a private address,
+as most company proxies do: its name is your setting, so VSift does not check it.
 yt-dlp gets the same proxy variables, in its environment and never on its command line. Whatever the proxy, yt-dlp
 makes its own connections, which VSift cannot see or limit.
 

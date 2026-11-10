@@ -14,9 +14,19 @@
 //! private address. A host written as an address is checked by the link and
 //! redirect policy ([`check_link`]), because it is never resolved. Through a
 //! proxy from the environment the proxy resolves the name; then only
-//! addresses and names for internal hosts are refused, on the link and on
-//! every redirect, and the origin says `proxy_resolved` (known limit L-208).
-//! A proxy variable that is set but unusable is refused, never ignored.
+//! addresses and names for internal hosts are refused, and the origin says
+//! `proxy_resolved` (known limit L-208). A proxy variable that is set but
+//! unusable is refused, never ignored.
+//!
+//! **Each request routes by its own host** ([`ProxyRoutes::proxy_for`]): the
+//! link and every redirect hop go through the proxy unless `NO_PROXY` lists
+//! that hop's host, and a hop `NO_PROXY` lists goes direct, its name screened
+//! like any other. **The proxy's own name is trusted:** it is the person's
+//! configuration, so it may resolve to a private address (the ordinary
+//! corporate proxy), and the resolver hands its addresses to the connector
+//! unscreened. That trust is by name, so a link or hop that would go direct
+//! to the proxy's own name is refused; every name `VSift` resolves for the
+//! link or a hop is still screened.
 //!
 //! Cancellation and the deadline are observed while the fetch waits for the
 //! response and for each chunk. Writing a chunk and the final flush to disk
@@ -32,7 +42,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{
         Arc,
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
     time::Duration,
 };
@@ -177,9 +187,9 @@ pub fn is_internal_name(host: &str) -> bool {
 }
 
 /// Whether a proxy must not be asked for `url`: its host is a name for an
-/// internal host ([`is_internal_name`]). Applied to the link and to every
-/// redirect when a proxy resolves names, because `VSift` then cannot see the
-/// address; a host written as an address is judged by [`check_link`].
+/// internal host ([`is_internal_name`]). Applied to the link and to each
+/// redirect hop that goes through the proxy, because `VSift` then cannot see
+/// the address; a host written as an address is judged by [`check_link`].
 fn internal_through_proxy(url: &Url) -> bool {
     url.domain().is_some_and(is_internal_name)
 }
@@ -238,24 +248,57 @@ fn literal_address(host: &str) -> Option<IpAddr> {
 
 /// Resolves names for a link fetch and hands the connector only public
 /// addresses: a name with any address that is not public is refused whole.
+///
+/// The one exception is the proxy's own name (`proxy_name`), which reqwest
+/// resolves through this resolver to open the tunnel: the person configured
+/// it, so its addresses are handed over unscreened (Fable review T-1). A
+/// link or hop is never resolved under that name, because
+/// [`ProxyRoutes::proxy_for`] refuses one that would go direct to it.
 struct PublicAddressResolver {
     allowance: Allowance,
+    /// The proxy's host name, lowercase as the URL parser writes it; `None`
+    /// without a usable proxy, or when the proxy is written as an address.
+    proxy_name: Option<String>,
     #[cfg(any(test, feature = "install-test-hooks"))]
     answers: Option<Arc<TestAnswers>>,
+}
+
+/// Which screen a resolved name passes through.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NameTrust {
+    /// A link's or hop's name: only public addresses.
+    Screened,
+    /// The proxy's own name: the person's configuration, not screened.
+    ProxyOwn,
+}
+
+impl PublicAddressResolver {
+    fn trust(&self, host: &str) -> NameTrust {
+        if self
+            .proxy_name
+            .as_deref()
+            .is_some_and(|proxy| proxy.eq_ignore_ascii_case(host))
+        {
+            NameTrust::ProxyOwn
+        } else {
+            NameTrust::Screened
+        }
+    }
 }
 
 impl reqwest::dns::Resolve for PublicAddressResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let host = name.as_str().to_owned();
         let allowance = self.allowance;
+        let trust = self.trust(&host);
         #[cfg(any(test, feature = "install-test-hooks"))]
         if let Some(answers) = &self.answers {
             let addresses = answers.next(&host);
-            return Box::pin(std::future::ready(screen(addresses, allowance)));
+            return Box::pin(std::future::ready(screen(addresses, allowance, trust)));
         }
         Box::pin(async move {
             let addresses = lookup(&host).await?;
-            screen(addresses, allowance)
+            screen(addresses, allowance, trust)
         })
     }
 }
@@ -276,17 +319,27 @@ async fn lookup(host: &str) -> Result<Vec<IpAddr>, Box<dyn Error + Send + Sync>>
 }
 
 /// The connector's addresses for one resolved name, or the refusal.
+///
+/// A screened name's addresses carry port 443 (or the test port), the only
+/// port a link may name. The proxy's own addresses carry port 0, so the
+/// connector puts the proxy's own port on them.
 fn screen(
     addresses: Vec<IpAddr>,
     allowance: Allowance,
+    trust: NameTrust,
 ) -> Result<reqwest::dns::Addrs, Box<dyn Error + Send + Sync>> {
     if addresses.is_empty() {
         return Err(Box::new(PolicyRefusal(SourceFetchReason::Offline)));
     }
-    if !addresses.iter().all(|address| allowance.address(*address)) {
-        return Err(Box::new(PolicyRefusal(SourceFetchReason::AddressRefused)));
-    }
-    let port = allowance.test_port.unwrap_or(HTTPS_PORT);
+    let port = match trust {
+        NameTrust::ProxyOwn => 0,
+        NameTrust::Screened => {
+            if !addresses.iter().all(|address| allowance.address(*address)) {
+                return Err(Box::new(PolicyRefusal(SourceFetchReason::AddressRefused)));
+            }
+            allowance.test_port.unwrap_or(HTTPS_PORT)
+        }
+    };
     Ok(Box::new(
         addresses
             .into_iter()
@@ -296,53 +349,133 @@ fn screen(
     ))
 }
 
-/// The proxy the environment names for `url`, if any: `HTTPS_PROXY` (or
-/// `https_proxy`), else `ALL_PROXY` (or `all_proxy`), unless `NO_PROXY` (or
-/// `no_proxy`) lists the host. `VSift` decides this itself, so it knows when
-/// the proxy, not `VSift`, resolves the name.
+/// The proxy the person named, as read once for a fetch.
+#[derive(Clone)]
+enum NamedProxy {
+    /// A proxy `VSift` can use ([`parse_proxy`]). It may hold the person's
+    /// proxy credentials, so nothing that holds it derives `Debug`.
+    Usable(Url),
+    /// A value that is no usable proxy: a hop that would go through it is
+    /// refused, never sent direct.
+    Unusable,
+}
+
+/// The proxy settings of one fetch: the proxy the person named and the hosts
+/// `NO_PROXY` sends direct. Read once; each request (the link and every
+/// redirect hop) is then routed by its own host ([`Self::proxy_for`]).
+///
+/// No `Debug`: the proxy may carry credentials, which no reason, record or
+/// debug text may hold.
+#[derive(Clone)]
+struct ProxyRoutes {
+    proxy: NamedProxy,
+    /// `NO_PROXY` entries, lowercase, without a leading `.`; `*` for every
+    /// host.
+    excluded: Vec<String>,
+}
+
+impl ProxyRoutes {
+    /// Whether `NO_PROXY` lists the host of `url`.
+    ///
+    /// Entries are compared by host name only: an entry is the host itself
+    /// or a domain it is under (a leading `.` is optional), or `*` for every
+    /// host. Wildcards inside an entry, addresses, address ranges and ports
+    /// are not read (the troubleshooting guide says so).
+    fn excludes(&self, url: &Url) -> bool {
+        let Some(host) = url.host_str().map(str::to_ascii_lowercase) else {
+            return false;
+        };
+        self.excluded
+            .iter()
+            .any(|entry| entry == "*" || host == *entry || host.ends_with(&format!(".{entry}")))
+    }
+
+    /// The proxy's host name, if it is written as a name; the only name the
+    /// resolver does not screen ([`PublicAddressResolver`]).
+    fn proxy_name(&self) -> Option<&str> {
+        match &self.proxy {
+            NamedProxy::Usable(proxy) => proxy.domain(),
+            NamedProxy::Unusable => None,
+        }
+    }
+
+    /// The proxy one request goes through, or `None` when it goes direct
+    /// because `NO_PROXY` lists its host. The link and every redirect hop
+    /// are each decided by their own host (Fable review T-2).
+    ///
+    /// # Errors
+    ///
+    /// - [`SourceFetchReason::ProxyUnusable`] when the request needs a proxy
+    ///   that is named but unusable: it never goes direct past it.
+    /// - [`SourceFetchReason::AddressRefused`] when a proxied request names
+    ///   an internal host (`VSift` cannot see the proxy's address for it), or
+    ///   a direct request names the proxy's own host, whose addresses the
+    ///   resolver does not screen.
+    fn proxy_for(&self, url: &Url) -> Result<Option<&Url>, SourceFetchReason> {
+        if self.excludes(url) {
+            let to_proxy_name = self
+                .proxy_name()
+                .is_some_and(|proxy| url.domain() == Some(proxy));
+            return if to_proxy_name {
+                Err(SourceFetchReason::AddressRefused)
+            } else {
+                Ok(None)
+            };
+        }
+        match &self.proxy {
+            NamedProxy::Unusable => Err(SourceFetchReason::ProxyUnusable),
+            NamedProxy::Usable(_) if internal_through_proxy(url) => {
+                Err(SourceFetchReason::AddressRefused)
+            }
+            NamedProxy::Usable(proxy) => Ok(Some(proxy)),
+        }
+    }
+}
+
+/// The proxy one request goes through under `routes`, if any: always direct
+/// when no proxy is named ([`ProxyRoutes::proxy_for`]).
 ///
 /// # Errors
 ///
-/// [`SourceFetchReason::ProxyUnusable`] when a proxy is named for `url` but
-/// is not one `VSift` can use ([`parse_proxy`]).
-fn environment_proxy(url: &Url) -> Result<Option<Url>, SourceFetchReason> {
-    proxy_from_variables(url, |name| std::env::var(name).ok())
+/// As [`ProxyRoutes::proxy_for`].
+fn proxy_for_request<'routes>(
+    routes: Option<&'routes ProxyRoutes>,
+    url: &Url,
+) -> Result<Option<&'routes Url>, SourceFetchReason> {
+    routes.map_or(Ok(None), |routes| routes.proxy_for(url))
+}
+
+/// The proxy settings the environment names, if any: `HTTPS_PROXY` (or
+/// `https_proxy`), else `ALL_PROXY` (or `all_proxy`), with `NO_PROXY` (or
+/// `no_proxy`). `VSift` decides the route itself, so it knows when the
+/// proxy, not `VSift`, resolves a name.
+fn environment_proxy() -> Option<ProxyRoutes> {
+    proxy_from_variables(|name| std::env::var(name).ok())
 }
 
 /// [`environment_proxy`] with the variables read by `variable`, so the rule
-/// is tested without changing the process environment.
-///
-/// `NO_PROXY` entries are compared by host name only: an entry is the host
-/// itself or a domain it is under (a leading `.` is optional), or `*` for
-/// every host. Wildcards inside an entry, addresses, address ranges and
-/// ports are not read (the troubleshooting guide says so).
-fn proxy_from_variables(
-    url: &Url,
-    variable: impl Fn(&str) -> Option<String>,
-) -> Result<Option<Url>, SourceFetchReason> {
+/// is tested without changing the process environment. A named proxy that
+/// is unusable is kept as [`NamedProxy::Unusable`]: refused for every
+/// request that would go through it, not for one `NO_PROXY` sends direct.
+fn proxy_from_variables(variable: impl Fn(&str) -> Option<String>) -> Option<ProxyRoutes> {
     let read = |names: [&str; 2]| {
         names
             .into_iter()
             .find_map(|name| variable(name).filter(|value| !value.trim().is_empty()))
     };
-    let Some(proxy) =
-        read(["HTTPS_PROXY", "https_proxy"]).or_else(|| read(["ALL_PROXY", "all_proxy"]))
-    else {
-        return Ok(None);
-    };
-    let Some(host) = url.host_str().map(str::to_ascii_lowercase) else {
-        return Ok(None);
-    };
-    if let Some(excluded) = read(["NO_PROXY", "no_proxy"])
-        && excluded.split(',').map(str::trim).any(|entry| {
-            let entry = entry.trim_start_matches('.').to_ascii_lowercase();
-            entry == "*"
-                || (!entry.is_empty() && (host == entry || host.ends_with(&format!(".{entry}"))))
+    let proxy =
+        read(["HTTPS_PROXY", "https_proxy"]).or_else(|| read(["ALL_PROXY", "all_proxy"]))?;
+    let excluded = read(["NO_PROXY", "no_proxy"])
+        .map(|value| {
+            value
+                .split(',')
+                .map(|entry| entry.trim().trim_start_matches('.').to_ascii_lowercase())
+                .filter(|entry| !entry.is_empty())
+                .collect()
         })
-    {
-        return Ok(None);
-    }
-    parse_proxy(&proxy).map(Some)
+        .unwrap_or_default();
+    let proxy = parse_proxy(&proxy).map_or(NamedProxy::Unusable, NamedProxy::Usable);
+    Some(ProxyRoutes { proxy, excluded })
 }
 
 /// A proxy value as curl reads it: a URL, or `host:port` with `http://`
@@ -545,6 +678,7 @@ pub struct LinkTestRoute {
     root_certificate_pem: Vec<u8>,
     answers: Arc<TestAnswers>,
     proxy: Option<String>,
+    no_proxy: Option<String>,
     stall: Duration,
     room_step: u64,
     free_space: Option<u64>,
@@ -561,6 +695,7 @@ impl LinkTestRoute {
             root_certificate_pem,
             answers,
             proxy: None,
+            no_proxy: None,
             stall: STALL_DEADLINE,
             room_step: ROOM_STEP,
             free_space: None,
@@ -580,6 +715,14 @@ impl LinkTestRoute {
     #[must_use]
     pub fn through_proxy(mut self, proxy: &str) -> Self {
         self.proxy = Some(proxy.to_owned());
+        self
+    }
+
+    /// The same route with a `NO_PROXY` value beside the proxy, read as the
+    /// variable's value is (`cdn.example.test, .example.org`).
+    #[must_use]
+    pub fn with_no_proxy(mut self, excluded: &str) -> Self {
+        self.no_proxy = Some(excluded.to_owned());
         self
     }
 
@@ -603,15 +746,38 @@ impl LinkTestRoute {
     }
 }
 
-/// The client of one fetch.
+/// What a fetch records about its requests as reqwest follows redirects.
+#[derive(Default)]
+struct HopLog {
+    /// Redirects followed.
+    redirects: AtomicU8,
+    /// Whether any request, the link's or a hop's, went through the proxy:
+    /// then `VSift` did not see every address, and the origin says so.
+    proxied: AtomicBool,
+}
+
+impl HopLog {
+    fn address_check(&self) -> AddressCheck {
+        if self.proxied.load(Ordering::Relaxed) {
+            AddressCheck::ProxyResolved
+        } else {
+            AddressCheck::Direct
+        }
+    }
+}
+
+/// The client of one fetch. The redirect policy decides each hop's route by
+/// the same rule as the link's ([`proxy_for_request`]) before it is
+/// followed, and the client's proxy routes each request by that rule, so a
+/// hop is never sent by a route its policy check did not pass.
 fn client(
     route: &LinkRoute,
     allowance: Allowance,
-    proxy: Option<&Url>,
-    redirects: &Arc<AtomicU8>,
+    routes: Option<&ProxyRoutes>,
+    log: &Arc<HopLog>,
 ) -> Result<Client, SourceFetchReason> {
-    let counter = Arc::clone(redirects);
-    let proxied = proxy.is_some();
+    let hops = Arc::clone(log);
+    let policy_routes = routes.cloned();
     let redirect = Policy::custom(move |attempt| {
         // `previous()` holds every URL already requested, the link included,
         // so it is 1 at the first redirect and 4 only at a fourth (reqwest's
@@ -619,12 +785,14 @@ fn client(
         if attempt.previous().len() > usize::from(MAX_SOURCE_REDIRECTS) {
             return attempt.error(PolicyRefusal(SourceFetchReason::RedirectPolicy));
         }
-        match check_link(attempt.url(), allowance) {
-            Ok(()) if proxied && internal_through_proxy(attempt.url()) => {
-                attempt.error(PolicyRefusal(SourceFetchReason::AddressRefused))
-            }
-            Ok(()) => {
-                counter.fetch_add(1, Ordering::Relaxed);
+        let checked = check_link(attempt.url(), allowance)
+            .and_then(|()| proxy_for_request(policy_routes.as_ref(), attempt.url()));
+        match checked {
+            Ok(proxy) => {
+                if proxy.is_some() {
+                    hops.proxied.store(true, Ordering::Relaxed);
+                }
+                hops.redirects.fetch_add(1, Ordering::Relaxed);
                 attempt.follow()
             }
             Err(SourceFetchReason::NotHttps) => {
@@ -649,14 +817,19 @@ fn client(
         .no_proxy();
     let resolver = PublicAddressResolver {
         allowance,
+        proxy_name: routes.and_then(ProxyRoutes::proxy_name).map(str::to_owned),
         #[cfg(any(test, feature = "install-test-hooks"))]
         answers: route.test.as_ref().map(|test| Arc::clone(&test.answers)),
     };
     let mut builder = builder.dns_resolver(resolver);
-    if let Some(proxy) = proxy {
-        builder = builder.proxy(
-            reqwest::Proxy::https(proxy.clone()).map_err(|_| SourceFetchReason::ProxyUnusable)?,
-        );
+    if let Some(routes) = routes {
+        let routes = routes.clone();
+        // Asked for every request, each redirect hop included. A request
+        // whose route is refused never gets here: the link is checked before
+        // it is sent and each hop by the redirect policy above.
+        builder = builder.proxy(reqwest::Proxy::custom(move |request: &Url| {
+            routes.proxy_for(request).ok().flatten().cloned()
+        }));
     }
     #[cfg(any(test, feature = "install-test-hooks"))]
     if let Some(test) = &route.test {
@@ -688,21 +861,20 @@ pub(crate) fn check_page_link(
     Ok((url, digest))
 }
 
-/// The proxy a fetch uses: the test route's, or the environment's, each read
-/// by [`parse_proxy`].
-///
-/// # Errors
-///
-/// [`SourceFetchReason::ProxyUnusable`] for a proxy that is named but
-/// unusable.
-fn proxy_for(route: &LinkRoute, url: &Url) -> Result<Option<Url>, SourceFetchReason> {
+/// The proxy settings a fetch uses: the test route's proxy and `NO_PROXY`,
+/// or the environment's, each read by [`proxy_from_variables`].
+fn proxy_routes(route: &LinkRoute) -> Option<ProxyRoutes> {
     #[cfg(any(test, feature = "install-test-hooks"))]
     if let Some(test) = &route.test {
-        return test.proxy.as_deref().map(parse_proxy).transpose();
+        return proxy_from_variables(|name| match name {
+            "HTTPS_PROXY" => test.proxy.clone(),
+            "NO_PROXY" => test.no_proxy.clone(),
+            _ => None,
+        });
     }
     #[cfg(not(any(test, feature = "install-test-hooks")))]
     let _ = route;
-    environment_proxy(url)
+    environment_proxy()
 }
 
 /// Fetches `link` into `sink`, within `limits`, checking `cancellation` at
@@ -730,17 +902,15 @@ pub(crate) async fn fetch_link(
     let allowance = route.allowance();
     check_link(&url, allowance).map_err(refused)?;
     let requested_host = host_name(&url).ok_or(refused(SourceFetchReason::NotHttps))?;
-    let proxy = proxy_for(route, &url).map_err(refused)?;
-    let address_check = if proxy.is_some() {
-        if internal_through_proxy(&url) {
-            return Err(refused(SourceFetchReason::AddressRefused));
-        }
-        AddressCheck::ProxyResolved
-    } else {
-        AddressCheck::Direct
-    };
-    let redirects = Arc::new(AtomicU8::new(0));
-    let client = client(route, allowance, proxy.as_ref(), &redirects).map_err(refused)?;
+    let routes = proxy_routes(route);
+    let log = Arc::new(HopLog::default());
+    if proxy_for_request(routes.as_ref(), &url)
+        .map_err(refused)?
+        .is_some()
+    {
+        log.proxied.store(true, Ordering::Relaxed);
+    }
+    let client = client(route, allowance, routes.as_ref(), &log).map_err(refused)?;
     let deadline = Instant::now() + Duration::from_secs(u64::from(limits.max_seconds()));
     let request = client
         .get(url.clone())
@@ -813,8 +983,8 @@ pub(crate) async fn fetch_link(
         link_sha256,
         requested_host,
         final_host,
-        redirects: redirects.load(Ordering::Relaxed),
-        address_check,
+        redirects: log.redirects.load(Ordering::Relaxed),
+        address_check: log.address_check(),
         bytes: received,
     })
 }
@@ -1122,19 +1292,29 @@ mod tests {
         Ok(())
     }
 
+    /// The proxy settings `pairs` name, as the environment's would be read.
+    fn routes_of(pairs: &[(&str, &str)]) -> Option<ProxyRoutes> {
+        proxy_from_variables(|name| {
+            pairs
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| (*value).to_owned())
+        })
+    }
+
+    /// The proxy `url` goes through under `routes`, as text.
+    fn route_of(
+        routes: Option<&ProxyRoutes>,
+        url: &Url,
+    ) -> Result<Option<String>, SourceFetchReason> {
+        proxy_for_request(routes, url).map(|found| found.map(|proxy| proxy.as_str().to_owned()))
+    }
+
     #[test]
     fn a_set_proxy_variable_is_used_or_refused_never_ignored() -> Result<(), Box<dyn Error>> {
         const UNUSABLE: &str = "http://bad host:3128";
         let link = Url::parse("https://videos.example.org/a.mp4")?;
-        let proxy = |pairs: &[(&str, &str)]| {
-            proxy_from_variables(&link, |name| {
-                pairs
-                    .iter()
-                    .find(|(key, _)| *key == name)
-                    .map(|(_, value)| (*value).to_owned())
-            })
-            .map(|found| found.map(String::from))
-        };
+        let proxy = |pairs: &[(&str, &str)]| route_of(routes_of(pairs).as_ref(), &link);
         assert_eq!(proxy(&[]), Ok(None));
         assert_eq!(
             proxy(&[("https_proxy", "proxy.corp:3128")]),
@@ -1174,6 +1354,129 @@ mod tests {
         Ok(())
     }
 
+    /// Fable review T-2: `NO_PROXY` is decided for each request by its own
+    /// host, so a redirect hop can take another route than the link.
+    #[test]
+    fn each_request_is_routed_by_its_own_host() -> Result<(), Box<dyn Error>> {
+        let routes = routes_of(&[
+            ("HTTPS_PROXY", "http://proxy.example.net:3128"),
+            ("NO_PROXY", "direct.example.org"),
+        ]);
+        let proxy = Some("http://proxy.example.net:3128/".to_owned());
+        for (url, route) in [
+            ("https://direct.example.org/a.mp4", None),
+            ("https://cdn.direct.example.org/a.mp4", None),
+            ("https://cdn.example.net/a.mp4", proxy.clone()),
+            ("https://8.8.8.8/a.mp4", proxy.clone()),
+        ] {
+            assert_eq!(
+                route_of(routes.as_ref(), &Url::parse(url)?),
+                Ok(route),
+                "{url}"
+            );
+        }
+        // Through the proxy, an internal name is refused; sent direct, it is
+        // resolved by VSift and screened, so it is not refused here.
+        let internal = Url::parse("https://wiki.corp/a.mp4")?;
+        assert_eq!(
+            route_of(routes.as_ref(), &internal),
+            Err(SourceFetchReason::AddressRefused)
+        );
+        let internal_direct = routes_of(&[
+            ("HTTPS_PROXY", "http://proxy.example.net:3128"),
+            ("NO_PROXY", "corp"),
+        ]);
+        assert_eq!(route_of(internal_direct.as_ref(), &internal), Ok(None));
+        // An unusable proxy refuses only the requests that need it.
+        let unusable = routes_of(&[
+            ("HTTPS_PROXY", "http://bad host:3128"),
+            ("NO_PROXY", "direct.example.org"),
+        ]);
+        assert_eq!(
+            route_of(
+                unusable.as_ref(),
+                &Url::parse("https://direct.example.org/a.mp4")?
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            route_of(
+                unusable.as_ref(),
+                &Url::parse("https://cdn.example.net/a.mp4")?
+            ),
+            Err(SourceFetchReason::ProxyUnusable)
+        );
+        Ok(())
+    }
+
+    /// The proxy's name is trusted by the resolver, so no link or hop may go
+    /// direct to that name; through the proxy it is the proxy that resolves
+    /// it. A proxy written as an address gives no name any trust.
+    #[test]
+    fn nothing_goes_direct_to_the_proxys_own_name() -> Result<(), Box<dyn Error>> {
+        let to_proxy = Url::parse("https://proxy.example.net/a.mp4")?;
+        let excluded = routes_of(&[
+            ("HTTPS_PROXY", "http://proxy.example.net:3128"),
+            ("NO_PROXY", "example.net"),
+        ]);
+        assert_eq!(
+            excluded.as_ref().and_then(ProxyRoutes::proxy_name),
+            Some("proxy.example.net")
+        );
+        assert_eq!(
+            route_of(excluded.as_ref(), &to_proxy),
+            Err(SourceFetchReason::AddressRefused)
+        );
+        let proxied = routes_of(&[("HTTPS_PROXY", "http://proxy.example.net:3128")]);
+        assert_eq!(
+            route_of(proxied.as_ref(), &to_proxy),
+            Ok(Some("http://proxy.example.net:3128/".to_owned()))
+        );
+        let by_address = routes_of(&[("HTTPS_PROXY", "http://10.0.0.5:3128"), ("NO_PROXY", "*")]);
+        assert_eq!(by_address.as_ref().and_then(ProxyRoutes::proxy_name), None);
+        assert_eq!(route_of(by_address.as_ref(), &to_proxy), Ok(None));
+        Ok(())
+    }
+
+    /// Fable review T-1: the resolver hands over the proxy's own addresses
+    /// unscreened, with port 0 so the connector puts the proxy's port on
+    /// them, and screens every other name as before.
+    #[test]
+    fn only_the_proxys_own_name_resolves_to_a_private_address() -> Result<(), Box<dyn Error>> {
+        let resolver = PublicAddressResolver {
+            allowance: Allowance::default(),
+            proxy_name: Some("proxy.corp.example.com".to_owned()),
+            answers: None,
+        };
+        assert_eq!(
+            resolver.trust("proxy.corp.example.com"),
+            NameTrust::ProxyOwn
+        );
+        assert_eq!(
+            resolver.trust("PROXY.corp.example.com"),
+            NameTrust::ProxyOwn
+        );
+        for other in [
+            "videos.example.org",
+            "proxy.corp.example.com.",
+            "corp.example.com",
+        ] {
+            assert_eq!(resolver.trust(other), NameTrust::Screened, "{other}");
+        }
+        let private = ip("10.0.0.5")?;
+        let handed = screen(vec![private], Allowance::default(), NameTrust::ProxyOwn)
+            .map_err(|error| error.to_string())?
+            .collect::<Vec<_>>();
+        assert_eq!(handed, vec![SocketAddr::new(private, 0)]);
+        let refused = screen(vec![private], Allowance::default(), NameTrust::Screened);
+        assert!(matches!(
+            refused.err().and_then(|error| error.downcast::<PolicyRefusal>().ok()),
+            Some(refusal) if refusal.0 == SourceFetchReason::AddressRefused
+        ));
+        assert!(screen(Vec::new(), Allowance::default(), NameTrust::ProxyOwn).is_err());
+        Ok(())
+    }
+
     #[test]
     fn through_a_proxy_internal_names_are_refused_and_addresses_left_to_the_link_check()
     -> Result<(), Box<dyn Error>> {
@@ -1193,13 +1496,14 @@ mod tests {
     #[test]
     fn a_name_with_any_private_address_is_refused_whole() -> Result<(), Box<dyn Error>> {
         let production = Allowance::default();
-        assert!(screen(vec![ip("8.8.8.8")?], production).is_ok());
-        let mixed = screen(vec![ip("8.8.8.8")?, ip("10.0.0.1")?], production);
+        let screened = NameTrust::Screened;
+        assert!(screen(vec![ip("8.8.8.8")?], production, screened).is_ok());
+        let mixed = screen(vec![ip("8.8.8.8")?, ip("10.0.0.1")?], production, screened);
         assert!(matches!(
             mixed.err().and_then(|error| error.downcast::<PolicyRefusal>().ok()),
             Some(refusal) if refusal.0 == SourceFetchReason::AddressRefused
         ));
-        assert!(screen(Vec::new(), production).is_err());
+        assert!(screen(Vec::new(), production, screened).is_err());
         Ok(())
     }
 

@@ -13,7 +13,7 @@ use std::{
     error::Error,
     fs,
     io::{BufRead, BufReader, Read, Write},
-    net::{IpAddr, Ipv4Addr, Shutdown, TcpListener, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex, PoisonError,
@@ -986,6 +986,190 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
         ),
         "{:?}",
         result.err()
+    );
+    Ok(())
+}
+
+/// Fable review T-1: the proxy is the person's own configuration, so its
+/// name is resolved without the link's public-address screen. `localhost`
+/// answers a loopback address the link policy would refuse (`::1`) besides
+/// the test server's `127.0.0.1`; the link's own names are still screened.
+#[tokio::test]
+async fn a_proxy_named_by_host_name_carries_the_request_and_the_link_is_still_screened()
+-> TestResult {
+    let server = HttpsServer::trusted()?;
+    server.route("/video.mp4", body(video_body(64_000), true));
+    let answers = answers();
+    answers.answer(
+        "localhost",
+        vec![vec![LOOPBACK, IpAddr::V6(Ipv6Addr::LOCALHOST)]],
+    );
+    let tunnel = start_proxy(server.port, false)?;
+    let by_name = format!("http://localhost:{}", tunnel.port);
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let snapshot = fetch(
+        &store,
+        &server.link("video.example.test", "/video.mp4")?,
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?.through_proxy(&by_name),
+    )
+    .await?;
+    let Some(SourceOrigin::DirectHttps(origin)) = snapshot.origin() else {
+        return Err("no origin".into());
+    };
+    assert_eq!(origin.address_check(), AddressCheck::ProxyResolved);
+    assert_eq!(tunnel.connects().len(), 1);
+    drop(snapshot);
+
+    // The link's own private address is refused with the proxy and without.
+    for proxy in [Some(by_name.as_str()), None] {
+        let through = |route: LinkTestRoute| match proxy {
+            Some(proxy) => route.through_proxy(proxy),
+            None => route,
+        };
+        refused_on(
+            &server,
+            ("10.0.0.5", "/video.mp4"),
+            DownloadLimits::DEFAULT,
+            through(route(&server, &answers)?),
+            SourceFetchReason::AddressRefused,
+        )
+        .await?;
+    }
+    // Without the proxy the link's name is resolved by VSift and screened:
+    // `localhost` is trusted only as the proxy's name.
+    refused_on(
+        &server,
+        ("localhost", "/video.mp4"),
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?,
+        SourceFetchReason::AddressRefused,
+    )
+    .await?;
+    assert_eq!(
+        tunnel.connects().len(),
+        1,
+        "a refused link reached the proxy"
+    );
+    Ok(())
+}
+
+/// Fable review T-2: `NO_PROXY` is decided for each hop by its own host. The
+/// proxy records every `CONNECT`, so it shows which hops it carried.
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one table of routes, each with the hops the proxy carried"
+)]
+async fn each_redirect_hop_takes_the_route_no_proxy_gives_its_own_host() -> TestResult {
+    let server = HttpsServer::trusted()?;
+    let port = server.port;
+    server.route("/video.mp4", body(video_body(64_000), true));
+    for (path, host) in [
+        ("/to-cdn", "cdn.example.test"),
+        ("/to-internal", "files.internal"),
+    ] {
+        server.route(
+            path,
+            Reply::Status(
+                "302 Found",
+                format!("Location: https://{host}:{port}/video.mp4\r\n"),
+            ),
+        );
+    }
+    let answers = answers();
+    let video = |port: u16| format!("video.example.test:{port}");
+    let cdn = |port: u16| format!("cdn.example.test:{port}");
+    // (link path, NO_PROXY, the hops the proxy carries, the origin's check)
+    for (path, excluded, carried, check) in [
+        // The link is proxied; the hop NO_PROXY lists goes direct.
+        (
+            "/to-cdn",
+            "cdn.example.test",
+            vec![video(port)],
+            AddressCheck::ProxyResolved,
+        ),
+        // The link NO_PROXY lists goes direct; the hop it does not list goes
+        // through the proxy, never past it.
+        (
+            "/to-cdn",
+            ".video.example.test, other.test",
+            vec![cdn(port)],
+            AddressCheck::ProxyResolved,
+        ),
+        // Every hop listed: nothing reaches the proxy, VSift saw each address.
+        ("/to-cdn", "example.test", Vec::new(), AddressCheck::Direct),
+    ] {
+        let tunnel = start_proxy(server.port, false)?;
+        let root = OwnedRoot::new()?;
+        let store = session(&root).await?;
+        let snapshot = fetch(
+            &store,
+            &server.link("video.example.test", path)?,
+            DownloadLimits::DEFAULT,
+            route(&server, &answers)?
+                .through_proxy(&tunnel.address())
+                .with_no_proxy(excluded),
+        )
+        .await
+        .map_err(|error| format!("{path} with NO_PROXY {excluded}: {error:?}"))?;
+        let Some(SourceOrigin::DirectHttps(origin)) = snapshot.origin() else {
+            return Err("no origin".into());
+        };
+        assert_eq!(origin.redirects(), 1, "{path} {excluded}");
+        assert_eq!(origin.address_check(), check, "{path} {excluded}");
+        assert_eq!(tunnel.connects(), carried, "{path} {excluded}");
+        drop(snapshot);
+    }
+
+    // An internal name the person sends direct is resolved by VSift and
+    // screened, not refused as an internal name through the proxy. The test
+    // certificate does not name `files.internal`, so a hop that passes the
+    // screen ends at the server's TLS handshake; one that fails it is
+    // refused before any connection. The proxy carries only the link.
+    for (address, reason) in [
+        (LOOPBACK, SourceFetchReason::Tls),
+        (
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)),
+            SourceFetchReason::AddressRefused,
+        ),
+    ] {
+        answers.answer("files.internal", vec![vec![address]]);
+        let tunnel = start_proxy(server.port, false)?;
+        refused_on(
+            &server,
+            ("video.example.test", "/to-internal"),
+            DownloadLimits::DEFAULT,
+            route(&server, &answers)?
+                .through_proxy(&tunnel.address())
+                .with_no_proxy("internal"),
+            reason,
+        )
+        .await?;
+        assert_eq!(tunnel.connects(), vec![video(port)], "{address}");
+    }
+    // A hop that needs an unusable proxy is refused, even when the link
+    // went direct.
+    let before = server.requests().len();
+    refused_on(
+        &server,
+        ("video.example.test", "/to-cdn"),
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?
+            .through_proxy("http://bad host:3128")
+            .with_no_proxy("video.example.test"),
+        SourceFetchReason::ProxyUnusable,
+    )
+    .await?;
+    let after = server.requests();
+    assert_eq!(after.len(), before + 1, "only the link was requested");
+    assert!(
+        after
+            .iter()
+            .skip(before)
+            .all(|request| request.starts_with("GET /to-cdn")),
+        "the hop went direct past the proxy"
     );
     Ok(())
 }
