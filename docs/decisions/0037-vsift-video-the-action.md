@@ -934,7 +934,7 @@ write refused on a sealed job, whose bundle `bundle search` finds. CLI: the JSON
 example, the failure's data, the finish screen's forms. End to end: the action with `--keep` on the synthetic clip, a
 second recording into the same folder, then `bundle search` on the folder finds the words of both.
 
-## Implementation note, 2026-11-10: a run that is still working is never taken over (H3)
+## Implementation note, 2026-11-10: a run that is still working is never taken over (H3, #598)
 
 The Fable review of 0.3.0 found (C-1, high) that a second `vsift <video>` started while the first run of the same video
 was still running took that run over. Section 8 continues a run "this VSift left unfinished", and the note of
