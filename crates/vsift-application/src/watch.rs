@@ -36,7 +36,11 @@
 //! **Ctrl-C keeps the session** (section 8). The files keep their last
 //! snapshot and marker, and the same command continues the job: the job's
 //! own record of its claimed names ([`WatchClaimLog`]) is what finds it,
-//! never the text of a file in the person's folder.
+//! never the text of a file in the person's folder. Only a job no process
+//! owns is continued: while another process runs it, the same command is
+//! refused ([`WatchError::RunInProgress`]) and touches none of that run's
+//! files, its session or its job, also when the job is owned again between
+//! the look and the resume (the job store's ownership decides).
 //!
 //! **`--keep` writes a bundle once the job has sealed** (the amendment of
 //! 2026-10-30). The bundle comes after the outputs and before the close, and
@@ -156,6 +160,13 @@ pub enum PrepareStop<E> {
     /// The caller cancelled the run (Ctrl-C): the job is interrupted, its
     /// finished chunks kept, and the same command continues it.
     Interrupted,
+    /// Another process owns the job, so nothing of it ran here: the job
+    /// store refused to hand it over (`BUSY`). For a run that took over an
+    /// earlier run's files this is the race in which that run was found
+    /// unowned and is owned again by the time it is resumed; the use case
+    /// then refuses as it refuses a live run, touching nothing (ADR 0037,
+    /// implementation note of 2026-11-10).
+    OwnedElsewhere(E),
     /// Any other failure, which ends the run.
     Failed(E),
 }
@@ -196,6 +207,20 @@ pub struct UnfinishedWatch {
     pub session: OpenedWatchSession,
     /// Its unfinished `prepare` job.
     pub job: JobId,
+}
+
+/// What a rerun whose names are taken found of an earlier run that claimed
+/// exactly those names, by the job's own record (ADR 0037 section 8).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EarlierWatch {
+    /// A run of the same video that no process runs any more (it was
+    /// interrupted): this run takes its files over and continues its job.
+    Interrupted(UnfinishedWatch),
+    /// A run another process is running right now, writing these files.
+    /// It is never taken over: this run is refused and touches nothing of
+    /// it, not its files, its session or its job (ADR 0037, implementation
+    /// note of 2026-11-10).
+    Live,
 }
 
 /// The existing operations `watch` composes, supplied by the engine.
@@ -264,8 +289,10 @@ pub trait WatchSteps: Send + Sync {
     /// # Errors
     ///
     /// [`PrepareStop::Interrupted`] when the caller cancelled the run, which
-    /// leaves the job resumable, and [`PrepareStop::Failed`] for every other
-    /// error of the job; a video with no sound track is not one.
+    /// leaves the job resumable, [`PrepareStop::OwnedElsewhere`] when another
+    /// process owns the job, so nothing of it ran here, and
+    /// [`PrepareStop::Failed`] for every other error of the job; a video with
+    /// no sound track is not one.
     fn prepare(
         &self,
         session: &SessionId,
@@ -286,9 +313,13 @@ pub trait WatchSteps: Send + Sync {
         since: Option<&str>,
     ) -> Result<Option<PublishedPart>, Self::Error>;
 
-    /// An open session of this video whose unfinished `prepare` job claimed
-    /// exactly `claimed`, found through the job's own record (ADR 0037
-    /// section 8). An expired session is not found.
+    /// The earlier run whose unfinished `prepare` job claimed exactly
+    /// `claimed`, found through the job's own record in an open session
+    /// (ADR 0037 section 8); an expired session is not found. A job a live
+    /// process owns is [`EarlierWatch::Live`], whatever else matches: the
+    /// job store's ownership decides, never the files. A job no process
+    /// owns is [`EarlierWatch::Interrupted`] only when its session holds
+    /// this video.
     ///
     /// # Errors
     ///
@@ -297,7 +328,7 @@ pub trait WatchSteps: Send + Sync {
         &self,
         video: &Path,
         claimed: &ClaimedOutputs,
-    ) -> impl Future<Output = Result<Option<UnfinishedWatch>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Option<EarlierWatch>, Self::Error>> + Send;
 
     /// The clock the snapshots are spaced by.
     fn clock(&self) -> &dyn Clock;
@@ -840,6 +871,11 @@ pub enum WatchError<E> {
     UnusableName(OutputNameError),
     /// An output could not be claimed or written.
     Output(WatchOutputError),
+    /// Another `VSift` run is writing these outputs right now: its job is
+    /// owned by a live process. Nothing was written, released or closed, and
+    /// that run's files, session and job are as they were (ADR 0037,
+    /// implementation note of 2026-11-10).
+    RunInProgress,
     /// The caller stopped the run (Ctrl-C). The files keep their last
     /// snapshot and its marker, the session is kept, and the same command
     /// continues the job (ADR 0037 section 8).
@@ -875,8 +911,9 @@ pub const SNAPSHOT_INTERVAL_SECONDS: u64 = 10;
 /// `video`, `output` and `keep` are absolute. Nothing is copied or written before
 /// every output name is claimed. When a name is taken, the run continues an
 /// interrupted run of the same video only if its job's own record claimed
-/// exactly these names in a session still open (section 8); otherwise it is
-/// refused as before. While the job runs the transcript and the subtitles
+/// exactly these names in a session still open (section 8) and no process
+/// owns that job; a run whose job a live process owns is refused, touching
+/// nothing of it, and anything else is refused as before. While the job runs the transcript and the subtitles
 /// grow by snapshots, and the frames are written once the visual stream is
 /// done. Stopped by the caller, the run keeps the files with their last
 /// snapshot and the session; after any other failure it releases the claim
@@ -887,8 +924,9 @@ pub const SNAPSHOT_INTERVAL_SECONDS: u64 = 10;
 ///
 /// [`WatchError::Step`] for the operations' errors,
 /// [`WatchError::UnusableName`] or [`WatchError::Output`] for the outputs,
-/// [`WatchError::Stopped`] when the caller stopped the run, and
-/// [`WatchError::FailedAfterKeep`] for a failure after the job sealed, with
+/// [`WatchError::Stopped`] when the caller stopped the run,
+/// [`WatchError::RunInProgress`] when another process is running the job
+/// that claimed these names, and [`WatchError::FailedAfterKeep`] for a failure after the job sealed, with
 /// `keep`.
 pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
     steps: &S,
@@ -933,8 +971,17 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
         taken_over: job.is_some(),
     };
     let (written, sealed) = Box::pin(run.write(outputs, job)).await;
-    if let Err(stopped @ WatchError::Stopped { .. }) = written {
-        return Err(stopped);
+    match written {
+        // A stopped run keeps its files and session.
+        Err(stopped @ WatchError::Stopped { .. }) => return Err(stopped),
+        // The files, session and job are another live run's: nothing is
+        // closed. The release gives up only what this run's takeover put
+        // there itself (an output it recreated, still empty).
+        Err(WatchError::RunInProgress) => {
+            outputs.release();
+            return Err(WatchError::RunInProgress);
+        }
+        _ => {}
     }
     // A run that did not reach the seal keeps nothing. Past it, the bundle
     // does not need the outputs, so a failed one does not stop it.
@@ -968,7 +1015,9 @@ pub async fn run_watch<S: WatchSteps, O: WatchOutputs>(
 }
 
 /// Claims the names, or, when one is taken, takes over the outputs of an
-/// unfinished run of the same video that claimed exactly these names.
+/// interrupted run of the same video that claimed exactly these names. A
+/// run that claimed them and is live in another process is refused before
+/// anything is taken over.
 async fn claim_or_continue<S: WatchSteps, O: WatchOutputs>(
     steps: &S,
     outputs: &mut O,
@@ -985,15 +1034,18 @@ async fn claim_or_continue<S: WatchSteps, O: WatchOutputs>(
             // Decided by the session's record of the job, never by the text of
             // a file in the person's folder (the planner's condition A): an
             // expired session is gone, so its files are refused.
-            let Some(unfinished) = steps
+            match steps
                 .find_unfinished(video, &planned)
                 .await
                 .map_err(WatchError::Step)?
-            else {
-                return Err(WatchError::Output(taken));
-            };
-            outputs.reclaim(&planned).map_err(WatchError::Output)?;
-            Ok((planned, Some(unfinished)))
+            {
+                None => Err(WatchError::Output(taken)),
+                Some(EarlierWatch::Live) => Err(WatchError::RunInProgress),
+                Some(EarlierWatch::Interrupted(unfinished)) => {
+                    outputs.reclaim(&planned).map_err(WatchError::Output)?;
+                    Ok((planned, Some(unfinished)))
+                }
+            }
         }
         Err(error) => Err(WatchError::Output(error)),
     }
@@ -1069,7 +1121,10 @@ impl<S: WatchSteps> WatchRun<'_, S> {
         };
         let written = self.run(outputs, unfinished_job, &mut following).await;
         if let Err(error) = &written
-            && !matches!(error, WatchError::Stopped { .. })
+            && !matches!(
+                error,
+                WatchError::Stopped { .. } | WatchError::RunInProgress
+            )
             && (following.snapshot_written || self.taken_over)
         {
             self.refresh(&mut following);
@@ -1112,7 +1167,15 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                     duration: following.duration,
                 });
             }
-            Err(PrepareStop::Failed(error)) => return Err(WatchError::Step(error)),
+            // The files belong to the run that owns the job: refused as a
+            // live run is, before this run wrote anything (the job told the
+            // follower nothing, so it wrote no snapshot).
+            Err(PrepareStop::OwnedElsewhere(_)) if self.taken_over => {
+                return Err(WatchError::RunInProgress);
+            }
+            Err(PrepareStop::OwnedElsewhere(error) | PrepareStop::Failed(error)) => {
+                return Err(WatchError::Step(error));
+            }
         };
         following.sealed = true;
         let screens = match following.screens.take() {

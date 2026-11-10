@@ -171,12 +171,13 @@ pub use visual::{
     visual_index_id,
 };
 pub use watch::{
-    ClaimedOutputs, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop, PreparedRun,
-    PreparedTranscript, PublishedPart, SNAPSHOT_INTERVAL_SECONDS, ScreenChange, ScreenChangeEntry,
-    ScreenChangeSummary, ScreenChanges, SessionFrame, SnapshotState, TranscriptEntry,
-    TranscriptLine, UnfinishedWatch, WatchClaimLog, WatchDocuments, WatchError, WatchFile,
-    WatchFrame, WatchKept, WatchOutcome, WatchOutputError, WatchOutputKind, WatchOutputs,
-    WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps, WrittenFrame, run_watch,
+    ClaimedOutputs, EarlierWatch, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop,
+    PreparedRun, PreparedTranscript, PublishedPart, SNAPSHOT_INTERVAL_SECONDS, ScreenChange,
+    ScreenChangeEntry, ScreenChangeSummary, ScreenChanges, SessionFrame, SnapshotState,
+    TranscriptEntry, TranscriptLine, UnfinishedWatch, WatchClaimLog, WatchDocuments, WatchError,
+    WatchFile, WatchFrame, WatchKept, WatchOutcome, WatchOutputError, WatchOutputKind,
+    WatchOutputs, WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps, WrittenFrame,
+    run_watch,
 };
 
 /// Port used to inspect one specialist runtime dependency.

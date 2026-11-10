@@ -177,6 +177,41 @@ fn a_failure_with_no_bundle_gives_the_retain_command_with_the_real_session() -> 
     Ok(())
 }
 
+/// C-1 of the 0.3.0 review: a run refused because another run of the same
+/// video is still writing its files answers section 5's code with its own
+/// fixed remediation, the same words in JSON and on the terminal, and no
+/// data.
+#[test]
+fn a_run_still_in_progress_is_refused_with_the_same_words_in_both_outputs() -> TestResult {
+    let response = crate::failure_response(
+        CommandName::Watch,
+        super::failure(EngineError::Watch(WatchFailure::RunInProgress)),
+    );
+    let value = serde_json::to_value(&response)?;
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT", "{value}");
+    assert_eq!(
+        value["error"]["remediation"][0]["summary"],
+        vsift_contract::WATCH_RUN_IN_PROGRESS_REMEDIATION,
+        "{value}"
+    );
+    assert!(value["data"].is_null(), "{value}");
+    let human = crate::human::failure(&response, None)?;
+    assert!(
+        human.as_str().contains(&format!(
+            "Fix: {}",
+            vsift_contract::WATCH_RUN_IN_PROGRESS_REMEDIATION
+        )),
+        "{}",
+        human.as_str()
+    );
+    assert!(
+        human.as_str().contains("(INVALID_ARGUMENT)"),
+        "{}",
+        human.as_str()
+    );
+    Ok(())
+}
+
 /// The option parses on both forms of the command.
 #[test]
 fn keep_is_an_option_of_the_action() -> TestResult {

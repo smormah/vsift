@@ -265,7 +265,7 @@ pub use visual_sampler::FfmpegVisualSampler;
 pub use watch_output::{
     FolderWatchOutputs, HELD_FILE_WAIT, SCREEN_CHANGES_FILE, WatchClaim, file_sha256,
     render_screen_changes, render_subrip, render_subrip_snapshot, render_transcript,
-    render_transcript_snapshot, replace_claimed,
+    render_transcript_snapshot, replace_claimed, resolve_configured_path,
 };
 pub use whisper_build::{
     MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,

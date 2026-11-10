@@ -23,10 +23,10 @@ use std::{
 };
 
 use vsift_application::{
-    ClaimedOutputs, Clock, FrameRefusal, JobStore as _, OpenedWatchSession, PrepareStop,
-    PreparedRun, PreparedTranscript, PublishedPart, ScreenChange, ScreenChanges, SessionFrame,
-    TranscriptLine, UnfinishedWatch, WatchClaimLog as _, WatchError, WatchOutputError,
-    WatchProgress, WatchProvenance, WatchSteps, run_watch,
+    ClaimedOutputs, Clock, EarlierWatch, FrameRefusal, JobLiveness, JobStore as _,
+    OpenedWatchSession, PrepareStop, PreparedRun, PreparedTranscript, PublishedPart, ScreenChange,
+    ScreenChanges, SessionFrame, TranscriptLine, UnfinishedWatch, WatchClaimLog as _, WatchError,
+    WatchOutputError, WatchProgress, WatchProvenance, WatchSteps, run_watch,
 };
 use vsift_contract::render_hidden_characters;
 use vsift_domain::{
@@ -34,7 +34,9 @@ use vsift_domain::{
     SearchCoverage, SessionId, SessionPhase, SourceId, TimeRange, TranscriptRevisionId,
     VisualCandidateId,
 };
-use vsift_infrastructure::{FolderWatchOutputs, ManagedArtifactStore, file_sha256};
+use vsift_infrastructure::{
+    FolderWatchOutputs, ManagedArtifactStore, file_sha256, resolve_configured_path,
+};
 
 pub use vsift_application::{WatchFile, WatchFrame, WatchKept, WatchOutcome, WatchOutputKind};
 pub use vsift_domain::{OutputNameError, WatchOutputNames};
@@ -98,6 +100,10 @@ pub enum WatchFailure {
     /// Another program held a file open for the final write's 30 s (known
     /// limit L-237); the file keeps its last snapshot and marker.
     OutputHeld(WatchOutputKind),
+    /// Another `VSift` run is writing these outputs right now: the job that
+    /// claimed them is owned by a live process. Nothing of that run was
+    /// touched (ADR 0037, implementation note of 2026-11-10).
+    RunInProgress,
     /// The caller stopped the run (Ctrl-C). The files keep their last
     /// snapshot and marker, and the session is kept: the same request
     /// continues the job (ADR 0037 section 8).
@@ -116,6 +122,7 @@ impl WatchFailure {
         match self {
             Self::UnusableName(_)
             | Self::OutputExists(_)
+            | Self::RunInProgress
             | Self::OutputInsideVsift
             | Self::OutputFolderUnusable
             | Self::KeepFolderUnusable
@@ -147,6 +154,9 @@ impl fmt::Display for WatchFailure {
             }
             Self::FrameMismatch => formatter.write_str("a copied frame does not match its digest"),
             Self::OutputHeld(_) => formatter.write_str("another program held an output open"),
+            Self::RunInProgress => {
+                formatter.write_str("another VSift run is writing these files right now")
+            }
             Self::Stopped { .. } => {
                 formatter.write_str("the run was stopped; run it again to continue")
             }
@@ -192,6 +202,7 @@ impl From<WatchError<Self>> for EngineError {
             WatchError::Step(error) => error,
             WatchError::UnusableName(error) => Self::Watch(WatchFailure::UnusableName(error)),
             WatchError::Output(error) => Self::Watch(error.into()),
+            WatchError::RunInProgress => Self::Watch(WatchFailure::RunInProgress),
             WatchError::Stopped {
                 transcribed_to,
                 duration,
@@ -256,7 +267,10 @@ impl Engine {
         .map_err(EngineError::from)
     }
 
-    /// The canonical session and managed roots that exist.
+    /// The session and managed roots as configured, resolved as the
+    /// filesystem would name them ([`resolve_configured_path`]): a root that
+    /// does not exist yet is still one, so `--output` can never become it
+    /// (ADR 0037 section 5).
     fn vsift_roots(&self) -> Vec<PathBuf> {
         let managed = match &self.config().managed_root {
             ManagedRootLocation::PlatformDefault => ManagedArtifactStore::default_location()
@@ -267,7 +281,7 @@ impl Engine {
         [self.session_root_path().ok(), managed]
             .into_iter()
             .flatten()
-            .filter_map(|root| std::fs::canonicalize(root).ok())
+            .filter_map(|root| resolve_configured_path(&root).ok())
             .collect()
     }
 
@@ -426,20 +440,29 @@ impl Engine {
         }
     }
 
-    /// An open session of `video` whose unfinished `prepare` job claimed
-    /// exactly `claimed`, by the job's own record (ADR 0037 section 8). The
-    /// records are compared first, so the video is hashed only when one
-    /// matches.
+    /// The earlier run whose unfinished `prepare` job claimed exactly
+    /// `claimed`, by the job's own record in an open session (ADR 0037
+    /// section 8).
+    ///
+    /// A job a live process owns answers [`EarlierWatch::Live`] as soon as it
+    /// is found, whatever else matches and without hashing the video: those
+    /// files are being written right now, so nothing may take them over (ADR
+    /// 0037, implementation note of 2026-11-10). Only a job no process owns is
+    /// [`EarlierWatch::Interrupted`], and only once every session has been
+    /// looked at, so a live run is never missed behind an interrupted one
+    /// that claimed the same names. The records are compared first, so the
+    /// video is hashed only when an unowned one matches.
     fn watch_unfinished(
         &self,
         video: &Path,
         claimed: &ClaimedOutputs,
-    ) -> Result<Option<UnfinishedWatch>, EngineError> {
+    ) -> Result<Option<EarlierWatch>, EngineError> {
         let (store, now) = self.existing_store()?;
         let Some(store) = store else {
             return Ok(None);
         };
         let mut video_source = None;
+        let mut interrupted = None;
         let mut cursor = None;
         loop {
             let page = self.list_sessions(cursor)?;
@@ -455,12 +478,21 @@ impl Engine {
                     continue;
                 };
                 for (job, recorded) in claims {
-                    let unfinished = store
+                    if recorded != *claimed {
+                        continue;
+                    }
+                    let Some(view) = store
                         .job(session, &job)
                         .ok()
                         .flatten()
-                        .is_some_and(|view| !view.record.state.is_terminal());
-                    if recorded != *claimed || !unfinished {
+                        .filter(|view| !view.record.state.is_terminal())
+                    else {
+                        continue;
+                    };
+                    if view.liveness == JobLiveness::Owned {
+                        return Ok(Some(EarlierWatch::Live));
+                    }
+                    if interrupted.is_some() {
                         continue;
                     }
                     if video_source.is_none() {
@@ -469,19 +501,19 @@ impl Engine {
                         video_source = SourceId::from_sha256(&digest).ok();
                     }
                     if video_source.as_ref() == Some(snapshot.source_id()) {
-                        return Ok(Some(UnfinishedWatch {
+                        interrupted = Some(UnfinishedWatch {
                             session: OpenedWatchSession {
                                 session_id: session.clone(),
                                 source_id: snapshot.source_id().clone(),
                             },
                             job,
-                        }));
+                        });
                     }
                 }
             }
             match page.next_cursor() {
                 Some(next) => cursor = Some(next),
-                None => return Ok(None),
+                None => return Ok(interrupted.map(EarlierWatch::Interrupted)),
             }
         }
     }
@@ -719,15 +751,7 @@ impl WatchSteps for EngineWatchSteps<'_> {
         while let Ok(notice) = received.try_recv() {
             notice.tell(progress);
         }
-        ran.map_err(|error| {
-            if self.cancellation.is_cancelled()
-                && error.failure_code() == vsift_domain::FailureCode::Cancelled
-            {
-                PrepareStop::Interrupted
-            } else {
-                PrepareStop::Failed(error)
-            }
-        })
+        ran.map_err(|error| prepare_stop(error, job, self.cancellation.is_cancelled()))
     }
 
     fn published(
@@ -742,7 +766,7 @@ impl WatchSteps for EngineWatchSteps<'_> {
         &self,
         video: &Path,
         claimed: &ClaimedOutputs,
-    ) -> impl Future<Output = Result<Option<UnfinishedWatch>, EngineError>> + Send {
+    ) -> impl Future<Output = Result<Option<EarlierWatch>, EngineError>> + Send {
         std::future::ready(self.engine.watch_unfinished(video, claimed))
     }
 
@@ -801,6 +825,24 @@ impl WatchSteps for EngineWatchSteps<'_> {
     }
 }
 
+/// How the run of `job` stopped short of its end, for the use case.
+///
+/// `job_resume` refuses a job another process owns with
+/// [`EngineError::JobBusy`] naming that job, both when it looks
+/// (`resumable_request`) and when it takes the job (`run_prepare`): nothing of
+/// the job ran here, so it is [`PrepareStop::OwnedElsewhere`]. A busy answer
+/// about any other job (one of the job's streams) is a failure of this run.
+/// Only a cancellation the caller asked for is an interruption.
+fn prepare_stop(error: EngineError, job: &JobId, cancelled: bool) -> PrepareStop<EngineError> {
+    match &error {
+        EngineError::JobBusy { job: busy } if busy == job => PrepareStop::OwnedElsewhere(error),
+        _ if cancelled && error.failure_code() == FailureCode::Cancelled => {
+            PrepareStop::Interrupted
+        }
+        _ => PrepareStop::Failed(error),
+    }
+}
+
 /// What the `prepare` job's progress tells the use case.
 #[derive(Clone, Copy, Debug)]
 enum Notice {
@@ -823,4 +865,49 @@ impl Notice {
 /// links (the source's own checks refuse a link).
 fn absolute(path: &Path) -> Result<PathBuf, EngineError> {
     std::path::absolute(path).map_err(|_| EngineError::WorkingDirectoryUnavailable)
+}
+
+#[cfg(test)]
+mod tests {
+    use vsift_application::PrepareStop;
+    use vsift_domain::JobId;
+
+    use super::prepare_stop;
+    use crate::error::EngineError;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    /// C-1 of the 0.3.0 review, the race: `job_resume` answers busy for the
+    /// job itself when another process owns it (when it looks and when it
+    /// takes it). That is never a failure of this run, which would write a
+    /// failed marker over the other run's files and close its session.
+    #[test]
+    fn the_job_owned_elsewhere_is_told_apart_from_a_failure() -> TestResult {
+        let job = JobId::parse("job_0123456789abcdef")?;
+        let stream = JobId::parse("job_fedcba9876543210")?;
+        let owned = prepare_stop(EngineError::JobBusy { job: job.clone() }, &job, false);
+        assert!(
+            matches!(
+                owned,
+                PrepareStop::OwnedElsewhere(EngineError::JobBusy { .. })
+            ),
+            "{owned:?}"
+        );
+        let stream_busy = prepare_stop(EngineError::JobBusy { job: stream }, &job, false);
+        assert!(
+            matches!(
+                stream_busy,
+                PrepareStop::Failed(EngineError::JobBusy { .. })
+            ),
+            "busy about another job is this run's failure: {stream_busy:?}"
+        );
+        let stopped = prepare_stop(EngineError::JobCancelled { job: job.clone() }, &job, true);
+        assert!(matches!(stopped, PrepareStop::Interrupted), "{stopped:?}");
+        let cancelled = prepare_stop(EngineError::JobCancelled { job: job.clone() }, &job, false);
+        assert!(
+            matches!(cancelled, PrepareStop::Failed(_)),
+            "a cancellation the caller did not ask for fails the run: {cancelled:?}"
+        );
+        Ok(())
+    }
 }

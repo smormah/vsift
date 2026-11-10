@@ -170,9 +170,14 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **A hidden `.<name>.<random>.vsift-partial` file** can be left beside the outputs if the computer or the process
   stops hard in the middle of an update. It is VSift's and safe to delete.
 - **Stopping and starting again.** Ctrl-C keeps the files, each saying where it stopped (`STOPPED: ...`), and keeps VSift's private
-  copy of the video; the same command continues where the run stopped. A private copy expires after a day unused:
-  after that the same command refuses the files, as for any file in the way, and you move them away first. A run
-  that fails after writing the files leaves them saying so (`STOPPED WITH AN ERROR: ...`); they will not be finished.
+  copy of the video; the same command continues where the run stopped, and writes again a file of that run you
+  deleted. A private copy expires after a day unused: after that the same command refuses the files, as for any file
+  in the way, and you move them away first. A run that fails after writing the files leaves them saying so (`STOPPED
+  WITH AN ERROR: ...`); they will not be finished.
+- **A run that is still working is never taken over.** The same command started while the first run of that video
+  is still writing its files (from a second terminal, or an assistant that ran it again after a timeout) is refused,
+  says another VSift run is writing them, and changes nothing. Wait for the first run to finish, or stop it and run
+  the command again to continue it, or write elsewhere with `--output <folder>`.
 - **The files take the folder's ordinary permissions**, because you write them to share. Beside the video they are as
   exposed as the video itself; `--output <folder>` writes them elsewhere.
 

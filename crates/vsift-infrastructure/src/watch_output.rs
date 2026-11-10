@@ -10,8 +10,11 @@
 //! removes exactly what it created, and a file only while it is still empty.
 //!
 //! **Untrusted text.** The renderers take text already in its display form
-//! (hidden and control characters made visible by the caller); the `SubRip`
-//! writer also keeps each cue to one line without the timing arrow
+//! (hidden characters made visible by the caller), and make every untrusted
+//! piece they place on a line inert themselves: a segment's text and the
+//! video's name stay on their one line with control characters made visible
+//! ([`one_line_text`]), so neither can forge a `[HH:MM:SS]` line or a header,
+//! and the `SubRip` writer also keeps each cue free of the timing arrow
 //! ([`subrip_cue_text`]).
 
 use std::{
@@ -29,7 +32,7 @@ use vsift_application::{
     WatchOutputKind, WatchOutputs, WatchProvenance, WatchSnapshot,
 };
 use vsift_domain::{
-    CandidateReason, WatchOutputNames, readable_time, subrip_cue_text, subrip_time,
+    CandidateReason, WatchOutputNames, one_line_text, readable_time, subrip_cue_text, subrip_time,
 };
 
 use crate::{BundleDestinationRefusal, FilesystemSessionStore, RandomIdentifierSource};
@@ -55,7 +58,42 @@ pub struct WatchClaim {
     /// the same job (ADR 0037 section 8): frames already in the folder are
     /// then kept, and one with the same name and digest is accepted.
     taken_over: bool,
+    /// Which of the three outputs this claim created itself, and so may give
+    /// up again: all three for a fresh claim, and for a takeover only one the
+    /// interrupted run's files had lost.
+    created: CreatedOutputs,
     created_in_folder: Vec<PathBuf>,
+}
+
+/// Which of a claim's three outputs the claim created itself.
+#[allow(clippy::struct_excessive_bools)] // Three independent facts, not switches.
+#[derive(Clone, Copy, Debug, Default)]
+struct CreatedOutputs {
+    transcript: bool,
+    subtitles: bool,
+    folder: bool,
+}
+
+impl CreatedOutputs {
+    const ALL: Self = Self {
+        transcript: true,
+        subtitles: true,
+        folder: true,
+    };
+
+    /// Removes what was created, the files only while still empty and the
+    /// folder only once empty, so text that was written is never removed.
+    fn remove(self, transcript: &Path, subtitles: &Path, folder: &Path) {
+        if self.folder {
+            let _ignored = fs::remove_dir(folder);
+        }
+        if self.transcript {
+            remove_if_empty(transcript);
+        }
+        if self.subtitles {
+            remove_if_empty(subtitles);
+        }
+    }
 }
 
 impl WatchClaim {
@@ -87,6 +125,7 @@ impl WatchClaim {
             subtitles_path,
             folder_path,
             taken_over: false,
+            created: CreatedOutputs::ALL,
             created_in_folder: Vec::new(),
         })
     }
@@ -95,27 +134,37 @@ impl WatchClaim {
     /// which its job's record names: each must still be what that run
     /// created, a regular file or a folder, never a link.
     ///
+    /// An output that is gone (the person deleted it after the run stopped)
+    /// is claimed again here, by the same exclusive creation as a fresh claim
+    /// (T-5 of the 0.3.0 review): the run continues and writes it whole, and
+    /// a release gives it up again while it is still empty. Nothing that
+    /// exists is ever replaced, so the run still writes only what it claimed.
+    ///
     /// # Errors
     ///
-    /// [`WatchOutputError::Exists`] for an output that is no longer one.
+    /// [`WatchOutputError::Exists`] for an output that is no longer what the
+    /// run created (a link, a folder where a file was), and
+    /// [`WatchOutputError::Refused`] when one cannot be looked at or a lost
+    /// one cannot be created again. Anything this call created is removed
+    /// again first.
     pub fn take_over(claimed: &ClaimedOutputs) -> Result<Self, WatchOutputError> {
-        let is = |path: &Path, folder: bool| {
-            fs::symlink_metadata(path).is_ok_and(|metadata| {
-                !metadata.file_type().is_symlink()
-                    && if folder {
-                        metadata.is_dir()
-                    } else {
-                        metadata.is_file()
-                    }
-            })
-        };
-        for (path, folder, kind) in [
-            (&claimed.transcript, false, WatchOutputKind::Transcript),
-            (&claimed.subtitles, false, WatchOutputKind::Subtitles),
-            (&claimed.folder, true, WatchOutputKind::Folder),
-        ] {
-            if !is(path, folder) {
-                return Err(WatchOutputError::Exists(kind));
+        let mut created = CreatedOutputs::default();
+        let outputs = [
+            (&claimed.transcript, WatchOutputKind::Transcript),
+            (&claimed.subtitles, WatchOutputKind::Subtitles),
+            (&claimed.folder, WatchOutputKind::Folder),
+        ];
+        for (path, kind) in outputs {
+            match retake(path, kind) {
+                Ok(recreated) => match kind {
+                    WatchOutputKind::Transcript => created.transcript = recreated,
+                    WatchOutputKind::Subtitles => created.subtitles = recreated,
+                    _ => created.folder = recreated,
+                },
+                Err(error) => {
+                    created.remove(&claimed.transcript, &claimed.subtitles, &claimed.folder);
+                    return Err(error);
+                }
             }
         }
         Ok(Self {
@@ -123,6 +172,7 @@ impl WatchClaim {
             subtitles_path: claimed.subtitles.clone(),
             folder_path: claimed.folder.clone(),
             taken_over: true,
+            created,
             created_in_folder: Vec::new(),
         })
     }
@@ -250,7 +300,9 @@ impl WatchClaim {
         random: &str,
     ) -> Result<(PathBuf, String), WatchOutputError> {
         let path = self.folder_path.join(SCREEN_CHANGES_FILE);
-        let created = !self.taken_over && !self.created_in_folder.contains(&path);
+        // An interrupted run's list stays; one in a folder this claim made is
+        // this run's.
+        let created = self.created.folder && !self.created_in_folder.contains(&path);
         let sha256 = replace_claimed(
             &path,
             text.as_bytes(),
@@ -274,12 +326,13 @@ impl WatchClaim {
             let _ignored = fs::remove_file(path);
         }
         // What an interrupted run created stays: the job that claimed it is
-        // still unfinished, and a later rerun continues it.
-        if !self.taken_over {
-            let _ignored = fs::remove_dir(&self.folder_path);
-            remove_if_empty(&self.transcript_path);
-            remove_if_empty(&self.subtitles_path);
-        }
+        // still unfinished, and a later rerun continues it. Only what this
+        // claim created is given up.
+        self.created.remove(
+            &self.transcript_path,
+            &self.subtitles_path,
+            &self.folder_path,
+        );
     }
 
     fn write_in_folder(
@@ -295,6 +348,36 @@ impl WatchClaim {
             .and_then(|()| file.sync_all())
             .map_err(|error| classify(&error, kind))?;
         Ok(path)
+    }
+}
+
+/// One output of a takeover: `Ok(false)` when it is still what the
+/// interrupted run created (a regular file, or a folder for the folder, never
+/// a link), `Ok(true)` when it was gone and has been created again,
+/// exclusively and empty.
+fn retake(path: &Path, kind: WatchOutputKind) -> Result<bool, WatchOutputError> {
+    let folder = kind == WatchOutputKind::Folder;
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            let expected = if folder {
+                metadata.is_dir()
+            } else {
+                metadata.is_file()
+            };
+            if metadata.file_type().is_symlink() || !expected {
+                return Err(WatchOutputError::Exists(kind));
+            }
+            Ok(false)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if folder {
+                fs::create_dir(path).map_err(|error| classify(&error, kind))?;
+            } else {
+                drop(create_new(path, kind)?);
+            }
+            Ok(true)
+        }
+        Err(error) => Err(WatchOutputError::Refused(kind, error.kind())),
     }
 }
 
@@ -585,28 +668,106 @@ impl WatchOutputs for FolderWatchOutputs {
 /// The folder to write into: the video's own, or `output` (an existing
 /// folder, or a new one whose parent exists, created without its parents),
 /// canonicalised and never inside one of `vsift_roots` (ADR 0037 section 5).
+///
+/// A new folder is judged before it is created, by the path it would have
+/// ([`resolve_configured_path`]), so a refusal leaves nothing behind; should
+/// the folder it created resolve inside a root after all (a link in its
+/// parent changed meanwhile), it is removed again, empty, before the refusal
+/// (T-3 of the 0.3.0 review).
 fn output_folder(
     video: &Path,
     output: Option<&Path>,
     vsift_roots: &[PathBuf],
 ) -> Result<PathBuf, WatchOutputError> {
     let unusable = WatchOutputError::FolderUnusable;
-    let folder = match output {
-        None => video.parent().map(Path::to_path_buf).ok_or(unusable)?,
+    let (folder, created) = match output {
+        None => (
+            video.parent().map(Path::to_path_buf).ok_or(unusable)?,
+            false,
+        ),
         Some(output) => match fs::symlink_metadata(output) {
-            Ok(metadata) if metadata.is_dir() => output.to_path_buf(),
+            Ok(metadata) if metadata.is_dir() => (output.to_path_buf(), false),
             Ok(_) => return Err(WatchOutputError::FolderUnusable),
             Err(_) => {
+                let planned = resolve_configured_path(output)
+                    .map_err(|_| WatchOutputError::FolderUnusable)?;
+                if inside_any(&planned, vsift_roots) {
+                    return Err(WatchOutputError::InsideVsift);
+                }
                 fs::create_dir(output).map_err(|_| WatchOutputError::FolderUnusable)?;
-                output.to_path_buf()
+                (output.to_path_buf(), true)
             }
         },
     };
-    let folder = fs::canonicalize(&folder).map_err(|_| WatchOutputError::FolderUnusable)?;
-    if vsift_roots.iter().any(|root| folder.starts_with(root)) {
-        return Err(WatchOutputError::InsideVsift);
+    let give_up = |error: WatchOutputError| {
+        if created {
+            // Only ever an empty folder: this run made it a moment ago.
+            let _empty_only = fs::remove_dir(&folder);
+        }
+        error
+    };
+    let resolved =
+        fs::canonicalize(&folder).map_err(|_| give_up(WatchOutputError::FolderUnusable))?;
+    if inside_any(&resolved, vsift_roots) {
+        return Err(give_up(WatchOutputError::InsideVsift));
     }
-    Ok(folder)
+    Ok(resolved)
+}
+
+/// `path` resolved as the filesystem would name it once it exists: its
+/// longest existing ancestor canonicalised (links resolved, Windows' verbatim
+/// form), then the components that do not exist yet, as given.
+///
+/// This is how `VSift`'s own roots are compared before they exist (a root that
+/// has never been created must still refuse `--output` naming it or a folder
+/// in it) and how a new `--output` folder is judged before it is created.
+///
+/// # Errors
+///
+/// The canonicalisation's error when it is not a missing path, and
+/// [`io::ErrorKind::NotFound`] when no ancestor exists or a missing component
+/// is not a plain name (`..`).
+pub fn resolve_configured_path(path: &Path) -> io::Result<PathBuf> {
+    let mut missing = Vec::new();
+    let mut existing = path;
+    loop {
+        match fs::canonicalize(existing) {
+            Ok(mut resolved) => {
+                for name in missing.iter().rev() {
+                    resolved.push(name);
+                }
+                return Ok(resolved);
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let (Some(parent), Some(name)) = (existing.parent(), existing.file_name()) else {
+                    return Err(error);
+                };
+                missing.push(name.to_os_string());
+                existing = parent;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// Whether `path` is one of `roots` or lies inside one; on Windows, whose
+/// file names ignore case, a root's missing components are compared without
+/// regard to ASCII case.
+fn inside_any(path: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| {
+        if cfg!(windows) {
+            let mut inner = path.components();
+            root.components().all(|part| {
+                inner.next().is_some_and(|other| {
+                    part.as_os_str()
+                        .to_string_lossy()
+                        .eq_ignore_ascii_case(&other.as_os_str().to_string_lossy())
+                })
+            })
+        } else {
+            path.starts_with(root)
+        }
+    })
 }
 
 /// Where the bundle goes under the `--keep` folder, canonicalised and never
@@ -617,7 +778,7 @@ fn keep_target(
     vsift_roots: &[PathBuf],
 ) -> Result<PathBuf, WatchOutputError> {
     let folder = fs::canonicalize(folder).map_err(|_| WatchOutputError::KeepFolderUnusable)?;
-    if vsift_roots.iter().any(|root| folder.starts_with(root)) {
+    if inside_any(&folder, vsift_roots) {
         return Err(WatchOutputError::KeepInsideVsift);
     }
     let bundle = folder.join(names.bundle());
@@ -763,7 +924,9 @@ fn transcript_text(
     let _ = writeln!(
         text,
         "{}: transcript by {}, {} (local speech recognition).",
-        provenance.video_name, provenance.made_by, provenance.made_at
+        one_line_text(&provenance.video_name),
+        provenance.made_by,
+        provenance.made_at
     );
     text.push_str(
         "A machine transcription: check it against the recording before you rely on it.\n\n",
@@ -776,14 +939,15 @@ fn transcript_text(
             TranscriptEntry::Line {
                 start, text: line, ..
             } => {
-                let _ = writeln!(text, "[{}] {line}", readable_time(*start));
+                let _ = writeln!(text, "[{}] {}", readable_time(*start), one_line_text(line));
             }
             TranscriptEntry::Gap { start, end, reason } => {
                 let _ = writeln!(
                     text,
-                    "[{}-{}] (not transcribed: {reason})",
+                    "[{}-{}] (not transcribed: {})",
                     readable_time(*start),
-                    readable_time(*end)
+                    readable_time(*end),
+                    one_line_text(reason)
                 );
             }
         }
@@ -873,7 +1037,7 @@ pub fn render_screen_changes(
     let _ = writeln!(
         text,
         "Screen changes in {}, found by {}, {}: {} settled screens of {} changes found, {frames} frames.",
-        provenance.video_name,
+        one_line_text(&provenance.video_name),
         provenance.made_by,
         provenance.made_at,
         changes.len(),

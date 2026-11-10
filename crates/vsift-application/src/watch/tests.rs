@@ -19,11 +19,12 @@ use vsift_domain::{
 };
 
 use super::{
-    ClaimedOutputs, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop, PreparedRun,
-    PreparedTranscript, PublishedPart, ScreenChange, ScreenChangeEntry, ScreenChangeSummary,
-    ScreenChanges, SessionFrame, SnapshotState, TranscriptEntry, TranscriptLine, UnfinishedWatch,
-    WatchDocuments, WatchError, WatchFile, WatchOutputError, WatchOutputKind, WatchOutputs,
-    WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps, run_watch,
+    ClaimedOutputs, EarlierWatch, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop,
+    PreparedRun, PreparedTranscript, PublishedPart, ScreenChange, ScreenChangeEntry,
+    ScreenChangeSummary, ScreenChanges, SessionFrame, SnapshotState, TranscriptEntry,
+    TranscriptLine, UnfinishedWatch, WatchDocuments, WatchError, WatchFile, WatchOutputError,
+    WatchOutputKind, WatchOutputs, WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps,
+    run_watch,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -85,6 +86,11 @@ struct FakeSteps {
     notices: Vec<FakeNotice>,
     published: Option<PublishedPart>,
     unfinished: Option<UnfinishedWatch>,
+    /// A live process owns the job that claimed the names.
+    live: bool,
+    /// The job store refuses the job as owned by another process when it is
+    /// resumed: the race after a lookup that found it unowned.
+    owned_elsewhere: bool,
     clock: SteppingClock,
     transcript: Option<PreparedTranscript>,
     lines: Vec<TranscriptLine>,
@@ -115,6 +121,8 @@ impl FakeSteps {
                 since: Some("since-1".to_owned()),
             }),
             unfinished: None,
+            live: false,
+            owned_elsewhere: false,
             clock: SteppingClock {
                 now: Mutex::new(1_000),
                 step: 0,
@@ -221,6 +229,9 @@ impl WatchSteps for FakeSteps {
         let answer = (|| {
             self.step(&format!("prepare {}", job.as_str()), StepFailure::Prepare)
                 .map_err(PrepareStop::Failed)?;
+            if self.owned_elsewhere {
+                return Err(PrepareStop::OwnedElsewhere(StepFailure::Prepare));
+            }
             for notice in &self.notices {
                 match notice {
                     FakeNotice::Published => progress.published(),
@@ -251,9 +262,14 @@ impl WatchSteps for FakeSteps {
         &self,
         _video: &Path,
         _claimed: &ClaimedOutputs,
-    ) -> impl Future<Output = Result<Option<UnfinishedWatch>, StepFailure>> + Send {
+    ) -> impl Future<Output = Result<Option<EarlierWatch>, StepFailure>> + Send {
         self.record("find_unfinished");
-        std::future::ready(Ok(self.unfinished.clone()))
+        let found = if self.live {
+            Some(EarlierWatch::Live)
+        } else {
+            self.unfinished.clone().map(EarlierWatch::Interrupted)
+        };
+        std::future::ready(Ok(found))
     }
 
     fn clock(&self) -> &dyn Clock {
@@ -1059,6 +1075,104 @@ async fn a_failed_rerun_leaves_the_taken_over_files_saying_so() -> TestResult {
         vec![SnapshotState::Failed]
     );
     assert_eq!(outputs.calls.last().map(String::as_str), Some("release"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rerun_while_the_first_run_is_live_is_refused_and_touches_nothing() -> TestResult {
+    // C-1 of the 0.3.0 review: the first run's job is owned by a live
+    // process. It is never taken over: no reclaim, no session or job of its
+    // touched, no snapshot written over its files, nothing closed.
+    let mut steps = FakeSteps::new()?;
+    steps.live = true;
+    let mut outputs = FakeOutputs {
+        taken: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_watch(
+        &steps,
+        &mut outputs,
+        Path::new(VIDEO),
+        None,
+        Some(Path::new(KEEP)),
+    )
+    .await;
+    assert!(
+        matches!(result, Err(WatchError::RunInProgress)),
+        "{result:?}"
+    );
+    assert_eq!(
+        outputs.calls,
+        vec!["claim", "planned"],
+        "nothing is taken over, written, kept or released"
+    );
+    assert_eq!(
+        steps.calls(),
+        vec!["check_source", "check_capabilities", "find_unfinished"],
+        "no session is opened, no job resumed, nothing closed"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rerun_whose_job_is_owned_again_before_it_resumes_is_refused_the_same_way() -> TestResult
+{
+    // The race: the lookup found the job unowned, and by the time it is
+    // resumed another process owns it again. The job store's answer decides:
+    // the same refusal, no failed marker over the files, nothing closed.
+    let mut steps = FakeSteps::new()?;
+    steps.owned_elsewhere = true;
+    steps.unfinished = Some(UnfinishedWatch {
+        session: FakeSteps::session()?,
+        job: JobId::parse("job_fedcba9876543210")?,
+    });
+    let mut outputs = FakeOutputs {
+        taken: true,
+        ..FakeOutputs::default()
+    };
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
+    assert!(
+        matches!(result, Err(WatchError::RunInProgress)),
+        "{result:?}"
+    );
+    assert_eq!(
+        outputs.snapshots,
+        Vec::new(),
+        "no snapshot, failed or other"
+    );
+    assert_eq!(
+        outputs.calls,
+        vec!["claim", "planned", "reclaim", "release"],
+        "the release gives up only what the takeover itself created"
+    );
+    let calls = steps.calls();
+    assert!(calls.contains(&"prepare job_fedcba9876543210".to_owned()));
+    assert!(
+        !calls.contains(&"close_session".to_owned()),
+        "the live run's session stays open, so its job is not cancelled"
+    );
+    assert!(!calls.contains(&"open_session".to_owned()));
+    assert!(!calls.contains(&"start_job".to_owned()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_fresh_run_whose_own_job_is_owned_elsewhere_fails_as_before() -> TestResult {
+    // Only a takeover can meet another run's files: a fresh run's own job
+    // refused as owned is a failure of this run, released and closed.
+    let mut steps = FakeSteps::new()?;
+    steps.owned_elsewhere = true;
+    let mut outputs = FakeOutputs::default();
+    let result = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None).await;
+    assert!(
+        matches!(result, Err(WatchError::Step(StepFailure::Prepare))),
+        "{result:?}"
+    );
+    assert_eq!(outputs.calls.last().map(String::as_str), Some("release"));
+    assert_eq!(
+        steps.calls().last().map(String::as_str),
+        Some("close_session")
+    );
     Ok(())
 }
 
