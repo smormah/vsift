@@ -50,7 +50,7 @@ const SEARCH_SCOPE: &str = "transcript_text";
 pub(crate) const UNTRANSCRIBED_REASON: &str = "untranscribed_range";
 
 /// Envelope reason: more untranscribed gaps exist than the envelope lists.
-const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";
+pub(crate) const GAPS_TRUNCATED_REASON: &str = "gap_list_truncated";
 
 /// Fixed warning of a search whose range is not fully transcribed.
 pub const UNTRANSCRIBED_SEARCH_WARNING: &str = "Part of the searched range has no transcript, so words said there cannot be found; coverage lists the gaps. Run transcript retranscribe to transcribe them.";

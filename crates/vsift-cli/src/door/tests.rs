@@ -940,7 +940,8 @@ async fn unattended_installs_the_named_parts_and_passes() -> TestResult {
 
 /// With `--json` the result is the `setup` command's, and a speech part
 /// that waits for video is a fail with its next step; the exit status is
-/// the install's.
+/// the install's, and so is the failed envelope's `error.code` (Fable
+/// review P-2): `data` is the same result beside the error.
 #[tokio::test]
 async fn unattended_json_reports_a_fail_with_each_parts_next_step() -> TestResult {
     let nothing = checked(
@@ -975,6 +976,12 @@ async fn unattended_json_reports_a_fail_with_each_parts_next_step() -> TestResul
 
     let result: Value = serde_json::from_str(&stdout)?;
     assert_eq!(result["command"], "setup");
+    assert_eq!(result["status"], "failed");
+    assert_eq!(result["error"]["code"], "DOWNLOAD_FAILED");
+    assert_eq!(
+        result["error"]["remediation"][0]["summary"],
+        vsift_contract::SETUP_FAILED_REMEDIATION
+    );
     assert_eq!(result["data"]["outcome"], "fail");
     assert_eq!(result["data"]["parts"][0]["status"], "not_set_up");
     assert_eq!(
@@ -990,6 +997,47 @@ async fn unattended_json_reports_a_fail_with_each_parts_next_step() -> TestResul
         "offline"
     );
     assert_eq!(exit, ProcessExit::from(FailureCode::DownloadFailed.class()));
+    Ok(())
+}
+
+/// An install that ended without a failure code but left a named part not
+/// working is a fail too: the envelope is `failed` with
+/// `MISSING_CAPABILITY`, the class the process exits with (Fable review P-2).
+#[tokio::test]
+async fn unattended_json_fail_without_an_install_failure_is_missing_capability() -> TestResult {
+    let nothing = checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![nothing.clone(), nothing])
+        .with_plan(plan(vec![
+            action("ffmpeg_ffprobe", "n9.0.1", "BtbN", 112_640_000),
+            action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        ])?)
+        .with_install(Ok(install_results(
+            json!([
+                component("ffmpeg_ffprobe", "activated", None, None),
+                component("whisper_cli", "activated", None, None),
+            ]),
+            None,
+        )?));
+
+    let (exit, stdout, _) = unattended(&steps, CorePartSet::ALL, None, OutputMode::Json).await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(result["status"], "failed");
+    assert_eq!(result["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(result["data"]["outcome"], "fail");
+    assert_eq!(
+        exit,
+        ProcessExit::from(FailureCode::MissingCapability.class())
+    );
     Ok(())
 }
 

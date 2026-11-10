@@ -20,7 +20,7 @@
           "executable": "vsift"
         },
         "required_authority": "none",
-        "summary": "The run was cancelled before it committed, so nothing was committed; affected_ids names its session and job. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again."
+        "summary": "The run was cancelled before it finished; affected_ids names its session and job. What it had already published stays committed and citable: its revision stays open, and transcript get reads it, listing the rest as pending. A run that published nothing committed nothing. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again."
       }
     ],
     "retry_after_ms": null,

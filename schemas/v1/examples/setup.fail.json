@@ -69,10 +69,23 @@
       }
     ]
   },
-  "error": null,
+  "error": {
+    "affected_ids": [],
+    "code": "DOWNLOAD_FAILED",
+    "message": "A managed download from the reviewed publisher did not complete.",
+    "remediation": [
+      {
+        "command": null,
+        "required_authority": "none",
+        "summary": "The install ran, but a part you named does not work yet. data.parts says which part, with its next step; data.install says what the install did."
+      }
+    ],
+    "retry_after_ms": null,
+    "retryable": false
+  },
   "lifecycle": null,
   "operation_id": null,
   "schema_version": "1",
-  "status": "complete",
+  "status": "failed",
   "warnings": []
 }

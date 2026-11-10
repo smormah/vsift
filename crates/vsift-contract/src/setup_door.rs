@@ -6,8 +6,17 @@
 //! when one ran. An error (a part `VSift` cannot install here, checks that
 //! ran out of time, a busy install, a plan whose digest is not the one
 //! given) is the ordinary failure envelope, never this result.
+//!
+//! A pass is a `complete` envelope (exit 0). A fail is a `failed` envelope
+//! whose `error.code` has the class the process exits with, the install's own
+//! failure code or `MISSING_CAPABILITY`, and whose `data` is still this
+//! result (the planner's ruling on the Fable 0.3.0 review, P-2, amending
+//! ADR 0036): every non-zero exit carries an error of its class.
 
 use serde::{Deserialize, Serialize};
+use vsift_domain::FailureCode;
+
+use crate::{CommandName, OperationResponse};
 
 /// Whether every named part works after the run.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -96,6 +105,49 @@ pub const SETUP_NEXT_AFTER_VIDEO: &str = "Speech waits for video: once video ins
 
 /// The next step of a run that was cancelled.
 pub const SETUP_NEXT_CANCELLED: &str = "The run was stopped; run the same command again.";
+
+/// The remediation of a fail: the install ran and a named part does not
+/// work; each part's entry in `data` says what to do next.
+pub const SETUP_FAILED_REMEDIATION: &str = "The install ran, but a part you named does not work yet. data.parts says which part, with its next step; data.install says what the install did.";
+
+/// The failure code of a run with this outcome: `None` for a pass; for a
+/// fail, the install's own failure code when it had one, otherwise
+/// `MISSING_CAPABILITY` (a named part still does not work). The process
+/// exits with this code's class, so the envelope and the exit agree.
+#[must_use]
+pub fn setup_failure_code(
+    outcome: SetupOutcome,
+    install_failure: Option<FailureCode>,
+) -> Option<FailureCode> {
+    match outcome {
+        SetupOutcome::Pass => None,
+        SetupOutcome::Fail => Some(install_failure.unwrap_or(FailureCode::MissingCapability)),
+    }
+}
+
+/// The `setup` envelope: `complete` for a pass; for a fail, a `failed`
+/// envelope with [`setup_failure_code`]'s code and
+/// [`SETUP_FAILED_REMEDIATION`], whose `data` is the same result.
+///
+/// # Errors
+///
+/// Returns the serialization error when the result cannot be represented as
+/// JSON.
+pub fn setup_door_response(
+    result: &SetupResponse,
+    install_failure: Option<FailureCode>,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let command = CommandName::Setup.identifier();
+    match setup_failure_code(result.outcome, install_failure) {
+        None => OperationResponse::complete(command, result),
+        Some(code) => OperationResponse::failure_with_remediation(
+            command,
+            code,
+            SETUP_FAILED_REMEDIATION.to_owned(),
+        )
+        .with_failure_data(result),
+    }
+}
 
 /// The next step of a core part that was not named and does not work.
 #[must_use]

@@ -17,9 +17,10 @@ use vsift::{
     OptionalComponent, OptionalComponentSet, RuntimeDependency,
 };
 use vsift_contract::{
-    CommandName, OperationResponse, SETUP_NEXT_AFTER_VIDEO, SETUP_NEXT_AGAIN, SETUP_NEXT_CANCELLED,
+    CommandName, SETUP_NEXT_AFTER_VIDEO, SETUP_NEXT_AGAIN, SETUP_NEXT_CANCELLED,
     SETUP_NEXT_CONNECTION, SETUP_NEXT_SPACE, STALE_PLAN_REMEDIATION, SetupOutcome, SetupPartName,
-    SetupPartResult, SetupPartStatus, SetupResponse, setup_next_install,
+    SetupPartResult, SetupPartStatus, SetupResponse, setup_door_response, setup_failure_code,
+    setup_next_install,
 };
 
 use super::{CheckedSetup, InstallResults, SetupSteps, Stop, extra_capability, show};
@@ -144,17 +145,11 @@ where
     };
 
     let response = response(&after, parts, include, installed.as_ref());
-    let exit = match (response.outcome, installed.as_ref()) {
-        (SetupOutcome::Pass, _) => ProcessExit::Success,
-        (
-            SetupOutcome::Fail,
-            Some(InstallResults {
-                failure: Some(code),
-                ..
-            }),
-        ) => ProcessExit::from(code.class()),
-        (SetupOutcome::Fail, _) => ProcessExit::from(FailureCode::MissingCapability.class()),
-    };
+    let install_failure = installed.as_ref().and_then(|installed| installed.failure);
+    // The exit and the envelope's `error.code` come from one rule, so every
+    // non-zero exit carries an error of its class (Fable review P-2).
+    let exit = setup_failure_code(response.outcome, install_failure)
+        .map_or(ProcessExit::Success, |code| ProcessExit::from(code.class()));
     match mode {
         OutputMode::Human => {
             let heading = installed.is_none().then_some(version);
@@ -164,7 +159,7 @@ where
             )?;
         }
         OutputMode::Json | OutputMode::JsonLines => {
-            let envelope = OperationResponse::complete(CommandName::Setup.identifier(), &response)
+            let envelope = setup_door_response(&response, install_failure)
                 .map_err(|_| Stop::Failed(CommandFailure::from(FailureCode::Internal)))?;
             writer.write_json(&envelope).map_err(|_| Stop::Output)?;
         }

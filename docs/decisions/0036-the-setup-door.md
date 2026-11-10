@@ -181,7 +181,9 @@ Third-party detail appears at three moments only: before the yes (the offer), du
 - **pass** (exit 0): every named part works after the run, including parts that already worked
   (nothing to do is a pass).
 - **fail** (the exit status `setup install` gives the same failure today): the install ran and a
-  named part does not work; each part's result and next step are reported.
+  named part does not work; each part's result and next step are reported. *(Amended 2026-11-10: with
+  `--json` a fail is a `failed` envelope whose `error.code` has the exit's class; see the amendment of
+  that date at the end.)*
 - **error** (the exit status of the failure code): it could not start: an invalid argument, a part
   named that VSift cannot install here (refused before anything changes, `MISSING_CAPABILITY` with
   the do-it-yourself remediation), timed-out checks, a busy install guard (`BUSY`), or an
@@ -372,7 +374,8 @@ What the second pull request built, and where it differs in detail from the sect
   (`DEADLINE_EXCEEDED`), a named part with no reviewed catalogue here and an included extra unavailable here (both
   `MISSING_CAPABILITY`), and an `--accept-plan` digest that is not the plan's (`INVALID_ARGUMENT` with the
   stale-plan remediation, compared in the door before the install guard is taken). An extra that fails never makes
-  the outcome a fail; its entry names the next step. A `--json` fail is a `complete` result with a non-zero exit, as
+  the outcome a fail; its entry names the next step. *(Amended 2026-11-10: a `--json` fail is now a `failed`
+  envelope; see the amendment of that date at the end.)* A `--json` fail is a `complete` result with a non-zero exit, as
   a blocked `setup check` is. The `setup` result carries the install's `setup.install` data unchanged.
 - **The planner's two wording changes:** the close says `Setup complete: video and speech both work.` once, then
   `Try it: vsift ingest ./your-video.mp4`. After the `[y/N]` question the door breaks the line only when nobody
@@ -399,3 +402,23 @@ What the second pull request built, and where it differs in detail from the sect
 - **Unattended acceptance only by digest.** Kept as the optional stricter form; as the only form it
   makes scripting an install depend on reading a digest out of a file first.
 - **Installing speech before video.** Rejected: speech cannot be tested without video tools.
+
+## Amendment, 2026-11-10: a fail is a failed envelope (the Fable 0.3.0 review, P-2 and P-3)
+
+The planner's ruling on the Fable review of 0.3.0, before the unattended door first shipped. It amends section
+6's **fail** and the second pull request's implementation note, which wrote a `--json` fail as a `complete`
+result with a non-zero exit.
+
+- **What changes.** With `--json`, a fail answers a `failed` envelope. Its `error.code` is the install's own
+  failure code (for example `DOWNLOAD_FAILED`, exit 7), or `MISSING_CAPABILITY` (exit 2) when the install gave
+  none, and its one remediation is fixed prose that points to `data.parts` and `data.install`. The process exits
+  with that code's class, decided by the same rule as the envelope (`setup_failure_code` in the contract crate),
+  so every non-zero exit carries an error of its class.
+- **What stays.** `data` is the same `setup` result beside the error (the envelope allows `data` with an error,
+  as `setup install` and `job run` already use), so `outcome`, `parts` and `install` read as before. A pass is a
+  `complete` envelope, an error is the ordinary failure envelope with `data` null, the exit statuses are those
+  this ADR gave, and the readable text does not change.
+- **The names (P-3).** The door's person-facing `web_videos` and `--include web-videos` stay, beside the
+  catalogue's `online_links` and `--include online_links` and the managed component `yt_dlp`. `cli-v1.md`
+  ("One extra, its names", under "Optional components and archive formats") is the one table that relates
+  them; the 1.0 freeze statement points to it.

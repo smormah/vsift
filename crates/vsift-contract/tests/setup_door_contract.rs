@@ -9,9 +9,10 @@ use std::{env, fs, io, path::PathBuf};
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
-    CommandName, OperationResponse, SETUP_NEXT_AGAIN, SETUP_NEXT_CONNECTION, SetupOutcome,
-    SetupPartName, SetupPartResult, SetupPartStatus, SetupResponse,
+    SETUP_FAILED_REMEDIATION, SETUP_NEXT_AGAIN, SETUP_NEXT_CONNECTION, SetupOutcome, SetupPartName,
+    SetupPartResult, SetupPartStatus, SetupResponse, setup_door_response, setup_failure_code,
 };
+use vsift_domain::FailureCode;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -65,10 +66,13 @@ fn frozen(example: &str, value: &Value) -> TestResult {
     Ok(())
 }
 
-fn envelope(response: &SetupResponse) -> Result<Value, Box<dyn std::error::Error>> {
-    Ok(serde_json::to_value(OperationResponse::complete(
-        CommandName::Setup.identifier(),
+fn envelope(
+    response: &SetupResponse,
+    install_failure: Option<FailureCode>,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    Ok(serde_json::to_value(setup_door_response(
         response,
+        install_failure,
     )?)?)
 }
 
@@ -97,7 +101,7 @@ fn a_pass_carries_the_install_and_validates() -> TestResult {
         ],
         install: Some(load("examples/setup-install.json")?["data"].take()),
     };
-    let value = envelope(&response)?;
+    let value = envelope(&response, None)?;
     validate("operation-response.schema.json", &value)?;
     validate("setup.schema.json", &value["data"])?;
     assert_eq!(value["command"], "setup");
@@ -108,7 +112,9 @@ fn a_pass_carries_the_install_and_validates() -> TestResult {
 }
 
 /// A fail: video already worked, speech's download stopped, and each part
-/// that does not work names its next step.
+/// that does not work names its next step. The envelope is `failed` with
+/// the install's own code, whose class is the exit status, and `data` is
+/// the result beside the error (Fable review P-2).
 #[test]
 fn a_fail_names_each_parts_next_step_and_validates() -> TestResult {
     let response = SetupResponse {
@@ -130,10 +136,50 @@ fn a_fail_names_each_parts_next_step_and_validates() -> TestResult {
         ],
         install: Some(load("examples/setup-install.failed.json")?["data"].take()),
     };
-    let value = envelope(&response)?;
+    let value = envelope(&response, Some(FailureCode::DownloadFailed))?;
     validate("operation-response.schema.json", &value)?;
     validate("setup.schema.json", &value["data"])?;
+    assert_eq!(value["status"], "failed");
+    assert_eq!(value["error"]["code"], "DOWNLOAD_FAILED");
+    assert_eq!(
+        value["error"]["remediation"][0]["summary"],
+        SETUP_FAILED_REMEDIATION
+    );
     frozen("setup.fail.json", &value)?;
+    Ok(())
+}
+
+/// The failure code follows the outcome: none for a pass (whatever the
+/// install reported), the install's own code for a fail, and
+/// `MISSING_CAPABILITY` for a fail the install gave no code for.
+#[test]
+fn the_failure_code_follows_the_outcome() -> TestResult {
+    assert_eq!(
+        setup_failure_code(SetupOutcome::Pass, Some(FailureCode::DownloadFailed)),
+        None
+    );
+    assert_eq!(
+        setup_failure_code(SetupOutcome::Fail, Some(FailureCode::StorageIo)),
+        Some(FailureCode::StorageIo)
+    );
+    assert_eq!(
+        setup_failure_code(SetupOutcome::Fail, None),
+        Some(FailureCode::MissingCapability)
+    );
+    let response = SetupResponse {
+        outcome: SetupOutcome::Fail,
+        parts: vec![part(
+            SetupPartName::Video,
+            true,
+            SetupPartStatus::NotSetUp,
+            Some(SETUP_NEXT_AGAIN),
+        )],
+        install: None,
+    };
+    let value = envelope(&response, None)?;
+    validate("operation-response.schema.json", &value)?;
+    assert_eq!(value["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(value["data"]["outcome"], "fail");
     Ok(())
 }
 
@@ -149,7 +195,7 @@ fn nothing_to_install_is_null_and_unknown_values_are_refused() -> TestResult {
         ],
         install: None,
     };
-    let mut value = envelope(&response)?;
+    let mut value = envelope(&response, None)?;
     validate("setup.schema.json", &value["data"])?;
     assert_eq!(value["data"]["install"], Value::Null);
     value["data"]["outcome"] = Value::from("partial");
