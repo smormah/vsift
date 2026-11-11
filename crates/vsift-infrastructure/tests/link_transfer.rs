@@ -237,7 +237,35 @@ impl TestProxy {
     }
 }
 
-fn start_proxy(target_port: u16, demand_credentials: bool) -> TestResult<TestProxy> {
+/// What the test proxy asks of a `CONNECT` before it tunnels it.
+#[derive(Clone, Copy)]
+enum ProxyCredentials {
+    /// Tunnels every `CONNECT`.
+    NotAsked,
+    /// Answers every `CONNECT` with `407`.
+    AlwaysRefused,
+    /// Tunnels a `CONNECT` whose `Proxy-Authorization` is `Basic` with this
+    /// base64 value, and answers any other with `407`.
+    Expected(&'static str),
+}
+
+impl ProxyCredentials {
+    /// Whether a `CONNECT` with these header lines may pass.
+    fn admit(self, headers: &[String]) -> bool {
+        match self {
+            Self::NotAsked => true,
+            Self::AlwaysRefused => false,
+            Self::Expected(value) => headers.iter().any(|line| {
+                line.split_once(':').is_some_and(|(name, given)| {
+                    name.trim().eq_ignore_ascii_case("proxy-authorization")
+                        && given.trim() == format!("Basic {value}")
+                })
+            }),
+        }
+    }
+}
+
+fn start_proxy(target_port: u16, credentials: ProxyCredentials) -> TestResult<TestProxy> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
     let port = listener.local_addr()?.port();
     let connects = Arc::new(Mutex::new(Vec::new()));
@@ -246,7 +274,7 @@ fn start_proxy(target_port: u16, demand_credentials: bool) -> TestResult<TestPro
         for client in listener.incoming().flatten() {
             let log = Arc::clone(&log);
             thread::spawn(move || {
-                let _ = tunnel(client, target_port, demand_credentials, &log);
+                let _ = tunnel(client, target_port, credentials, &log);
             });
         }
     });
@@ -256,11 +284,12 @@ fn start_proxy(target_port: u16, demand_credentials: bool) -> TestResult<TestPro
 fn tunnel(
     mut client: TcpStream,
     target_port: u16,
-    demand_credentials: bool,
+    credentials: ProxyCredentials,
     connects: &Mutex<Vec<String>>,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(client.try_clone()?);
     let mut first = true;
+    let mut headers = Vec::new();
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 || line == "\r\n" {
@@ -275,9 +304,11 @@ fn tunnel(
                     .push(target.to_owned());
             }
             first = false;
+        } else {
+            headers.push(line);
         }
     }
-    if demand_credentials {
+    if !credentials.admit(&headers) {
         client.write_all(
             b"HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"test\"\r\nContent-Length: 0\r\n\r\n",
         )?;
@@ -932,7 +963,7 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
     let server = HttpsServer::trusted()?;
     server.route("/video.mp4", body(video_body(64_000), true));
     let answers = answers();
-    let tunnel = start_proxy(server.port, false)?;
+    let tunnel = start_proxy(server.port, ProxyCredentials::NotAsked)?;
     let root = OwnedRoot::new()?;
     let store = session(&root).await?;
     let snapshot = fetch(
@@ -948,7 +979,7 @@ async fn through_a_proxy_the_origin_says_the_proxy_resolved_the_name() -> TestRe
     assert_eq!(origin.address_check(), AddressCheck::ProxyResolved);
     drop(snapshot);
 
-    let demanding = start_proxy(server.port, true)?;
+    let demanding = start_proxy(server.port, ProxyCredentials::AlwaysRefused)?;
     let root = OwnedRoot::new()?;
     let store = session(&root).await?;
     let result = fetch(
@@ -1004,7 +1035,7 @@ async fn a_proxy_named_by_host_name_carries_the_request_and_the_link_is_still_sc
         "localhost",
         vec![vec![LOOPBACK, IpAddr::V6(Ipv6Addr::LOCALHOST)]],
     );
-    let tunnel = start_proxy(server.port, false)?;
+    let tunnel = start_proxy(server.port, ProxyCredentials::NotAsked)?;
     let by_name = format!("http://localhost:{}", tunnel.port);
     let root = OwnedRoot::new()?;
     let store = session(&root).await?;
@@ -1055,6 +1086,107 @@ async fn a_proxy_named_by_host_name_carries_the_request_and_the_link_is_still_sc
     Ok(())
 }
 
+/// Made-up proxy credentials; they must reach the proxy and nothing else.
+const PROXY_USER: &str = "h6-proxy-user";
+const PROXY_SECRET: &str = "SENTINEL-PROXY-SECRET-4b2e";
+/// `base64("h6-proxy-user:SENTINEL-PROXY-SECRET-4b2e")`, as the proxy expects
+/// it in `Proxy-Authorization: Basic`.
+const PROXY_BASIC: &str = "aDYtcHJveHktdXNlcjpTRU5USU5FTC1QUk9YWS1TRUNSRVQtNGIyZQ==";
+
+/// A company proxy named by host name that needs a user name and password
+/// (the planner's condition on #599): the credentials in the proxy's URL
+/// reach the proxy through reqwest's per-request proxy, and no answer,
+/// record or debug text holds them; wrong ones are `proxy_auth`.
+#[tokio::test]
+async fn a_proxy_named_by_host_name_with_credentials_carries_the_fetch_and_keeps_them_private()
+-> TestResult {
+    let server = HttpsServer::trusted()?;
+    server.route("/video.mp4", body(video_body(64_000), true));
+    let answers = answers();
+    answers.answer(
+        "localhost",
+        vec![vec![LOOPBACK, IpAddr::V6(Ipv6Addr::LOCALHOST)]],
+    );
+    let tunnel = start_proxy(server.port, ProxyCredentials::Expected(PROXY_BASIC))?;
+    let with_credentials = format!(
+        "http://{PROXY_USER}:{PROXY_SECRET}@localhost:{}",
+        tunnel.port
+    );
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let snapshot = fetch(
+        &store,
+        &server.link("video.example.test", "/video.mp4")?,
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?.through_proxy(&with_credentials),
+    )
+    .await?;
+    let Some(SourceOrigin::DirectHttps(origin)) = snapshot.origin() else {
+        return Err("no origin".into());
+    };
+    assert_eq!(origin.address_check(), AddressCheck::ProxyResolved);
+    assert_eq!(tunnel.connects().len(), 1);
+    let origin_text = format!("{:?}", snapshot.origin());
+    // The stored origin: activate the session and read its status back.
+    store.activate_source(
+        &snapshot,
+        &OperationId::parse("op_2222222222222222")?,
+        StorageGeneration::INITIAL,
+        1_000,
+    )?;
+    drop(snapshot);
+    let status = store.session_status(&SessionId::parse(SESSION)?)?;
+    let stored_text = format!("{:?}", status.origin());
+    for (what, text) in [("origin", &origin_text), ("stored origin", &stored_text)] {
+        assert!(!text.contains(PROXY_SECRET), "the {what} holds the secret");
+        assert!(!text.contains(PROXY_USER), "the {what} holds the user name");
+    }
+    for file in files_under(&root.0)? {
+        let text = String::from_utf8_lossy(&fs::read(&file)?).into_owned();
+        assert!(
+            !text.contains(PROXY_SECRET) && !text.contains(PROXY_BASIC),
+            "{} holds the proxy credentials",
+            file.display()
+        );
+    }
+    // The credentials went to the proxy only, never through the tunnel.
+    assert!(
+        server
+            .requests()
+            .iter()
+            .all(|request| !request.to_ascii_lowercase().contains("authorization")),
+        "the server saw a credential"
+    );
+
+    // Wrong credentials: the proxy answers 407, and the refusal holds none.
+    let wrong = format!(
+        "http://{PROXY_USER}:not-the-secret@localhost:{}",
+        tunnel.port
+    );
+    let root = OwnedRoot::new()?;
+    let store = session(&root).await?;
+    let result = fetch(
+        &store,
+        &server.link("video.example.test", "/video.mp4")?,
+        DownloadLimits::DEFAULT,
+        route(&server, &answers)?.through_proxy(&wrong),
+    )
+    .await;
+    let Err(error) = result else {
+        return Err("wrong proxy credentials were accepted".into());
+    };
+    assert!(
+        matches!(error, SourceError::Fetch(SourceFetchReason::ProxyAuth)),
+        "{error:?}"
+    );
+    let text = format!("{error} {error:?}");
+    assert!(
+        !text.contains("not-the-secret") && !text.contains(PROXY_USER),
+        "{text}"
+    );
+    Ok(())
+}
+
 /// Fable review T-2: `NO_PROXY` is decided for each hop by its own host. The
 /// proxy records every `CONNECT`, so it shows which hops it carried.
 #[tokio::test]
@@ -1101,7 +1233,7 @@ async fn each_redirect_hop_takes_the_route_no_proxy_gives_its_own_host() -> Test
         // Every hop listed: nothing reaches the proxy, VSift saw each address.
         ("/to-cdn", "example.test", Vec::new(), AddressCheck::Direct),
     ] {
-        let tunnel = start_proxy(server.port, false)?;
+        let tunnel = start_proxy(server.port, ProxyCredentials::NotAsked)?;
         let root = OwnedRoot::new()?;
         let store = session(&root).await?;
         let snapshot = fetch(
@@ -1136,7 +1268,7 @@ async fn each_redirect_hop_takes_the_route_no_proxy_gives_its_own_host() -> Test
         ),
     ] {
         answers.answer("files.internal", vec![vec![address]]);
-        let tunnel = start_proxy(server.port, false)?;
+        let tunnel = start_proxy(server.port, ProxyCredentials::NotAsked)?;
         refused_on(
             &server,
             ("video.example.test", "/to-internal"),
@@ -1189,7 +1321,7 @@ async fn through_a_proxy_a_redirect_to_an_internal_name_is_refused() -> TestResu
         );
     }
     let answers = answers();
-    let tunnel = start_proxy(server.port, false)?;
+    let tunnel = start_proxy(server.port, ProxyCredentials::NotAsked)?;
     for path in ["/to-corp", "/to-single-label"] {
         refused_on(
             &server,
@@ -1223,7 +1355,7 @@ async fn a_proxy_value_is_read_as_curl_reads_it_and_an_unusable_one_is_refused()
     let server = HttpsServer::trusted()?;
     server.route("/video.mp4", body(video_body(64_000), true));
     let answers = answers();
-    let tunnel = start_proxy(server.port, false)?;
+    let tunnel = start_proxy(server.port, ProxyCredentials::NotAsked)?;
     // `host:port` with no scheme is an HTTP proxy.
     let root = OwnedRoot::new()?;
     let store = session(&root).await?;
