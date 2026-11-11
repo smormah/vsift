@@ -286,6 +286,7 @@ impl Seeded {
             NonZeroU32::new(number).ok_or("zero")?,
             first,
             self.now,
+            vsift_application::CommitAdmission::Ordinary,
         )?;
         Ok(())
     }

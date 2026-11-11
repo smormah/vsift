@@ -29,6 +29,9 @@ pub const WATCH_BEYOND_BOUND_REASON: &str = "screen_changes_beyond_bound";
 /// Envelope reason: the session ran out of evidence room, so the frames
 /// stopped early (L-234).
 pub const WATCH_FRAMES_STOPPED_REASON: &str = "frames_stopped_for_room";
+/// Envelope reason: other work held the machine's capacity while frames were
+/// taken, so some selected changes have no frame (Fable review C-2).
+pub const WATCH_FRAMES_SKIPPED_REASON: &str = "frames_skipped_for_capacity";
 /// Envelope reason: the bundle `--keep` asked for could not be written.
 pub const WATCH_NOT_KEPT_REASON: &str = "not_kept";
 
@@ -157,8 +160,9 @@ pub enum WatchCompleteness {
     /// changes found.
     Complete,
     /// Part of the video was not transcribed, runs past the part screen
-    /// changes are found in, the frames stopped for room, or the bundle
-    /// `--keep` asked for could not be written; the data says which.
+    /// changes are found in, the frames stopped for room or some were skipped
+    /// while the computer was busy, or the bundle `--keep` asked for could
+    /// not be written; the data says which.
     Partial,
 }
 
@@ -170,17 +174,10 @@ impl WatchCompleteness {
     pub fn of(
         not_transcribed: &[WatchRangeData],
         screen_changes_beyond_bound: bool,
-        frames_stopped_for_room: bool,
+        frames: WatchFrameGaps,
         kept: Option<&WatchKeptData>,
     ) -> Self {
-        if gap_reasons(
-            not_transcribed,
-            screen_changes_beyond_bound,
-            frames_stopped_for_room,
-            kept,
-        )
-        .is_empty()
-        {
+        if gap_reasons(not_transcribed, screen_changes_beyond_bound, frames, kept).is_empty() {
             Self::Complete
         } else {
             Self::Partial
@@ -188,11 +185,21 @@ impl WatchCompleteness {
     }
 }
 
+/// Why selected changes have no frame: the two facts of [`WatchData`] the
+/// gap rule reads about frames.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WatchFrameGaps {
+    /// [`WatchData::frames_stopped_for_room`].
+    pub stopped_for_room: bool,
+    /// [`WatchData::frames_skipped_for_capacity`].
+    pub skipped_for_capacity: u64,
+}
+
 /// The distinct reasons a run left a gap, in a fixed order.
 fn gap_reasons(
     not_transcribed: &[WatchRangeData],
     screen_changes_beyond_bound: bool,
-    frames_stopped_for_room: bool,
+    frames: WatchFrameGaps,
     kept: Option<&WatchKeptData>,
 ) -> Vec<&'static str> {
     let mut reasons = Vec::new();
@@ -205,8 +212,11 @@ fn gap_reasons(
     if screen_changes_beyond_bound {
         reasons.push(WATCH_BEYOND_BOUND_REASON);
     }
-    if frames_stopped_for_room {
+    if frames.stopped_for_room {
         reasons.push(WATCH_FRAMES_STOPPED_REASON);
+    }
+    if frames.skipped_for_capacity > 0 {
+        reasons.push(WATCH_FRAMES_SKIPPED_REASON);
     }
     if kept.is_some_and(|kept| kept.state == WatchKeptState::NotKept) {
         reasons.push(WATCH_NOT_KEPT_REASON);
@@ -221,7 +231,10 @@ fn envelope_coverage(data: &WatchData) -> CoverageResponse {
     let reasons = gap_reasons(
         &data.not_transcribed,
         data.screen_changes_beyond_bound,
-        data.frames_stopped_for_room,
+        WatchFrameGaps {
+            stopped_for_room: data.frames_stopped_for_room,
+            skipped_for_capacity: data.frames_skipped_for_capacity,
+        },
         data.kept.as_ref(),
     );
     CoverageResponse::new(
@@ -288,6 +301,10 @@ pub struct WatchData {
     /// Whether the session ran out of evidence room before every selected
     /// change had its frame, so the frames stopped early (known limit L-234).
     pub frames_stopped_for_room: bool,
+    /// How many selected changes have no frame because other work held the
+    /// machine's capacity when their frame was taken; each is listed without
+    /// one (Fable review C-2). Zero for a run that took every frame it chose.
+    pub frames_skipped_for_capacity: u64,
     /// Whether the names were shortened, so the subtitles no longer share the
     /// video's name.
     pub names_shortened: bool,

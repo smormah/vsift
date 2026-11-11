@@ -30,6 +30,7 @@
       }
     ],
     "frames_stopped_for_room": false,
+    "frames_skipped_for_capacity": 0,
     "job_id": "job_0123456789abcdef0123456789abcdef",
     "kept": {
       "failure_code": null,

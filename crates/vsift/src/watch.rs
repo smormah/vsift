@@ -601,7 +601,8 @@ impl Engine {
 
     /// One change's frame, stored in the session by `frame get`. A session
     /// whose evidence is full answers [`FrameRefusal::NoRoom`], which ends
-    /// the frames, not the run (known limit L-234).
+    /// the frames, not the run (known limit L-234); contention answers
+    /// [`FrameRefusal::Busy`] ([`frame_refusal`]).
     async fn watch_frame(
         &self,
         session: &SessionId,
@@ -615,10 +616,7 @@ impl Engine {
                 cancellation: cancellation.clone(),
             })
             .await
-            .map_err(|error| match error {
-                EngineError::EvidenceBudgetExhausted => FrameRefusal::NoRoom,
-                error => FrameRefusal::Failed(error),
-            })?;
+            .map_err(frame_refusal)?;
         let file = results
             .files()
             .first()
@@ -867,15 +865,64 @@ fn absolute(path: &Path) -> Result<PathBuf, EngineError> {
     std::path::absolute(path).map_err(|_| EngineError::WorkingDirectoryUnavailable)
 }
 
+/// What a refused `frame get` means for the run: no evidence room ends the
+/// frames; contention, and only contention (other work held the root's
+/// capacity, or the session past a commit's wait, which the engine names as
+/// the transcription that runs when one does), skips the frame (Fable review
+/// C-2); every other failure ends the run, as before.
+fn frame_refusal(error: EngineError) -> FrameRefusal<EngineError> {
+    match error {
+        EngineError::EvidenceBudgetExhausted => FrameRefusal::NoRoom,
+        error
+            if matches!(error, EngineError::TranscriptionRunning { .. })
+                || error.is_media_contention() =>
+        {
+            FrameRefusal::Busy
+        }
+        error => FrameRefusal::Failed(error),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use vsift_application::PrepareStop;
-    use vsift_domain::JobId;
+    use vsift_application::{FrameRefusal, PrepareStop, SessionStorageError};
+    use vsift_domain::{JobId, SessionId};
 
-    use super::prepare_stop;
+    use super::{frame_refusal, prepare_stop};
     use crate::error::EngineError;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    /// Fable review C-2: contention skips the frame, a full session ends the
+    /// frames, and any other failure still fails the run.
+    #[test]
+    fn only_contention_skips_a_frame() -> TestResult {
+        let session = SessionId::parse("ses_0123456789abcdef")?;
+        let job = JobId::parse("job_0123456789abcdef")?;
+        assert!(matches!(
+            frame_refusal(EngineError::Storage(SessionStorageError::Busy)),
+            FrameRefusal::Busy
+        ));
+        assert!(matches!(
+            frame_refusal(EngineError::TranscriptionRunning { session, job }),
+            FrameRefusal::Busy
+        ));
+        assert!(matches!(
+            frame_refusal(EngineError::EvidenceBudgetExhausted),
+            FrameRefusal::NoRoom
+        ));
+        for failure in [
+            EngineError::Storage(SessionStorageError::Io),
+            EngineError::Storage(SessionStorageError::StateConflict),
+            EngineError::EvidenceAssembly,
+        ] {
+            assert!(
+                matches!(frame_refusal(failure), FrameRefusal::Failed(_)),
+                "a failure that is not contention ends the run"
+            );
+        }
+        Ok(())
+    }
 
     /// C-1 of the 0.3.0 review, the race: `job_resume` answers busy for the
     /// job itself when another process owns it (when it looks and when it

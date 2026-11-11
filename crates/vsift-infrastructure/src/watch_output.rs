@@ -1068,6 +1068,13 @@ pub fn render_screen_changes(
             "VSift's private copy of the video ran out of room for frames, so the frames stop early; every settled screen is still listed.\n",
         );
     }
+    if summary.skipped_for_capacity > 0 {
+        let _ = writeln!(
+            text,
+            "{} of the chosen frames were not saved because the computer was busy with other VSift work; their changes are listed with no frame.",
+            summary.skipped_for_capacity
+        );
+    }
     if summary.beyond_index_bound {
         text.push_str("Screen changes are found in the first four hours of a video only.\n");
     }

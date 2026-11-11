@@ -10,10 +10,10 @@ use std::{fs, io, path::PathBuf};
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
-    WATCH_BEYOND_BOUND_REASON, WATCH_FRAMES_STOPPED_REASON, WATCH_NOT_KEPT_REASON,
-    WATCH_NOT_KEPT_WARNING, WatchCompleteness, WatchData, WatchFailureData, WatchFrameData,
-    WatchKeptData, WatchKeptState, WatchOutputData, WatchOutputsData, WatchRangeData,
-    watch_response,
+    WATCH_BEYOND_BOUND_REASON, WATCH_FRAMES_SKIPPED_REASON, WATCH_FRAMES_STOPPED_REASON,
+    WATCH_NOT_KEPT_REASON, WATCH_NOT_KEPT_WARNING, WatchCompleteness, WatchData, WatchFailureData,
+    WatchFrameData, WatchFrameGaps, WatchKeptData, WatchKeptState, WatchOutputData,
+    WatchOutputsData, WatchRangeData, watch_response,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -119,6 +119,7 @@ fn meeting() -> WatchData {
         }],
         screen_changes_beyond_bound: false,
         frames_stopped_for_room: false,
+        frames_skipped_for_capacity: 0,
         names_shortened: false,
         outputs: WatchOutputsData {
             transcript: file(
@@ -181,7 +182,10 @@ fn completeness(data: &WatchData) -> WatchCompleteness {
     WatchCompleteness::of(
         &data.not_transcribed,
         data.screen_changes_beyond_bound,
-        data.frames_stopped_for_room,
+        WatchFrameGaps {
+            stopped_for_room: data.frames_stopped_for_room,
+            skipped_for_capacity: data.frames_skipped_for_capacity,
+        },
         data.kept.as_ref(),
     )
 }
@@ -225,7 +229,8 @@ fn a_whole_run_is_complete() -> TestResult {
     Ok(())
 }
 
-/// Each of the four partial cases of the planner's ruling answers
+/// Each partial case of the planner's ruling (and C-2's frames skipped
+/// while the computer was busy) answers
 /// `status: partial`, with its own reason, and `data.outcome` agrees: a
 /// reader that follows the exit rule alone never takes a gap for a whole run.
 #[test]
@@ -234,6 +239,8 @@ fn every_partial_case_answers_a_partial_envelope() -> TestResult {
     beyond.screen_changes_beyond_bound = true;
     let mut stopped = whole_meeting();
     stopped.frames_stopped_for_room = true;
+    let mut skipped = whole_meeting();
+    skipped.frames_skipped_for_capacity = 3;
     let mut not_kept = whole_meeting();
     not_kept.session_closed = false;
     not_kept.kept = Some(kept(WatchKeptState::NotKept, Some("STORAGE_IO")));
@@ -241,6 +248,7 @@ fn every_partial_case_answers_a_partial_envelope() -> TestResult {
         (meeting(), "untranscribed_range"),
         (beyond, WATCH_BEYOND_BOUND_REASON),
         (stopped, WATCH_FRAMES_STOPPED_REASON),
+        (skipped, WATCH_FRAMES_SKIPPED_REASON),
         (not_kept, WATCH_NOT_KEPT_REASON),
     ] {
         data.outcome = completeness(&data);
@@ -423,6 +431,18 @@ fn the_schema_refuses_what_watch_never_reports() -> TestResult {
     assert!(validate(SCHEMA, &broken).is_err());
     broken["outcome"] = Value::from("partial");
     validate(SCHEMA, &broken)?;
+
+    // Frames skipped while the computer was busy make the run partial
+    // (Fable review C-2), and the count is never negative.
+    let mut broken = valid.clone();
+    broken["not_transcribed"] = serde_json::json!([]);
+    broken["outcome"] = Value::from("complete");
+    broken["frames_skipped_for_capacity"] = Value::from(2);
+    assert!(validate(SCHEMA, &broken).is_err());
+    broken["outcome"] = Value::from("partial");
+    validate(SCHEMA, &broken)?;
+    broken["frames_skipped_for_capacity"] = Value::from(-1);
+    assert!(validate(SCHEMA, &broken).is_err());
 
     // At most 180 frames (known limit L-234).
     let mut broken = valid.clone();

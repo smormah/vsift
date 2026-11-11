@@ -66,9 +66,9 @@ pub use publish::{
     stop_operation_id,
 };
 pub use run::{
-    CommitGuard, JobReport, JobRunError, PublishedOpenRevision, RetranscriptionOutcome,
-    RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore, SessionHead,
-    run_retranscription,
+    CommitAdmission, CommitGuard, JobReport, JobRunError, PublishedOpenRevision,
+    RetranscriptionOutcome, RetranscriptionPorts, RetranscriptionRun, RetryTimer, RevisionStore,
+    SessionHead, run_retranscription,
 };
 
 /// Command name bound into a retranscription's request digest.
@@ -575,6 +575,13 @@ impl JobRecord {
                 next.state = self.state.transition_to(JobState::Cancelled)?;
                 next.commit = None;
             }
+            JobChange::Requeue => {
+                // The epoch, the attempts, the failures and the checkpoints
+                // stay: the job continues where it stopped once its turn
+                // comes.
+                next.state = self.state.transition_to(JobState::Queued)?;
+                next.commit = None;
+            }
             JobChange::Restart => {
                 if !matches!(self.state, JobState::Failed | JobState::Cancelled) {
                     return Err(JobStoreError::Transition(JobTransitionError::new(
@@ -623,6 +630,12 @@ pub enum JobChange {
     Cancel,
     /// Starts a failed or cancelled job again in a new epoch, from nothing.
     Restart,
+    /// Puts an interrupted job of the queued mode back to wait its turn:
+    /// `interrupted` to `queued`, keeping its epoch, attempts, failures and
+    /// checkpoints. Only its owner applies it, under the owner lock, just
+    /// before the wait, so that the wait is the queued one, which `job
+    /// cancel` and `session close` can stop (Fable review C-4).
+    Requeue,
 }
 
 impl JobChange {
@@ -1217,9 +1230,19 @@ impl Resumability {
 
     /// Decides the answer for a job in `state` (as a reader observes it,
     /// see [`observed_state`]) with `liveness`, in a session that is or is
-    /// not open.
+    /// not open, whose epoch has started `attempts` attempts.
+    ///
+    /// A `queued` job with an attempt behind it is a job interrupted and
+    /// resumed in the queued mode, recorded `queued` while it waited its turn
+    /// again ([`JobChange::Requeue`]): it is `interrupted`, continued from its
+    /// checkpoints, never "not started" (Fable review C-4).
     #[must_use]
-    pub const fn of(state: JobState, liveness: JobLiveness, session_open: bool) -> Self {
+    pub const fn of(
+        state: JobState,
+        liveness: JobLiveness,
+        session_open: bool,
+        attempts: u32,
+    ) -> Self {
         if matches!(liveness, JobLiveness::Owned) {
             return Self::LiveOwner;
         }
@@ -1228,8 +1251,9 @@ impl Resumability {
             JobState::Failed => Self::Failed,
             JobState::Cancelled => Self::Cancelled,
             _ if !session_open => Self::SessionNotOpen,
-            JobState::Queued => Self::NotStarted,
-            JobState::Interrupted
+            JobState::Queued if attempts == 0 => Self::NotStarted,
+            JobState::Queued
+            | JobState::Interrupted
             | JobState::Running
             | JobState::Committing
             | JobState::Cancelling => Self::Interrupted,

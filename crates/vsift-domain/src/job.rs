@@ -112,8 +112,10 @@ impl JobState {
             ) | (
                 Self::Committing,
                 Self::Succeeded | Self::Failed | Self::Interrupted
-            ) | (Self::Interrupted, Self::Running | Self::Cancelled)
-                | (Self::Cancelling, Self::Cancelled | Self::Failed)
+            ) | (
+                Self::Interrupted,
+                Self::Running | Self::Cancelled | Self::Queued
+            ) | (Self::Cancelling, Self::Cancelled | Self::Failed)
         );
         if legal {
             Ok(next)
@@ -351,6 +353,7 @@ mod tests {
             (JobState::Committing, JobState::Interrupted),
             (JobState::Interrupted, JobState::Running),
             (JobState::Interrupted, JobState::Cancelled),
+            (JobState::Interrupted, JobState::Queued),
             (JobState::Cancelling, JobState::Cancelled),
             (JobState::Cancelling, JobState::Failed),
         ];

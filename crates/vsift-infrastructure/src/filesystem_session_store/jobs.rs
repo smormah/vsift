@@ -492,7 +492,10 @@ impl vsift_application::JobProgressLog for FilesystemSessionStore {
             .open_dir_nofollow(job_id.as_str())
             .map_err(map_committed_io)?;
         let bytes = super::job_records::encode_progress(progress)?;
-        // Advisory and rewritten every second: never synchronised to disk.
+        // Advisory and rewritten at most once a second, by rename: the new
+        // file's contents are synchronised to disk (`replace_file` always
+        // does), but not the directory that holds it (ephemeral), so a power
+        // loss can leave the previous record, never a torn one.
         replace_file(
             &job,
             PROGRESS_FILE,
@@ -874,7 +877,8 @@ impl JobOwner for FilesystemJobOwner {
                 | JobChange::Fail(_)
                 | JobChange::RequestCancel
                 | JobChange::Cancel
-                | JobChange::Restart => {}
+                | JobChange::Restart
+                | JobChange::Requeue => {}
             }
             Ok(next)
         })?;
@@ -1077,6 +1081,7 @@ impl RevisionStore for FilesystemSessionStore {
         part: std::num::NonZeroU32,
         first: usize,
         now: u64,
+        admission: vsift_application::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         // A part continues the open revision exactly, or begins one over the
         // newest sealed revision; anything else would leave parts that cannot
@@ -1099,13 +1104,15 @@ impl RevisionStore for FilesystemSessionStore {
             return Err(SessionStorageError::StateConflict);
         }
         let bytes = crate::encode_transcript_part(open, job, part, first, MERGE_RULES_VERSION)?;
-        self.publish_artifact(
+        self.publish_artifact_as(
             session_id,
             operation_id,
             expected,
             SessionArtifactKind::TranscriptPart,
             &bytes,
             now,
+            ArtifactCommit::Add,
+            admission,
         )
     }
 
@@ -1133,6 +1140,7 @@ impl RevisionStore for FilesystemSessionStore {
             &record,
             now,
             commit,
+            vsift_application::CommitAdmission::Ordinary,
         )
     }
 }

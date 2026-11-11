@@ -400,6 +400,7 @@ async fn parts_are_committed_read_as_the_newest_and_retired_by_the_seal() -> Tes
             NonZeroU32::new(2).ok_or("zero")?,
             0,
             OPENED_AT,
+            vsift_application::CommitAdmission::Ordinary,
         ),
         Err(SessionStorageError::StateConflict)
     );
@@ -412,6 +413,7 @@ async fn parts_are_committed_read_as_the_newest_and_retired_by_the_seal() -> Tes
         NonZeroU32::MIN,
         0,
         OPENED_AT,
+        vsift_application::CommitAdmission::Ordinary,
     )?;
     let (newest, _) = store
         .read_transcript(id, OPENED_AT)?
@@ -430,6 +432,7 @@ async fn parts_are_committed_read_as_the_newest_and_retired_by_the_seal() -> Tes
             two,
             first.segments().len(),
             OPENED_AT,
+            vsift_application::CommitAdmission::Ordinary,
         ),
         Err(SessionStorageError::StateConflict)
     );
@@ -443,6 +446,7 @@ async fn parts_are_committed_read_as_the_newest_and_retired_by_the_seal() -> Tes
             two,
             0,
             OPENED_AT,
+            vsift_application::CommitAdmission::Ordinary,
         ),
         Err(SessionStorageError::StateConflict)
     );
@@ -455,6 +459,7 @@ async fn parts_are_committed_read_as_the_newest_and_retired_by_the_seal() -> Tes
         two,
         first.segments().len(),
         OPENED_AT,
+        vsift_application::CommitAdmission::Ordinary,
     )?;
     let reopened = FilesystemSessionStore::open_existing(&session.workspace)?;
     let open = reopened

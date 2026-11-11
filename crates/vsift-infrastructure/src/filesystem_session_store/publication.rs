@@ -32,6 +32,7 @@ use super::{
     root::{acquire_admission, validate_platform_root_permissions},
     sha256_hex,
     stored::{validate_artifact_record, validate_source_record},
+    take_writer_lock,
 };
 use crate::{fault_point::FaultPoint, file_lock::HeldFileLock};
 
@@ -134,12 +135,7 @@ pub(super) fn publish_generation(
         "lifetime",
     )?)
     .map_err(map_lock_error)?;
-    let writer = HeldFileLock::try_exclusive(open_session_lock(
-        &coordination,
-        request.session_id(),
-        "writer",
-    )?)
-    .map_err(map_lock_error)?;
+    let writer = take_writer_lock(&coordination, request.session_id(), hooks)?;
 
     let result = publish_generation_while_locked(root, request, LifecycleUpdate::Keep, hooks, None);
     drop(writer);
@@ -175,12 +171,7 @@ pub(super) fn publish_generation_with_update(
         LifetimeHold::Shared => HeldFileLock::try_shared(lifetime_file),
     }
     .map_err(map_lock_error)?;
-    let writer = HeldFileLock::try_exclusive(open_session_lock(
-        &coordination,
-        request.session_id(),
-        "writer",
-    )?)
-    .map_err(map_lock_error)?;
+    let writer = take_writer_lock(&coordination, request.session_id(), hooks)?;
     let result = publish_generation_while_locked(root, request, update, hooks, cache);
     drop(writer);
     drop(lifetime);

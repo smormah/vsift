@@ -104,6 +104,7 @@ fn prepare_job(state: JobState, live: bool, streams: &[StreamPresentation<'_>]) 
                 vsift_application::JobLiveness::Unowned
             },
             true,
+            0,
         ),
         operation_id: None,
         requested: None,

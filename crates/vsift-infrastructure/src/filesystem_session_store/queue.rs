@@ -184,6 +184,21 @@ impl FilesystemSessionStore {
         }
     }
 
+    /// Removes every entry of `session_id`'s jobs from the queue, best effort:
+    /// a closed session's jobs can never run, so their entries must not
+    /// count toward [`MAX_QUEUED_JOBS`] until cleanup removes the session
+    /// (Fable review C-5).
+    pub fn dequeue_session(&self, session_id: &SessionId) {
+        let Ok(entries) = self.job_queue() else {
+            return;
+        };
+        for entry in entries {
+            if entry.session_id == *session_id {
+                self.dequeue_job(&entry.job_id);
+            }
+        }
+    }
+
     /// The queue, first in first: every entry that reads as one. An entry
     /// that does not (a stray or damaged file) is left out.
     ///

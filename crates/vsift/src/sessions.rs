@@ -930,13 +930,17 @@ impl Engine {
     /// A job of the session that a process runs (a background runner, ADR
     /// 0033) is asked to cancel first, and the close waits up to
     /// [`SESSION_CLOSE_JOB_WAIT`] for every such job to stop, so the runner
-    /// seals what it published as stopped and ends. A runner that has not
-    /// stopped by then fails its next publication on the closed session and
-    /// ends there. With no job running, nothing waits.
+    /// seals what it published as stopped and ends. A runner that still holds
+    /// the session then (it keeps a shared hold on the session's lifetime for
+    /// as long as it lives, which the close needs exclusively) makes the close
+    /// answer `BUSY`: nothing is closed, and the same command closes the
+    /// session once the runner has ended (ADR 0033 section 5, note of
+    /// 2026-11-11; Fable review C-6). With no job running, nothing waits.
     ///
     /// # Errors
     ///
-    /// Fails when the session cannot be read or closed.
+    /// Fails when the session cannot be read or closed, and `BUSY` while a
+    /// runner still holds it.
     pub fn close_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         self.stop_live_jobs(session_id);
         let (store, now) = self.existing_store()?;

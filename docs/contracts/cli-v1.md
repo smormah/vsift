@@ -1383,7 +1383,10 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   the same way without saying so (L-223). The queue is kept on disk
   (`job-queue/` of the root) and survives a restart: its jobs keep their order, and `job start`
   (or `job resume`) of a waiting one starts a runner that takes its turn again; nothing runs the
-  queue on its own (L-222).
+  queue on its own (L-222). A queued job that was interrupted and is resumed waits its turn
+  again as `queued`, keeping its checkpoints (`resumable_reason` `interrupted` when no runner
+  holds it), so `job cancel` and `session close` stop it while it waits, as any queued job
+  (0.3.0, Fable review C-4). An entry whose job cannot be read for a moment keeps its place.
 
 `--mode quick|watched` overrides the choice.
 
@@ -1456,9 +1459,13 @@ at most once a second; they are advisory. Example:
 **Stopping it.** `job cancel` of the `prepare` job cancels its stream's job too: the
 runner stops its provider within about a second and seals what it published as stopped.
 **`session close` now stops the session's running jobs (changed behaviour):** it asks
-every job a process runs to cancel, waits up to 10 s for them to stop, then closes; a
-runner that has not stopped by then fails its next publication on the closed session and
-ends. Until 0.2.x a close while a transcription ran answered `BUSY`. A runner killed
+every job a process runs to cancel, waits up to 10 s for them to stop, then closes. A
+runner that has not stopped by then still holds the session (it holds it for as long as
+it lives), so the close answers `BUSY`, retryable, and closes nothing; the same command
+closes the session once the runner has ended (corrected 2026-11-11, Fable review C-6:
+this paragraph said the close went ahead and the runner failed its next publication,
+which the store does not allow). Until 0.2.x a close while a transcription ran answered
+`BUSY` at once. A close removes the session's jobs from the root's queue. A runner killed
 outright leaves the job interrupted and resumable; on Windows its providers end with it,
 on Unix a provider can outlive it until its chunk ends (L-220).
 
@@ -3854,7 +3861,11 @@ after it releases every name it claimed, never a file it did not create.
   get`, which takes two of the session's 384 evidence slots, and the room is measured before the first
   frame. Above that, the frames written are spread evenly over the video and the list marks the rest.
   Should the session still refuse a frame for room, the frames stop there, every change stays listed, and the
-  run ends `partial` with `frames_stopped_for_room` (it never fails for lack of room). Each frame is copied from the session's content-addressed artifact and checked
+  run ends `partial` with `frames_stopped_for_room` (it never fails for lack of room). **A frame refused
+  because other work held the machine's capacity** (another VSift command on the same root, or the session for
+  longer than a commit waits) **is skipped** and the next one taken: the run ends `partial`, with
+  `frames_skipped_for_capacity` counting the changes left without a frame; any other frame failure still fails the
+  run (0.3.0, Fable review C-2; ADR 0037, note of 2026-11-11). Each frame is copied from the session's content-addressed artifact and checked
   against its SHA-256 (`INTEGRITY_FAILURE` if it differs; nothing is kept). The list holds the changes
   `candidates` returns, so a change its per-window budget left out is not listed.
 - **Four hours:** screen changes are found in the first four hours only (L-235); the list and the
@@ -3929,8 +3940,8 @@ work and not held during the run; nothing is ever replaced (L-244).
 status `complete`, or `partial` when the run left a gap (exit 0 either way), and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
 `duration_us`, `transcript_revision_id` (`null` with no sound track), `visual_index_revision_id`
 (`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range,
-`screen_changes_beyond_bound` or `frames_stopped_for_room` is true, or `kept.state` is `not_kept`), `not_transcribed` (half-open
-ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
+`screen_changes_beyond_bound` or `frames_stopped_for_room` is true, `frames_skipped_for_capacity` is above 0, or `kept.state` is `not_kept`), `not_transcribed` (half-open
+ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `frames_skipped_for_capacity` (an integer), `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
 `screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
 only for the folder), `changes_found` (every screen change the visual stream found), `changes_listed`
 (the settled screens `screen-changes.txt` lists, each with its reason: the first frame, each screen once
@@ -3944,7 +3955,8 @@ implementation note of 2026-10-28 before `watch` first shipped).** As for every 
 envelope's `coverage` is `truncated` whenever `data.outcome` is `partial`, so a reader that follows the exit rule
 alone never takes a gap for a whole result: `gaps` lists the ranges not transcribed as `<from_us>-<to_us>` (the first
 100; `data.not_transcribed` holds them all) and `reasons` names each kind of gap, in this order: `untranscribed_range`
-(and `gap_list_truncated` past 100 ranges), `screen_changes_beyond_bound`, `frames_stopped_for_room` and `not_kept`. A
+(and `gap_list_truncated` past 100 ranges), `screen_changes_beyond_bound`, `frames_stopped_for_room`,
+`frames_skipped_for_capacity` and `not_kept`. A
 complete run has `coverage` `{"truncated": false, "gaps": [], "reasons": []}`. The exit status is 0 either way
 ("complete or supported partial"), and the readable view is unchanged.
 

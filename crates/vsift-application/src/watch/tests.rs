@@ -98,6 +98,8 @@ struct FakeSteps {
     evidence_slots: usize,
     /// Frames the session stores before it is full.
     frame_room: usize,
+    /// The frame asks (counted from 0) other work holds the capacity for.
+    busy_frames: Vec<usize>,
     /// Why the bundle cannot be written.
     keep_failure: Option<FailureCode>,
     calls: Mutex<Vec<String>>,
@@ -140,6 +142,7 @@ impl FakeSteps {
             changes: vec![change(1)?, change(0)?],
             evidence_slots: 384,
             frame_room: usize::MAX,
+            busy_frames: Vec::new(),
             keep_failure: None,
             calls: Mutex::new(Vec::new()),
         })
@@ -320,6 +323,9 @@ impl WatchSteps for FakeSteps {
             }
             if taken >= self.frame_room {
                 return Err(FrameRefusal::NoRoom);
+            }
+            if self.busy_frames.contains(&taken) {
+                return Err(FrameRefusal::Busy);
             }
             Ok(SessionFrame {
                 evidence_id: EvidenceId::parse(format!("evd_{taken:032}"))
@@ -756,6 +762,37 @@ async fn a_session_out_of_room_ends_the_frames_not_the_run() -> TestResult {
     let (summary, changes) = outputs.listed.ok_or("the list was written")?;
     assert!(summary.stopped_for_room);
     assert_eq!(changes.len(), 10, "every change is still listed");
+    Ok(())
+}
+
+/// Fable review C-2: a frame refused because other work held the capacity is
+/// skipped, its change listed without one; the frames after it are still
+/// taken, and the run ends partial, saying how many were skipped, instead of
+/// failing after the whole transcription.
+#[tokio::test]
+async fn a_frame_refused_for_capacity_is_skipped_and_the_run_goes_on() -> TestResult {
+    let mut steps = FakeSteps::new()?;
+    steps.changes = (0..6).map(change).collect::<Result<_, _>>()?;
+    steps.busy_frames = vec![2];
+    let mut outputs = FakeOutputs::default();
+    let outcome = run_watch(&steps, &mut outputs, Path::new(VIDEO), None, None)
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(outcome.frames_skipped_for_capacity, 1);
+    assert!(!outcome.frames_stopped_for_room);
+    assert_eq!(steps.frames_asked().len(), 6, "every frame is asked for");
+    assert_eq!(
+        outcome.frames.len(),
+        5,
+        "the frames after the skip are taken"
+    );
+    let (summary, changes) = outputs.listed.ok_or("the list was written")?;
+    assert_eq!(summary.skipped_for_capacity, 1);
+    assert_eq!(changes.len(), 6, "every change is still listed");
+    assert_eq!(
+        changes.iter().filter(|entry| entry.frame.is_none()).count(),
+        1
+    );
     Ok(())
 }
 

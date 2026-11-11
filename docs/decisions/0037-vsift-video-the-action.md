@@ -1003,3 +1003,21 @@ still free). It amends the first pull request's implementation note of 2026-10-2
   that follows it took a `complete` `watch` with a range missing as whole and never looked in `data.outcome`.
   A contract test now holds every published example envelope to the rule (`cli-v1.md`, "Exit and error
   taxonomy").
+
+## Note, 2026-11-11: a frame refused for capacity is skipped (Fable 0.3.0 review, C-2; H5)
+
+A frame taken while the run's transcript published a part could be refused `BUSY`: the part commit held the
+one admission unit the watched run leaves free (D4 of ADR 0033), or the session's writer lock. The refusal
+became `TranscriptionRunning` and then a failed frame, raised after the seal, so the whole run failed after
+a full transcription. ADR 0033's note of the same date removes both causes: the run's parts are committed
+under its own permit, and a commit waits up to 2 s for the writer lock. What is left is contention from
+other work on the root (another VSift command), which no change here can remove.
+
+**A frame refused for contention, and only contention, is skipped** (`FrameRefusal::Busy`): its change is
+listed without a frame, the next frame is taken, and the run ends `partial` with
+`frames_skipped_for_capacity` counting the skipped frames, beside `frames_stopped_for_room` in the one gap
+rule (section 9 and the P-2 amendment). Any other frame failure still fails the run. The finish screen and
+`screen-changes.txt` say how many frames were not saved and why. A finished run's files are never replaced,
+so the same command would be refused; the finish screen says to run again with `--output <another folder>`
+(the whole run again). On a 1-unit root the run holds the whole capacity while it transcribes, so every
+frame taken then is skipped and the run ends partial instead of failing.

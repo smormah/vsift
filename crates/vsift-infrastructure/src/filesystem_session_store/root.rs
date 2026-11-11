@@ -351,6 +351,7 @@ impl FilesystemSessionStore {
         }
         self.revalidate_root()?;
         acquire_admission(&self.root, self.admission_capacity, weight)
+            .map(|permit| permit.taken_on(&self.root_path))
     }
 
     /// Takes `weight` units without waiting even for queued work to yield
@@ -364,6 +365,7 @@ impl FilesystemSessionStore {
         }
         self.revalidate_root()?;
         acquire_slots(&self.root, self.admission_capacity, weight)
+            .map(|permit| permit.taken_on(&self.root_path))
     }
 
     /// Acquires a shared lifetime hold and returns one verified committed snapshot.
@@ -1060,7 +1062,10 @@ fn acquire_slots(
             Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
         }
         if slots.len() == usize::from(weight) {
-            return Ok(FilesystemAdmissionPermit { _slots: slots });
+            return Ok(FilesystemAdmissionPermit {
+                root: None,
+                _slots: slots,
+            });
         }
     }
     Err(SessionStorageError::Busy)
