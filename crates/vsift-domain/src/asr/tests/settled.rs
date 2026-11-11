@@ -16,9 +16,10 @@ use super::{
 use crate::{
     MediaTime,
     asr::{
-        ChunkPlan, ChunkSegments, MAX_EARLY_AUDIO_MICROS, SettledTranscript, merge_chunks,
-        settled_merge,
+        ChunkPlan, ChunkSegments, MAX_EARLY_AUDIO_MICROS, PlannedChunk, SettledTranscript,
+        merge_chunks, settled_merge,
     },
+    spans::{merged, span},
 };
 
 /// What the cuts of one run showed, for the tests that check the matrix is not
@@ -32,7 +33,16 @@ pub(super) struct CutCounts {
     /// Cuts whose settled time is before the reach, because a stretch of the
     /// union ran into the next chunk's reach.
     pub(super) held_back: u32,
+    /// Cuts whose settled time lies strictly inside a stretch of the finished
+    /// chunks' union that runs to the reach: only the bounded cut (L-256)
+    /// settles there.
+    pub(super) inside_stretch: u32,
 }
+
+/// A cut of a run: what [`settled_merge`] is, or a looser cut a test shows to
+/// fail.
+pub(super) type Cut<'a> =
+    &'a dyn Fn(&[ChunkSegments], Option<&PlannedChunk>, u64) -> SettledTranscript;
 
 /// The earliest time a segment of chunk `index` or a later one starts, if any.
 fn earliest_later_start(chunks: &[ChunkSegments], index: usize) -> Option<u64> {
@@ -65,9 +75,18 @@ pub(super) fn every_cut_settles_a_prefix(chunks: &[ChunkSegments]) -> Result<Cut
 
 /// [`every_cut_settles_a_prefix`] for a run that bounds its audio's early
 /// start by `bound` microseconds (a tighter source, ADR 0033 section 8).
-fn every_cut_settles_a_prefix_within(
+pub(super) fn every_cut_settles_a_prefix_within(
     chunks: &[ChunkSegments],
     bound: u64,
+) -> Result<CutCounts, String> {
+    every_cut_settles_a_prefix_by(chunks, bound, &settled_merge)
+}
+
+/// [`every_cut_settles_a_prefix_within`] for the cut `cut`.
+pub(super) fn every_cut_settles_a_prefix_by(
+    chunks: &[ChunkSegments],
+    bound: u64,
+    cut: Cut<'_>,
 ) -> Result<CutCounts, String> {
     let whole = merge_chunks(chunks);
     let mut counts = CutCounts::default();
@@ -83,7 +102,7 @@ fn every_cut_settles_a_prefix_within(
                 ));
             }
         }
-        let settled = settled_merge(finished, next, bound);
+        let settled = cut(finished, next, bound);
         counts.cuts += 1;
         let count = settled.segments.len();
         if whole.segments.get(..count) != Some(settled.segments.as_slice()) {
@@ -143,6 +162,19 @@ fn every_cut_settles_a_prefix_within(
             if !finished.is_empty() && until.as_micros() < reach {
                 counts.held_back += 1;
             }
+            let union = merged(
+                finished
+                    .iter()
+                    .flat_map(|chunk| chunk.segments.iter().map(|segment| span(segment.range())))
+                    .collect(),
+            );
+            let at = until.as_micros();
+            if union
+                .iter()
+                .any(|&(start, end)| start < at && at < end && end >= reach)
+            {
+                counts.inside_stretch += 1;
+            }
         }
         previous = Some(settled);
     }
@@ -152,7 +184,7 @@ fn every_cut_settles_a_prefix_within(
 /// The chunk plans the matrix cuts: R0, and smaller ones such as a live
 /// source would use (ADR 0033 section 8 asks that the rule hold for them),
 /// down to windows shorter than [`MAX_EARLY_AUDIO_MICROS`].
-fn plans() -> Built<[ChunkPlan; 4]> {
+pub(super) fn plans() -> Built<[ChunkPlan; 4]> {
     Ok([
         ChunkPlan::R0,
         ChunkPlan::new(10 * SECOND, 2 * SECOND)?,

@@ -31,6 +31,7 @@ use crate::{
     spans::{SpanSet, merged, span},
 };
 
+mod bounded_cut;
 mod settled;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

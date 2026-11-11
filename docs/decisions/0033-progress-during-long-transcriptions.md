@@ -120,6 +120,55 @@ chunks and keeps the segments that no unfinished chunk can change.
   `unplaced_ranges` beyond the settled time) describe what is published so far while the revision is open,
   and are final at the seal.
 
+**Amendment, 2026-11-11: a bounded cut inside a long stretch (L-256; H8, the maintainer's decision of 11 Nov to fix it
+in 0.3.0).** W8 measured that the stretch rule holds back the whole of a continuous talk: RM03's stretch of touching
+segments ran from 0 to 767 s, so its first part came 215 s into the transcription with 12:48 at once. The settled time is
+now the later of two cuts; the merge rules do not change, and `MERGE_RULES_VERSION` stays 2.
+
+- **The stretch cut** is the rule above, unchanged.
+- **The bounded cut.** Let `λ` be the reach or the last finished window's end less the edge margin (0.5 s), whichever is
+  earlier. `T` is the latest point **before** `λ` that no finished segment crosses (segments may touch there) and where a
+  segment that rules 1 and 2 keep ends. The bounded cut is the latest point that no finished segment crosses **more than**
+  the tolerance (0.5 s) before `T`.
+- **Why it is a prefix (sketch; `settled.rs` has it in full).** Rules 1 and 2 can change, once later chunks are finished,
+  only segments that end after `λ` (a midpoint in the last chunk's core past its next seam, the last chunk's right-edge
+  cut, a replacement spanning a later segment's midpoint), so every segment that starts before `T` keeps its decision.
+  The guard closes a hole with segments ordered by how much of the whole hole they cover, and nothing bounds a hole's
+  length, so **no fixed distance before the reach is safe**; but no hole contains `T` (a kept segment ends there), holes
+  before it are closed from segments that end by it and holes after it from segments that start after it. Rule 3 drops a
+  copy only where no hole longer than the tolerance opens, and after the guard every hole is within it, so it looks at
+  most the tolerance past the copy's end, which is before `T`. The repeat and loop rules act through rules 1 and 2. Each
+  cut only moves forward as chunks finish, so the settled part only grows. Every equality is held back (a segment ending
+  exactly at `λ`, a cut exactly the tolerance before `T`).
+- **The bound is one of structure, not of time.** On speech of ordinary segments the settled time trails the finished
+  audio by the reach's distance from it (10 s with R0) and about two segments; a single segment as long as a window still
+  holds its stretch back. No time bound enters the contract.
+- **Two margins are redundant, kept on purpose (the planner's ruling of 2026-11-11).** (a) **The edge term of `λ`:** every
+  segment a later chunk can change ends after the reach itself, not only after `λ`: rule 1 needs a midpoint at or after the
+  middle of the last seam, which is after the next window's start; rule 2's cover needs a neighbour segment that starts half a
+  second after that window's start and spans the midpoint; a replacement spans the midpoint of a segment that starts at or
+  after the reach. So `λ` could be the reach; the term costs at most 60 ms, with a bound under half a second. (b) **Rule 3's
+  margin:** the kept segment that ends at `T` starts at or after the bounded cut (no finished segment crosses the cut), so it
+  is still there when rule 3 judges a settled segment, which sorts before it; that segment's hole test then stops before `T`,
+  and a cut anywhere strictly before `T` would do. The margin costs about one segment of trail. Neither is load-bearing; both
+  stay, because a segment of trail is cheap and published text that differs from the seal is not. The two structural
+  conditions (no finished segment crosses `T`; a segment kept by rules 1 and 2 ends there) are what the proof uses: the
+  loosened sweep below (4 plans, 2 bounds, 300 runs each) with either one dropped found no counterexample, and they stay.
+- **The tests.** The property `every_cut_of_a_run_settles_a_prefix_of_its_merge` and its sweep are unchanged and pass.
+  `every_cut_of_a_continuous_run_settles_a_prefix_of_its_merge` adds runs of continuous speech (segments of 1 to 6 s
+  touching or with gaps under half a second, over every plan, bound, kind of rejected segment and word kind), with
+  segment edges snapped onto the reach, the tight reach, the edge margin and the tolerance before another edge; with R0
+  it also requires that from the second chunk the settled part is not empty and trails the finished audio by at most
+  22.5 s (for those runs only). A sweep shows many cuts settle inside a stretch, for every plan and bound. With the cut
+  allowed a second past the reach, the same sweep finds counterexamples, so the matrix catches a wrong cut. Hand-built
+  runs pin each boundary (a segment ending exactly at the reach, exactly at the edge margin, a later segment starting
+  exactly at the reach, an edge exactly the tolerance before `T`, touched and crossed points). The seal stays the safety
+  net: `a_resume_over_parts_published_under_other_merge_rules_fails_loudly` shows that a run whose seal does not begin with
+  its published parts fails as an integrity failure and keeps what was published.
+- **Earlier revisions.** A revision published under the stretch cut alone is a prefix of the same merge, so a run resumed
+  by this version continues it; a run resumed by an earlier build over parts this one published settles less and waits
+  until it has caught up. `0.3.0` is unpublished, so no released revision is affected.
+
 ### 3. Readers: `transcript get`, `search`, `--since`, coverage
 
 All of this is additive to JSON v1.
@@ -255,7 +304,8 @@ after the visual stream, which both run first (9 to 28 s on the 1080p talk, 6 s 
   talk, -13 and -23 percent at 10 and 25 percent on the briefing; within 10 percent from 50 percent done on runs of 15
   minutes or more; first shown 44 to 48 s into the transcription of the talk and 20 s into the briefing's. A known limit, no fix.
 - **The claim of section 2 is not met on continuous speech:** the published text trailed the recognised audio by up to about
-  12 minutes on RM03, not 10 to 40 s ([L-256](../planning/known-limits.md#l-256)); it did meet it on RM09.
+  12 minutes on RM03, not 10 to 40 s ([L-256](../planning/known-limits.md#l-256)); it did meet it on RM09. The maintainer
+  decided the same day to fix it in `0.3.0`: the bounded cut of section 2's amendment of 2026-11-11.
 
 ### 7. What the skill says
 
