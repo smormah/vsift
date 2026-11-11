@@ -332,6 +332,116 @@ async fn a_stopped_run_keeps_its_session_and_the_same_request_continues_it() -> 
     Ok(())
 }
 
+/// The bytes of every file under `folder`, by path, to show a run touched
+/// nothing there.
+fn contents(folder: &Path) -> Built<Vec<(PathBuf, Vec<u8>)>> {
+    let mut found = Vec::new();
+    for entry in fs::read_dir(folder)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            found.extend(contents(&path)?);
+        } else {
+            found.push((path.clone(), fs::read(&path)?));
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
+/// C-1 of the 0.3.0 review: a second `vsift <video>` while the first run of
+/// the same video is still running is refused and touches nothing. The first
+/// run is stood in for by holding its job's owner lock, as its process does,
+/// so the test needs no timing: its files stay byte for byte, its session
+/// stays open, and its job stays owned and is not cancelled. Once nobody owns
+/// the job, the same command continues it as before.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_rerun_while_the_first_run_is_live_is_refused_and_touches_nothing() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = engine(&root);
+    let video = video(&root)?;
+    let cancellation = Cancellation::new();
+    let stop = cancellation.clone();
+    let stopped = engine
+        .watch(WatchRequest {
+            source: video.clone(),
+            output: None,
+            keep: None,
+            cancellation,
+            progress: ProgressObserver::new(move |progress| {
+                if progress.update.stage == vsift::ProgressStage::RecognisingSpeech {
+                    stop.cancel();
+                }
+            }),
+        })
+        .await;
+    assert!(
+        matches!(
+            stopped,
+            Err(EngineError::Watch(WatchFailure::Stopped { .. }))
+        ),
+        "{stopped:?}"
+    );
+    let page = engine.list_sessions(None)?;
+    let [vsift::SessionListEntry::Indexed(snapshot)] = page.entries() else {
+        return Err("one session expected".into());
+    };
+    let session = snapshot.session_id().clone();
+    let store = vsift_infrastructure::FilesystemSessionStore::open_existing(root.path("sessions"))?;
+    let claims = vsift_application::WatchClaimLog::watch_claims(&store, &session)?;
+    let [(job, _)] = claims.as_slice() else {
+        return Err("one claim expected".into());
+    };
+    let folder = video.parent().ok_or("no folder")?;
+    let before = contents(folder)?;
+
+    let owner = vsift_application::JobStore::acquire(&store, &session, job)?;
+    let refused = engine.watch(request(&video, None)).await;
+    assert!(
+        matches!(
+            refused,
+            Err(EngineError::Watch(WatchFailure::RunInProgress))
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(
+        refused.err().map(|error| error.failure_code()),
+        Some(FailureCode::InvalidArgument)
+    );
+    assert_eq!(
+        contents(folder)?,
+        before,
+        "the first run's files are as they were"
+    );
+    assert_eq!(
+        engine.session_status(&session)?.phase(),
+        SessionPhase::Open,
+        "its session stays open"
+    );
+    let view = vsift_application::JobStore::job(&store, &session, job)?.ok_or("no job")?;
+    assert_eq!(view.liveness, vsift_application::JobLiveness::Owned);
+    assert!(!view.record.state.is_terminal(), "{:?}", view.record.state);
+    assert!(
+        !vsift_application::JobOwner::cancel_requested(&owner),
+        "nobody asked the first run to stop"
+    );
+
+    drop(owner);
+    let outcome = engine.watch(request(&video, None)).await?;
+    assert_eq!(outcome.session_id, session, "the same session continues");
+    assert_eq!(&outcome.job_id, job, "the same job continues");
+    let text = fs::read_to_string(folder.join("team meeting.txt"))?;
+    assert!(
+        text.contains(
+            "] chunk 0 says hello --> world
+"
+        ),
+        "{text}"
+    );
+    assert!(outcome.session_closed);
+    Ok(())
+}
+
 /// Every file called `name` under `folder`.
 fn files_named(folder: &Path, name: &str) -> Built<Vec<PathBuf>> {
     let mut found = Vec::new();

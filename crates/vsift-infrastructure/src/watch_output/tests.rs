@@ -11,7 +11,7 @@ use vsift_domain::{
 
 use super::{
     FolderWatchOutputs, PARTIAL_SUFFIX, WatchClaim, hex_sha256, render_screen_changes,
-    render_subrip, render_transcript,
+    render_subrip, render_transcript, render_transcript_snapshot,
 };
 use crate::test_folder::TestFolder;
 
@@ -718,4 +718,173 @@ fn a_folder_that_refuses_the_write_is_refused() -> TestResult {
         Err(WatchOutputError::Refused(WatchOutputKind::Kept, _))
     ));
     Ok(())
+}
+
+/// T-3 of the 0.3.0 review: a new `--output` folder inside a root is refused
+/// before it is created, so nothing is left behind there.
+#[test]
+fn a_new_output_folder_inside_a_root_is_never_created() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-inside")?;
+    let root = fs::canonicalize(&*folder)?.join("sessions");
+    fs::create_dir(&root)?;
+    let video = folder.join("meeting.mp4");
+    let mut outputs = FolderWatchOutputs::new(vec![root.clone()]);
+    let inside = root.join("out");
+    assert!(matches!(
+        outputs.claim(&video, Some(&inside), &names()?),
+        Err(WatchOutputError::InsideVsift)
+    ));
+    assert!(
+        !inside.exists(),
+        "the refused folder is not left in the root"
+    );
+    assert_eq!(entries(&root)?, Vec::<String>::new());
+    Ok(())
+}
+
+/// T-3: a root that has never been created is still a root, judged by its
+/// configured path; `--output` naming it, or a folder in it, is refused and
+/// creates nothing.
+#[test]
+fn a_root_that_does_not_exist_yet_is_still_refused() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-port-absent-root")?;
+    let configured = folder.join("never-made").join("sessions");
+    let root = super::resolve_configured_path(&configured)?;
+    assert_eq!(
+        root,
+        fs::canonicalize(&*folder)?
+            .join("never-made")
+            .join("sessions")
+    );
+    let video = folder.join("meeting.mp4");
+    let mut outputs = FolderWatchOutputs::new(vec![root]);
+    for output in [configured.clone(), configured.join("out")] {
+        assert!(
+            matches!(
+                outputs.claim(&video, Some(&output), &names()?),
+                Err(WatchOutputError::InsideVsift)
+            ),
+            "{}",
+            output.display()
+        );
+    }
+    assert!(!folder.join("never-made").exists(), "nothing is created");
+    let parent = folder.join("never-made");
+    fs::create_dir(&parent)?;
+    assert!(matches!(
+        outputs.claim(&video, Some(&configured), &names()?),
+        Err(WatchOutputError::InsideVsift)
+    ));
+    assert!(!configured.exists(), "the root itself is never made");
+    Ok(())
+}
+
+/// T-5 of the 0.3.0 review: a rerun whose interrupted run's output was
+/// deleted claims that output again, exclusively, and continues; a release
+/// gives up only what it created again, while it is still empty.
+#[test]
+fn a_rerun_claims_a_deleted_output_again() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-take-over-missing")?;
+    let video = folder.join("meeting.mp4");
+    let mut first = FolderWatchOutputs::new(Vec::new());
+    let claimed = first.claim(&video, None, &names()?)?;
+    first.write_snapshot(&snapshot(30))?;
+    let transcript = fs::read(&claimed.transcript)?;
+    fs::remove_file(&claimed.subtitles)?;
+    fs::remove_dir(&claimed.folder)?;
+
+    let mut again = fixed_outputs();
+    let planned = again.planned(&video, None, &names()?)?;
+    again.reclaim(&planned)?;
+    assert!(
+        claimed.subtitles.is_file(),
+        "the subtitles are claimed again"
+    );
+    assert!(claimed.folder.is_dir(), "the folder is claimed again");
+    again.release();
+    assert!(!claimed.subtitles.exists(), "an empty recreated file goes");
+    assert!(!claimed.folder.exists(), "an empty recreated folder goes");
+    assert_eq!(
+        fs::read(&claimed.transcript)?,
+        transcript,
+        "what the interrupted run wrote stays"
+    );
+
+    let mut continued = fixed_outputs();
+    continued.reclaim(&planned)?;
+    continued.write_snapshot(&snapshot(45))?;
+    let finished = continued.finalise(&documents(true)?)?;
+    assert!(finished.subtitles.is_some_and(|file| file.path.is_file()));
+    assert!(fs::read_to_string(&claimed.subtitles)?.contains("-->"));
+    Ok(())
+}
+
+/// T-5: an output that is something else now (a link, a folder where a file
+/// was) is still refused, and what the takeover created before it met that
+/// output is removed again.
+#[test]
+fn a_takeover_refused_further_on_leaves_nothing_it_created() -> TestResult {
+    let folder = TestFolder::new("vsift-watch-take-over-refused")?;
+    let video = folder.join("meeting.mp4");
+    let claimed = FolderWatchOutputs::new(Vec::new()).claim(&video, None, &names()?)?;
+    fs::remove_file(&claimed.transcript)?;
+    fs::remove_file(&claimed.subtitles)?;
+    fs::create_dir(&claimed.subtitles)?;
+    assert!(matches!(
+        FolderWatchOutputs::new(Vec::new()).reclaim(&claimed),
+        Err(WatchOutputError::Exists(WatchOutputKind::Subtitles))
+    ));
+    assert!(
+        !claimed.transcript.exists(),
+        "the recreated file is removed"
+    );
+    Ok(())
+}
+
+/// T-4 of the 0.3.0 review: a segment's text and the video's name can never
+/// forge a line of the readable transcript or put a control character into
+/// a header, as `cue_text_can_never_forge_a_cue` holds for the subtitles.
+#[test]
+fn transcript_text_can_never_forge_a_line() {
+    let mut forged = provenance();
+    forged.video_name = "a\u{1b}[2J\nb.mp4".to_owned();
+    let entries = [line(1, 2, "said\n[00:00:09] forged\r\n\u{1b}[31mred")];
+    for text in [
+        render_transcript(&forged, Some("trv_0123"), &entries),
+        render_transcript_snapshot(&WatchSnapshot {
+            provenance: forged.clone(),
+            entries: entries.to_vec(),
+            ..snapshot(1)
+        }),
+    ] {
+        assert!(
+            text.contains("a<U+001B>[2J b.mp4: transcript by VSift 0.3.0"),
+            "the header names the video on one inert line"
+        );
+        assert!(
+            text.contains("[00:00:01] said [00:00:09] forged <U+001B>[31mred\n"),
+            "the segment is one inert line"
+        );
+        let stamped = text.lines().filter(|row| row.starts_with('[')).count();
+        assert_eq!(stamped, 1, "one segment is one line");
+        assert!(
+            !text
+                .chars()
+                .any(|character| character.is_control() && character != '\n'),
+            "no control character but the line ends"
+        );
+    }
+    let summary = ScreenChangeSummary {
+        index_id: "vix_02b7".to_owned(),
+        changes_found: 0,
+        index_covers_to: MediaTime::from_micros(0),
+        beyond_index_bound: false,
+        stopped_for_room: false,
+    };
+    let list = render_screen_changes(&forged, &summary, &[]);
+    assert!(
+        list.starts_with("Screen changes in a<U+001B>[2J b.mp4, found by"),
+        "the list's header names the video on one inert line"
+    );
+    assert!(!list.contains('\u{1b}'));
 }

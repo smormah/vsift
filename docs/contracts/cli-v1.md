@@ -3858,12 +3858,14 @@ after it releases every name it claimed, never a file it did not create.
 **Never overwriting.** Each output is claimed by exclusive creation before any work; if a name is taken
 nothing is written or copied. **`--output <folder>`** is an existing folder or a new one whose parent
 exists (created, never with its parents), refused when it lies inside the session root or the managed
-root, which VSift cleans automatically. Refusals reuse existing failure codes; each carries one fixed
+root, which VSift cleans automatically. A new folder is judged before it is created, and a root that does not exist
+yet is judged by its configured path, so a refusal leaves no folder behind (since 0.3.0, H3). Refusals reuse existing failure codes; each carries one fixed
 remediation that names the kind of output, never a file name (L-071):
 
 | Refusal | Code | Remediation (summary) |
 | --- | --- | --- |
 | The transcript, subtitles or screen-change folder name is taken | `INVALID_ARGUMENT` | `The transcript file (.txt)` (or `subtitles file (.srt)`, `screen-change folder (-vsift)`) `VSift would write beside the video already exists, and VSift never replaces` it. `Move it away, or write elsewhere with --output <folder>.` |
+| Another VSift run of the same video is writing these files right now (its job is owned by a live process; since 0.3.0, H3) | `INVALID_ARGUMENT` | `Another VSift run is writing these files right now, and VSift never takes over a run that is still working; nothing was changed. Wait for it to finish, or stop it and run the same command again to continue it, or write elsewhere with --output <folder>.` |
 | The folder refuses a write | `STORAGE_IO` | `VSift could not write its files into the folder (...). Choose a folder you can write to with --output <folder>.` |
 | `--output` inside VSift's own folders | `INVALID_ARGUMENT` | `--output names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.` |
 | `--output` not usable as a folder | `INVALID_ARGUMENT` | `--output takes a folder: an existing one, or a new one whose parent folder exists.` |
@@ -3878,10 +3880,15 @@ remediation that names the kind of output, never a file name (L-071):
 Every other failure is the underlying command's, with its code and remediation (`ingest`'s source
 refusals, `MISSING_CAPABILITY`, the `prepare` job's, `frame get`'s). No new failure code is introduced.
 
-**Interruption.** Ctrl-C cancels the job through the existing cancellation (`CANCELLED`, exit 6); in
-this first pull request the run releases the names it claimed and closes the session. Continuing an
-interrupted run, and files that grow while it runs, come with the second pull request (ADR 0037
-sections 7 and 8).
+**Interruption, and run again (ADR 0037 sections 7 and 8, notes of 2026-10-29 and 2026-11-10).** Ctrl-C
+leaves the job interrupted (`CANCELLED`, exit 6): the files keep their last update, marked `STOPPED`, and
+the session is kept. The same command, while the session is kept, finds that job by the names its own
+record claimed, takes the files over and continues it; an output of that run that has since been deleted
+is claimed again and written whole. **Only a job no process owns is continued.** While another VSift
+process runs the job (a second terminal, or an assistant's call repeated after a timeout), the same
+command is refused with the `INVALID_ARGUMENT` row above and touches nothing: not that run's files, its
+session or its job. The job store's ownership decides, also when the job is owned again between the
+look and the resume.
 
 **`--keep <folder>`: keep the recording for later search (ADR 0037, amendment of 2026-10-30).** A run whose job seals
 writes one retained bundle (ADR 0013) to `<folder>/<name>`, after the outputs and before its session closes, so `vsift

@@ -933,3 +933,51 @@ it (the planner's ruling, 2026-10-30; FFmpeg and a stand-in recogniser): a name 
 write refused on a sealed job, whose bundle `bundle search` finds. CLI: the JSON contract with `kept`, the schema and
 example, the failure's data, the finish screen's forms. End to end: the action with `--keep` on the synthetic clip, a
 second recording into the same folder, then `bundle search` on the folder finds the words of both.
+
+## Implementation note, 2026-11-10: a run that is still working is never taken over (H3, #598)
+
+The Fable review of 0.3.0 found (C-1, high) that a second `vsift <video>` started while the first run of the same video
+was still running took that run over. Section 8 continues a run "this VSift left unfinished", and the note of
+2026-10-29 says the job it continues is the interrupted one; the code read "unfinished" as "not ended", which a running
+job also is. The rerun then wrote `STOPPED WITH AN ERROR` over the first run's growing files and closed its session,
+which cancelled its job. This note brings the code to the intent; it is not a new decision.
+
+- **Only a job no process owns is taken over.** A rerun whose names are taken looks for a job that claimed them, as
+  before, and reads the job store's ownership of each match. A match a live process owns answers at once that another
+  run is writing these files (`EarlierWatch::Live`), whatever else matches and before the video is hashed. A job no
+  process owns is continued only once every open session has been looked at, so a live run is never missed behind an
+  interrupted one that claimed the same names.
+- **A live run is refused and touches nothing.** No takeover, no snapshot, no failed marker, no release of its files,
+  no close of its session and no cancel of its job. The refusal is section 5's code, `INVALID_ARGUMENT` (exit 2), with a
+  new fixed remediation, `WATCH_RUN_IN_PROGRESS_REMEDIATION`: another VSift run is writing these files right now and
+  nothing was changed; wait for it to finish, or stop it and run the same command again to continue it, or write
+  elsewhere with `--output <folder>`. No new failure code. `BUSY` was not used: it tells a script to retry, and a retry
+  after the first run finishes is refused as "already exists", which would mislead.
+- **The race decides by the job store.** The first run can be owned again between the look and the resume. `job_resume`
+  then answers `BUSY` for that job (when it looks, and when it takes the job); the engine's step maps exactly that, the
+  busy job being this job, to `PrepareStop::OwnedElsewhere`, and the use case gives a taken-over run the same refusal,
+  never the failed snapshot or the close. A busy answer about any other job stays a failure of this run, and a fresh
+  run's own job refused as owned fails as before.
+- **An output the stopped run lost is claimed again (T-5).** A rerun whose interrupted run's `.txt`, `.srt` or folder
+  was deleted claims it again by the same exclusive creation, continues, and writes it whole; a release gives it up
+  while still empty. An output that is something else now (a link, a folder where a file was) is still refused as
+  section 5 says. Recreating was chosen over refusing because the person can follow it: refusing would leave them to
+  move the run's other files away and start again from nothing.
+- **`--output` (T-3).** A new folder is judged before it is created, by the path it would have (the longest existing
+  ancestor canonicalised, then the rest), so a refusal leaves nothing inside a root. VSift's own roots are judged by
+  their configured paths the same way, so a root that does not exist yet is still refused, and `--output` can never
+  create it.
+- **Inert text (T-4).** `<stem>.txt` and `screen-changes.txt` write a segment's text and the video's name on one line:
+  a line-breaking control becomes a space and any other control character visible `<U+XXXX>` notation (the domain's
+  `one_line_text`, which the `SubRip` cue guard now starts from). A segment can never forge a `[HH:MM:SS]` line.
+- **No limit remains.** A second machine, a second user or another `--session-root` uses another session root, never
+  finds the first run's job, and is refused as "already exists"; ownership does not need to reach across machines.
+- **Tests.** Application, over fakes: a live match is refused with nothing claimed, taken over, written, kept, released or
+  closed; the race (the job owned again before it resumes) is refused with no snapshot and no close; a fresh run's own
+  job owned elsewhere fails as before. Engine: the mapping of a busy answer for the job and for a stream; opt-in on
+  FFmpeg, a rerun while the stopped run's job is owned (the test holds the owner lock, as the first process does) leaves
+  every file byte for byte, the session open and the job owned and not asked to stop, and once the lock is dropped the
+  same command continues the same job in the same session. Infrastructure: a new `--output` inside a root and a root
+  that does not exist yet are refused with nothing created; deleted outputs are claimed again and given up while empty;
+  `transcript_text_can_never_forge_a_line` for both `.txt` outputs and their headers. Domain:
+  `one_line_text_can_never_forge_a_line`.

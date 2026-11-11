@@ -198,6 +198,10 @@ pub const WATCH_FOLDER_EXISTS_REMEDIATION: &str = "The screen-change folder (-vs
 /// Remediation when a file was held open by another program, or was not
 /// writable, for the final write's 30 s (known limit L-237).
 pub const WATCH_OUTPUT_HELD_REMEDIATION: &str = "A file VSift was writing was held open by another program, or not writable, so VSift could not finish it; the file keeps its last update. Close the file in the other program (or make it writable), then write the files again elsewhere with --output <folder>.";
+/// Remediation when another `VSift` run is writing the same files right now:
+/// its job is owned by a live process, so this run touched nothing (ADR 0037,
+/// implementation note of 2026-11-10).
+pub const WATCH_RUN_IN_PROGRESS_REMEDIATION: &str = "Another VSift run is writing these files right now, and VSift never takes over a run that is still working; nothing was changed. Wait for it to finish, or stop it and run the same command again to continue it, or write elsewhere with --output <folder>.";
 /// Remediation when the person stopped the run (Ctrl-C): the files keep
 /// their last update and the same command continues (ADR 0037 section 8).
 pub const WATCH_STOPPED_REMEDIATION: &str = "VSift stopped. The files keep what was transcribed so far, marked IN PROGRESS, and VSift kept its private copy of the video: run the same command again to continue.";

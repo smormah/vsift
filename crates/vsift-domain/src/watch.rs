@@ -6,7 +6,7 @@
 //! untrusted input: it is only ever extended by a fixed suffix, shortened at a
 //! character boundary, or refused, never rewritten character by character.
 
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 use crate::{CandidateReason, MediaTime};
 
@@ -251,19 +251,47 @@ pub fn settled_screens(changes: &[(MediaTime, CandidateReason)]) -> Vec<usize> {
     listed
 }
 
+/// Untrusted text (a segment's display text, a video's name) as it may stand
+/// on one line of a plain-text output: inert, so it can never start a line of
+/// its own or act on the terminal that shows the file.
+///
+/// A control character that breaks a line (line feed, carriage return, tab,
+/// vertical tab, form feed, next line) becomes a space, runs of them one, and
+/// the ends are trimmed; every other control character (`ESC`, `NUL`, `DEL`,
+/// the C1 range) is written as visible `<U+XXXX>` notation, as hidden
+/// characters already are. So a segment can never forge a `[HH:MM:SS]` line
+/// of the readable transcript, and a file name can never put an escape
+/// sequence into a header.
+#[must_use]
+pub fn one_line_text(display_text: &str) -> String {
+    let mut text = String::with_capacity(display_text.len());
+    for word in display_text
+        .split(|character: char| character.is_control() && character.is_whitespace())
+        .map(str::trim)
+        .filter(|word| !word.is_empty())
+    {
+        if !text.is_empty() {
+            text.push(' ');
+        }
+        for character in word.chars() {
+            if character.is_control() {
+                // Writing to a `String` cannot fail.
+                let _infallible = write!(text, "<U+{:04X}>", u32::from(character));
+            } else {
+                text.push(character);
+            }
+        }
+    }
+    text
+}
+
 /// A subtitle cue's text from a segment's display text: one line, holding
 /// neither a blank line, which would end the cue, nor the `-->` arrow, which
-/// would read as a timing line. Line breaks become spaces and the arrow
-/// becomes `->`, so a segment's text can never forge a cue.
+/// would read as a timing line. The text is made [`one_line_text`] and the
+/// arrow becomes `->`, so a segment's text can never forge a cue.
 #[must_use]
 pub fn subrip_cue_text(display_text: &str) -> String {
-    let single_line = display_text
-        .split(['\r', '\n'])
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    let mut text = single_line;
+    let mut text = one_line_text(display_text);
     while text.contains("-->") {
         text = text.replace("-->", "->");
     }
@@ -394,6 +422,27 @@ mod tests {
         assert_eq!(subrip_cue_text("a ---> b"), "a -> b");
         assert_eq!(subrip_cue_text("  plain  "), "plain");
         assert!(!subrip_cue_text("x\r\n\r\ny").contains('\n'));
+        assert_eq!(subrip_cue_text("red\u{1b}[31m"), "red<U+001B>[31m");
+    }
+
+    /// T-4 of the 0.3.0 review: a segment or a video name with a line break
+    /// or a control character stays one inert line.
+    #[test]
+    fn one_line_text_can_never_forge_a_line() {
+        assert_eq!(
+            one_line_text("said\n[00:00:09] forged\r\n\tline"),
+            "said [00:00:09] forged line"
+        );
+        assert_eq!(
+            one_line_text("a\u{1b}[2Jb\u{0}c\u{7f}d\u{9b}e"),
+            "a<U+001B>[2Jb<U+0000>c<U+007F>d<U+009B>e"
+        );
+        assert_eq!(one_line_text("\u{85}x\u{b}\u{c}y  "), "x y");
+        assert_eq!(one_line_text("  plain words  "), "plain words");
+        assert_eq!(one_line_text("\n\r\t"), "");
+        let forged = one_line_text("one\n[00:00:01] two\u{2028}three");
+        assert!(!forged.chars().any(char::is_control));
+        assert_eq!(forged.lines().count(), 1);
     }
 
     fn at(seconds: u64, reason: CandidateReason) -> (MediaTime, CandidateReason) {

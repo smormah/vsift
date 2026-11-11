@@ -186,7 +186,7 @@ pub use visual::{
 pub use watch::{
     EVIDENCE_ARTIFACTS_PER_FRAME, MAX_OUTPUT_NAME_BYTES, MAX_WATCH_FRAMES, OutputNameError,
     SETTLED_SCREEN_SPACING_MICROS, WatchOutputNames, frame_file_name, frames_that_fit,
-    readable_time, settled_screens, spread_evenly, subrip_cue_text, subrip_time,
+    one_line_text, readable_time, settled_screens, spread_evenly, subrip_cue_text, subrip_time,
 };
 pub use worker::{
     MIN_STEP_BUDGET, RecordedRequest, RequestAdmission, StepRetry, admit_request, ends_request,
