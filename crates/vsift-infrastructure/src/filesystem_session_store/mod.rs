@@ -240,7 +240,17 @@ pub struct FilesystemSessionStore {
 ///
 /// Dropping the value releases every reservation. The slot files themselves are
 /// immutable anchors and are never replaced during normal operation.
+///
+/// What it holds is boxed, so the permit is one pointer wide: callers keep it
+/// inside larger values (an ingest source, a run's gate), and the root it
+/// records (Fable review C-2 and C-3) must not make every one of them larger.
 pub struct FilesystemAdmissionPermit {
+    held: Box<HeldAdmission>,
+}
+
+/// What a [`FilesystemAdmissionPermit`] holds. Its fields drop in order: the
+/// root first, then the slots in their list's order.
+struct HeldAdmission {
     /// The canonical root the permit was taken on, when a store's own
     /// admission took it: what lets the run's part commits be made under it
     /// ([`vsift_application::CommitAdmission::UnderPermit`]). `None` for the
@@ -248,40 +258,40 @@ pub struct FilesystemAdmissionPermit {
     root: Option<PathBuf>,
     /// The slots, and for queued work (ADR 0033 section 6) the marker that
     /// makes an ordinary caller who finds the slots taken wait for them
-    /// instead of being refused: one list, so the permit stays as small as
-    /// before.
+    /// instead of being refused: one list.
     ///
     /// **The marker must stay last.** A list drops its elements in order, so
     /// the slots are released before the marker, and a caller that reads the
     /// marker as gone knows the slots are free; the wait for queued work takes
     /// the slots once more on that reading (`root::wait_for_queued_work`).
     /// Putting the marker first would bring the refusal with free slots back.
-    _slots: Vec<HeldFileLock>,
+    slots: Vec<HeldFileLock>,
 }
 
 impl FilesystemAdmissionPermit {
+    /// The permit of `slots`, taken on no recorded root.
+    pub(super) fn of_slots(slots: Vec<HeldFileLock>) -> Self {
+        Self {
+            held: Box::new(HeldAdmission { root: None, slots }),
+        }
+    }
+
     /// The same slots, held for queued work under `marker`.
-    pub(super) fn marked_queued(self, marker: HeldFileLock) -> Self {
-        let Self {
-            root,
-            _slots: mut held,
-        } = self;
-        held.push(marker);
-        Self { root, _slots: held }
+    pub(super) fn marked_queued(mut self, marker: HeldFileLock) -> Self {
+        self.held.slots.push(marker);
+        self
     }
 
     /// The same slots, known to be taken on the canonical root `root`.
-    pub(super) fn taken_on(self, root: &Path) -> Self {
-        Self {
-            root: Some(root.to_path_buf()),
-            ..self
-        }
+    pub(super) fn taken_on(mut self, root: &Path) -> Self {
+        self.held.root = Some(root.to_path_buf());
+        self
     }
 
     /// Whether the permit was taken on the canonical root `root`. A permit
     /// whose root is not known is not.
     pub(super) fn is_taken_on(&self, root: &Path) -> bool {
-        self.root.as_deref() == Some(root)
+        self.held.root.as_deref() == Some(root)
     }
 }
 
