@@ -859,19 +859,19 @@ fn transcript_text_can_never_forge_a_line() {
     ] {
         assert!(
             text.contains("a<U+001B>[2J b.mp4: transcript by VSift 0.3.0"),
-            "{text}"
+            "the header names the video on one inert line"
         );
         assert!(
             text.contains("[00:00:01] said [00:00:09] forged <U+001B>[31mred\n"),
-            "{text}"
+            "the segment is one inert line"
         );
         let stamped = text.lines().filter(|row| row.starts_with('[')).count();
-        assert_eq!(stamped, 1, "one segment is one line: {text}");
+        assert_eq!(stamped, 1, "one segment is one line");
         assert!(
             !text
                 .chars()
                 .any(|character| character.is_control() && character != '\n'),
-            "{text:?}"
+            "no control character but the line ends"
         );
     }
     let summary = ScreenChangeSummary {
@@ -884,7 +884,7 @@ fn transcript_text_can_never_forge_a_line() {
     let list = render_screen_changes(&forged, &summary, &[]);
     assert!(
         list.starts_with("Screen changes in a<U+001B>[2J b.mp4, found by"),
-        "{list}"
+        "the list's header names the video on one inert line"
     );
     assert!(!list.contains('\u{1b}'));
 }
