@@ -783,3 +783,40 @@ Run 40761586962 on `138d7cc5` (the loop rule of ADR 0017's 2026-10-28 note; both
   stretches heard in another writing system by the two plans. Seam recall 0.903 against 0.886.
 - **The campaign still exits 1** on these advisory findings; the check's threshold is unchanged. `vsift <video>` ended `partial`
   for both items (frames for 180 of 589 and 297 changes; L-234), exit 0.
+
+### 14.8 Quick against watched, and the estimate (ADR 0033 sections 6 and 9, hosted, 2026-11-11)
+
+Run 43036639892 on `89abe00d` (46 minutes; mode `progress`, items RM03 and RM09; AMD EPYC 9V74, 4 logical CPUs, `base`; quick
+recognised with 4 threads, watched with 3). A first run, 43035185042, failed every ingest in 5 s with `STORAGE_IO`: the tool
+had made the session roots itself and VSift refuses a root it did not create private; the tool no longer does. Each medium ran
+both modes on fresh sessions, the order alternating (`order` in the table). The prefixes of RM03 were cut by stream copy
+(300, 600 and 900 s). Wall time includes the visual stream both modes run first (9 to 28 s on RM03, 6 s on RM09).
+Estimate error is the estimate minus the time that really remained to the seal, at the first sample at or after the point, signed
+(positive: pessimistic); "no estimate" means the estimate had not appeared at that point.
+
+| Media | Mode (order) | Sealed after | First part | Real-time factor | Threads | Estimate error at 10% | 25% | 50% | 75% |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RM03, first 5 min | quick (1st) | 97.9 s | - | 0.326 | 4 | - | - | - | - |
+| RM03, first 5 min | watched (2nd) | 103.5 s | none before the seal | 0.345 | 3 | no estimate | no estimate | +17.3 s (+50.8%) | +6.3 s (+39.0%) |
+| RM03, first 10 min | watched (1st) | 183.8 s | none before the seal | 0.306 | 3 | no estimate | +47.2 s (+42.8%) | +14.1 s (+18.9%) | +4.8 s (+13.3%) |
+| RM03, first 10 min | quick (2nd) | 180.2 s | - | 0.300 | 4 | - | - | - | - |
+| RM03, first 15 min | quick (1st) | 264.1 s | - | 0.293 | 4 | - | - | - | - |
+| RM03, first 15 min | watched (2nd) | 268.3 s | 238 s (12:48 published) | 0.298 | 3 | +123.7 s (+61.6%) | +42.4 s (+24.8%) | +11.0 s (+9.6%) | +4.3 s (+7.7%) |
+| RM03, 19:16 | watched (1st) | 343.9 s | 244.3 s (12:48 published) | 0.297 | 3 | +121.9 s (+46.1%) | +32.8 s (+14.8%) | +9.1 s (+6.0%) | +6.0 s (+8.7%) |
+| RM03, 19:16 | quick (2nd) | 336.0 s | - | 0.291 | 4 | - | - | - | - |
+| RM09, 28:02 | quick (1st) | 397.4 s | - | 0.236 | 4 | - | - | - | - |
+| RM09, 28:02 | watched (2nd) | 405.3 s | 27.3 s (20 s published) | 0.241 | 3 | -47.6 s (-13.3%) | -69.3 s (-22.5%) | -17.2 s (-8.7%) | +1.9 s (+2.2%) |
+
+- **The estimate first appears** 48.2 s (5-minute prefix, 35% done), 44.2 s (10-minute prefix, 17.5%; 15-minute prefix, 11.7%; the
+  whole talk, 9.1%) into the transcription of RM03 and 20.2 s (4.8%) into RM09's, all with 3 or 4 fresh chunks.
+- **Parts.** RM03 published 5 parts in all (to 12:48 at 244 s, 15:19 at 284 s, 15:50 at 297 s, 18:38 at 336 s, the seal at 344 s);
+  the 15-minute prefix 2; the 10- and 5-minute prefixes one each, the seal. RM09 published 24 parts, the first to 0:20 at 7 s and
+  the second to 1:10 at 27 s, then one every 10 to 40 s. (Times are first seen by a sample every 2 s before the first part, then
+  10 s, then 1 s in the last fifth.) L-256 is the finding.
+- **Sealed revisions agree.** For all five pairs the quick and the watched revision have the same segments (272 and 369 for the
+  two whole items; 53, 106 and 199 for the prefixes) and the same text, word distance 0, despite 4 and 3 threads.
+- **Watched costs 1.6 to 5.7% of wall time** (5.7, 2.0, 1.6, 2.4, 2.0% from the shortest to the longest); no difference follows
+  the order. The transcription itself ran at 3.4 to 3.75 media seconds a second on RM03 (3.3 to 3.7 with 3 threads), 4.3 on RM09.
+- **Reading.** ADR 0033's note of 2026-11-11 holds the proposal (keep ten minutes); [L-256](known-limits.md#l-256) and
+  [L-257](known-limits.md#l-257) the two findings. One run on one runner class: the figures are this CPU's, and a laptop's speed
+  moves every wall time in the table.
