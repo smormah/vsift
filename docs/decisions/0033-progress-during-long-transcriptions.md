@@ -250,7 +250,7 @@ after the visual stream, which both run first (9 to 28 s on the 1080p talk, 6 s 
   better rule in principle, but it needs the speed of the machine before the first run, which the call does not have, and it
   would change the help text, the skill and the contract. It is a candidate after `0.3.0` and the maintainer's to decide.
   The measurement also shows that the watched mode's first part is not what the threshold choice would buy on continuous
-  speech: see [L-256](../planning/known-limits.md#l-256), which the maintainer accepted for `0.3.0` on 2026-11-11 (the fix is planned for `0.3.1`).
+  speech: see [L-256](../planning/known-limits.md#l-256), which is a decision of its own.
 - **The estimate's error** is in [L-257](../planning/known-limits.md#l-257): +46 to +62 percent at 10 percent done on the
   talk, -13 and -23 percent at 10 and 25 percent on the briefing; within 10 percent from 50 percent done on runs of 15
   minutes or more; first shown 44 to 48 s into the transcription of the talk and 20 s into the briefing's. A known limit, no fix.
