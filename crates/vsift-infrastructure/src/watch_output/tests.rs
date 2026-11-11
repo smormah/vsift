@@ -480,6 +480,7 @@ fn the_screen_change_list_gives_every_id_and_hash() {
         index_covers_to: MediaTime::from_micros(300_000_000),
         beyond_index_bound: true,
         stopped_for_room: true,
+        skipped_for_capacity: 0,
     };
     let text = render_screen_changes(&provenance(), &summary, &changes);
     assert!(text.starts_with(
@@ -528,6 +529,7 @@ fn the_folder_port_writes_beside_the_video_and_finishes_every_file() -> TestResu
             index_covers_to: MediaTime::from_micros(0),
             beyond_index_bound: false,
             stopped_for_room: false,
+            skipped_for_capacity: 0,
         },
         &[],
     )?;
@@ -880,6 +882,7 @@ fn transcript_text_can_never_forge_a_line() {
         index_covers_to: MediaTime::from_micros(0),
         beyond_index_bound: false,
         stopped_for_room: false,
+        skipped_for_capacity: 0,
     };
     let list = render_screen_changes(&forged, &summary, &[]);
     assert!(

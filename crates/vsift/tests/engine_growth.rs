@@ -735,3 +735,168 @@ async fn a_queued_job_gives_way_to_a_frame_at_its_next_chunk() -> TestResult {
     assert_eq!(report.outcome().revision().state(), RevisionState::Sealed);
     Ok(())
 }
+
+/// Fable review C-3: a foreground run that takes the root's whole capacity (a
+/// four-thread stand-in on the default four-unit root) publishes its parts as
+/// it goes: while it holds, a read sees the open revision with what it
+/// published. Before the fix every part asked for a unit the run's own
+/// reservation held, was refused, and the revision appeared only at the seal.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_whole_share_run_publishes_its_parts_as_it_goes() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser {
+        threads: NonZeroU16::new(4),
+        ..HeldRecogniser::default()
+    };
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let running = {
+        let runner = Arc::clone(&runner);
+        let request = published_as_it_goes(&session_id);
+        tokio::spawn(async move { runner.retranscribe(request).await })
+    };
+    until_held(&recogniser).await?;
+    let reader = engine(&root, &recogniser);
+    let read = reader.transcript(whole(&session_id, None))?;
+    assert_eq!(read.revision().state(), RevisionState::Open);
+    assert_ne!(read.segments().len(), 0, "nothing was published");
+    recogniser.released.store(true, Ordering::SeqCst);
+    let outcome = running.await??;
+    assert_eq!(outcome.revision().state(), RevisionState::Sealed);
+    Ok(())
+}
+
+/// A queued `prepare` job interrupted while it ran (the caller stopped it at
+/// its held chunk), so that it has an attempt and checkpoints behind it.
+async fn interrupted_queued_job(
+    runner: &Arc<Engine>,
+    recogniser: &HeldRecogniser,
+    session_id: &SessionId,
+) -> Built<vsift::JobId> {
+    let plan = runner.job_start(&JobStartRequest {
+        session: session_id.clone(),
+        mode: Some(JobMode::Queued),
+        first: None,
+    })?;
+    let job = plan.job_id().clone();
+    let stop = Cancellation::new();
+    let running = {
+        let runner = Arc::clone(runner);
+        let request = JobResumeRequest {
+            cancellation: stop.clone(),
+            ..resumed(&job)
+        };
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    until_held(recogniser).await?;
+    stop.cancel();
+    recogniser.released.store(true, Ordering::SeqCst);
+    let _stopped = running.await?;
+    let status = runner.job_status(&job)?;
+    assert_eq!(status.state(), JobState::Interrupted);
+    assert!(status.attempt() > 0);
+    // The recogniser stays released: the next run of it goes through.
+    Ok(job)
+}
+
+/// Waits, a minute at most, until a runner holds `job` waiting its turn.
+async fn until_waiting(other: &Engine, job: &vsift::JobId) -> TestResult {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let status = other.job_status(job)?;
+        if status.live() && status.state() == JobState::Queued {
+            return Ok(());
+        }
+        if Instant::now() > deadline {
+            return Err("the resumed job never waited its turn as queued".into());
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// Fable review C-4: a queued job interrupted while it ran, and resumed, waits
+/// its turn again as `queued` (another queued job holds the turn here), so
+/// `job cancel` stops it, and `session close` then closes the session. Before
+/// the fix it waited as `interrupted`, `job cancel` answered `BUSY` for as
+/// long as it waited, and the close failed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_resumed_queued_job_is_cancelled_while_it_waits_its_turn() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser::default();
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let job = interrupted_queued_job(&runner, &recogniser, &session_id).await?;
+    let store = vsift_infrastructure::FilesystemSessionStore::open_existing(root.path("sessions"))?;
+    let turn = store
+        .try_take_queue_turn()?
+        .ok_or("another runner holds the queue turn")?;
+    let waiting = {
+        let runner = Arc::clone(&runner);
+        let request = resumed(&job);
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    let other = engine(&root, &recogniser);
+    until_waiting(&other, &job).await?;
+    assert_eq!(
+        other.job_cancel(&job)?.outcome(),
+        JobCancelOutcome::Requested
+    );
+    // However the stopped run reports itself, the job ends cancelled.
+    let _stopped = waiting.await?;
+    assert_eq!(other.job_status(&job)?.state(), JobState::Cancelled);
+    let closing = {
+        let other = engine(&root, &recogniser);
+        let session_id = session_id.clone();
+        tokio::task::spawn_blocking(move || other.close_session(&session_id))
+    };
+    assert_eq!(closing.await??.phase(), SessionPhase::Closed);
+    drop(turn);
+    Ok(())
+}
+
+/// Fable review C-4, the runner killed while it waits: the job stays `queued`
+/// with its attempt and checkpoints, is reported resumable as `interrupted`,
+/// and `job resume` continues it from its checkpoints once its turn comes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+#[ignore = "requires FFmpeg and FFprobe on PATH"]
+async fn a_waiter_that_dies_leaves_its_job_queued_and_resumable() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let recogniser = HeldRecogniser::default();
+    let runner = Arc::new(engine(&root, &recogniser));
+    let clip = looped_clip(&root)?;
+    let session_id = session(&runner, &clip).await?;
+    let job = interrupted_queued_job(&runner, &recogniser, &session_id).await?;
+    let store = vsift_infrastructure::FilesystemSessionStore::open_existing(root.path("sessions"))?;
+    let turn = store
+        .try_take_queue_turn()?
+        .ok_or("another runner holds the queue turn")?;
+    let waiting = {
+        let runner = Arc::clone(&runner);
+        let request = resumed(&job);
+        tokio::spawn(async move { runner.job_resume(request).await })
+    };
+    let other = engine(&root, &recogniser);
+    until_waiting(&other, &job).await?;
+    // The runner dies: its task is dropped, and the owner lock goes with it.
+    waiting.abort();
+    let _ = waiting.await;
+    let status = other.job_status(&job)?;
+    assert_eq!(status.state(), JobState::Queued);
+    assert!(!status.live());
+    assert!(status.attempt() > 0);
+    assert_eq!(status.resumability(), vsift::Resumability::Interrupted);
+    drop(turn);
+    let before = recogniser.calls.load(Ordering::SeqCst);
+    let report = other.job_resume(resumed(&job)).await?;
+    assert_eq!(report.status().state(), JobState::Succeeded);
+    let heard = recogniser.calls.load(Ordering::SeqCst) - before;
+    assert!(
+        heard < 6,
+        "the resumed run heard {heard} chunks again: its checkpoints were not used"
+    );
+    Ok(())
+}

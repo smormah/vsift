@@ -70,8 +70,8 @@ pub use install::{
 };
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
-    CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner,
-    JobProgressLog, JobRecord, JobReport, JobRequest, JobRunError, JobSpec, JobStore,
+    CommitAdmission, CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness,
+    JobOwner, JobProgressLog, JobRecord, JobReport, JobRequest, JobRunError, JobSpec, JobStore,
     JobStoreError, JobView, LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES,
     MAX_SESSION_JOBS, NoCheckpoints, OperationLookup, PrepareError, PrepareOutcome,
     PrepareProgress, PrepareStreams, Publication, PublishedOpenRevision, PublishingStopped,

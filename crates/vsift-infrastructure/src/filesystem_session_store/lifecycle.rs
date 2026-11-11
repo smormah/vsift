@@ -304,7 +304,8 @@ impl FilesystemSessionStore {
         )
     }
 
-    /// Closes a session after claiming its exclusive lifetime lock.
+    /// Closes a session after claiming its exclusive lifetime lock, then
+    /// removes its jobs' entries from the root's queue.
     ///
     /// # Errors
     ///
@@ -322,7 +323,7 @@ impl FilesystemSessionStore {
             expected_generation,
             vsift_domain::DurabilityRequirement::Ephemeral,
         );
-        publish_generation_with_update(
+        let closed = publish_generation_with_update(
             &self.root,
             self.admission_capacity,
             &request,
@@ -330,6 +331,10 @@ impl FilesystemSessionStore {
             LifetimeHold::Exclusive,
             &CommitHooks::new(),
             Some(&self.verified_heads),
-        )
+        )?;
+        // Its jobs can never run now: their queue entries go with the close,
+        // not when cleanup removes the session (Fable review C-5).
+        self.dequeue_session(session_id);
+        Ok(closed)
     }
 }

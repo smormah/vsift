@@ -11,8 +11,8 @@ use vsift::{
 };
 use vsift_contract::{
     OperationResponse, WATCH_KEPT_AFTER_FAILURE_REMEDIATION, WATCH_NOT_KEPT_WARNING,
-    WatchCompleteness, WatchData, WatchFailureData, WatchFrameData, WatchKeptData, WatchOutputData,
-    WatchOutputsData, WatchRangeData, watch_response,
+    WatchCompleteness, WatchData, WatchFailureData, WatchFrameData, WatchFrameGaps, WatchKeptData,
+    WatchOutputData, WatchOutputsData, WatchRangeData, watch_response,
 };
 
 use crate::{
@@ -196,6 +196,8 @@ pub(crate) async fn watch(
         })
         .collect::<Vec<_>>();
     let kept = outcome.kept.as_ref().map(kept_data).transpose()?;
+    let frames_skipped_for_capacity =
+        u64::try_from(outcome.frames_skipped_for_capacity).unwrap_or(u64::MAX);
     let data = WatchData {
         source_id: outcome.source_id.as_str().to_owned(),
         session_id: outcome.session_id.as_str().to_owned(),
@@ -213,12 +215,16 @@ pub(crate) async fn watch(
         outcome: WatchCompleteness::of(
             &not_transcribed,
             outcome.beyond_visual_bound,
-            outcome.frames_stopped_for_room,
+            WatchFrameGaps {
+                stopped_for_room: outcome.frames_stopped_for_room,
+                skipped_for_capacity: frames_skipped_for_capacity,
+            },
             kept.as_ref(),
         ),
         not_transcribed,
         screen_changes_beyond_bound: outcome.beyond_visual_bound,
         frames_stopped_for_room: outcome.frames_stopped_for_room,
+        frames_skipped_for_capacity,
         names_shortened: outcome.names_shortened,
         outputs: WatchOutputsData {
             transcript: output(&outcome.transcript)?,

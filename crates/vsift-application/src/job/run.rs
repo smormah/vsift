@@ -141,7 +141,8 @@ pub trait RevisionStore: Send + Sync {
     /// Commits part `part` of the open revision `open`, which `job` publishes,
     /// as the generation after `expected`, under `operation_id`: the revision
     /// as it stands, with its segments from position `first` on, the ones no
-    /// earlier part published (ADR 0033).
+    /// earlier part published (ADR 0033). `admission` says whether the run's
+    /// own permit covers the commit or it takes a unit as any write does.
     ///
     /// # Errors
     ///
@@ -162,6 +163,7 @@ pub trait RevisionStore: Send + Sync {
         part: NonZeroU32,
         first: usize,
         now: u64,
+        admission: CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError>;
 
     /// Commits `revision` as the generation after `expected`, under
@@ -183,6 +185,38 @@ pub trait RevisionStore: Send + Sync {
         now: u64,
     ) -> Result<StorageGeneration, SessionStorageError>;
 }
+
+/// How a part commit is admitted to the session root's capacity (ADR 0033,
+/// note of 2026-11-11; Fable review C-2 and C-3).
+///
+/// A run reserves the units of its recognizer threads for the whole attempt
+/// (X-07: one reservation for everything the attempt runs). Its part commits
+/// are part of that attempt, made between two chunks, so they are covered by
+/// the run's own permit and take no further unit: otherwise a whole-share run
+/// would be refused every part by its own reservation, and a watched run's
+/// parts would take the one unit it leaves free for frames.
+///
+/// **Only part commits use [`Self::UnderPermit`]**, and only from the run that
+/// holds the permit, through the gate that holds it. Evidence, generation and
+/// lifecycle commits and the seal (made once the permit is given back) are
+/// always [`Self::Ordinary`]. A store that cannot tell the permit was taken on
+/// its own root treats it as [`Self::Ordinary`]: never a way past admission.
+#[derive(Debug)]
+pub enum CommitAdmission<'a, P> {
+    /// The commit is made for the run that holds this permit on the same
+    /// root; it takes no unit.
+    UnderPermit(&'a P),
+    /// The commit takes one unit, as every session write does.
+    Ordinary,
+}
+
+impl<P> Clone for CommitAdmission<'_, P> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<P> Copy for CommitAdmission<'_, P> {}
 
 /// A session's open revision as its parts publish it (ADR 0033).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -784,6 +818,7 @@ where
     let publisher = super::publish::Publisher::new(
         run,
         ports.store,
+        &gate.permit,
         ports.publication,
         ports.stopwatch,
         owner.record().epoch,
@@ -813,7 +848,9 @@ where
         )
         .await
     };
-    drop(gate);
+    // The recognition is over: the permit goes back before the seal, which
+    // takes its own unit (the publisher still borrows the gate).
+    gate.give_back();
     let (transcription, usage) = match recognised {
         Ok(result) => result,
         Err(failure) => {
@@ -1060,7 +1097,8 @@ impl AdmissionWaits {
 
 /// The permit of a queued run, given back at a chunk boundary while an ordinary
 /// caller waits for capacity and taken back once nobody does (ADR 0033 section
-/// 6). For every other run it only holds the permit.
+/// 6). For every other run it only holds the permit. The run's part commits
+/// are made under the permit it holds ([`CommitAdmission::UnderPermit`]).
 struct QueuedGate<'a, S: RevisionStore, T, C> {
     store: &'a S,
     timer: &'a T,
@@ -1082,6 +1120,15 @@ impl<'a, S: RevisionStore, T, C> QueuedGate<'a, S, T, C> {
             weight,
             permit: std::sync::Mutex::new(Some(permit)),
         }
+    }
+
+    /// Releases the permit now, even from a poisoned lock.
+    fn give_back(&self) {
+        let mut held = self
+            .permit
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        held.take();
     }
 }
 

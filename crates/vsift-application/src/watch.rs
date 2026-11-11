@@ -150,6 +150,12 @@ pub struct SessionFrame {
 pub enum FrameRefusal<E> {
     /// The session has no evidence room left for it.
     NoRoom,
+    /// Other work held what the frame needs (the root's capacity, or the
+    /// session for longer than a commit waits): contention only, never
+    /// another failure. The frame is skipped, its change listed without one,
+    /// and the run goes on and ends partial (Fable review C-2; ADR 0037,
+    /// note of 2026-11-11).
+    Busy,
     /// Any other failure, which ends the run.
     Failed(E),
 }
@@ -367,8 +373,9 @@ pub trait WatchSteps: Send + Sync {
     ///
     /// # Errors
     ///
-    /// [`FrameRefusal::NoRoom`] when the session's evidence is full, and
-    /// [`FrameRefusal::Failed`] for any other failure.
+    /// [`FrameRefusal::NoRoom`] when the session's evidence is full,
+    /// [`FrameRefusal::Busy`] when other work held the capacity or the
+    /// session, and [`FrameRefusal::Failed`] for any other failure.
     fn take_frame(
         &self,
         session: &SessionId,
@@ -604,6 +611,9 @@ pub struct ScreenChangeSummary {
     /// Whether the session ran out of evidence room before every selected
     /// change had its frame (known limit L-234).
     pub stopped_for_room: bool,
+    /// How many selected changes have no frame because other work held what
+    /// the frame needed ([`FrameRefusal::Busy`]).
+    pub skipped_for_capacity: usize,
 }
 
 /// Everything the finished files hold, for the port to render and write.
@@ -858,6 +868,10 @@ pub struct WatchOutcome {
     /// change had its frame: the run stopped taking frames, listed the rest
     /// without one, and is partial (known limit L-234).
     pub frames_stopped_for_room: bool,
+    /// How many selected changes have no frame because other work held what
+    /// the frame needed: each was skipped, listed without its frame, and the
+    /// run is partial (Fable review C-2).
+    pub frames_skipped_for_capacity: usize,
     /// The bundle `--keep` asked for; `None` without the option.
     pub kept: Option<WatchKept>,
 }
@@ -1068,6 +1082,7 @@ struct TakenFrames {
     frames: Vec<WatchFrame>,
     listed: Vec<ScreenChangeEntry>,
     stopped_for_room: bool,
+    skipped_for_capacity: usize,
 }
 
 /// The screen changes, their frames and the list, written once the visual
@@ -1326,6 +1341,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             // covers part of a longer video.
             beyond_index_bound: covered_to.as_micros() >= MAX_VISUAL_INDEX_DURATION_MICROS,
             stopped_for_room: taken.stopped_for_room,
+            skipped_for_capacity: taken.skipped_for_capacity,
         };
         let list = outputs
             .write_screen_changes(&provenance, &summary, &taken.listed)
@@ -1396,6 +1412,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             beyond_visual_bound,
             names_shortened: self.names.shortened(),
             frames_stopped_for_room: screens.taken.stopped_for_room,
+            frames_skipped_for_capacity: screens.taken.skipped_for_capacity,
             kept: None,
         })
     }
@@ -1460,6 +1477,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                 frames: Vec::new(),
                 listed,
                 stopped_for_room: false,
+                skipped_for_capacity: 0,
             });
         }
         let room = frames_that_fit(
@@ -1468,6 +1486,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                 .map_err(WatchError::Step)?,
         );
         let mut frames = Vec::new();
+        let mut skipped_for_capacity = 0;
         for position in spread_evenly(changes.len(), room) {
             let (Some(change), Some(entry)) = (changes.get(position), listed.get_mut(position))
             else {
@@ -1480,7 +1499,14 @@ impl<S: WatchSteps> WatchRun<'_, S> {
                         frames,
                         listed,
                         stopped_for_room: true,
+                        skipped_for_capacity,
                     });
+                }
+                // Contention costs this frame only: a brief collision with
+                // other work must not cost the frames after it, nor the run.
+                Err(FrameRefusal::Busy) => {
+                    skipped_for_capacity += 1;
+                    continue;
                 }
                 Err(FrameRefusal::Failed(error)) => return Err(WatchError::Step(error)),
             };
@@ -1505,6 +1531,7 @@ impl<S: WatchSteps> WatchRun<'_, S> {
             frames,
             listed,
             stopped_for_room: false,
+            skipped_for_capacity,
         })
     }
 }

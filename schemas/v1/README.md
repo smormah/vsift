@@ -162,7 +162,8 @@ These files are the machine-readable public v1 boundary:
   `vsift <video>` or `vsift watch <video>` (0.3.0, ADR 0037): the run's ids (`source_id`,
   `session_id` and `session_closed`, `job_id`, `transcript_revision_id`,
   `visual_index_revision_id`), `outcome` (`complete` or `partial`, with `not_transcribed`,
-  `screen_changes_beyond_bound` and `frames_stopped_for_room`), `names_shortened`, `outputs` (each file's absolute
+  `screen_changes_beyond_bound`, `frames_stopped_for_room` and, since Fable review C-2,
+  `frames_skipped_for_capacity`), `names_shortened`, `outputs` (each file's absolute
   `path`, display `name` and `sha256`; the folder's `sha256` is `null`), `changes_found`
   (every screen change found), `changes_listed` (the settled screens the list shows) and at most 180 `frames` (`time_us`, `candidate_id`, `evidence_id`, `path`, `sha256`);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal

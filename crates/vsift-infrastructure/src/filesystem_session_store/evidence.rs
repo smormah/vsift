@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, path::PathBuf};
 
 use cap_fs_ext::DirExt;
-use vsift_application::{PublishSessionGenerationRequest, SessionStorageError};
+use vsift_application::{CommitAdmission, PublishSessionGenerationRequest, SessionStorageError};
 use vsift_domain::{
     EvidenceMediaKind, OperationId, SessionArtifactKind, SessionId, SessionPhase, StorageGeneration,
 };
@@ -11,15 +11,15 @@ use vsift_domain::{
 use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, ATTEMPTS_DIRECTORY, COORDINATION_DIRECTORY, EvidenceInventory,
-    EvidenceMediaFile, FilesystemSessionStore, LifecycleUpdate, SESSIONS_DIRECTORY, StoredArtifact,
-    StoredArtifactKind,
+    EvidenceMediaFile, FilesystemAdmissionPermit, FilesystemSessionStore, LifecycleUpdate,
+    SESSIONS_DIRECTORY, StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest,
     commit::CommitHooks,
     hash_bounded, map_lock_error, map_storage_io, open_regular_file, open_session_lock,
     publication::{ArtifactInstaller, evidence_artifact_count, publish_generation_while_locked},
     reads::read_evidence_artifact,
     root::acquire_admission,
-    sha256_hex,
+    sha256_hex, take_writer_lock,
 };
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
@@ -74,10 +74,15 @@ impl FilesystemSessionStore {
             bytes,
             now_unix_seconds,
             ArtifactCommit::Add,
+            CommitAdmission::Ordinary,
         )
     }
 
-    /// [`Self::publish_artifact`], adding the artifact as `commit` says.
+    /// [`Self::publish_artifact`], adding the artifact as `commit` says and
+    /// admitted as `admission` says: a part commit made under the run's own
+    /// permit on this root takes no unit (ADR 0033, note of 2026-11-11); a
+    /// permit taken on another root, or of no known root, does not cover it,
+    /// and the commit takes its unit as every other commit does.
     #[allow(
         clippy::too_many_arguments,
         reason = "One generation's inputs; the store's other commits take the same"
@@ -91,13 +96,50 @@ impl FilesystemSessionStore {
         bytes: &[u8],
         now_unix_seconds: u64,
         commit: ArtifactCommit,
+        admission: CommitAdmission<'_, FilesystemAdmissionPermit>,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.publish_artifact_hooked(
+            session_id,
+            operation_id,
+            expected_generation,
+            kind,
+            bytes,
+            now_unix_seconds,
+            commit,
+            admission,
+            &CommitHooks::new(),
+        )
+    }
+
+    /// [`Self::publish_artifact_as`] under explicit commit hooks, so the unit
+    /// tests can stop it where it waits for the session's writer lock.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "One generation's inputs, and the hooks the unit tests drive it by"
+    )]
+    pub(super) fn publish_artifact_hooked(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        kind: SessionArtifactKind,
+        bytes: &[u8],
+        now_unix_seconds: u64,
+        commit: ArtifactCommit,
+        admission: CommitAdmission<'_, FilesystemAdmissionPermit>,
+        hooks: &CommitHooks<'_>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         let max = StoredArtifactKind::from_domain(kind).max_bytes();
         if bytes.is_empty() || bytes.len() > max {
             return Err(SessionStorageError::CapacityExhausted);
         }
         self.revalidate_root()?;
-        let _admission = acquire_admission(&self.root, self.admission_capacity, 1)?;
+        let _admission = match admission {
+            CommitAdmission::UnderPermit(permit) if permit.is_taken_on(&self.root_path) => None,
+            CommitAdmission::UnderPermit(_) | CommitAdmission::Ordinary => {
+                Some(acquire_admission(&self.root, self.admission_capacity, 1)?)
+            }
+        };
         let coordination = self
             .root
             .open_dir_nofollow(COORDINATION_DIRECTORY)
@@ -129,7 +171,6 @@ impl FilesystemSessionStore {
         let attempts = session
             .open_dir_nofollow(ATTEMPTS_DIRECTORY)
             .map_err(map_committed_io)?;
-        let hooks = CommitHooks::new();
         let durability = committed.manifest.durability;
         let installer = ArtifactInstaller {
             commit: hooks.commit(durability),
@@ -140,9 +181,7 @@ impl FilesystemSessionStore {
         };
         installer.install(&name, bytes, &digest)?;
         installer.finish()?;
-        let _writer =
-            HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "writer")?)
-                .map_err(map_lock_error)?;
+        let _writer = take_writer_lock(&coordination, session_id, hooks)?;
         // The session's own durability: its commit protocol was fixed when
         // it was initialized (ADR 0020).
         let request = PublishSessionGenerationRequest::new(
@@ -172,7 +211,7 @@ impl FilesystemSessionStore {
             &self.root,
             &request,
             update,
-            &hooks,
+            hooks,
             Some(&self.verified_heads),
         )
     }
@@ -302,9 +341,7 @@ impl FilesystemSessionStore {
             installer.install(&artifact.name, bytes, &artifact.sha256)?;
         }
         installer.finish()?;
-        let _writer =
-            HeldFileLock::try_exclusive(open_session_lock(&coordination, session_id, "writer")?)
-                .map_err(map_lock_error)?;
+        let _writer = take_writer_lock(&coordination, session_id, hooks)?;
         // The session's own durability (ADR 0020).
         let request = PublishSessionGenerationRequest::new(
             session_id.clone(),

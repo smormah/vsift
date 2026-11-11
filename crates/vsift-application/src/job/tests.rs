@@ -473,6 +473,11 @@ struct Shared {
     open_job: Option<JobId>,
     /// Every part ever published, sealed or not, with its part number.
     part_history: Vec<(u32, TranscriptRevision)>,
+    /// The run's permit takes the root's whole capacity (Fable review C-3):
+    /// a part commit that asks for a unit of its own is refused `Busy`.
+    whole_share: bool,
+    /// Part commits that asked for a unit of their own.
+    ordinary_parts: usize,
 }
 
 impl Shared {
@@ -834,8 +839,15 @@ impl RevisionStore for MemoryStore {
         part: std::num::NonZeroU32,
         first: usize,
         _now: u64,
+        admission: crate::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         let mut shared = self.lock()?;
+        if matches!(admission, crate::CommitAdmission::Ordinary) {
+            shared.ordinary_parts += 1;
+            if shared.whole_share {
+                return Err(SessionStorageError::Busy);
+            }
+        }
         if shared.generation() != expected.value() {
             return Err(SessionStorageError::StateConflict);
         }
@@ -1194,6 +1206,29 @@ async fn a_run_published_as_it_goes_seals_the_revision_a_sealed_run_makes() -> T
         vsift_domain::RevisionState::Sealed
     );
     assert_eq!(harness.store.open_revision(&session()?, NOW)?, None);
+    Ok(())
+}
+
+/// Fable review C-3: a run whose permit takes the root's whole capacity
+/// (a foreground `transcript retranscribe` or `job resume` on a default root
+/// with four or more cores) publishes its parts as it goes, because each part
+/// is committed under the run's own permit and asks for no unit of its own.
+/// Before the fix every part asked for one, was refused `Busy` by the run's
+/// own reservation, and the refusal was swallowed: the revision appeared only
+/// at the seal.
+#[tokio::test]
+async fn a_whole_share_run_publishes_its_parts_under_its_own_permit() -> TestResult {
+    let harness = Harness::publishing()?;
+    harness.store.with(|shared| shared.whole_share = true)?;
+    let outcome = harness.request(None, None).await??;
+    let parts = harness.part_history()?;
+    assert!(!parts.is_empty(), "no part was published before the seal");
+    assert_parts_grow_into(&parts, &outcome.revision)?;
+    assert_eq!(
+        harness.store.with(|shared| shared.ordinary_parts)?,
+        0,
+        "a part asked for a unit beside the run's permit"
+    );
     Ok(())
 }
 
@@ -2733,7 +2768,7 @@ async fn most_chunks_unusable_end_the_job_at_the_first_failure() -> TestResult {
         })
     );
     // `job status` therefore says it failed, not that it can be resumed.
-    let resumability = super::Resumability::of(JobState::Failed, JobLiveness::Unowned, true);
+    let resumability = super::Resumability::of(JobState::Failed, JobLiveness::Unowned, true, 1);
     assert!(!resumability.resumable());
 
     // The same request, run again, starts a new epoch from nothing.
@@ -3084,6 +3119,7 @@ impl RevisionStore for SlowStore<'_> {
         part: std::num::NonZeroU32,
         first: usize,
         now: u64,
+        admission: crate::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         self.0.publish_part(
             session_id,
@@ -3094,6 +3130,7 @@ impl RevisionStore for SlowStore<'_> {
             part,
             first,
             now,
+            admission,
         )
     }
 

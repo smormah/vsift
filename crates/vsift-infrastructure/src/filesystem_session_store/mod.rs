@@ -20,6 +20,8 @@ mod bundle_search;
 mod chain;
 mod cleanup;
 mod commit;
+#[cfg(test)]
+mod commit_admission_tests;
 mod evidence;
 mod index;
 #[cfg(test)]
@@ -238,26 +240,58 @@ pub struct FilesystemSessionStore {
 ///
 /// Dropping the value releases every reservation. The slot files themselves are
 /// immutable anchors and are never replaced during normal operation.
+///
+/// What it holds is boxed, so the permit is one pointer wide: callers keep it
+/// inside larger values (an ingest source, a run's gate), and the root it
+/// records (Fable review C-2 and C-3) must not make every one of them larger.
 pub struct FilesystemAdmissionPermit {
+    held: Box<HeldAdmission>,
+}
+
+/// What a [`FilesystemAdmissionPermit`] holds. Its fields drop in order: the
+/// root first, then the slots in their list's order.
+struct HeldAdmission {
+    /// The canonical root the permit was taken on, when a store's own
+    /// admission took it: what lets the run's part commits be made under it
+    /// ([`vsift_application::CommitAdmission::UnderPermit`]). `None` for the
+    /// unit a commit takes for itself, which nothing else may use.
+    root: Option<PathBuf>,
     /// The slots, and for queued work (ADR 0033 section 6) the marker that
     /// makes an ordinary caller who finds the slots taken wait for them
-    /// instead of being refused: one list, so the permit stays as small as
-    /// before.
+    /// instead of being refused: one list.
     ///
     /// **The marker must stay last.** A list drops its elements in order, so
     /// the slots are released before the marker, and a caller that reads the
     /// marker as gone knows the slots are free; the wait for queued work takes
     /// the slots once more on that reading (`root::wait_for_queued_work`).
     /// Putting the marker first would bring the refusal with free slots back.
-    _slots: Vec<HeldFileLock>,
+    slots: Vec<HeldFileLock>,
 }
 
 impl FilesystemAdmissionPermit {
+    /// The permit of `slots`, taken on no recorded root.
+    pub(super) fn of_slots(slots: Vec<HeldFileLock>) -> Self {
+        Self {
+            held: Box::new(HeldAdmission { root: None, slots }),
+        }
+    }
+
     /// The same slots, held for queued work under `marker`.
-    pub(super) fn marked_queued(self, marker: HeldFileLock) -> Self {
-        let Self { _slots: mut held } = self;
-        held.push(marker);
-        Self { _slots: held }
+    pub(super) fn marked_queued(mut self, marker: HeldFileLock) -> Self {
+        self.held.slots.push(marker);
+        self
+    }
+
+    /// The same slots, known to be taken on the canonical root `root`.
+    pub(super) fn taken_on(mut self, root: &Path) -> Self {
+        self.held.root = Some(root.to_path_buf());
+        self
+    }
+
+    /// Whether the permit was taken on the canonical root `root`. A permit
+    /// whose root is not known is not.
+    pub(super) fn is_taken_on(&self, root: &Path) -> bool {
+        self.held.root.as_deref() == Some(root)
     }
 }
 
@@ -732,6 +766,68 @@ fn map_open_error(error: SessionStoreOpenError) -> SessionStorageError {
         | SessionStoreOpenError::InvalidOwnership
         | SessionStoreOpenError::InvalidLayout => SessionStorageError::IntegrityFailure,
         _ => SessionStorageError::Io,
+    }
+}
+
+/// How often a commit looks again for a session's writer lock another commit
+/// holds.
+const WRITER_LOCK_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+/// How long a commit waits at most for a session's writer lock before it is
+/// refused `BUSY` (Fable review C-2; ADR 0033, note of 2026-11-11).
+const WRITER_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Takes `session_id`'s writer lock, waiting up to [`WRITER_LOCK_WAIT`] while
+/// another commit of the session holds it, then `BUSY`. Every commit takes the
+/// writer lock here, and only here.
+///
+/// **Why the wait is safe.** The writer lock is the innermost lock of every
+/// commit: its holder took its admission unit (or holds its run's permit) and
+/// its hold on the session's lifetime first, and **no code waits for any other
+/// lock while holding the writer lock**. A holder does the file operations of
+/// one generation and lets it go, so the wait can never be part of a cycle
+/// and lasts at most one commit. Before 0.3.0's fix a commit that met another
+/// commit of its session was refused at once: a frame taken while the run's
+/// own transcript part committed failed the whole `vsift <video>` run.
+///
+/// **The wait is never made on an async worker thread.** The store's port
+/// methods for generations run their commits under `spawn_blocking`, but the
+/// engine and the job run call the other commits (evidence, artifacts, parts,
+/// the seal, lifecycle changes) synchronously from async code. Each pause is
+/// therefore made through [`pause_off_the_runtime`], which on a
+/// multi-threaded runtime hands the worker's other tasks to another thread
+/// while this one waits.
+fn take_writer_lock(
+    coordination: &Dir,
+    session_id: &SessionId,
+    hooks: &commit::CommitHooks<'_>,
+) -> Result<HeldFileLock, SessionStorageError> {
+    let started = std::time::Instant::now();
+    loop {
+        match HeldFileLock::try_exclusive(open_session_lock(coordination, session_id, "writer")?) {
+            Ok(held) => return Ok(held),
+            Err(fs::TryLockError::WouldBlock) => {}
+            Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
+        }
+        if started.elapsed() >= WRITER_LOCK_WAIT {
+            return Err(SessionStorageError::Busy);
+        }
+        hooks.writer_busy();
+        pause_off_the_runtime(WRITER_LOCK_POLL);
+    }
+}
+
+/// Sleeps the calling thread for `pause` without holding up an async worker:
+/// on a worker of a multi-threaded Tokio runtime (the command line's), the
+/// sleep runs in [`tokio::task::block_in_place`], which first moves the
+/// worker's other tasks to another thread. Anywhere else (a blocking thread,
+/// a thread with no runtime, a current-thread runtime, where
+/// `block_in_place` is not allowed) it is a plain sleep.
+fn pause_off_the_runtime(pause: std::time::Duration) {
+    let flavor = tokio::runtime::Handle::try_current().map(|handle| handle.runtime_flavor());
+    if matches!(flavor, Ok(tokio::runtime::RuntimeFlavor::MultiThread)) {
+        tokio::task::block_in_place(|| std::thread::sleep(pause));
+    } else {
+        std::thread::sleep(pause);
     }
 }
 

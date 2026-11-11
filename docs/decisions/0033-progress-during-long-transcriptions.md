@@ -627,3 +627,46 @@ All are taken (2026-10-21):
 prefix property (`every_cut_of_a_run_settles_a_prefix_of_its_merge`) now include such segments, and the
 prefix claim holds with them. Version 1 shipped in no release, so the rule above (a resume under other
 merge rules seals as stopped) affects no stored revision.
+
+## Note, 2026-11-11: a run's own commits, the writer lock, and the queue (Fable 0.3.0 review, C-2 to C-9; H5)
+
+The planner accepted these on 2026-11-11 (`story-handoffs/H5-design-rulings.md`).
+
+- **A run's parts are committed under the run's own permit (C-2, C-3).** X-07 makes the permit cover
+  everything an attempt runs, and before this note every part commit still took one more admission unit.
+  A whole-share run (`transcript retranscribe` or `job resume` in the foreground, on a default 4-unit root
+  with four or more cores) was then refused every part by its own reservation. The refusal was swallowed,
+  so the revision appeared only at the seal (section 1's promise did not hold, and nothing said why). A
+  watched run's parts took the one unit D4 leaves free for frames. `RevisionStore::publish_part` now takes
+  a typed `CommitAdmission`: `UnderPermit(&permit)` from the run's gate, which takes no unit, or `Ordinary`.
+  Only part commits use it. Evidence, generation and lifecycle commits, and the seal (made once the permit
+  is given back), stay ordinary. The store covers a commit only with a permit it took on the same
+  canonical root; any other permit falls back to an ordinary admission, never past it. Other processes
+  never see more units held than the run reserved, the queued-work marker is not read or demanded by a
+  covered commit, and the permit's slots and marker are only borrowed, so the marker stays last (section 6,
+  #594). The swallow of a refused part stays: what is left to refuse a part is another commit of the
+  session for a moment, or a generation another command moved, and the next chunk tries again.
+- **A commit waits a moment for the session's writer lock (C-2).** A frame's evidence commit that met a
+  part commit holding the session's writer lock was refused `BUSY` at once. Every commit now takes the
+  writer lock through one helper, which polls it every 10 ms for up to 2 s, then answers `BUSY` as before.
+  The writer lock is the innermost lock, and no code waits for any other lock while holding it, so the wait
+  cannot form a cycle. On a worker thread of a multi-threaded runtime the pause runs in `block_in_place`,
+  so the wait never holds up an async worker. The visible cost: a command that meets a held writer lock is
+  refused after up to 2 s, not at once.
+- **A resumed queued job waits as `queued` (C-4).** A job of the queued mode that was interrupted and is
+  resumed is moved back to `queued` (the change `Requeue`, edge `interrupted -> queued`) by its owner,
+  before it waits its turn. It keeps its epoch, attempts, failures and checkpoints. `job cancel` and
+  `session close` then stop it as they stop any waiting job; before, `job cancel` answered `BUSY` for as
+  long as it waited. A `queued` record with an attempt behind it is reported resumable as `interrupted`.
+- **Section 5's close, corrected (C-6).** "Then closes ... a runner that missed it fails its next
+  publication" was wrong: a runner holds a shared hold on the session's lifetime for as long as it lives,
+  which the close needs exclusively. A close that still finds a runner after its 10 s wait answers `BUSY`,
+  retryable, and closes nothing; the same command closes the session once the runner has ended. The lock
+  protocol is unchanged.
+- **The queue (C-5, C-7).** An entry is removed only on a positive finding that its job ended (no record,
+  its session gone, or a terminal state). An entry whose job cannot be read for a moment keeps its place,
+  and counts ahead only within its start grace. A stamp in the future (the clock stepped back) does not
+  count as "entered recently". A closed session's entries are removed by the close.
+- **Records (C-8, C-9).** L-220 says which clock a run checks expiry with; L-223's mitigation says a chunk
+  can take minutes with a large model on a slow processor; the progress record's comment says its contents
+  are synchronised and only its directory is not.

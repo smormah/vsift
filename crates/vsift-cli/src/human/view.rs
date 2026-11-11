@@ -1619,6 +1619,7 @@ pub(crate) struct Watched {
     pub(crate) not_transcribed: Vec<WatchRange>,
     pub(crate) screen_changes_beyond_bound: bool,
     pub(crate) frames_stopped_for_room: bool,
+    pub(crate) frames_skipped_for_capacity: u64,
     pub(crate) names_shortened: bool,
     pub(crate) outputs: WatchOutputs,
     pub(crate) changes_found: u64,

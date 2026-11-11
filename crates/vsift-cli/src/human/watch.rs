@@ -64,12 +64,7 @@ pub(super) fn finished(envelope: &Envelope<Watched>) -> Result<RenderedText, Too
             .push_fixed(" (the transcript says so in place)")
             .end_line();
     }
-    if data.frames_stopped_for_room {
-        text.push_fixed(
-            "VSift's private copy ran out of room for frames, so they stop early; every settled screen is listed.",
-        )
-        .end_line();
-    }
+    push_frame_gaps(&mut text, data);
     if data.screen_changes_beyond_bound {
         text.push_fixed("Screen changes were found in the first four hours only.")
             .end_line();
@@ -103,6 +98,33 @@ pub(super) fn finished(envelope: &Envelope<Watched>) -> Result<RenderedText, Too
     text.finish()
 }
 
+/// Why some listed screens have no frame: the session ran out of room, or
+/// other `VSift` work held the computer (Fable review C-2).
+fn push_frame_gaps(text: &mut TerminalText, data: &Watched) {
+    if data.frames_stopped_for_room {
+        text.push_fixed(
+            "VSift's private copy ran out of room for frames, so they stop early; every settled screen is listed.",
+        )
+        .end_line();
+    }
+    if data.frames_skipped_for_capacity > 0 {
+        // A finished run's files are never replaced, so the same command
+        // would be refused: only a run into another folder takes them.
+        let (noun, verb) = if data.frames_skipped_for_capacity == 1 {
+            (" frame", " was")
+        } else {
+            (" frames", " were")
+        };
+        text.push_unsigned(data.frames_skipped_for_capacity)
+            .push_fixed(noun)
+            .push_fixed(verb)
+            .push_fixed(
+                " not saved because the computer was busy with other VSift work; their screens are listed without a frame. To get them, run the command again with --output <another folder> (it does the whole run again).",
+            )
+            .end_line();
+    }
+}
+
 /// A time as a person reads it, `HH:MM:SS`.
 fn readable(micros: u64) -> String {
     vsift::readable_time(vsift::MediaTime::from_micros(micros))
@@ -116,6 +138,13 @@ mod tests {
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     fn screen(kept: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
+        screen_skipping(kept, 0)
+    }
+
+    fn screen_skipping(
+        kept: &serde_json::Value,
+        skipped: u64,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let file = serde_json::json!({ "name": "call.txt" });
         let envelope: Envelope<Watched> = serde_json::from_value(serde_json::json!({
             "status": "complete",
@@ -126,6 +155,7 @@ mod tests {
                 "not_transcribed": [],
                 "screen_changes_beyond_bound": false,
                 "frames_stopped_for_room": false,
+                "frames_skipped_for_capacity": skipped,
                 "names_shortened": false,
                 "outputs": { "transcript": file, "subtitles": null, "folder": file },
                 "changes_found": 1,
@@ -140,6 +170,24 @@ mod tests {
             .map_err(|_| "too large")?
             .as_str()
             .to_owned())
+    }
+
+    /// Fable review C-2: frames skipped while the computer was busy are
+    /// counted, and the next step is a run into another folder, never the
+    /// same command, which a finished run's files would refuse.
+    #[test]
+    fn skipped_frames_are_counted_with_what_to_do() -> TestResult {
+        let text = screen_skipping(&serde_json::Value::Null, 1)?;
+        assert!(
+            text.contains("1 frame was not saved because the computer was busy"),
+            "{text}"
+        );
+        assert!(text.contains("--output <another folder>"), "{text}");
+        let text = screen_skipping(&serde_json::Value::Null, 3)?;
+        assert!(text.contains("3 frames were not saved"), "{text}");
+        let text = screen(&serde_json::Value::Null)?;
+        assert!(!text.contains("not saved"), "{text}");
+        Ok(())
     }
 
     #[test]

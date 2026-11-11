@@ -37,7 +37,7 @@ use vsift_domain::{
     MAX_FIRST_WINDOW_MICROS, MediaProgress, PrepareStream, ProgressStage, ProgressUpdate,
     RevisionState, SessionId, TimeRange, VISUAL_WINDOW_MICROS, align_to_chunk_grid,
 };
-use vsift_infrastructure::{FilesystemSessionStore, MonotonicStopwatch};
+use vsift_infrastructure::{FilesystemSessionStore, MonotonicStopwatch, QueuedEntry};
 
 use crate::{
     Cancellation, JobResumeReport, JobStatusReport, ProgressObserver, RecognitionSeed,
@@ -798,31 +798,97 @@ const QUEUE_START_GRACE_SECONDS: u64 = 30;
 /// [`QUEUE_START_GRACE_SECONDS`] ago. An entry that no process runs (its runner
 /// was killed, or the machine restarted) keeps its place but does not hold up
 /// the live jobs behind it (RV-1 finding 1); once its job runs again, it is
-/// ahead of them. An ended job's entry is removed as it is found. `None` when
-/// the job is not in the queue or the queue cannot be read.
+/// ahead of them. An ended job's entry is removed as it is found; an entry
+/// whose job cannot be read just now keeps its place ([`place_in_queue`]).
+/// `None` when the job is not in the queue or the queue cannot be read.
 pub(crate) fn queue_position(
     store: &FilesystemSessionStore,
     job: &JobId,
     now_unix_seconds: u64,
 ) -> Option<usize> {
     let entries = store.job_queue().ok()?;
+    let place = place_in_queue(&entries, job, now_unix_seconds, &mut |entry| {
+        match store.job(&entry.session_id, &entry.job_id) {
+            Ok(Some(view)) if !view.record.state.is_terminal() => QueuedJobRead::Waiting {
+                owned: view.liveness == vsift_application::JobLiveness::Owned,
+            },
+            // No record, its session gone, or ended: it will never run.
+            Ok(_) => QueuedJobRead::Ended,
+            // Not known now (a renewal, a close or a cleanup holds the
+            // session's lifetime for a moment, or the read failed).
+            Err(_) => QueuedJobRead::Unread,
+        }
+    });
+    for ended in &place.ended {
+        store.dequeue_job(ended);
+    }
+    place.position
+}
+
+/// What one look at a queue entry's job found.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum QueuedJobRead {
+    /// The job has not ended; `owned` when a runner holds it.
+    Waiting {
+        /// Whether a live runner holds the job.
+        owned: bool,
+    },
+    /// Positively ended: no record, its session gone, or a terminal state.
+    Ended,
+    /// The job could not be read just now; nothing is known of it.
+    Unread,
+}
+
+/// Where a job stands, and the entries found ended on the way.
+#[derive(Debug, Default, Eq, PartialEq)]
+pub(crate) struct QueuePlace {
+    /// The job's position (0 for the next to run), `None` when it is not in
+    /// the queue.
+    pub(crate) position: Option<usize>,
+    /// The entries whose jobs ended, to remove.
+    pub(crate) ended: Vec<JobId>,
+}
+
+/// The queue's decision, apart from the store (Fable review C-5 and C-7).
+///
+/// An entry is removed only on a positive finding that its job ended
+/// ([`QueuedJobRead::Ended`]). An entry whose job cannot be read just now
+/// keeps its place and counts as one whose runner is not seen: ahead only
+/// within its start grace. Taking a live job for one whose runner is not seen,
+/// for one look, at most lets the next job try for the queue turn, which the
+/// turn lock refuses while the live job holds it; removing the entry would
+/// send its job to the end of the queue, or out of it.
+///
+/// An entry counts as "entered recently" only when its stamp is not in the
+/// future: a stamp after `now_unix_seconds` was raised past the newest entry
+/// when the clock stepped back, so it says nothing about when the entry was
+/// entered, and a dead entry must not count ahead of live jobs until the
+/// clock catches up.
+pub(crate) fn place_in_queue(
+    entries: &[QueuedEntry],
+    job: &JobId,
+    now_unix_seconds: u64,
+    read: &mut dyn FnMut(&QueuedEntry) -> QueuedJobRead,
+) -> QueuePlace {
+    let mut place = QueuePlace::default();
     let mut position = 0;
     for entry in entries {
-        let view = store.job(&entry.session_id, &entry.job_id).ok().flatten();
-        let Some(view) = view.filter(|view| !view.record.state.is_terminal()) else {
-            store.dequeue_job(&entry.job_id);
+        let found = read(entry);
+        if found == QueuedJobRead::Ended {
+            place.ended.push(entry.job_id.clone());
             continue;
-        };
-        if entry.job_id == *job {
-            return Some(position);
         }
-        let starting = now_unix_seconds.saturating_sub(entry.entered_at_unix_seconds)
-            < QUEUE_START_GRACE_SECONDS;
-        if view.liveness == vsift_application::JobLiveness::Owned || starting {
+        if entry.job_id == *job {
+            place.position = Some(position);
+            return place;
+        }
+        let starting = entry.entered_at_unix_seconds <= now_unix_seconds
+            && now_unix_seconds - entry.entered_at_unix_seconds < QUEUE_START_GRACE_SECONDS;
+        if found == (QueuedJobRead::Waiting { owned: true }) || starting {
             position += 1;
         }
     }
-    None
+    place
 }
 
 /// The observer of one transcript stream: every observation reaches the host
@@ -854,9 +920,103 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use vsift_application::{StreamPhase, StreamProgress};
-    use vsift_domain::{PrepareStream, ProgressStage, ProgressUpdate};
+    use vsift_domain::{JobId, PrepareStream, ProgressStage, ProgressUpdate, SessionId};
+    use vsift_infrastructure::QueuedEntry;
 
-    use super::stream_observer;
+    use super::{QUEUE_START_GRACE_SECONDS, QueuedJobRead, place_in_queue, stream_observer};
+
+    type Built<T> = Result<T, Box<dyn std::error::Error>>;
+
+    const NOW: u64 = 1_800_000_000;
+
+    fn entry(job: &str, entered: u64) -> Built<QueuedEntry> {
+        Ok(QueuedEntry {
+            session_id: SessionId::parse("ses_0123456789abcdef")?,
+            job_id: JobId::parse(job)?,
+            entered_at_unix_seconds: entered,
+        })
+    }
+
+    /// Fable review C-5: an entry whose job cannot be read just now (its
+    /// session's lifetime held by a renewal, say) keeps its place and is not
+    /// removed; a job that ended is. The unread entry, entered long ago,
+    /// does not hold up the job behind it.
+    #[test]
+    fn an_entry_that_cannot_be_read_keeps_its_place() -> Built<()> {
+        let entries = [
+            entry("job_aaaaaaaaaaaaaaaa", NOW - 3_600)?,
+            entry("job_bbbbbbbbbbbbbbbb", NOW - 3_600)?,
+            entry("job_cccccccccccccccc", NOW - 3_600)?,
+        ];
+        let mine = JobId::parse("job_cccccccccccccccc")?;
+        let place = place_in_queue(
+            &entries,
+            &mine,
+            NOW,
+            &mut |entry| match entry.job_id.as_str() {
+                "job_aaaaaaaaaaaaaaaa" => QueuedJobRead::Unread,
+                "job_bbbbbbbbbbbbbbbb" => QueuedJobRead::Ended,
+                _ => QueuedJobRead::Waiting { owned: true },
+            },
+        );
+        assert_eq!(place.position, Some(0));
+        assert_eq!(place.ended, vec![JobId::parse("job_bbbbbbbbbbbbbbbb")?]);
+
+        // The waiting job itself, read as unread, still finds its place,
+        // and nothing is removed.
+        let place = place_in_queue(&entries, &mine, NOW, &mut |_| QueuedJobRead::Unread);
+        assert_eq!(place.position, Some(0));
+        assert_eq!(place.ended, Vec::<JobId>::new());
+
+        // An unread entry within its start grace counts ahead, as a starting
+        // one does.
+        let entries = [
+            entry("job_aaaaaaaaaaaaaaaa", NOW - 1)?,
+            entry("job_cccccccccccccccc", NOW)?,
+        ];
+        let place = place_in_queue(&entries, &mine, NOW, &mut |entry| {
+            if entry.job_id == mine {
+                QueuedJobRead::Waiting { owned: true }
+            } else {
+                QueuedJobRead::Unread
+            }
+        });
+        assert_eq!(place.position, Some(1));
+        Ok(())
+    }
+
+    /// Fable review C-7: after the clock steps back, a stamp in the future
+    /// says nothing about when its entry was entered, so a dead entry with
+    /// one does not count as starting; a recent stamp in the past still does.
+    #[test]
+    fn a_stamp_in_the_future_is_not_entered_recently() -> Built<()> {
+        let mine = JobId::parse("job_cccccccccccccccc")?;
+        let behind_a_dead_entry = |entered: u64| -> Built<Option<usize>> {
+            let entries = [
+                entry("job_aaaaaaaaaaaaaaaa", entered)?,
+                entry("job_cccccccccccccccc", NOW)?,
+            ];
+            Ok(
+                place_in_queue(&entries, &mine, NOW, &mut |entry| QueuedJobRead::Waiting {
+                    owned: entry.job_id == mine,
+                })
+                .position,
+            )
+        };
+        assert_eq!(behind_a_dead_entry(NOW + 3_600)?, Some(0), "a future stamp");
+        assert_eq!(behind_a_dead_entry(NOW + 1)?, Some(0), "one second ahead");
+        assert_eq!(
+            behind_a_dead_entry(NOW - 1)?,
+            Some(1),
+            "entered a second ago: starting"
+        );
+        assert_eq!(
+            behind_a_dead_entry(NOW - QUEUE_START_GRACE_SECONDS)?,
+            Some(0),
+            "the grace is over"
+        );
+        Ok(())
+    }
     use crate::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
 
     /// ADR 0033 section 6: a transcript stream of a `prepare` job passes a
