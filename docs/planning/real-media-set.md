@@ -293,6 +293,18 @@ the SHA-256 of its text, so two runs can be compared segment by segment from the
   With `-f mode=visual` it runs, instead of the campaign, the measurement of the visual change rule on the fetched items
   (#175: `crates/vsift-infrastructure/tests/p08_real_media_visual.rs`, which decodes each item twice and keeps numbers only,
   as `visual-measurement.json` in the report artifact); `-f mode=both` runs the two.
+  With `-f mode=progress` (0.3.0 readiness item 5, ADR 0033 sections 6 and 9; [`progress-measurement.cjs`](../../tools/p14-campaigns/progress-measurement.cjs))
+  it runs, instead of the campaign, the measurement of the quick/watched threshold and of the progress estimate's error: for
+  RM03 and RM09 (the default when `items` is empty) and for prefixes of RM03 of 5, 10 and 15 minutes that the runner cuts with
+  FFmpeg (stream copy, so the audio is untouched; one re-encode of the video only if the container does not allow it, and the
+  report says so), it makes a fresh session for each of `job start --mode quick` and `--mode watched`, the order of the two
+  alternating from one medium to the next. A watched run is followed with `job status` about every ten seconds (every two until a
+  part is readable, every second in the last fifth). It writes `progress.json` (every figure and every status sample) and
+  `progress.md` (the tables) to the artifact: wall time to the sealed revision, time to the first readable part and to each part,
+  real-time factor and recogniser threads, the estimate's signed and relative error when the run is 10, 25, 50 and 75 percent
+  done, when the estimate first appears, and the quick revision against the watched one (segments, text, where they differ and
+  how near a chunk seam). **Public items only:** the tool refuses `--private-manifest` and any private item (tests drive both),
+  and keeps at most 120 characters of each side of a difference, from a public item.
   With `-f keep_segments="RM09:915-940"` (#485; whole seconds, at most four ranges and 120 s an item) the campaign also keeps,
   as text, the transcript segments of both revisions that overlap each range, with their chunk, its audio window and the
   recogniser's own times, in `kept-segments/<item>/segments.json` of the artifact beside the item's attribution, so a person can
