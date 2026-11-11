@@ -179,14 +179,18 @@ name or password in the link; at most three redirects, each held to the same rul
 and connected to only when every address it resolves to is public (loopback, private, link-local, the cloud
 metadata addresses, carrier-grade NAT, documentation, multicast, reserved, IPv6 unique-local and link-local, and
 IPv4-mapped, 6to4, Teredo and NAT64 forms of those are refused), so the address checked is the address connected
-to; a host written as an address is checked too. Through a proxy named by `HTTPS_PROXY` or `ALL_PROXY` (and not
-excluded by `NO_PROXY`) the proxy resolves the name, so VSift refuses only internal-looking names (one label,
-`localhost`, `.local`, `.localhost`, `.internal`, `.lan`, `.home.arpa`, `.corp`, `.intranet`) and addresses, on the
-link and on every redirect, and the origin says `proxy_resolved` (known limit L-208). A proxy value is read as curl
-reads it (a URL, or `host:port` for an HTTP proxy); a value that is set but is not a usable `http` or `https` proxy
-is refused with `proxy_unusable` and never ignored, so a fetch never goes direct past a proxy the user set.
-`NO_PROXY` is matched by host name only: an entry is the host, a domain it is under (with or without a leading
-`.`), or `*`. One `GET` with `Accept-Encoding: identity`, a `User-Agent` of
+to; a host written as an address is checked too. Through a proxy named by `HTTPS_PROXY` or `ALL_PROXY` the proxy
+resolves the name, so VSift refuses only internal-looking names (one label, `localhost`, `.local`, `.localhost`,
+`.internal`, `.lan`, `.home.arpa`, `.corp`, `.intranet`) and addresses on each request the proxy carries, and the
+origin says `proxy_resolved` when any request went through it (known limit L-208). `NO_PROXY` is decided for the
+link and again for each redirect by that request's own host: one it lists goes direct, its name resolved and
+checked by VSift; any other goes through the proxy. The proxy's own name is the user's configuration and is
+resolved without the public-address check, so a proxy on a private address works; a link or redirect that would go
+direct to the proxy's own name is refused with `address_refused`. A proxy value is read as curl reads it (a URL, or
+`host:port` for an HTTP proxy); a value that is set but is not a usable `http` or `https` proxy is refused with
+`proxy_unusable` for any request that would go through it and never ignored, so a fetch never goes direct past a
+proxy the user set. `NO_PROXY` is matched by host name only: an entry is the host, a domain it is under (with or
+without a leading `.`), or `*`. One `GET` with `Accept-Encoding: identity`, a `User-Agent` of
 `VSift/<version> link-ingest` and nothing personal: no cookie, no `Authorization`, no `Referer`. Only a complete
 `200 OK` identity body is accepted; a text content type stops at once as a web page, and the first 12 bytes must be
 an MP4/MOV (`ftyp`) or Matroska/WebM file. `--max-download-bytes` (default 4 GiB, at most 20 GiB) and
