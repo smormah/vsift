@@ -12,6 +12,8 @@ mod command;
 mod config;
 mod door;
 mod evidence;
+#[cfg(test)]
+mod exit_rule;
 mod handoff;
 mod help_text;
 mod human;

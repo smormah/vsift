@@ -22,6 +22,7 @@ use std::{
 };
 
 use assert_cmd::Command;
+use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -81,12 +82,38 @@ fn vsift(root: &OwnedRoot, arguments: &[&str]) -> Result<Output, Box<dyn Error>>
         .output()?)
 }
 
-fn validate(schema: &str, instance: &Value) -> TestResult {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+/// The identifier base of the published schemas.
+const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
+
+fn schema_file(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../schemas/v1")
-        .join(schema);
-    let schema: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
-    jsonschema::validator_for(&schema)?
+        .join(name)
+}
+
+/// Resolves a schema's sibling `$ref`s (`setup.schema.json` names
+/// `setup-install.schema.json`) to the local copies, so validation never
+/// reaches the network.
+struct LocalSchemas;
+
+impl Retrieve for LocalSchemas {
+    fn retrieve(&self, uri: &Uri<String>) -> Result<Value, Box<dyn Error + Send + Sync>> {
+        let name = uri
+            .as_str()
+            .strip_prefix(SCHEMA_BASE)
+            .filter(|name| !name.contains(['/', '\\']))
+            .ok_or_else(|| format!("unpublished schema reference: {uri}"))?;
+        Ok(serde_json::from_str(&fs::read_to_string(schema_file(
+            name,
+        ))?)?)
+    }
+}
+
+fn validate(schema: &str, instance: &Value) -> TestResult {
+    let schema: Value = serde_json::from_str(&fs::read_to_string(schema_file(schema))?)?;
+    jsonschema::options()
+        .with_retriever(LocalSchemas)
+        .build(&schema)?
         .validate(instance)
         .map_err(|error| io::Error::other(format!("{error}")))?;
     Ok(())
@@ -218,9 +245,12 @@ fn the_unattended_options_need_each_other() -> TestResult {
 
 /// Speech has no reviewed catalogue on Windows and macOS yet: naming it is
 /// an error, `MISSING_CAPABILITY` under `setup` with the do-it-yourself
-/// step, and nothing is created. On Ubuntu, where it can be installed, the
-/// run reaches the install, which the debug build's refused network stops:
-/// a `setup` result with `outcome` `fail`, valid against its schema.
+/// step, `data` null, and nothing is created. On Ubuntu, where it can be
+/// installed, the run reaches the install, which the debug build's refused
+/// network stops: a fail, which since the Fable review's P-2 is a `failed`
+/// envelope too, so the two are told apart by `data`. The fail's `data` is
+/// the `setup` result with `outcome` `fail`, and its `error.code` is the
+/// install's own, whose class is the exit status.
 #[test]
 fn an_unattended_run_never_asks_and_reports_pass_fail_or_error() -> TestResult {
     let root = OwnedRoot::new()?;
@@ -231,7 +261,8 @@ fn an_unattended_run_never_asks_and_reports_pass_fail_or_error() -> TestResult {
     let value: Value = serde_json::from_slice(&output.stdout)?;
     validate("operation-response.schema.json", &value)?;
     assert_eq!(value["command"], "setup");
-    if value["status"] == "failed" {
+    assert_eq!(value["status"], "failed", "{value}");
+    if value["data"].is_null() {
         assert_eq!(value["error"]["code"], "MISSING_CAPABILITY", "{value}");
         assert_eq!(output.status.code(), Some(2));
         let remediation = value["error"]["remediation"][0]["summary"]
@@ -247,10 +278,48 @@ fn an_unattended_run_never_asks_and_reports_pass_fail_or_error() -> TestResult {
                 .exists()
         );
     } else {
+        validate("setup.schema.json", &value["data"])?;
         assert_eq!(value["data"]["outcome"], "fail", "{value}");
         assert_eq!(value["data"]["parts"][1]["part"], "speech", "{value}");
         assert_eq!(value["data"]["parts"][1]["status"], "not_set_up", "{value}");
-        assert_ne!(output.status.code(), Some(0));
+        assert_eq!(
+            value["error"]["remediation"][0]["summary"],
+            vsift_contract::SETUP_FAILED_REMEDIATION,
+            "{value}"
+        );
+        // Every non-zero exit carries an error of its class.
+        let code = value["error"]["code"].as_str().ok_or("no error code")?;
+        assert_eq!(output.status.code(), Some(exit_of(code)?), "{value}");
     }
+    Ok(())
+}
+
+/// The documented exit status of a failure code's class (`cli-v1.md`,
+/// "Exit and error taxonomy"), for the codes an install can end with.
+fn exit_of(code: &str) -> Result<i32, Box<dyn Error>> {
+    Ok(match code {
+        "MISSING_CAPABILITY" => 2,
+        "BUSY" => 4,
+        "DEADLINE_EXCEEDED" | "RESOURCE_LIMIT" => 5,
+        "CANCELLED" => 6,
+        "STORAGE_IO" | "INTEGRITY_FAILURE" | "DOWNLOAD_FAILED" => 7,
+        other => return Err(format!("an install does not end with {other}").into()),
+    })
+}
+
+/// The schema check of the fail branch above runs only where speech can be
+/// installed; this holds its helper, with the local resolver for
+/// `setup.schema.json`'s `$ref`, on every platform, against the published
+/// fail.
+#[test]
+fn the_published_fail_validates_through_the_local_schemas() -> TestResult {
+    let example: Value = serde_json::from_str(&fs::read_to_string(schema_file(
+        "examples/setup.fail.json",
+    ))?)?;
+    validate("operation-response.schema.json", &example)?;
+    validate("setup.schema.json", &example["data"])?;
+    let mut broken = example["data"].clone();
+    broken["outcome"] = Value::from("partial");
+    assert!(validate("setup.schema.json", &broken).is_err());
     Ok(())
 }

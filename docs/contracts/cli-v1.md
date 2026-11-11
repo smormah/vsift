@@ -3719,6 +3719,20 @@ components**: named groups of managed components that a plan installs only when 
 `online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only); `ocr` and `speakers`
 come with their stories.
 
+**One extra, its names (the planner's ruling on the Fable 0.3.0 review, P-3).** The extra for public video pages has
+a person-facing name on the setup door ([ADR 0036](../decisions/0036-the-setup-door.md)) and the catalogue's name
+everywhere else, and its main managed component has a name of its own. The names are deliberate and stay as they
+are; this table is the one place that relates them, and the 1.0 freeze statement points here.
+
+| Where | JSON identifier | On the command line |
+| --- | --- | --- |
+| The setup door: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `web_videos` | `--include web-videos` |
+| The catalogue's group: `setup plan`, `setup install`, `setup check` (`optional_components[].name`), `setup list`, `setup remove`, `setup rollback`, and the `web_page` remediation of `ingest --url` | `online_links` | `--include online_links` |
+| The managed yt-dlp inside that group (plan actions, the group's `installs`, `components[].component`), and a yt-dlp the user registered | `yt_dlp` (beside `js_runtime_deno`, or the registered `js_runtime`) | `setup configure yt-dlp` (`yt_dlp` is a hidden spelling) |
+
+A reader that maps the `setup` result's `web_videos` to `setup check`'s `optional_components` takes the row above:
+`web_videos` is the group `online_links`, which installs `yt_dlp` and `js_runtime_deno`.
+
 - **`setup plan --include <name>`** (repeatable; an older release answers it as an unknown argument) adds the
   group's actions to the plan. The plan's additive `optional_components` array lists every optional component of
   the release on the desktop profile (only what is included on the worker profile), each with `name`, `status`
@@ -3899,8 +3913,8 @@ work and not held during the run; nothing is ever replaced (L-244).
 
 - **A bundle that cannot be written.** The outputs stand and the session is left open: `kept.state` is `not_kept` with
   `kept.failure_code`, `session_closed` is false, `outcome` is `partial`, and a fixed warning gives the `session retain`
-  command. **The envelope's status stays `complete` and the exit status 0, as for every partial of `watch`, so a script
-  reads `data.outcome` and `kept.state`, not only `status`.**
+  command. The envelope's status is `partial` (exit 0), with the coverage reason `not_kept`, as for every partial of
+  `watch` (below).
 - **A job that did not seal keeps nothing.** A run stopped by Ctrl-C, or failed before the seal, writes no bundle.
 - **A failure after the seal** (a final write refused, a frame that failed) still writes the bundle, because it does not
   need the outputs, and the session closes only once the bundle is committed. The failure keeps its own code and
@@ -3912,7 +3926,7 @@ work and not held during the run; nothing is ever replaced (L-244).
 
 **The answer** ([`watch-data.schema.json`](../../schemas/v1/watch-data.schema.json), example
 [`watch.json`](../../schemas/v1/examples/watch.json)): command `watch` (also for `vsift <video>`),
-status `complete`, and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
+status `complete`, or `partial` when the run left a gap (exit 0 either way), and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
 `duration_us`, `transcript_revision_id` (`null` with no sound track), `visual_index_revision_id`
 (`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range,
 `screen_changes_beyond_bound` or `frames_stopped_for_room` is true, or `kept.state` is `not_kept`), `not_transcribed` (half-open
@@ -3924,6 +3938,15 @@ motion settles, and a change at least 5 s after the one listed before it), and `
 `time_us`, `candidate_id`, `evidence_id`, `path` and `sha256`, at most 180, for listed changes only), and `kept` (`null`
 without `--keep`; otherwise `state`, `path`, `name` and `failure_code`). With `--events jsonl` the stream carries the
 `prepare` job's progress events, then the terminal event with the same data.
+
+**A partial run answers `status: partial` (the planner's ruling on the Fable 0.3.0 review, P-2; amending ADR 0037's
+implementation note of 2026-10-28 before `watch` first shipped).** As for every other reader of the contract, the
+envelope's `coverage` is `truncated` whenever `data.outcome` is `partial`, so a reader that follows the exit rule
+alone never takes a gap for a whole result: `gaps` lists the ranges not transcribed as `<from_us>-<to_us>` (the first
+100; `data.not_transcribed` holds them all) and `reasons` names each kind of gap, in this order: `untranscribed_range`
+(and `gap_list_truncated` past 100 ranges), `screen_changes_beyond_bound`, `frames_stopped_for_room` and `not_kept`. A
+complete run has `coverage` `{"truncated": false, "gaps": [], "reasons": []}`. The exit status is 0 either way
+("complete or supported partial"), and the readable view is unchanged.
 
 **The readable view** writes ADR 0033's live line on standard error while it works (terminal only),
 then on standard output the finish screen: `Done: HH:MM:SS of video`, one line per output, a line per
@@ -4083,8 +4106,8 @@ digest, or nothing is installed. `--unattended` needs `--install`, and `--instal
 `--unattended` (a parse failure otherwise). It reports one of three outcomes:
 
 - **pass** (exit 0): every named part works after the run, also when nothing needed installing;
-- **fail** (the exit status `setup install` gives the same failure): the install ran and a named part does not
-  work; each part's entry says what to do next;
+- **fail** (a `failed` envelope, exiting with its code's class): the install ran and a named part does not work;
+  each part's entry says what to do next;
 - **error** (the failure code's exit status, the ordinary failure envelope under `setup`): it could not start: a
   named part VSift cannot install on this computer (`MISSING_CAPABILITY`, with the do-it-yourself step), an
   included extra it cannot add here (`MISSING_CAPABILITY`), checks that ran out of time (`DEADLINE_EXCEEDED`), a
@@ -4097,8 +4120,12 @@ With `--json` the result is the `setup` command's
 [`setup.fail.json`](../../schemas/v1/examples/setup.fail.json)): `outcome` (`pass`, `fail`), `parts` (video,
 speech, then each included extra: `part`, `requested`, `status` one of `ready`, `not_set_up`, `added`,
 `not_added`, `not_available_here`, and a fixed-prose `next_step` or `null`), and `install`, the `setup.install`
-data of the install it ran, or `null` when nothing needed installing. A fail is a `complete` result with a
-non-zero exit status, as a blocked `setup check` is. `--events` is refused (`INVALID_ARGUMENT`); a script that
+data of the install it ran, or `null` when nothing needed installing. A pass is a `complete` envelope (exit 0). A fail is a `failed`
+envelope whose `error.code` is the install's own failure code (for example `DOWNLOAD_FAILED`, exit 7), or
+`MISSING_CAPABILITY` (exit 2) when the install gave none, with one fixed remediation (`The install ran, but a part you
+named does not work yet. ...`); its `data` is still this result, beside the error, so `outcome`, `parts` and `install`
+read as before (the planner's ruling on the Fable 0.3.0 review, P-2, amending ADR 0036 before the command first
+shipped: every non-zero exit carries an error of its class). An error, which could not start, has `data` null. `--events` is refused (`INVALID_ARGUMENT`); a script that
 wants progress events uses `setup install --events jsonl`. Without `--json` it writes the heading, one plain line
 per piece as it finishes, the table and verdict, `Result: pass` or `Result: fail`, and each part's next step.
 
@@ -4291,6 +4318,14 @@ against `operation-response.schema.json`; evidence events validate against
 | 5 | deadline or resource limit | `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT` |
 | 6 | cancellation | `CANCELLED` |
 | 7 | storage, output I/O or integrity failure, or a managed download that did not complete | `STORAGE_IO`, `INTEGRITY_FAILURE`, `DOWNLOAD_FAILED` |
+
+**Every envelope keeps this rule:** exit 0 answers `complete` or `partial`, and every other exit answers `failed`
+or `cancelled` with an `error.code` of that exit's class. `watch` and the unattended `setup` were aligned with it in
+0.3.0, before either first shipped (the planner's ruling on the Fable 0.3.0 review, P-2): a partial `watch` is
+`partial`, and a fail of `setup --unattended` is `failed` with its code. A contract test lists every published example
+envelope, current and frozen, with its exit status and holds each to the rule, so a later command cannot add an
+answer that breaks it unnoticed. `setup check` answers with its own result, not an envelope, and exits 2 when
+`blocked`.
 
 `vsift` itself never exits with 126 or 127. When it is installed through npm (P13 PR 9,
 [`install.md`](../operations/install.md)), the launcher that starts it exits with 127

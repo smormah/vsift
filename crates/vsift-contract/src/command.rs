@@ -7,8 +7,10 @@
 /// word. It is public API: consumers dispatch on it, and the published schemas
 /// constrain it with a pattern that every listed identifier must satisfy.
 ///
-/// Reserved operations are listed too, because a host still answers them with a
-/// schema-valid `COMMAND_NOT_IMPLEMENTED` failure that carries their identifier.
+/// Every listed operation is implemented. A reserved one, should a later
+/// release name one before it builds it, is listed too, because a host
+/// answers it with a schema-valid `COMMAND_NOT_IMPLEMENTED` failure that
+/// carries its identifier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommandName {
     /// Arguments could not be parsed into any operation.
@@ -17,15 +19,15 @@ pub enum CommandName {
     SetupCheck,
     /// `setup plan`.
     SetupPlan,
-    /// `setup install` (reserved).
+    /// `setup install`.
     SetupInstall,
-    /// `setup repair` (reserved).
+    /// `setup repair`.
     SetupRepair,
-    /// `setup list` (reserved).
+    /// `setup list`.
     SetupList,
-    /// `setup remove` (reserved).
+    /// `setup remove`.
     SetupRemove,
-    /// `setup rollback` (reserved).
+    /// `setup rollback`.
     SetupRollback,
     /// `setup configure`.
     SetupConfigure,
@@ -67,9 +69,9 @@ pub enum CommandName {
     BundleValidate,
     /// `bundle search` (ADR 0035): one question over retained bundles.
     BundleSearch,
-    /// `job run` (reserved).
+    /// `job run`.
     JobRun,
-    /// `job batch` (reserved).
+    /// `job batch`.
     JobBatch,
     /// `job status`.
     JobStatus,

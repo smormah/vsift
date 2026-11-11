@@ -1695,6 +1695,21 @@ fn every_job_state_and_reason_is_schema_valid() -> TestResult {
     // `session renew`, which would be refused.
     assert!(!JOB_SESSION_NOT_OPEN_REMEDIATION.contains("session renew"));
     assert!(JOB_SESSION_NOT_OPEN_REMEDIATION.contains("ingest"));
+    // Fable review P-1: since ADR 0033 a stopped run keeps what it had
+    // published (an open revision after Ctrl-C, a stopped one after job
+    // cancel), so neither text may tell an agent that nothing was committed
+    // without saying which run that is, and each names how to read the rest.
+    for prose in [JOB_INTERRUPTED_REMEDIATION, JOB_CANCELLED_REMEDIATION] {
+        assert!(prose.contains("What it had already published stays"));
+        assert!(prose.contains("A run that published nothing committed nothing."));
+        assert!(prose.contains("transcript get"));
+        assert!(!prose.contains("so nothing was committed"));
+        assert!(!prose.contains("Nothing was committed"));
+    }
+    assert!(JOB_INTERRUPTED_REMEDIATION.contains("its revision stays open"));
+    assert!(JOB_INTERRUPTED_REMEDIATION.contains("job resume <job>"));
+    assert!(JOB_CANCELLED_REMEDIATION.contains("sealed as stopped"));
+    assert!(!JOB_CANCELLED_REMEDIATION.contains("job resume"));
     Ok(())
 }
 

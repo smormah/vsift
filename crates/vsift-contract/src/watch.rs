@@ -5,12 +5,32 @@
 //! (the plain `C:\...` form on Windows whenever it names the same file);
 //! `name` members are the file names in display form, hidden characters made
 //! visible, because they are derived from the video's untrusted name.
+//!
+//! A partial run answers `status: partial` through the envelope's coverage,
+//! as every other reader of the contract does (the planner's ruling on the
+//! Fable 0.3.0 review, P-2, amending ADR 0037's implementation note of
+//! 2026-10-28): exit 0 means complete or a supported partial, so a reader
+//! that follows the exit rule alone never takes a gap for a whole result.
 
 use std::path::Path;
 
 use serde::Serialize;
 
-use crate::{delivered_path::delivered_path_text, render_hidden_characters};
+use crate::{
+    CommandName, CoverageResponse, OperationResponse,
+    delivered_path::delivered_path_text,
+    render_hidden_characters,
+    search::{GAPS_TRUNCATED_REASON, MAX_COVERAGE_RANGES, UNTRANSCRIBED_REASON},
+};
+
+/// Envelope reason: the video runs past the first four hours, the part
+/// screen changes are found in (L-235).
+pub const WATCH_BEYOND_BOUND_REASON: &str = "screen_changes_beyond_bound";
+/// Envelope reason: the session ran out of evidence room, so the frames
+/// stopped early (L-234).
+pub const WATCH_FRAMES_STOPPED_REASON: &str = "frames_stopped_for_room";
+/// Envelope reason: the bundle `--keep` asked for could not be written.
+pub const WATCH_NOT_KEPT_REASON: &str = "not_kept";
 
 /// A file or folder the run wrote.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -140,6 +160,102 @@ pub enum WatchCompleteness {
     /// changes are found in, the frames stopped for room, or the bundle
     /// `--keep` asked for could not be written; the data says which.
     Partial,
+}
+
+impl WatchCompleteness {
+    /// The completeness of a run with these facts: `partial` when any of
+    /// them leaves a gap. The envelope's coverage is derived by the same
+    /// rule, so `data.outcome` and `status` never disagree.
+    #[must_use]
+    pub fn of(
+        not_transcribed: &[WatchRangeData],
+        screen_changes_beyond_bound: bool,
+        frames_stopped_for_room: bool,
+        kept: Option<&WatchKeptData>,
+    ) -> Self {
+        if gap_reasons(
+            not_transcribed,
+            screen_changes_beyond_bound,
+            frames_stopped_for_room,
+            kept,
+        )
+        .is_empty()
+        {
+            Self::Complete
+        } else {
+            Self::Partial
+        }
+    }
+}
+
+/// The distinct reasons a run left a gap, in a fixed order.
+fn gap_reasons(
+    not_transcribed: &[WatchRangeData],
+    screen_changes_beyond_bound: bool,
+    frames_stopped_for_room: bool,
+    kept: Option<&WatchKeptData>,
+) -> Vec<&'static str> {
+    let mut reasons = Vec::new();
+    if !not_transcribed.is_empty() {
+        reasons.push(UNTRANSCRIBED_REASON);
+    }
+    if not_transcribed.len() > MAX_COVERAGE_RANGES {
+        reasons.push(GAPS_TRUNCATED_REASON);
+    }
+    if screen_changes_beyond_bound {
+        reasons.push(WATCH_BEYOND_BOUND_REASON);
+    }
+    if frames_stopped_for_room {
+        reasons.push(WATCH_FRAMES_STOPPED_REASON);
+    }
+    if kept.is_some_and(|kept| kept.state == WatchKeptState::NotKept) {
+        reasons.push(WATCH_NOT_KEPT_REASON);
+    }
+    reasons
+}
+
+/// The envelope coverage of a run: truncated when it left any gap, with the
+/// ranges not transcribed as `<from_us>-<to_us>` (the first 100) and the
+/// distinct reasons.
+fn envelope_coverage(data: &WatchData) -> CoverageResponse {
+    let reasons = gap_reasons(
+        &data.not_transcribed,
+        data.screen_changes_beyond_bound,
+        data.frames_stopped_for_room,
+        data.kept.as_ref(),
+    );
+    CoverageResponse::new(
+        !reasons.is_empty(),
+        data.not_transcribed
+            .iter()
+            .take(MAX_COVERAGE_RANGES)
+            .map(|range| format!("{}-{}", range.from_us, range.to_us))
+            .collect(),
+        reasons.into_iter().map(str::to_owned).collect(),
+    )
+}
+
+/// The `watch` result: `complete`, or `partial` (exit 0 either way) when the
+/// run left a gap, with the envelope's coverage saying which; a bundle that
+/// could not be kept adds [`WATCH_NOT_KEPT_WARNING`].
+///
+/// # Errors
+///
+/// Returns the serialization error when the data cannot be represented as JSON.
+pub fn watch_response(
+    data: &WatchData,
+) -> Result<OperationResponse<serde_json::Value>, serde_json::Error> {
+    let not_kept = data
+        .kept
+        .as_ref()
+        .is_some_and(|kept| kept.state == WatchKeptState::NotKept);
+    let response = OperationResponse::complete(CommandName::Watch.identifier(), data)?
+        .with_coverage(envelope_coverage(data));
+    Ok(if not_kept {
+        response.with_warnings(&[WATCH_NOT_KEPT_WARNING])
+    } else {
+        response
+    })
 }
 
 /// `data` of a `watch` result.

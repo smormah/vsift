@@ -1,17 +1,19 @@
 //! `watch`, from `vsift <video>`, through the v1 contract (ADR 0037 section
 //! 9): the result validates against the published schema, the frozen example
-//! is what the code gives, and the schema refuses what the action never
-//! reports (a hash on the folder, a partial run called complete, more frames
-//! than the bound of 180).
+//! is what the code gives, the schema refuses what the action never reports
+//! (a hash on the folder, a partial run called complete, more frames than the
+//! bound of 180), and a partial run's envelope is `partial`, with coverage
+//! naming each gap (the planner's ruling on the Fable 0.3.0 review, P-2).
 
 use std::{fs, io, path::PathBuf};
 
 use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 use vsift_contract::{
-    CommandName, OperationResponse, WATCH_NOT_KEPT_WARNING, WatchCompleteness, WatchData,
-    WatchFailureData, WatchFrameData, WatchKeptData, WatchKeptState, WatchOutputData,
-    WatchOutputsData, WatchRangeData,
+    WATCH_BEYOND_BOUND_REASON, WATCH_FRAMES_STOPPED_REASON, WATCH_NOT_KEPT_REASON,
+    WATCH_NOT_KEPT_WARNING, WatchCompleteness, WatchData, WatchFailureData, WatchFrameData,
+    WatchKeptData, WatchKeptState, WatchOutputData, WatchOutputsData, WatchRangeData,
+    watch_response,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -163,10 +165,25 @@ fn kept(state: WatchKeptState, failure_code: Option<&str>) -> WatchKeptData {
 }
 
 fn response(data: &WatchData) -> Built<Value> {
-    Ok(serde_json::to_value(OperationResponse::complete(
-        CommandName::Watch.identifier(),
-        data,
-    )?)?)
+    Ok(serde_json::to_value(watch_response(data)?)?)
+}
+
+/// The data of a run with no gap.
+fn whole_meeting() -> WatchData {
+    let mut data = meeting();
+    data.not_transcribed.clear();
+    data.outcome = WatchCompleteness::Complete;
+    data
+}
+
+/// The completeness the shared rule gives `data`'s facts.
+fn completeness(data: &WatchData) -> WatchCompleteness {
+    WatchCompleteness::of(
+        &data.not_transcribed,
+        data.screen_changes_beyond_bound,
+        data.frames_stopped_for_room,
+        data.kept.as_ref(),
+    )
 }
 
 /// The result of a run validates, is the frozen example, and names the
@@ -179,8 +196,94 @@ fn a_watch_result_is_the_published_example() -> TestResult {
     regenerate(EXAMPLE, &response)?;
     assert_eq!(response, load(EXAMPLE)?);
     assert_eq!(response["command"], "watch");
-    assert_eq!(response["status"], "complete");
+    assert_eq!(response["status"], "partial");
     assert_eq!(response["data"]["outcome"], "partial");
+    assert_eq!(
+        response["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["720000000-750000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    Ok(())
+}
+
+/// A run with no gap is `complete`, with coverage that is not truncated.
+#[test]
+fn a_whole_run_is_complete() -> TestResult {
+    let data = whole_meeting();
+    assert_eq!(completeness(&data), WatchCompleteness::Complete);
+    let response = response(&data)?;
+    validate("operation-response.schema.json", &response)?;
+    validate(SCHEMA, &response["data"])?;
+    assert_eq!(response["status"], "complete");
+    assert_eq!(
+        response["coverage"],
+        serde_json::json!({"truncated": false, "gaps": [], "reasons": []})
+    );
+    Ok(())
+}
+
+/// Each of the four partial cases of the planner's ruling answers
+/// `status: partial`, with its own reason, and `data.outcome` agrees: a
+/// reader that follows the exit rule alone never takes a gap for a whole run.
+#[test]
+fn every_partial_case_answers_a_partial_envelope() -> TestResult {
+    let mut beyond = whole_meeting();
+    beyond.screen_changes_beyond_bound = true;
+    let mut stopped = whole_meeting();
+    stopped.frames_stopped_for_room = true;
+    let mut not_kept = whole_meeting();
+    not_kept.session_closed = false;
+    not_kept.kept = Some(kept(WatchKeptState::NotKept, Some("STORAGE_IO")));
+    for (mut data, reason) in [
+        (meeting(), "untranscribed_range"),
+        (beyond, WATCH_BEYOND_BOUND_REASON),
+        (stopped, WATCH_FRAMES_STOPPED_REASON),
+        (not_kept, WATCH_NOT_KEPT_REASON),
+    ] {
+        data.outcome = completeness(&data);
+        let response = response(&data)?;
+        validate("operation-response.schema.json", &response)?;
+        validate(SCHEMA, &response["data"])?;
+        assert_eq!(response["status"], "partial", "{reason}");
+        assert_eq!(response["data"]["outcome"], "partial", "{reason}");
+        assert_eq!(response["coverage"]["truncated"], true, "{reason}");
+        assert_eq!(
+            response["coverage"]["reasons"],
+            serde_json::json!([reason]),
+            "{reason}"
+        );
+    }
+    Ok(())
+}
+
+/// More than 100 ranges not transcribed: the envelope lists the first 100
+/// and says the list was cut, as `search` does; `data` keeps them all.
+#[test]
+fn a_long_gap_list_is_cut_in_the_envelope_only() -> TestResult {
+    let mut data = meeting();
+    data.not_transcribed = (0..101)
+        .map(|index| WatchRangeData {
+            from_us: index * 2 * SECOND,
+            to_us: (index * 2 + 1) * SECOND,
+        })
+        .collect();
+    let response = response(&data)?;
+    validate("operation-response.schema.json", &response)?;
+    assert_eq!(
+        response["coverage"]["gaps"].as_array().map(Vec::len),
+        Some(100)
+    );
+    assert_eq!(
+        response["coverage"]["reasons"],
+        serde_json::json!(["untranscribed_range", "gap_list_truncated"])
+    );
+    assert_eq!(
+        response["data"]["not_transcribed"].as_array().map(Vec::len),
+        Some(101)
+    );
     Ok(())
 }
 
@@ -210,9 +313,9 @@ fn without_the_option_nothing_is_kept() -> TestResult {
     Ok(())
 }
 
-/// A bundle that could not be written: the envelope stays `complete`, so a
-/// script reads `data.outcome` and `kept.state`, and a warning gives the
-/// command that still exports the session.
+/// A bundle that could not be written: the envelope is `partial`, with the
+/// reason `not_kept`, and a warning gives the command that still exports the
+/// session.
 #[test]
 fn a_bundle_that_could_not_be_written_is_partial_with_a_warning() -> TestResult {
     let mut data = meeting();
@@ -224,13 +327,19 @@ fn a_bundle_that_could_not_be_written_is_partial_with_a_warning() -> TestResult 
         validate(SCHEMA, &unmarked["data"]).is_ok(),
         "the example's outcome is already partial"
     );
-    let warned = OperationResponse::<Value>::complete(CommandName::Watch.identifier(), &data)?
-        .with_warnings(&[WATCH_NOT_KEPT_WARNING]);
-    let warned = serde_json::to_value(warned)?;
-    validate("operation-response.schema.json", &warned)?;
-    assert_eq!(warned["status"], "complete");
-    assert_eq!(warned["data"]["kept"]["state"], "not_kept");
-    assert_eq!(warned["warnings"][0], WATCH_NOT_KEPT_WARNING);
+    validate("operation-response.schema.json", &unmarked)?;
+    assert_eq!(unmarked["status"], "partial");
+    assert_eq!(
+        unmarked["coverage"]["reasons"],
+        serde_json::json!(["not_kept"])
+    );
+    assert_eq!(unmarked["data"]["kept"]["state"], "not_kept");
+    assert_eq!(
+        unmarked["warnings"],
+        serde_json::json!([WATCH_NOT_KEPT_WARNING])
+    );
+    // A run that kept its bundle has no warning.
+    assert_eq!(response(&meeting())?["warnings"], serde_json::json!([]));
 
     // A failed bundle is never reported as a finished run, or a closed session.
     let mut broken = unmarked["data"].clone();

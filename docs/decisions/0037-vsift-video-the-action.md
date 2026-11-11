@@ -540,7 +540,8 @@ complete in code; the "after" real-media run is its qualification evidence.
   the second pull request's.
 - **The envelope is always `complete`;** `data.outcome` says `partial` when a range was not transcribed, the
   video runs past four hours, or the frames stopped for room (`frames_stopped_for_room`). Deciding `partial`
-  from those facts is done where the result is built.
+  from those facts is done where the result is built. *(Amended 2026-11-10, before `watch` first shipped: a
+  partial run's envelope is `partial`; see the amendment of that date at the end.)*
 - **A refusal names the output's kind** (`.txt`, `.srt`, `-vsift`) in fixed prose, never the file's name: a
   remediation never echoes text derived from the untrusted video name (L-071). The readable view does not name
   the file either, in this pull request.
@@ -838,7 +839,8 @@ as a failed write (below). An interrupted run leaves nothing in the keep folder,
 
 **If the bundle cannot be written.** The outputs stand. The session is **left open**, not closed, so the work is not
 lost. `data.outcome` is `partial`, `session_closed` is false, `kept.state` is `not_kept` with the failure's code, and the
-envelope carries a fixed warning. The envelope's status stays `complete`, as the first pull request's implementation note
+envelope carries a fixed warning. *(Amended 2026-11-10: the envelope is `partial`, with the coverage reason `not_kept`; see the amendment of
+that date at the end.)* The envelope's status stays `complete`, as the first pull request's implementation note
 has it for every other partial: `data.outcome` is where `watch` says partial. The exit status is 0. The warning and the
 finish screen give the command: `vsift session retain <session_id> --output <a new folder>`, with the real id in the
 finish screen. They say the session lasts about a day unused. `retain_bundle` may have left an incomplete folder at the
@@ -981,3 +983,23 @@ which cancelled its job. This note brings the code to the intent; it is not a ne
   that does not exist yet are refused with nothing created; deleted outputs are claimed again and given up while empty;
   `transcript_text_can_never_forge_a_line` for both `.txt` outputs and their headers. Domain:
   `one_line_text_can_never_forge_a_line`.
+
+## Amendment, 2026-11-10: a partial run answers `status: partial` (the Fable 0.3.0 review, P-2)
+
+The planner's ruling on the Fable review of 0.3.0, before `watch` first shipped (a contract change while it is
+still free). It amends the first pull request's implementation note of 2026-10-28 ("the envelope is always
+`complete`") and the `--keep` amendment's "the envelope's status stays `complete`".
+
+- **What changes.** A run whose `data.outcome` is `partial` answers `status: partial`, through the envelope's
+  coverage, the same path every other reader of the contract uses (`transcript get`, `search`, `candidates`,
+  `changes`, `bundle search`, `ocr`). The coverage is `truncated`; `gaps` lists the ranges not transcribed as
+  `<from_us>-<to_us>` (the first 100) and `reasons` names each kind of gap: `untranscribed_range` (and
+  `gap_list_truncated` past 100 ranges), `screen_changes_beyond_bound`, `frames_stopped_for_room` and `not_kept`.
+  A complete run has coverage that is not truncated. `data.outcome` and `status` come from one rule in the
+  contract crate (`WatchCompleteness::of` and `watch_response`), so they cannot disagree.
+- **What stays.** The exit status is 0 either way: exit 0 is "complete or supported partial". `data` and its
+  schema's members are unchanged, the `--keep` warning is unchanged, and the readable view does not change.
+- **Why.** The exit taxonomy that 1.0 promises reads `status` and the exit status together. A generic v1 reader
+  that follows it took a `complete` `watch` with a range missing as whole and never looked in `data.outcome`.
+  A contract test now holds every published example envelope to the rule (`cli-v1.md`, "Exit and error
+  taxonomy").

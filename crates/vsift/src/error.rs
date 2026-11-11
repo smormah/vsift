@@ -269,7 +269,9 @@ pub enum EngineError {
         /// The job the operation id is bound to.
         job: JobId,
     },
-    /// The job was cancelled through its job id before it committed.
+    /// The job was cancelled through its job id before it finished. A run
+    /// that had published part of its revision sealed it as `stopped`,
+    /// keeping every published segment (ADR 0033).
     JobCancelled {
         /// The cancelled job.
         job: JobId,
@@ -298,9 +300,10 @@ pub enum EngineError {
         state: JobState,
     },
     /// The caller cancelled the run (Ctrl-C, `SIGTERM` or a library
-    /// [`crate::Cancellation`]) before it committed. Nothing was committed;
-    /// the job is `interrupted` and `job resume` (or the same request)
-    /// continues it from its checkpoints.
+    /// [`crate::Cancellation`]) before it finished. What the run had
+    /// published stays committed in its open revision (ADR 0033); a run that
+    /// published nothing committed nothing. The job is `interrupted` and
+    /// `job resume` (or the same request) continues it from its checkpoints.
     JobInterrupted {
         /// The session the job belongs to.
         session: SessionId,

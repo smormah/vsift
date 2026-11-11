@@ -10,9 +10,9 @@ use vsift::{
     WatchKept, WatchRequest,
 };
 use vsift_contract::{
-    CommandName, OperationResponse, WATCH_KEPT_AFTER_FAILURE_REMEDIATION, WATCH_NOT_KEPT_WARNING,
+    OperationResponse, WATCH_KEPT_AFTER_FAILURE_REMEDIATION, WATCH_NOT_KEPT_WARNING,
     WatchCompleteness, WatchData, WatchFailureData, WatchFrameData, WatchKeptData, WatchOutputData,
-    WatchOutputsData, WatchRangeData,
+    WatchOutputsData, WatchRangeData, watch_response,
 };
 
 use crate::{
@@ -187,14 +187,15 @@ pub(crate) async fn watch(
             })
         })
         .collect::<Result<Vec<_>, CommandFailure>>()?;
-    let not_kept = outcome
-        .kept
-        .as_ref()
-        .is_some_and(|kept| kept.failure.is_some());
-    let partial = !outcome.not_transcribed.is_empty()
-        || outcome.beyond_visual_bound
-        || outcome.frames_stopped_for_room
-        || not_kept;
+    let not_transcribed = outcome
+        .not_transcribed
+        .iter()
+        .map(|range| WatchRangeData {
+            from_us: range.start().as_micros(),
+            to_us: range.end().as_micros(),
+        })
+        .collect::<Vec<_>>();
+    let kept = outcome.kept.as_ref().map(kept_data).transpose()?;
     let data = WatchData {
         source_id: outcome.source_id.as_str().to_owned(),
         session_id: outcome.session_id.as_str().to_owned(),
@@ -209,19 +210,13 @@ pub(crate) async fn watch(
             .visual_index
             .as_ref()
             .map(|index| index.as_str().to_owned()),
-        outcome: if partial {
-            WatchCompleteness::Partial
-        } else {
-            WatchCompleteness::Complete
-        },
-        not_transcribed: outcome
-            .not_transcribed
-            .iter()
-            .map(|range| WatchRangeData {
-                from_us: range.start().as_micros(),
-                to_us: range.end().as_micros(),
-            })
-            .collect(),
+        outcome: WatchCompleteness::of(
+            &not_transcribed,
+            outcome.beyond_visual_bound,
+            outcome.frames_stopped_for_room,
+            kept.as_ref(),
+        ),
+        not_transcribed,
         screen_changes_beyond_bound: outcome.beyond_visual_bound,
         frames_stopped_for_room: outcome.frames_stopped_for_room,
         names_shortened: outcome.names_shortened,
@@ -234,17 +229,12 @@ pub(crate) async fn watch(
         changes_found: u64::try_from(outcome.changes_found).unwrap_or(u64::MAX),
         changes_listed: u64::try_from(outcome.changes_listed).unwrap_or(u64::MAX),
         frames,
-        kept: outcome.kept.as_ref().map(kept_data).transpose()?,
+        kept,
     };
-    let response = OperationResponse::complete(CommandName::Watch.identifier(), &data)
-        .map_err(|_| CommandFailure::from(vsift::FailureCode::Internal))?;
-    // The envelope stays `complete` for every partial of `watch`: a script
-    // reads `data.outcome` and `kept.state` (ADR 0037, amendment of 2026-10-30).
-    Ok(if not_kept {
-        response.with_warnings(&[WATCH_NOT_KEPT_WARNING])
-    } else {
-        response
-    })
+    // A partial run answers `status: partial` (exit 0), with the envelope's
+    // coverage naming each gap, as every other reader does (the planner's
+    // ruling on the Fable 0.3.0 review, P-2, amending ADR 0037).
+    watch_response(&data).map_err(|_| CommandFailure::from(vsift::FailureCode::Internal))
 }
 
 fn kept_data(kept: &WatchKept) -> Result<WatchKeptData, CommandFailure> {
