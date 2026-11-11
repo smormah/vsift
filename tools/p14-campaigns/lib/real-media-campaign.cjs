@@ -877,4 +877,4 @@ function markdown(run) {
   return lines.join('\n');
 }
 
-module.exports = { WATCH_MAX_FRAMES, watchItem, takeChanges, KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };
+module.exports = { allSegments, WATCH_MAX_FRAMES, watchItem, takeChanges, KEPT_CROPS_PER_ITEM, KEPT_CROPS_PER_RUN, MAX_KEPT_SEGMENT_US, MAX_KEPT_SEGMENT_RANGES, RECORDED_CPU_FLAGS, mayKeepCrops, mayKeepSegments, parseKeepSegments, SECOND, setup, investigate, privateReport, markdown, measurementsOnly, shiftPoint, mediaState, runnerIdentity, segmentFingerprints };

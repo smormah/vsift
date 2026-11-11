@@ -34,6 +34,12 @@ name: P14 real media
 # L-211: crates/vsift/tests/real_media_screen_changes.rs) over the whole of each
 # fetched item, which keeps numbers and change times only and scores them
 # against the manifest's `labels.changes_us` where a person has labelled them.
+# With `-f mode=progress` it runs, instead of the campaign, the measurement of ADR 0033
+# sections 6 and 9 (0.3.0 readiness item 5, tools/p14-campaigns/progress-measurement.cjs):
+# the quick/watched threshold and the progress estimate's error, on public items only
+# (RM03 and RM09 by default; prefixes of RM03 of 5, 10 and 15 minutes are cut on the
+# runner), the two modes on the same media, with `job status` sampled every ten seconds.
+# It keeps `progress.json` and `progress.md` in the artifact and never a private item.
 # It cannot publish anything: `contents: read` only, no secret.
 on:
   pull_request:
@@ -43,12 +49,15 @@ on:
       - .github/workflows/p14-real-media.yml
       - tools/p14-campaigns/real-media.cjs
       - tools/p14-campaigns/real-media-campaign.cjs
+      - tools/p14-campaigns/progress-measurement.cjs
+      - tools/p14-campaigns/lib/progress-measurement.cjs
       - tools/p14-campaigns/lib/real-media.cjs
       - tools/p14-campaigns/lib/real-media-checks.cjs
       - tools/p14-campaigns/lib/real-media-campaign.cjs
       - tools/p14-campaigns/lib/small-text.cjs
       - tools/p14-campaigns/real-media/**
       - tools/p14-campaigns/test/real-media.test.cjs
+      - tools/p14-campaigns/test/progress-measurement.test.cjs
       - tools/p14-campaigns/test/real-media-checks.test.cjs
       - tools/p14-campaigns/test/real-media-campaign.test.cjs
       - tools/p14-campaigns/test/small-text.test.cjs
@@ -56,7 +65,7 @@ on:
   workflow_dispatch:
     inputs:
       items:
-        description: Item ids separated by spaces (for example "RM01 RM04"); empty means every approved item
+        description: Item ids separated by spaces (for example "RM01 RM04"); empty means every approved item, and RM03 and RM09 for mode progress
         type: string
         default: ""
       keep_segments:
@@ -71,6 +80,7 @@ on:
           - visual
           - both
           - changes
+          - progress
         default: campaign
 
 permissions: {}
@@ -134,8 +144,11 @@ jobs:
       - name: Choose the items
         env:
           ITEMS: ${{ inputs.items }}
+          MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
+          # The progress measurement needs the long public talk and the briefing, and no other item.
+          if [ "$MODE" = progress ] && [ -z "$ITEMS" ]; then ITEMS="RM03 RM09"; fi
           arguments=""
           for item in $ITEMS; do
             case "$item" in RM[0-9][0-9]) arguments="$arguments --item $item";; *) echo "an item id is RM followed by two digits"; exit 1;; esac
@@ -168,7 +181,7 @@ jobs:
         run: cargo build --release --locked -p vsift-cli
 
       - name: Run the campaign
-        if: inputs.mode != 'visual' && inputs.mode != 'changes'
+        if: inputs.mode == 'campaign' || inputs.mode == 'both'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/work"
@@ -183,6 +196,26 @@ jobs:
             --model "$VSIFT_TEST_WHISPER_MODEL" \
             --available-only \
             $ITEM_ARGUMENTS $KEEP_ARGUMENTS
+
+      - name: Measure quick against watched, and the estimate (ADR 0033 sections 6 and 9)
+        if: inputs.mode == 'progress'
+        timeout-minutes: 240
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/work" "$RUNNER_TEMP/report"
+          # Public items only, as the tool itself enforces. The prefixes are cut here by FFmpeg.
+          # shellcheck disable=SC2086
+          node tools/p14-campaigns/progress-measurement.cjs \
+            --vsift "$GITHUB_WORKSPACE/target/release/vsift" \
+            --media "$RUNNER_TEMP/real-media" \
+            --work "$RUNNER_TEMP/work" \
+            --report "$RUNNER_TEMP/report" \
+            --ffmpeg "$(command -v ffmpeg)" \
+            --ffprobe "$(command -v ffprobe)" \
+            --whisper "$VSIFT_TEST_WHISPER_CLI" \
+            --model "$VSIFT_TEST_WHISPER_MODEL" \
+            --prefix-of RM03 --prefix-minutes 5,10,15 \
+            $ITEM_ARGUMENTS
 
       - name: Measure the visual change rule (#175)
         if: inputs.mode == 'visual' || inputs.mode == 'both'
@@ -221,6 +254,9 @@ jobs:
           if [ -f "$RUNNER_TEMP/cross-check.txt" ]; then
             { echo '## Pins'; echo; echo '```'; cat "$RUNNER_TEMP/cross-check.txt"; echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
             cp "$RUNNER_TEMP/cross-check.txt" "$RUNNER_TEMP/report/"
+          fi
+          if [ -f "$RUNNER_TEMP/report/progress.md" ]; then
+            cat "$RUNNER_TEMP/report/progress.md" >> "$GITHUB_STEP_SUMMARY"
           fi
           for run in "$RUNNER_TEMP"/work/run-*; do
             if [ -f "$run/summary.md" ]; then

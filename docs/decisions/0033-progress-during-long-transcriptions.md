@@ -223,6 +223,40 @@ automatically, and `--mode quick|watched|queued` overrides the choice.
 - **The skill** picks quick or watched by the recording's length, and queued when the user hands over
   several recordings or says there is no rush.
 
+**Note, 2026-11-11: the threshold and the estimate measured on real recordings (readiness item 5; W8).** The hosted
+`P14 real media` run 43036639892 (mode `progress`, commit `89abe00d`, 46 minutes; AMD EPYC 9V74, 4 vCPUs, `base`,
+whisper.cpp with 4 threads for quick and 3 for watched) ran `job start --mode quick` and `--mode watched` on fresh sessions
+of RM03 (19:16), of its first 5, 10 and 15 minutes (cut on the runner by stream copy) and of RM09 (28:02). Both modes seal
+after the visual stream, which both run first (9 to 28 s on the 1080p talk, 6 s on the small briefing).
+
+| Media | Quick, to the seal | Watched, to the seal | Watched costs | First readable part (watched) |
+| --- | --- | --- | --- | --- |
+| RM03, first 5 min | 97.9 s | 103.5 s | +5.7% | none before the seal |
+| RM03, first 10 min | 180.2 s | 183.8 s | +2.0% | none before the seal |
+| RM03, first 15 min | 264.1 s | 268.3 s | +1.6% | 238 s (12:48 of the talk, at once) |
+| RM03, 19:16 | 336.0 s | 343.9 s | +2.4% | 244 s (12:48 at once) |
+| RM09, 28:02 | 397.4 s | 405.3 s | +2.0% | 27 s (24 parts in all) |
+
+- **The two modes cost about the same, and the revisions agree.** The real-time factor is 0.29 to 0.33 on the talk and 0.24 on
+  the briefing; a watched run is 1.6 to 5.7 percent slower for its one thread less. For every one of the five pairs the
+  sealed revisions are the same segment for segment and word for word (272 and 369 segments for the two whole items), so ADR
+  section 9's comparison holds on real speech despite the different thread counts.
+- **There is no cliff at ten minutes.** On the talk the wall time is about 16 s plus 0.275 s a media second (the briefing,
+  with a small picture and a faster recogniser, is quicker: 0.24): a recording just under ten minutes keeps the caller waiting
+  about three minutes in quick mode, one of five minutes about 1:40.
+- **Proposal: (a), keep ten minutes, and change nothing before the cut.** The cost of either side of the line is small (a
+  few percent of wall time, the same revision), so the number matters less than the waiting; a rule by expected wall time
+  (c: quick while the call is expected to answer within about two minutes, which is about six minutes of the talk here) is the
+  better rule in principle, but it needs the speed of the machine before the first run, which the call does not have, and it
+  would change the help text, the skill and the contract. It is a candidate after `0.3.0` and the maintainer's to decide.
+  The measurement also shows that the watched mode's first part is not what the threshold choice would buy on continuous
+  speech: see [L-256](../planning/known-limits.md#l-256), which is a decision of its own.
+- **The estimate's error** is in [L-257](../planning/known-limits.md#l-257): +46 to +62 percent at 10 percent done on the
+  talk, -13 and -23 percent at 10 and 25 percent on the briefing; within 10 percent from 50 percent done on runs of 15
+  minutes or more; first shown 44 to 48 s into the transcription of the talk and 20 s into the briefing's. A known limit, no fix.
+- **The claim of section 2 is not met on continuous speech:** the published text trailed the recognised audio by up to about
+  12 minutes on RM03, not 10 to 40 s ([L-256](../planning/known-limits.md#l-256)); it did meet it on RM09.
+
 ### 7. What the skill says
 
 One place, the PREPARE state of `SKILL.md` (with the lines of `references/commands.md` that the skill
