@@ -153,7 +153,9 @@ impl EnginePorts {
     /// The wait only happens on that failure path, after the open has already
     /// failed, and never changes the failure the caller receives: if the
     /// registration still cannot be removed it is left for `session clean`, as
-    /// before. A test of that path shortens it.
+    /// before. A test of that path shortens it. The wait is the sum of the
+    /// pauses between tries, not the time on the clock, so a process held up
+    /// between two tries does not use it up (#604).
     #[must_use]
     pub fn with_failed_open_removal_wait(mut self, wait: Duration) -> Self {
         self.failed_open_removal_wait = wait.min(MAX_FAILED_OPEN_REMOVAL_WAIT);

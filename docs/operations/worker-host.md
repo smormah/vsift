@@ -330,7 +330,8 @@ request replays that job's commit.
   registered but never published: `session list` shows it as `initializing`, with no
   folder or with a folder that holds no first generation. A request whose open merely
   failed (a busy root, a source that is refused, a copy that does not fit) removes its own
-  registration at once, unless the root stays busy for five seconds, so a kill is what
+  registration at once, unless the root, or on Windows another program holding one of
+  its files, stays in the way for five seconds of waiting (#604), so a kill is what
   leaves one. `session status`, `renew` and `close` of
   such an id answer `STORAGE_IO` or `INVALID_ARGUMENT` (the codes the lookup always gave)
   with a remediation that says no published session has this id and that it is not a

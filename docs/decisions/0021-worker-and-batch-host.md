@@ -789,3 +789,25 @@ every chunk boundary while an ordinary caller waits for it; such a caller waits 
 being refused while queued work holds the slots.
 The thread count is part of a run's provenance, so a background revision is a different revision from
 a foreground one on the same root (known limit L-154). The text above is kept as written.
+
+## Note, 2026-11-11 (0.3.0, #604): the failed open's wait counts its pauses, and a held file is waited for
+
+The note of 2026-10-04 (#277) waits for a busy root for up to five seconds before a failed open
+gives up removing its registration. Twice on a hosted Windows runner (25 October and 11 November) a
+refused, not-media source still left one registration `initializing`, both times while the runner
+held the whole test process up for about 35 seconds. The run kept no OS error, so which of two
+mechanisms it was is not known; both are closed, each with a test that failed before:
+
+1. **The five seconds count the pauses between tries, not the clock.** A stall between two tries
+   used up the whole wait, and the next refusal ended it. The bound is now exact in tries: 55 tries
+   at most for five seconds, each a single bounded store call.
+2. **A file another handle holds in the session folder is waited for.** On Windows a scanner, an
+   indexer or a child process that holds a file without sharing deletion makes the rename into
+   quarantine fail with an access refusal, which was already waited for, and the deletion after it
+   with a sharing violation (os error 32 or 33) or "directory not empty" (145), which the store
+   reported as a storage failure that the wait never retries. The store answers `Busy` for those
+   three in the removal's own steps, so the wait tries again, and the next try finishes the
+   quarantine. `session clean` skips such a session with `BUSY` instead of `STORAGE_IO`.
+
+A removal still refused after the wait leaves the registration for `session clean`, unchanged. The
+text above is kept as written.
