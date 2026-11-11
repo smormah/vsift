@@ -13,6 +13,8 @@
 // `parseArguments` refuses `--private-manifest`, and `refusePrivate` refuses
 // any item marked private. Nothing here reads a person's identity.
 
+const path = require('node:path');
+
 const SECOND = 1_000_000;
 /** The chunk step of the recogniser's plan: a 30 s window, 5 s of it overlapping the next (`local_asr.window_us` and `overlap_us`). */
 const CHUNK_STEP_US = 25 * SECOND;
@@ -465,8 +467,8 @@ function summariseRun(run) {
     threads: run.revision ? run.revision.threads : null,
     revision_id: run.revision ? run.revision.revision_id : null,
     segments: run.revision ? run.revision.segment_count : null,
-    ended: run.mode === 'watched' ? (followed && followed.end ? followed.end.state : null) : (run.exit === 0 ? 'succeeded' : 'failed'),
-    failure_code: run.mode === 'watched' ? (followed && followed.end ? followed.end.failure_code : null) : (run.failure_code || null),
+    ended: run.mode === 'watched' ? (followed && followed.end ? followed.end.state : 'failed') : (run.exit === 0 ? 'succeeded' : 'failed'),
+    failure_code: run.mode === 'watched' ? ((followed && followed.end && followed.end.failure_code) || run.failure_code || null) : (run.failure_code || null),
     // The transcript stream's own elapsed wall time, read from the last status (this attempt's, admission waits included).
     transcript_elapsed_s: run.final_status && run.final_status.elapsed_ms !== null ? round(run.final_status.elapsed_ms / 1000, 1) : null,
   };
@@ -548,7 +550,67 @@ function markdown(record) {
   return `${lines.join('\n')}\n`;
 }
 
+/**
+ * One run: a fresh session on a session root of its own, then `job start
+ * --mode <mode>`; returns the figures for the report and the revision read
+ * back for the comparison.
+ *
+ * **The root is never created here.** VSift makes its own session root with
+ * its owner-only permissions and refuses one that already exists with group
+ * or other access (`STORAGE_IO`): hosted run 43035185042 failed every ingest
+ * that way, having made the folder with the default mode. Only the folder
+ * that holds it is made.
+ * @param {{ run: Function, log: (line: string) => void, clock: () => number, sleep: (ms: number) => void,
+ *   readRevision: (at: Function, session: string, revisionId: string, durationUs: number) => object | null,
+ *   makeDirectory: (directory: string) => void, entry: { label: string }, mode: 'quick' | 'watched',
+ *   order: string, folder: string, file: string, durationUs: number }} run
+ */
+function measureRun(run) {
+  const { log, entry, mode, order, folder, file, durationUs } = run;
+  const root = path.join(folder, 'root');
+  run.makeDirectory(folder);
+  const at = (step, args) => run.run(step, args, { root });
+  const quietAt = (step, args) => run.run(step, args, { root, quiet: true });
+  log(`${entry.label} ${mode} (${order})`);
+  const ingest = at('ingest', ['ingest', file]);
+  const session = ingest.json && ingest.json.data && ingest.json.data.session_id;
+  const base = { label: entry.label, mode, order, duration_us: durationUs, wall_s: null, revision: null, followed: null, final_status: null, exit: ingest.exit, failure_code: null };
+  if (!session) {
+    return { summary: summariseRun({ ...base, exit: ingest.exit === 0 ? 1 : ingest.exit, failure_code: (ingest.json && ingest.json.error && ingest.json.error.code) || 'ingest' }), segments: null };
+  }
+  let jobId = null;
+  let revisionId = null;
+  if (mode === 'quick') {
+    const started = at('job start (quick)', ['job', 'start', session, '--mode', 'quick']);
+    base.exit = started.exit;
+    base.wall_s = started.seconds;
+    base.failure_code = started.json && started.json.error ? started.json.error.code : null;
+    const data = started.json && started.json.data;
+    jobId = data && data.job ? data.job.job_id : null;
+    revisionId = data && data.outcome && data.outcome.revision ? data.outcome.revision.revision_id : null;
+    if (jobId) base.final_status = readStatus(at('job status', ['job', 'status', jobId]).json, base.wall_s);
+  } else {
+    const startedAt = run.clock();
+    const started = at('job start (watched)', ['job', 'start', session, '--mode', 'watched']);
+    base.exit = started.exit;
+    base.failure_code = started.json && started.json.error ? started.json.error.code : null;
+    const data = started.json && started.json.data;
+    jobId = data && data.job ? data.job.job_id : null;
+    if (jobId) {
+      base.followed = followWatched({ at: quietAt, jobId, session, durationUs, clock: run.clock, sleep: run.sleep, startedAt });
+      base.final_status = base.followed.last;
+      revisionId = base.followed.end ? base.followed.end.revision_id : null;
+      base.exit = base.followed.end && base.followed.end.state === 'succeeded' ? 0 : 1;
+      log(`  watched ended ${base.followed.end ? base.followed.end.state : 'unknown'} at ${base.followed.end ? base.followed.end.t_s.toFixed(1) : '?'} s, first part ${base.followed.first_part_s === null ? 'never' : `${base.followed.first_part_s.toFixed(1)} s`}`);
+    }
+  }
+  const revision = revisionId && base.exit === 0 ? run.readRevision(at, session, revisionId, durationUs) : null;
+  base.revision = revision;
+  return { summary: summariseRun(base), segments: revision };
+}
+
 module.exports = {
+  measureRun,
   SECOND,
   PREFIX_MINUTES,
   ESTIMATE_POINTS,

@@ -324,3 +324,54 @@ test('a run that failed shows how it ended and has no factor', () => {
   const text = measure.markdown({ binary: { version: 'v' }, runner: { cpu_model: null, logical_cpus: 2 }, prefixes: [], runs: [failed], comparisons: [] });
   assert.match(text, /quick \(failed\)/);
 });
+
+// ---------------------------------------------------------------------------
+// One run (hosted run 43035185042: every ingest failed with STORAGE_IO)
+// ---------------------------------------------------------------------------
+
+/**
+ * A stand-in for `vsift` that behaves as VSift does about its session root: a
+ * root that was made beforehand by anyone else (here: by `makeDirectory`) is
+ * refused as `STORAGE_IO`, because it is not private to its owner.
+ */
+function standInVsift(made) {
+  const calls = [];
+  const run = (step, args, { root }) => {
+    calls.push({ step, args, root });
+    if (made.includes(root)) return { step, exit: 7, seconds: 5, json: { status: 'failed', error: { code: 'STORAGE_IO' }, data: null } };
+    if (args[0] === 'ingest') return { step, exit: 0, seconds: 1, json: { data: { session_id: 'ses_1' } } };
+    if (args[0] === 'job' && args[1] === 'start') {
+      return { step, exit: 0, seconds: 30, json: { data: { job: { job_id: 'job_1' }, outcome: { revision: { revision_id: 'trv_q' } } } } };
+    }
+    if (args[0] === 'job' && args[1] === 'status') {
+      return { step, exit: 0, seconds: 0.1, json: { data: { state: 'succeeded', result: { revision_id: 'trv_q' }, streams: [{ stream: 'transcript', state: 'succeeded', media: { done_us: 10 * SECOND, total_us: 10 * SECOND, elapsed_ms: 25_000 } }] } } };
+    }
+    return { step, exit: 1, seconds: 0, json: null };
+  };
+  return { run, calls };
+}
+
+test('a run never creates its session root, only the folder that holds it, so VSift can make the root private', () => {
+  const made = [];
+  const { run, calls } = standInVsift(made);
+  const folder = path.join(ABSOLUTE, 'RM03', 'quick');
+  const result = measure.measureRun({ run, log: () => {}, clock: () => 0, sleep: () => {}, makeDirectory: (directory) => made.push(directory),
+    readRevision: () => ({ revision_id: 'trv_q', segment_count: 1, threads: 4, segments: [] }), entry: { label: 'RM03' }, mode: 'quick', order: 'first', folder, file: path.join(ABSOLUTE, 'RM03.webm'), durationUs: 10 * SECOND });
+  assert.deepEqual(made, [folder]);
+  assert.equal(calls[0].root, path.join(folder, 'root'));
+  assert.equal(result.summary.ended, 'succeeded');
+  assert.equal(result.summary.sealed_s, 30);
+  assert.equal(result.summary.transcript_elapsed_s, 25);
+  assert.equal(result.summary.threads, 4);
+});
+
+test('a failed ingest is a failed run with its code, never a silent success', () => {
+  const folder = path.join(ABSOLUTE, 'RM03', 'watched');
+  const root = path.join(folder, 'root');
+  const { run } = standInVsift([root]);
+  const result = measure.measureRun({ run, log: () => {}, clock: () => 0, sleep: () => {}, makeDirectory: () => {}, readRevision: () => null,
+    entry: { label: 'RM03' }, mode: 'watched', order: 'second', folder, file: 'x', durationUs: SECOND });
+  assert.equal(result.summary.ended, 'failed');
+  assert.equal(result.summary.failure_code, 'STORAGE_IO');
+  assert.equal(result.segments, null);
+});

@@ -108,53 +108,6 @@ function readRevision(at, session, revisionId, durationUs) {
   };
 }
 
-/**
- * One run: a fresh session on a root of its own, then `job start --mode <mode>`.
- * Returns the figures for the report and the segments for the comparison.
- */
-function measureRun({ run, log, entry, mode, order, folder, file, durationUs }) {
-  const root = path.join(folder, 'root');
-  fs.mkdirSync(root, { recursive: true });
-  const at = (step, args) => run(step, args, { root });
-  const quietAt = (step, args) => run(step, args, { root, quiet: true });
-  log(`${entry.label} ${mode} (${order})`);
-  const ingest = at('ingest', ['ingest', file]);
-  const session = ingest.json && ingest.json.data && ingest.json.data.session_id;
-  const base = { label: `${entry.label}`, mode, order, duration_us: durationUs, wall_s: null, revision: null, followed: null, final_status: null, exit: ingest.exit, failure_code: null };
-  if (!session) return { summary: measure.summariseRun({ ...base, failure_code: (ingest.json && ingest.json.error && ingest.json.error.code) || 'ingest' }), segments: null, revision: null };
-
-  let jobId = null;
-  let revisionId = null;
-  if (mode === 'quick') {
-    const started = at('job start (quick)', ['job', 'start', session, '--mode', 'quick']);
-    base.exit = started.exit;
-    base.wall_s = started.seconds;
-    base.failure_code = started.json && started.json.error ? started.json.error.code : null;
-    const data = started.json && started.json.data;
-    jobId = data && data.job ? data.job.job_id : null;
-    revisionId = data && data.outcome && data.outcome.revision ? data.outcome.revision.revision_id : null;
-    if (jobId) base.final_status = measure.readStatus(at('job status', ['job', 'status', jobId]).json, base.wall_s);
-  } else {
-    const startedAt = clock();
-    const started = at('job start (watched)', ['job', 'start', session, '--mode', 'watched']);
-    base.exit = started.exit;
-    base.failure_code = started.json && started.json.error ? started.json.error.code : null;
-    const data = started.json && started.json.data;
-    jobId = data && data.job ? data.job.job_id : null;
-    if (jobId) {
-      base.followed = measure.followWatched({ at: quietAt, jobId, session, durationUs, clock, sleep, startedAt });
-      base.final_status = base.followed.last;
-      revisionId = base.followed.end ? base.followed.end.revision_id : null;
-      base.exit = base.followed.end && base.followed.end.state === 'succeeded' ? 0 : 1;
-      log(`  watched ended ${base.followed.end ? base.followed.end.state : 'unknown'} at ${base.followed.end ? base.followed.end.t_s.toFixed(1) : '?'} s, first part ${base.followed.first_part_s === null ? 'never' : `${base.followed.first_part_s.toFixed(1)} s`}`);
-    }
-  }
-  let revision = null;
-  if (revisionId && base.exit === 0) revision = readRevision(at, session, revisionId, durationUs);
-  base.revision = revision;
-  return { summary: measure.summariseRun(base), segments: revision, revision };
-}
-
 function main() {
   const options = measure.parseArguments(process.argv.slice(2));
   const log = (line) => process.stdout.write(`${line}\n`);
@@ -205,8 +158,7 @@ function main() {
     const results = {};
     for (const [position, mode] of entry.modes.entries()) {
       const folder = path.join(runFolder, entry.label, mode);
-      fs.mkdirSync(folder, { recursive: true });
-      results[mode] = measureRun({ run, log, entry, mode, order: position === 0 ? 'first' : 'second', folder, file, durationUs });
+      results[mode] = measure.measureRun({ run, log, clock, sleep, readRevision, makeDirectory: (target) => fs.mkdirSync(target, { recursive: true }), entry, mode, order: position === 0 ? 'first' : 'second', folder, file, durationUs });
       summaries.push(results[mode].summary);
       if (results[mode].summary.ended !== 'succeeded') allSealed = false;
     }
