@@ -165,6 +165,12 @@ now the later of two cuts; the merge rules do not change, and `MERGE_RULES_VERSI
   exactly at the reach, an edge exactly the tolerance before `T`, touched and crossed points). The seal stays the safety
   net: `a_resume_over_parts_published_under_other_merge_rules_fails_loudly` shows that a run whose seal does not begin with
   its published parts fails as an integrity failure and keeps what was published.
+- **Measured (hosted run 43084227851 on the fix's branch, `real-media-set.md` 14.9).** RM03's first readable part came
+  20.1 s into the transcription (215 s before), with 24 parts (5 before); its 5- and 10-minute prefixes, which published
+  nothing before the seal, had their first parts 22 and 18 s in. The published text trailed the recognised audio by 20 s at
+  the median on RM03 and its prefixes, 43 to 48 s at the 90th percentile and 61 s at most, the moment before a part is due;
+  RM09 30 s, 55 s and one sample of 110 s. Quick and watched sealed the same revisions, segment for segment.
+  [L-256](../planning/known-limits.md#l-256) keeps what is left, low.
 - **Earlier revisions.** A revision published under the stretch cut alone is a prefix of the same merge, so a run resumed
   by this version continues it; a run resumed by an earlier build over parts this one published settles less and waits
   until it has caught up. `0.3.0` is unpublished, so no released revision is affected.

@@ -820,3 +820,39 @@ Estimate error is the estimate minus the time that really remained to the seal, 
 - **Reading.** ADR 0033's note of 2026-11-11 holds the proposal (keep ten minutes); [L-256](known-limits.md#l-256) and
   [L-257](known-limits.md#l-257) the two findings. One run on one runner class: the figures are this CPU's, and a laptop's speed
   moves every wall time in the table.
+
+### 14.9 The bounded settled cut on real speech (L-256, H8, hosted, 2026-11-11)
+
+Run 43084227851 on `af504315` (the fix's branch; 50 minutes; mode `progress`, items RM03 and RM09 with RM03's 5, 10 and
+15 minute prefixes; AMD EPYC 7763, 4 logical CPUs, `base`; quick with 4 threads, watched with 3). The same measurement as
+14.8, on a slower runner class (real-time factors 0.31 to 0.38 on RM03 against 0.29 to 0.35), after the bounded cut of
+ADR 0033 section 2 (amendment of 2026-11-11). **Trail** is the recognised audio in `job status` less `published_until_us`,
+at every sample from the first part to the seal (every 10 s, every 1 s in the last fifth); the recognised audio there can
+lag a part's commit by up to one chunk, so a few samples read negative.
+
+| Watched run | First part, into the transcription (14.8) | Parts (14.8) | Trail: median | 90th percentile | largest |
+| --- | --- | --- | --- | --- | --- |
+| RM03, first 5 min | 22.1 s (none before the seal) | 6 (1) | 23.0 s | 48.0 s | 61.0 s |
+| RM03, first 10 min | 18.1 s (none before the seal) | 12 (1) | 21.0 s | 46.0 s | 61.0 s |
+| RM03, first 15 min | 18.1 s (238 s after the start) | 18 (2) | 19.8 s | 42.7 s | 61.0 s |
+| RM03, 19:16 | 20.1 s (215 s) | 24 (5) | 20.0 s | 42.6 s | 61.0 s |
+| RM09, 28:02 | 40.4 s (20 s) | 31 (24) | 30.0 s | 55.0 s | 110.0 s |
+
+- **RM03 publishes as it goes.** Its first readable part came 20.1 s into the transcription with 1:06 published; the next
+  came 40 s later (the recognised audio stood at 1:20 for about 30 s, probably the chunk from 75 to 105 s, whose recognition loops, 14.7; not traced), and from then on a part
+  every 10 to 20 s (to 2:15, 3:04, 3:52, ...); the prefixes alike. The trail's median is 20 to 23 s and its 90th
+  percentile 43 to 48 s; the largest, 61 s, is the sample just before a part, when a chunk has finished and the next part
+  is not yet due. Before the fix the talk trailed by up to about 12 minutes (14.8).
+- **RM09** has pauses and published as it went before too. Its first part (to 0:20, no words) came 2 s into the
+  transcription and its second (to 1:06) 40 s in, against 20 s in 14.8: the recognised audio itself stood at 0:30 from 9 s
+  to 39 s of this run, so the wait is the recognition's on this runner, not the cut's (the bounded cut never settles less
+  than the stretch cut did for the same finished chunks). Its largest trail, 110 s, is one sample at 4:57 published while
+  6:45 was recognised, with the next part 10 s later.
+- **Sealed revisions agree.** For all five pairs the quick and the watched revision have the same segments (52, 105, 199,
+  267 and 369) and the same text, word distance 0. Segment counts differ from 14.8's on RM03 (267 against 272): another
+  CPU recognises differently (14.4).
+- **The estimate** (L-257) behaves as in 14.8: +67 to +73 percent at 10 percent done on the talk, within 15 percent from half
+  way on runs of 15 minutes or more.
+- **Reading.** [L-256](known-limits.md#l-256) is amended to what is left (low): the trail on continuous speech is now about 20 s
+  at the median and up to about a minute just before a part, and a single segment as long as a window would still hold its
+  stretch back.
