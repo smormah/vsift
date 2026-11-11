@@ -22,6 +22,7 @@ use std::{
 };
 
 use assert_cmd::Command;
+use jsonschema::{Retrieve, Uri};
 use serde_json::Value;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -81,12 +82,38 @@ fn vsift(root: &OwnedRoot, arguments: &[&str]) -> Result<Output, Box<dyn Error>>
         .output()?)
 }
 
-fn validate(schema: &str, instance: &Value) -> TestResult {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+/// The identifier base of the published schemas.
+const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
+
+fn schema_file(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../schemas/v1")
-        .join(schema);
-    let schema: Value = serde_json::from_str(&fs::read_to_string(path)?)?;
-    jsonschema::validator_for(&schema)?
+        .join(name)
+}
+
+/// Resolves a schema's sibling `$ref`s (`setup.schema.json` names
+/// `setup-install.schema.json`) to the local copies, so validation never
+/// reaches the network.
+struct LocalSchemas;
+
+impl Retrieve for LocalSchemas {
+    fn retrieve(&self, uri: &Uri<String>) -> Result<Value, Box<dyn Error + Send + Sync>> {
+        let name = uri
+            .as_str()
+            .strip_prefix(SCHEMA_BASE)
+            .filter(|name| !name.contains(['/', '\\']))
+            .ok_or_else(|| format!("unpublished schema reference: {uri}"))?;
+        Ok(serde_json::from_str(&fs::read_to_string(schema_file(
+            name,
+        ))?)?)
+    }
+}
+
+fn validate(schema: &str, instance: &Value) -> TestResult {
+    let schema: Value = serde_json::from_str(&fs::read_to_string(schema_file(schema))?)?;
+    jsonschema::options()
+        .with_retriever(LocalSchemas)
+        .build(&schema)?
         .validate(instance)
         .map_err(|error| io::Error::other(format!("{error}")))?;
     Ok(())
@@ -251,6 +278,7 @@ fn an_unattended_run_never_asks_and_reports_pass_fail_or_error() -> TestResult {
                 .exists()
         );
     } else {
+        validate("setup.schema.json", &value["data"])?;
         assert_eq!(value["data"]["outcome"], "fail", "{value}");
         assert_eq!(value["data"]["parts"][1]["part"], "speech", "{value}");
         assert_eq!(value["data"]["parts"][1]["status"], "not_set_up", "{value}");
@@ -277,4 +305,21 @@ fn exit_of(code: &str) -> Result<i32, Box<dyn Error>> {
         "STORAGE_IO" | "INTEGRITY_FAILURE" | "DOWNLOAD_FAILED" => 7,
         other => return Err(format!("an install does not end with {other}").into()),
     })
+}
+
+/// The schema check of the fail branch above runs only where speech can be
+/// installed; this holds its helper, with the local resolver for
+/// `setup.schema.json`'s `$ref`, on every platform, against the published
+/// fail.
+#[test]
+fn the_published_fail_validates_through_the_local_schemas() -> TestResult {
+    let example: Value = serde_json::from_str(&fs::read_to_string(schema_file(
+        "examples/setup.fail.json",
+    ))?)?;
+    validate("operation-response.schema.json", &example)?;
+    validate("setup.schema.json", &example["data"])?;
+    let mut broken = example["data"].clone();
+    broken["outcome"] = Value::from("partial");
+    assert!(validate("setup.schema.json", &broken).is_err());
+    Ok(())
 }
