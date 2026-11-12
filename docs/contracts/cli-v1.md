@@ -361,7 +361,10 @@ that is being removed at that moment** (by `session clean`, or by a failed open
 removing its own, #277) **is not an error.** A listing does not show it this time
 if its marker is gone or, on Windows, locked or being deleted; a listing may show
 it as unavailable because it is busy; a clean does not report it at all once it
-is gone and skips it as busy while another remover holds it.
+is gone and skips it as busy while another remover holds it. On Windows a clean
+also skips as busy a session one of whose files another program (a scanner, an
+indexer) holds open without sharing deletion, and a later clean removes it; that
+item error was `STORAGE_IO` before 0.3.0 (#604).
 
 `retain` requires a new absolute output directory and never overwrites one.
 The output is owner-private and stays outside automatic cleanup. Both bundle

@@ -3,7 +3,7 @@
 
 use std::{
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use vsift_application::{
@@ -823,13 +823,20 @@ impl Engine {
     /// few tries: the root's lock is held for tens of milliseconds by every
     /// other opener (measured: five consecutive refusals were common in a batch
     /// of two requests at a time on Windows, and a fixed eight tries then gave up
-    /// on a slow runner). The wait is five seconds
-    /// ([`crate::EnginePorts::with_failed_open_removal_wait`]) and applies only to this
-    /// failure path, so a request that did not fail never waits for it, and the
-    /// engine is asynchronous, so no thread is blocked. If the removal still
-    /// fails, or the root cannot be reopened, the registration is left for
-    /// `session clean` exactly as before, and the caller keeps its original
-    /// failure: this never reports and never masks.
+    /// on a slow runner). The wait is five seconds of pauses between tries
+    /// ([`crate::EnginePorts::with_failed_open_removal_wait`]), not of the
+    /// clock, so a runner that holds the process up between two tries does not
+    /// use it up (#604). It applies only to this failure path, so a request that
+    /// did not fail never waits for it, and the engine is asynchronous, so no
+    /// thread is blocked.
+    ///
+    /// **A file held open in the folder is waited for too**: on Windows a
+    /// scanner, an indexer or a child process that holds a file without
+    /// sharing deletion refuses the rename (`AccessDenied`) or the deletion (a
+    /// sharing violation, which the store answers as `Busy`) until it lets go
+    /// (#604). If the removal still fails, or the root cannot be reopened, the
+    /// registration is left for `session clean` exactly as before, and the
+    /// caller keeps its original failure: this never reports and never masks.
     async fn abandon_failed_open(
         &self,
         root: &Path,
@@ -1136,13 +1143,22 @@ pub(crate) fn published_status(
 }
 
 /// Runs `attempt` again while it reports a refusal that goes away by itself,
-/// for at most `limit` (the first attempt always runs), pausing 5 ms and then
-/// twice as long after each, up to 100 ms; any other outcome, success included,
-/// ends it at once.
+/// until the pauses between tries add up to `limit` (the first attempt always
+/// runs), pausing 5 ms and then twice as long after each, up to 100 ms; any
+/// other outcome, success included, ends it at once.
 ///
 /// `Busy` is such a refusal everywhere. On Windows so is `AccessDenied`: a file
 /// that another handle (a scanner, a child process, a remover) still holds open
-/// refuses to be deleted until it lets go.
+/// refuses to be deleted until it lets go. (The store answers `Busy` for the
+/// sharing violations of the same case, #604.)
+///
+/// **The limit counts the pauses, not the clock** (#604). Measured on the
+/// clock, time the process spent anywhere else counted as waiting: a hosted
+/// Windows runner that held the process up for about 35 seconds between two
+/// tries used up the whole limit, and the next refusal, which the other opener
+/// was about to lift, ended the retry. Counting the pauses keeps the bound
+/// exact in tries instead: five seconds is 55 tries, each one a single bounded
+/// store call, so a removal that never succeeds still ends.
 async fn retry_while_transient<T, F>(
     limit: Duration,
     mut attempt: F,
@@ -1150,12 +1166,13 @@ async fn retry_while_transient<T, F>(
 where
     F: FnMut() -> Result<T, SessionStorageError>,
 {
-    let started = Instant::now();
+    let mut waited = Duration::ZERO;
     let mut pause = Duration::from_millis(5);
     loop {
         match attempt() {
-            Err(error) if is_transient(error) && started.elapsed() < limit => {
+            Err(error) if is_transient(error) && waited < limit => {
                 tokio::time::sleep(pause).await;
+                waited += pause;
                 pause = (pause * 2).min(Duration::from_millis(100));
             }
             outcome => return outcome,
@@ -1497,6 +1514,33 @@ mod tests {
         .await;
         assert_eq!(none, Err(SessionStorageError::Busy));
         assert_eq!(once.get(), 1);
+    }
+
+    /// #604: the limit counts the pauses between tries, not time the process
+    /// spent anywhere else. Twice a hosted Windows runner held the whole test
+    /// binary up for about 35 seconds; a removal that met a busy root before
+    /// such a stall and once more just after it found its five seconds gone
+    /// and gave up, though it had waited a few milliseconds, and the failed
+    /// open's registration stayed `initializing`. Here every try itself takes
+    /// longer than the whole limit, a stand-in for the stall: the root frees
+    /// up at the third try, and that try is still made.
+    #[tokio::test]
+    async fn time_spent_outside_the_pauses_does_not_use_up_the_limit() {
+        let calls = Cell::new(0_u32);
+
+        let outcome = retry_while_transient(Duration::from_millis(50), || {
+            calls.set(calls.get() + 1);
+            std::thread::sleep(Duration::from_millis(60));
+            if calls.get() < 3 {
+                Err(SessionStorageError::Busy)
+            } else {
+                Ok("removed")
+            }
+        })
+        .await;
+
+        assert_eq!(outcome, Ok("removed"));
+        assert_eq!(calls.get(), 3);
     }
 
     /// Any other failure, like success, is final at once: no retry of an
