@@ -478,6 +478,9 @@ struct Shared {
     whole_share: bool,
     /// Part commits that asked for a unit of their own.
     ordinary_parts: usize,
+    /// The merge rules version the open revision reports, when not this
+    /// build's: as if an earlier `VSift` had published it.
+    open_merge_rules: Option<u32>,
 }
 
 impl Shared {
@@ -824,7 +827,9 @@ impl RevisionStore for MemoryStore {
             revision: revision.clone(),
             parts: std::num::NonZeroU32::new(u32::try_from(shared.parts.len()).unwrap_or(u32::MAX))
                 .ok_or(SessionStorageError::Io)?,
-            merge_rules: vsift_domain::MERGE_RULES_VERSION,
+            merge_rules: shared
+                .open_merge_rules
+                .unwrap_or(vsift_domain::MERGE_RULES_VERSION),
             job_id,
         }))
     }
@@ -1343,6 +1348,47 @@ async fn an_interrupted_run_stays_open_and_its_resume_continues_the_revision() -
     let parts = harness.part_history()?;
     assert!(parts.len() >= published);
     assert_parts_grow_into(&parts, &outcome.revision)?;
+    Ok(())
+}
+
+/// ADR 0033: what a run seals must begin with what it published. A run
+/// resumed over parts published under other merge rules cannot know that it
+/// settles them the same way, so it publishes nothing more, and at its end it
+/// **fails loudly** (`PublishedDiffers`, an integrity failure) and seals what
+/// was published as stopped, instead of sealing a revision silently. The
+/// settled cut (L-256) relies on this net: a cut that ever settled what the
+/// seal changes would fail here, not rewrite published text.
+#[tokio::test]
+async fn a_resume_over_parts_published_under_other_merge_rules_fails_loudly() -> TestResult {
+    let harness = Harness::publishing()?;
+    harness
+        .recognizer
+        .fault_at(3, Fault::Fails(SpeechRecognitionError::Io));
+    let resolved = harness.resolve(None)?;
+    let first = harness.run(&resolved, None).await;
+    assert!(first.is_err(), "{first:?}");
+    let job = resolved.spec.job_id.clone();
+    let open = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(open.state(), vsift_domain::RevisionState::Open);
+    assert!(!open.segments().is_empty(), "nothing was published");
+
+    harness.store.with(|shared| {
+        shared.open_merge_rules = Some(vsift_domain::MERGE_RULES_VERSION + 1);
+    })?;
+    harness.recognizer.clear();
+    let resumed = harness.resolve(None)?;
+    let outcome = harness.run(&resumed, None).await;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::PublishedDiffers { job: job.clone() })
+    );
+    assert_eq!(harness.record(&job)?.state, JobState::Failed);
+    let sealed = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(sealed.state(), vsift_domain::RevisionState::Stopped);
+    assert_eq!(
+        sealed.segments().get(..open.segments().len()),
+        Some(open.segments())
+    );
     Ok(())
 }
 
