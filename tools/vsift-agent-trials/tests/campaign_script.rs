@@ -44,7 +44,7 @@ const PINNED_CLAUDE: &str = "2.1.284";
 const CLAUDE_KEY_VARIABLE: &str = "VSIFT_TRIALS_ANTHROPIC_API_KEY";
 /// A made-up key: long enough to look like one, and never a real one.
 const FAKE_CLAUDE_KEY: &str = "sk-ant-api00-FAKE-campaign-script-test-0000000000";
-/// A made-up OpenAI key for the fake Codex API-key login.
+/// A made-up key for the fake Codex API-key login.
 const FAKE_OPENAI_KEY: &str = "sk-proj-FAKE-campaign-script-test-0000000000000";
 
 /// A throwaway repository holding a copy of the real script and harness.
@@ -687,7 +687,7 @@ fn the_api_key_is_the_default_credential() -> TestResult {
 }
 
 /// A Codex batch on the API key needs a trial home whose `auth.json` is an
-/// API-key login only (`codex login --with-api-key`): a ChatGPT sign-in, or a
+/// API-key login only (`codex login --with-api-key`): a browser sign-in, or a
 /// login without a key, is refused before the plan is written.
 #[test]
 fn a_codex_batch_on_the_api_key_needs_an_api_key_login_only() -> TestResult {

@@ -398,7 +398,7 @@ if ($Client -eq 'claude') {
         $env:CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = '1'
         $passEnvironment += @('--pass-env', 'ANTHROPIC_API_KEY', '--pass-env', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB')
     }
-    $proof =Join-Path $root ".installs\$Version.proof.json"
+    $proof = Join-Path $root ".installs\$Version.proof.json"
     if (-not (Test-Path -LiteralPath $proof)) {
         Write-Step "Installing vsift-cli@$Version from the registry into a fresh prefix (scripts off; a cleared environment)"
         $installed = Invoke-Harness @(
