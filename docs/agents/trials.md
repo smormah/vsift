@@ -261,7 +261,7 @@ It does **not** send, by construction:
 - private media: every video and transcript is a synthetic corpus fixture.
 
 The sign-in itself identifies your account to the provider, as any use of the client
-does.
+does; an API key ([On capped API keys](#on-capped-api-keys)) identifies the provider account that holds it.
 
 ## Before the first trial
 
@@ -1050,7 +1050,8 @@ bill ([L-120](../planning/known-limits.md#l-120)). A phase that ended at the cli
 ## The P14 batches
 
 The agent rounds are three batches (plan section 7), each started by **your explicit go** because each spends
-your Claude and Codex allowances. Nothing has run: PR 6 built the harness and ran no model.
+money: since 2026-11-14 the capped API keys you fund ([below](#on-capped-api-keys)), before that your Claude and
+Codex allowances. Nothing has run: PR 6 built the harness and ran no model.
 
 | Batch | Against | Runs (both clients) | What it answers |
 | --- | --- | --- | --- |
@@ -1070,7 +1071,9 @@ build; the allowance, not the clock, is the limit.
 install prefix and the Docker images):
 
 1. The neutral root and client homes as in [Before the first trial](#before-the-first-trial) (a root outside the
-   profile, without the user name, for example the one P12 used); sign in once per client.
+   profile, without the user name, for example the one P12 used). On the default credential the homes hold API
+   keys, not sign-ins ([On capped API keys](#on-capped-api-keys)); `-Credential SignIn` uses homes you signed in
+   to once per client.
 2. Node.js 22 or later with npm (the install runs `node npm-cli.js`; the harness needs both absolute paths) and
    Rust (to build the harness; the **agent** never sees either: its `PATH` holds npm's command folder, Node.js's
    folder, Git Bash's `usr\bin` and the system folders).
@@ -1126,6 +1129,45 @@ raw logs stay local. The records are committed in the pull request that acts on 
 private fails `records_privacy`; the record writer replaces each known local path in five spellings (backslashes,
 forward slashes, the `\\?\` form, doubled backslashes and, since P14 PR 7 (#283), Git Bash's `/c/...`, which is how
 Claude Code on Windows writes its commands).
+
+### On capped API keys
+
+Since 2026-11-14 `run-campaign.ps1` runs the clients on API keys with a spending limit by default
+(`-Credential ApiKey`), never on a person's sign-in: your rule of 2026-11-11 for unattended runs. `-Credential
+SignIn` keeps the old behaviour, for a batch you watch. You create and fund the keys; nobody else ever sees a key's
+value, and the script and the harness print, log and write none.
+
+- **Claude Code** reads its key from the **user** environment variable `VSIFT_TRIALS_ANTHROPIC_API_KEY` (Windows:
+  "Edit environment variables for your account"; or, with the key on the clipboard, `[Environment]::SetEnvironmentVariable('VSIFT_TRIALS_ANTHROPIC_API_KEY', (Get-Clipboard), 'User')`, which leaves the
+  value out of the shell's history). The script also reads it from your user environment directly, so a terminal
+  or app opened before you set it still finds it. The variable has its own name on purpose: an
+  `ANTHROPIC_API_KEY` in your user environment would make every Claude Code on the machine bill the key. The script
+  hands it to the harness as `ANTHROPIC_API_KEY`, which passes it to the client by name, adds its value to the leak
+  scan of every log, and with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` keeps it out of the agent's commands. The
+  campaign configuration's `clientHome` must hold **no sign-in** (no `.credentials.json`), so a run cannot fall back
+  to one: use a new, empty home such as `C:\vsift-trials\.clients\claude-key`. The script refuses a home with a
+  sign-in, and stops the batch if a run's init event names another credential source than `ANTHROPIC_API_KEY`.
+- **Codex** reads its key from its trial home's `auth.json`, as it read the sign-in before, so the container, the
+  read-only mount and the leak scan are unchanged. Write it once, with the key on the clipboard, into a new home:
+  `$env:CODEX_HOME = 'C:\vsift-trials\.clients\codex-key'; Get-Clipboard | <codex.exe> login --with-api-key`
+  (codex-cli `0.155.0-alpha.16`; it reads the key from the pipe, never from the command line). Point
+  `codexClientHome` at it. The script refuses a home that holds a ChatGPT sign-in or no key.
+- **A leak.** If a key's value appears in a client's output, the script deletes that trial (for Codex, the exported
+  record and folder; the raw logs stay in the Docker volume `vsift-codex-trials`), records nothing of it and stops:
+  revoke the key and create a new one before any further run. The harness's own flag also counts other passed
+  values of 24 characters or more (the Git Bash path), so the script confirms that the key itself is in the log
+  before it calls a leak.
+- **The spending limit.** On a key, a used-up allowance is the key's limit or credit, which no wait lifts. The script
+  then stops with exit 5 instead of waiting: nothing is counted for that run, it stays next, and the same command
+  resumes after a top-up (only with your go). A rate limit is retried by the client itself. Codex's container does
+  not say which limit stopped it, so any Codex usage limit stops a batch on a key.
+- **What changes in the measures.** The client, its version, the models, the skill and the settings are the same,
+  and so are the pass results, the calls, the skill bytes read and the token counts. Two things are not comparable
+  with batches run on a sign-in: the **client's reported cost** (an estimate whose caching terms need not match
+  between a sign-in and a key; compare tokens, not dollars) and **wall time** (an API key's rate tier, not a plan's, paces
+  the runs). Codex on a key talks to the API rather than ChatGPT's backend, so its first batch on a key also checks
+  that its token counts stay within the earlier batches' spread. A record shows which credential ran it:
+  `ANTHROPIC_API_KEY` among Claude Code's `environment_names`.
 
 ## What is weaker than it sounds (P14 harness)
 

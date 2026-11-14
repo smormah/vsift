@@ -11,6 +11,11 @@
 //! the checkout and after it has written its state).
 //!
 //! The script is a Windows script, so the tests are too.
+//!
+//! Since 2026-11-14 the script runs on capped API keys by default
+//! (`-Credential ApiKey`). The checkout tests name `-Credential SignIn`, which
+//! needs no key; the credential tests at the end use fake keys and fake
+//! client homes, and check that no key value is ever printed.
 
 #![cfg(windows)]
 
@@ -21,7 +26,7 @@ use std::{
     error::Error,
     fs,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
 };
 
 use common::Scratch;
@@ -35,12 +40,23 @@ const OUTPUT_TREE: &str = "docs/planning/p14-agent-trials";
 const NEUTRAL_ROOT: &str = r"C:\p14-campaign-script-test-root";
 /// The version the config pins and the fake client does not report.
 const PINNED_CLAUDE: &str = "2.1.284";
+/// The user environment variable the script reads Claude Code's key from.
+const CLAUDE_KEY_VARIABLE: &str = "VSIFT_TRIALS_ANTHROPIC_API_KEY";
+/// A made-up key: long enough to look like one, and never a real one.
+const FAKE_CLAUDE_KEY: &str = "sk-ant-api00-FAKE-campaign-script-test-0000000000";
+/// A made-up key for the fake Codex API-key login.
+const FAKE_OPENAI_KEY: &str = "sk-proj-FAKE-campaign-script-test-0000000000000";
 
 /// A throwaway repository holding a copy of the real script and harness.
 struct Checkout {
     repository: PathBuf,
     config: PathBuf,
     outside: PathBuf,
+    /// The Claude Code client home the configuration names (empty: no sign-in).
+    claude_home: PathBuf,
+    /// The Codex client home the configuration names (empty until a test
+    /// writes its `auth.json`).
+    codex_home: PathBuf,
     // Last: fields drop in order, and on Windows a folder something still
     // holds open cannot be removed (#423).
     scratch: Scratch,
@@ -73,11 +89,17 @@ impl Checkout {
 
         let fake_client = outside.join("fake-claude.cmd");
         fs::write(&fake_client, "@echo off\r\necho 0.0.1 (Fake Client)\r\n")?;
+        let claude_home = outside.join("claude-home");
+        let codex_home = outside.join("codex-home");
+        fs::create_dir(&claude_home)?;
+        fs::create_dir(&codex_home)?;
         let config = outside.join("campaign.json");
         fs::write(
             &config,
             serde_json::to_vec_pretty(&json!({
                 "root": NEUTRAL_ROOT,
+                "clientHome": claude_home,
+                "codexClientHome": codex_home,
                 "claudeExecutable": fake_client,
                 "claudeVersion": PINNED_CLAUDE,
             }))?,
@@ -87,6 +109,8 @@ impl Checkout {
             repository,
             config,
             outside,
+            claude_home,
+            codex_home,
             scratch,
         };
         checkout.git(&["init", "--quiet"])?;
@@ -141,20 +165,46 @@ impl Checkout {
         self.run_as("claude", batch, extra)
     }
 
-    /// [`Self::run`] for either client.
+    /// [`Self::run`] for either client, on the sign-in path unless `extra`
+    /// names a credential.
     fn run_as(&self, client: &str, batch: u8, extra: &[&str]) -> Result<Output, Box<dyn Error>> {
-        let output = Command::new("pwsh")
+        self.run_with_key(client, batch, extra, None)
+    }
+
+    /// Runs the script with `claude_key` (or none) as the process's value of
+    /// the key variable.
+    fn run_with_key(
+        &self,
+        client: &str,
+        batch: u8,
+        extra: &[&str],
+        claude_key: Option<&str>,
+    ) -> Result<Output, Box<dyn Error>> {
+        let credential: &[&str] = if extra.contains(&"-Credential") {
+            &[]
+        } else {
+            &["-Credential", "SignIn"]
+        };
+        let mut command = Command::new("pwsh");
+        command
             .args(["-NoProfile", "-NonInteractive", "-File"])
             .arg(self.repository.join(SCRIPT))
             .args(["-Batch", &batch.to_string()])
             .args(["-Client", client, "-Version", "0.1.0", "-Config"])
             .arg(&self.config)
             .arg("-NoBuild")
+            .args(credential)
             .args(extra)
             .current_dir(&self.repository)
             // Git must not look for a repository above the scratch folder
             // (a test that removes `.git` would otherwise find a parent's).
             .env("GIT_CEILING_DIRECTORIES", self.scratch.path())
+            .env_remove(CLAUDE_KEY_VARIABLE)
+            .env_remove("ANTHROPIC_API_KEY");
+        if let Some(key) = claude_key {
+            command.env(CLAUDE_KEY_VARIABLE, key);
+        }
+        let output = command
             .output()
             .map_err(|error| format!("PowerShell 7 (pwsh) must be installed: {error}"))?;
         Ok(output)
@@ -510,5 +560,178 @@ fn a_summary_only_run_calls_no_client_and_plans_nothing() -> TestResult {
             .exists()
     );
     assert!(checkout.batch_directory(1).join("summary.json").is_file());
+    Ok(())
+}
+
+/// Asserts that no fake key value appears in the script's output.
+fn assert_no_key_shown(output: &Output) {
+    let shown = text(output);
+    for key in [FAKE_CLAUDE_KEY, FAKE_OPENAI_KEY] {
+        assert!(!shown.contains(key), "a key value was printed: {shown}");
+    }
+}
+
+/// Whether the user's own environment holds the key variable. Only `reg`'s
+/// exit status is read: its output, which would show the value, goes
+/// nowhere.
+fn user_environment_holds_the_key_variable() -> Result<bool, Box<dyn Error>> {
+    let status = Command::new("reg")
+        .args(["query", r"HKCU\Environment", "/v", CLAUDE_KEY_VARIABLE])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    Ok(status.success())
+}
+
+/// The default credential is the capped API key, and a Claude Code batch on it
+/// starts only with the key variable set and a client home that holds no
+/// sign-in, so a run cannot fall back to a person's sign-in. Both refusals
+/// come before the plan is written, in a dry run too, and the key's value is
+/// never printed.
+#[test]
+fn a_claude_batch_on_the_api_key_needs_the_key_and_a_home_without_a_sign_in() -> TestResult {
+    let checkout = Checkout::new()?;
+    let api_key = ["-Credential", "ApiKey"];
+
+    // With the key and a clean home the dry run passes and names the
+    // credential it checked, and a real run reaches the client-version pin.
+    let accepted = checkout.run_with_key(
+        "claude",
+        2,
+        &["-DryRun", "-Credential", "ApiKey"],
+        Some(FAKE_CLAUDE_KEY),
+    )?;
+    assert_dry_run_passed(&accepted);
+    assert!(
+        text(&accepted).contains("Credential: the API key in VSIFT_TRIALS_ANTHROPIC_API_KEY"),
+        "{}",
+        text(&accepted)
+    );
+    assert_no_key_shown(&accepted);
+    let real = checkout.run_with_key("claude", 2, &api_key, Some(FAKE_CLAUDE_KEY))?;
+    assert_stopped_at_the_version_pin(&real);
+    assert_no_key_shown(&real);
+
+    // A sign-in in the client home is refused, whatever the key.
+    fs::write(
+        checkout.claude_home.join(".credentials.json"),
+        r#"{"claudeAiOauth":{"accessToken":"fake"}}"#,
+    )?;
+    for extra in [&["-DryRun", "-Credential", "ApiKey"][..], &api_key[..]] {
+        let refused = checkout.run_with_key("claude", 3, extra, Some(FAKE_CLAUDE_KEY))?;
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(
+            text(&refused).contains("holds a sign-in"),
+            "{}",
+            text(&refused)
+        );
+        assert_no_key_shown(&refused);
+    }
+    assert!(!checkout.batch_directory(3).exists(), "nothing was written");
+    fs::remove_file(checkout.claude_home.join(".credentials.json"))?;
+
+    // No key: refused, naming the variable. The script also reads the user's
+    // own environment, so this holds only where that does not set it.
+    if user_environment_holds_the_key_variable()? {
+        eprintln!("skipped the missing-key case: the user environment sets {CLAUDE_KEY_VARIABLE}");
+    } else {
+        let refused =
+            checkout.run_with_key("claude", 3, &["-DryRun", "-Credential", "ApiKey"], None)?;
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(
+            text(&refused).contains("No Claude API key")
+                && text(&refused).contains(CLAUDE_KEY_VARIABLE),
+            "{}",
+            text(&refused)
+        );
+        assert!(!checkout.batch_directory(3).exists(), "nothing was written");
+    }
+
+    // The sign-in path needs neither.
+    let signed_in =
+        checkout.run_with_key("claude", 3, &["-DryRun", "-Credential", "SignIn"], None)?;
+    assert_dry_run_passed(&signed_in);
+    assert!(
+        text(&signed_in).contains("Credential: the client homes' own sign-ins"),
+        "{}",
+        text(&signed_in)
+    );
+    Ok(())
+}
+
+/// The API key is the default: a run that names no credential is refused
+/// for a missing key, never run on a sign-in.
+#[test]
+fn the_api_key_is_the_default_credential() -> TestResult {
+    let checkout = Checkout::new()?;
+    let output = Command::new("pwsh")
+        .args(["-NoProfile", "-NonInteractive", "-File"])
+        .arg(checkout.repository.join(SCRIPT))
+        .args([
+            "-Batch", "2", "-Client", "claude", "-Version", "0.1.0", "-Config",
+        ])
+        .arg(&checkout.config)
+        .args(["-NoBuild", "-DryRun"])
+        .current_dir(&checkout.repository)
+        .env("GIT_CEILING_DIRECTORIES", checkout.scratch.path())
+        .env(CLAUDE_KEY_VARIABLE, FAKE_CLAUDE_KEY)
+        .output()?;
+    assert_dry_run_passed(&output);
+    assert!(
+        text(&output).contains("Credential: the API key in VSIFT_TRIALS_ANTHROPIC_API_KEY"),
+        "{}",
+        text(&output)
+    );
+    assert_no_key_shown(&output);
+    Ok(())
+}
+
+/// A Codex batch on the API key needs a trial home whose `auth.json` is an
+/// API-key login only (`codex login --with-api-key`): a browser sign-in, or a
+/// login without a key, is refused before the plan is written.
+#[test]
+fn a_codex_batch_on_the_api_key_needs_an_api_key_login_only() -> TestResult {
+    let checkout = Checkout::new()?;
+    let auth = checkout.codex_home.join("auth.json");
+    let api_key = ["-DryRun", "-Credential", "ApiKey"];
+
+    let missing = checkout.run_as("codex", 2, &api_key)?;
+    assert!(!missing.status.success(), "{}", text(&missing));
+    assert!(
+        text(&missing).contains("No Codex API-key login"),
+        "{}",
+        text(&missing)
+    );
+
+    for refused_login in [
+        json!({"OPENAI_API_KEY": null, "tokens": {"id_token": "fake", "access_token": "fake"}}),
+        json!({"auth_mode": "apikey", "OPENAI_API_KEY": "", "tokens": null}),
+    ] {
+        fs::write(&auth, serde_json::to_vec(&refused_login)?)?;
+        let refused = checkout.run_as("codex", 2, &api_key)?;
+        assert!(!refused.status.success(), "{}", text(&refused));
+        assert!(
+            text(&refused).contains("not an API-key login only"),
+            "{}",
+            text(&refused)
+        );
+    }
+    assert!(!checkout.batch_directory(2).exists(), "nothing was written");
+
+    fs::write(
+        &auth,
+        serde_json::to_vec(&json!({
+            "auth_mode": "apikey", "OPENAI_API_KEY": FAKE_OPENAI_KEY,
+            "tokens": null, "last_refresh": null
+        }))?,
+    )?;
+    let accepted = checkout.run_as("codex", 2, &api_key)?;
+    assert_dry_run_passed(&accepted);
+    assert!(
+        text(&accepted).contains("Credential: the API-key login in the Codex trial home"),
+        "{}",
+        text(&accepted)
+    );
+    assert_no_key_shown(&accepted);
     Ok(())
 }
