@@ -985,6 +985,15 @@ fn expectation_check(
             }
             "commands_required"
         }
+        Expectation::CommandsAnyOf { operations } => {
+            if !operations
+                .iter()
+                .any(|operation| ran.contains(operation.as_str()))
+            {
+                problems.push(format!("never ran any of {}", operations.join(", ")));
+            }
+            "commands_any_of"
+        }
         Expectation::CommandsForbidden { operations } => {
             for operation in operations {
                 if ran.contains(operation.as_str()) {

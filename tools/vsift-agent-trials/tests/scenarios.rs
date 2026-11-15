@@ -187,3 +187,35 @@ fn a_looped_clip_repeats_its_truth_with_the_measured_period() -> TestResult {
     assert_eq!(timeline.period_us, timeline.fixture_us);
     Ok(())
 }
+
+/// `commands_any_of` is for a step with more than one honest command. One
+/// operation would be `commands_required` under another name, and an unknown
+/// operation could never be satisfied: both are refused when the scenario
+/// loads, not after a paid trial.
+#[test]
+fn commands_any_of_needs_two_known_operations() -> TestResult {
+    let truth = CorpusTruth::load(&repository().join("fixtures/corpus"))?;
+    let references = SkillReferences::load(&repository())?;
+    let path = repository().join("tools/vsift-agent-trials/scenarios/A-08-f05-local-asr.json");
+    let original: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+    let message_for = |operations: serde_json::Value| -> Result<String, Box<dyn Error>> {
+        let mut value = original.clone();
+        value["phases"][0]["expectations"] =
+            serde_json::json!([{"kind": "commands_any_of", "operations": operations}]);
+        let scenario: Scenario = serde_json::from_value(value)?;
+        Ok(scenario
+            .validate(&truth, &references.policy)
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default())
+    };
+    assert_eq!(
+        message_for(serde_json::json!(["job.start", "transcript.retranscribe"]))?,
+        ""
+    );
+    let single = message_for(serde_json::json!(["job.start"]))?;
+    assert!(single.contains("fewer than two operations"), "{single}");
+    let unknown = message_for(serde_json::json!(["job.start", "job.begin"]))?;
+    assert!(unknown.contains("unknown operation job.begin"), "{unknown}");
+    Ok(())
+}
