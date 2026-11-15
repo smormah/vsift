@@ -412,7 +412,12 @@ mod tests {
     fn every_handoff_operation_that_finishes_a_report_is_a_finishing_call() {
         let trace = Trace {
             calls: vec![
-                call(0, 0, "vsift handoff skeleton ses_1 --question \"Q\" --json", 0),
+                call(
+                    0,
+                    0,
+                    "vsift handoff skeleton ses_1 --question \"Q\" --json",
+                    0,
+                ),
                 call(1, 1, "vsift handoff check --json <<'VSIFT_HANDOFF'", 0),
                 call(
                     2,
