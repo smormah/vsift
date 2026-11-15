@@ -51,6 +51,7 @@ const EXITS: &[(&str, u8)] = &[
     ("frame-get.json", 0),
     ("frame-neighbours.json", 0),
     ("handoff-check.json", 0),
+    ("handoff-finish.json", 0),
     ("handoff-skeleton.json", 0),
     ("ingest-copy-stopped-early.json", 3),
     ("ingest-copy-too-slow.json", 3),
