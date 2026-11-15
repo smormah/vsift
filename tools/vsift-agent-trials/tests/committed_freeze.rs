@@ -60,7 +60,11 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// **S1's freeze: 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut** (2026-11-15): the trial
+/// **M5a's freeze: 0.3.0 development freeze, rewritten at the rebase onto S1 (2026-11-15):** the lighter skill moves only
+/// the `skill` component, `SKILL.md` and its references, to `ec08dba7...`; on S1's `main` the other six components are
+/// S1's, so this digest `efd8633d...` (S1's) becomes the value below. `freeze write` at `4266488507b8c2d0011ae74f538a485183d6baff`.
+///
+/// The freeze before it, **S1's freeze: 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut** (2026-11-15): the trial
 /// scenarios follow `job start`. A new expectation, `commands_any_of`, lets A-08 and H-02 accept `job.start` or
 /// `transcript.retranscribe` for the whole-video transcription, and A-09-f05-supplied and H-01 forbid `job.start` as
 /// well as `transcript.retranscribe`. Three components moved: `grader` `55793d82...` to `68293b63...`, `scenarios`
@@ -195,7 +199,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "efd8633d3b88ec1beeb031a6bf7944b7f18924ddeeafb8c9155b0f662cf1d8ee";
+const CUT_FREEZE_SHA256: &str = "e6d01a646f23b5b7f164d6e34574e1a64d421672b40ea5e0e76fa468460b7bd2";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

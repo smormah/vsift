@@ -548,6 +548,58 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 - **The freeze:** the `skill`, `grader`, `scenarios` and `cold` components move once, written at the merge rebase. The
   fuzz seed and the plugin's copy stay byte-identical.
 
+## The change for 0.3.0: a lighter skill (M5a, 2026-11-07)
+
+- **Why.** The value measurement (phase 1, run on `0.3.0-rc.1`) compares an assistant that drives FFmpeg and
+  whisper.cpp itself with the same assistant using VSift, and most of VSift's cost is round trips; the skill's text
+  adds about a third to each. The maintainer chose "Steps and text" on 2026-11-06; this is the text part. The
+  planner's ruling of 2026-11-07 measures what a typical run loads: `SKILL.md` plus the four references that
+  all 89 recorded Claude Code skill runs read (`safety.md`, `handoff.md`, `commands.md`, `lifecycle.md`; `resume.md`
+  8 of 89, `budgets.md` 4 of 89), 76,635 bytes before, with a target of at least 30% less.
+- **What changed, in bytes** (checked with `wc -c`; `SKILL.md` carries the guard's pinned sentences, the
+  allowed-words table, the skeleton and the description unchanged):
+
+  | File | Before | After |
+  | --- | --- | --- |
+  | `SKILL.md` | 20,989 | 17,983 |
+  | `references/safety.md` | 5,370 | 5,107 |
+  | `references/handoff.md` | 21,697 | 19,732 |
+  | `references/commands.md` | 25,197 | 21,280 |
+  | `references/lifecycle.md` | 3,382 | 2,886 |
+  | The five a typical run loads | 76,635 | 66,988 |
+
+  `resume.md` grew by 260 bytes (the form for a VSift before 0.3.0, moved there from `SKILL.md`'s PREPARE).
+- **Reading on a trigger.** Wording alone gives −12%. The rest was meant to come from reading less: `SKILL.md`
+  rule 2 says the commands the skill shows are `free` and that `commands.md` is read before any other command, on a
+  failure and for the PowerShell form of the draft check; CLOSE_OR_RETAIN says `lifecycle.md` is read only to
+  retain, renew or clean. A run that reads only `SKILL.md`, `safety.md` and `handoff.md` would load 42,822 bytes
+  (−44%). The trial batch below shows that agents do not do that.
+- **Kept as it was in meaning:** every safety rule (the wording is shorter, no rule weaker), the handoff format, the
+  allowed-words table, the retain-only-on-request rule, the pinned sentences of the guard and every rule the trials
+  grade. No command, flag, failure code or schema changed.
+- **Not done:** the allowed-words table stays whole in `SKILL.md` (the maintainer asked for it on 2026-09-29 and the
+  planner kept it), the description is unchanged (it drives the trigger), and `handoff.md` still repeats those 15
+  members in its own table because the guard holds that table to the whole schema.
+- **The freeze:** the `skill` component moves; written at the merge ([`trials.md`](trials.md)).
+- **What one trial batch showed (15 Nov 2026).** 17 Claude Code runs (12 Opus 5.5, 5 Sonnet 5.5) on head
+  `71e51eaf` with a capped API key and the checkout's own `vsift.exe`; no Codex run. Records, summary and the
+  freeze copy are in [`batch-2-m5a/`](../planning/p14-agent-trials/batch-2-m5a/). The median run read 73,274 skill
+  bytes; the same 17 runs sized at the skill without this change read 82,425, so the text a typical run loads is
+  **11% lighter**, short of the 30% aimed at. The batch on `0.2.2-rc.1` (72,381) is the wrong stick: the skill has
+  grown since (`workflows/bug-report.md`, 3,622 bytes, is read in 13 of 17 runs; `commands.md` and `safety.md`
+  grew). Runs that read each file: `commands.md` 15 of 17 (16 of 17 before), `handoff.md` 14, `lifecycle.md` 11
+  (16 of 17 before), `resume.md` 3. **The trigger wording did not hold:** agents read the references straight after
+  loading the skill, before the first command, so `commands.md` is still read on most runs. `lifecycle.md` did fall.
+  That up-front read is the lever for after 0.3.0; it is not a known limit, because no behaviour is wrong. No further
+  cut was made for 0.3.0.
+- **Passes, and the six that failed.** 11 of 17 fully passed; the safety gate was met (0 policy, canary or report-text
+  failures), A-01 refused to install, and every run passed the interpretation check. The six that failed the
+  mechanical check (A-08 five times, H-02 once) each say "never ran transcript.retranscribe": the agent started the
+  transcription with `job start`, which `main`'s skill has taught since #510 and which this change only rewords,
+  while those scenarios still require `transcript.retranscribe`. That is a gap in the scenarios, not a regression of
+  this change; a separate cut item (S1) brings the scenarios in step, and A-09 and H-01 get the matching check so a
+  needless re-transcription cannot pass them. Cost by the client's own estimate: $7.76.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo

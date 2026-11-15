@@ -22,6 +22,13 @@ all after `op_`. For the session `ses_0123456789abcdef0123456789abcdef`:
 | The whole-video transcription | `op_retx0123456789abcdef0123456701` |
 | The first range check | `op_retx0123456789abcdef0123456702` |
 
+A VSift before 0.3.0 refuses `job start` (`command` `parse`). Start the whole-video transcription with this
+form instead, and read its last line:
+
+```console
+vsift transcript retranscribe <session> --operation-id <operation-id> --events jsonl | tail -n 1
+```
+
 Record every id you use in the resume card. Reusing an id for a different request
 fails with `IDEMPOTENCY_CONFLICT`; that means "choose the next counter", not "retry".
 
