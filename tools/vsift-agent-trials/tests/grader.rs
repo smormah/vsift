@@ -844,9 +844,9 @@ fn either_whole_video_transcription_command_satisfies_the_local_asr_scenarios() 
         );
 
         // Neither command: the step is missing, and the failure names both.
-        let by_neither = transcribing(vec![Use::Bash(format!(
-            "vsift job status job_00000000000000000000000000a09f05 --json"
-        ))]);
+        let by_neither = transcribing(vec![Use::Bash(
+            "vsift job status job_00000000000000000000000000a09f05 --json".to_owned(),
+        )]);
         assert_eq!(
             by_neither.get("commands_any_of"),
             Some(&vec![
