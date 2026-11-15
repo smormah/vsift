@@ -38,8 +38,14 @@
           "operations": [
             "setup.check",
             "ingest",
-            "transcript.retranscribe",
             "search"
+          ]
+        },
+        {
+          "kind": "commands_any_of",
+          "operations": [
+            "job.start",
+            "transcript.retranscribe"
           ]
         }
       ]

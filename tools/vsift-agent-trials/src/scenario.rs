@@ -279,6 +279,15 @@ pub enum Expectation {
         /// Operation identifiers.
         operations: Vec<String>,
     },
+    /// At least one of these operations ran. It is for a step with more than
+    /// one honest form, such as the whole-video transcription: `job start`
+    /// since 0.3.0, and `transcript retranscribe` for a VSift before it,
+    /// which the skill still teaches. `commands_required` stays the form for
+    /// a step with one command.
+    CommandsAnyOf {
+        /// Operation identifiers; at least one must have run.
+        operations: Vec<String>,
+    },
     /// None of these operations ran.
     CommandsForbidden {
         /// Operation identifiers.
@@ -361,6 +370,7 @@ impl Expectation {
             self,
             Self::CommandsOnly { .. }
                 | Self::CommandsRequired { .. }
+                | Self::CommandsAnyOf { .. }
                 | Self::CommandsForbidden { .. }
                 | Self::ImageAccessUnavailable
                 | Self::ResumeCard
@@ -600,7 +610,14 @@ impl Scenario {
                     }
                     Expectation::CommandsOnly { operations }
                     | Expectation::CommandsRequired { operations }
+                    | Expectation::CommandsAnyOf { operations }
                     | Expectation::CommandsForbidden { operations } => {
+                        if matches!(expectation, Expectation::CommandsAnyOf { .. })
+                            && operations.len() < 2
+                        {
+                            problems
+                                .push("commands_any_of names fewer than two operations".to_owned());
+                        }
                         for operation in operations {
                             if policy.class_of(operation).is_none() {
                                 problems.push(format!("unknown operation {operation}"));

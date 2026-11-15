@@ -50,6 +50,7 @@
         {
           "kind": "commands_forbidden",
           "operations": [
+            "job.start",
             "transcript.retranscribe"
           ]
         }

@@ -59,13 +59,23 @@ struct Bench {
 
 impl Bench {
     fn new(scenario: &str) -> Result<Self, Box<dyn Error>> {
+        Self::in_folder("scenarios", scenario)
+    }
+
+    /// A hold-out scenario's bench: the same fixtures and trace shapes, the
+    /// scenario read from `holdout/`.
+    fn holdout(scenario: &str) -> Result<Self, Box<dyn Error>> {
+        Self::in_folder("holdout", scenario)
+    }
+
+    fn in_folder(folder: &str, scenario: &str) -> Result<Self, Box<dyn Error>> {
         let repository = repository();
         let truth = CorpusTruth::load(&repository.join("fixtures").join("corpus"))?;
         let scenario = Scenario::load(
             &repository
                 .join("tools")
                 .join("vsift-agent-trials")
-                .join("scenarios")
+                .join(folder)
                 .join(format!("{scenario}.json")),
         )?;
         let script = truth.fixture("F05")?.audio.script.clone();
@@ -719,6 +729,16 @@ fn local_asr_handoff(claims: &Value) -> Value {
 }
 
 fn local_asr_uses(bench: &Bench) -> Vec<Use> {
+    local_asr_uses_transcribing(
+        bench,
+        vec![Use::Bash(format!(
+            "vsift transcript retranscribe {SESSION} --operation-id op_retx0000000000000000000000a001 --events jsonl | tail -n 1"
+        ))],
+    )
+}
+
+/// The dry trial's calls with `transcription` as the whole-video step.
+fn local_asr_uses_transcribing(bench: &Bench, transcription: Vec<Use>) -> Vec<Use> {
     let image = |name: &str| {
         Use::Read(
             bench
@@ -729,14 +749,14 @@ fn local_asr_uses(bench: &Bench) -> Vec<Use> {
                 .into_owned(),
         )
     };
-    vec![
+    let mut uses = vec![
         Use::Skill,
         Use::Read(bench.skill(".claude", "assets/image-check.png")),
         Use::Bash("vsift setup check --json".to_owned()),
         Use::Bash("vsift ingest walkthrough.mp4 --json".to_owned()),
-        Use::Bash(format!(
-            "vsift transcript retranscribe {SESSION} --operation-id op_retx0000000000000000000000a001 --events jsonl | tail -n 1"
-        )),
+    ];
+    uses.extend(transcription);
+    uses.extend([
         Use::Bash(format!(
             "vsift search {SESSION} --query \"invoice\" --limit 20 --json"
         )),
@@ -749,7 +769,151 @@ fn local_asr_uses(bench: &Bench) -> Vec<Use> {
         Use::Bash(format!(
             "vsift session retain {SESSION} --output evidence-bundle-phase-1 --json"
         )),
+    ]);
+    uses
+}
+
+/// What the agent runs since 0.3.0 to transcribe the whole video: `job start`,
+/// then `job status` until the job has finished (ADR 0033).
+fn job_start_transcription() -> Vec<Use> {
+    vec![
+        Use::Bash(format!("vsift job start {SESSION} --json")),
+        Use::Bash("vsift job status job_00000000000000000000000000a09f05 --json".to_owned()),
     ]
+}
+
+/// The local-ASR scenarios (A-08 and the hold-out H-02 share a shape) accept
+/// `job start` or `transcript retranscribe` for the whole-video transcription,
+/// and nothing else satisfies the step. M5a's batch of 15 Nov 2026 failed A-08
+/// five times and H-02 once on `never ran transcript.retranscribe` although the
+/// agent had followed the skill: `job start`, `job status`, `search`.
+#[test]
+fn either_whole_video_transcription_command_satisfies_the_local_asr_scenarios() -> TestResult {
+    let claims = json!([
+        {"id": "c1", "section": "problem", "kind": "observed", "support": "supported", "certainty": "high",
+         "statement": "Submitting invoice 4407 results in an error message E-409 instead of a success banner.",
+         "citations": ["e1", "e2", "e4", "e5"]}
+    ]);
+    for holdout in [false, true] {
+        let scenario = if holdout {
+            "H-02-f01-local-asr"
+        } else {
+            "A-08-f05-local-asr"
+        };
+        let bench = if holdout {
+            Bench::holdout(scenario)?
+        } else {
+            Bench::new(scenario)?
+        };
+        let transcribing = |transcription: Vec<Use>| -> BTreeMap<String, Vec<String>> {
+            let log = claude(
+                &local_asr_uses_transcribing(&bench, transcription),
+                &[],
+                &report(&local_asr_handoff(&claims)),
+            );
+            failed_checks(&bench.grade(&parse_claude(&log), &log))
+        };
+        let step_checks = |failures: &BTreeMap<String, Vec<String>>| -> Vec<String> {
+            failures
+                .keys()
+                .filter(|name| name.starts_with("commands_"))
+                .cloned()
+                .collect()
+        };
+
+        let by_job = transcribing(job_start_transcription());
+        assert_eq!(
+            step_checks(&by_job),
+            Vec::<String>::new(),
+            "{scenario}: job start did not satisfy the step: {by_job:?}"
+        );
+        let by_job_alone =
+            transcribing(vec![Use::Bash(format!("vsift job start {SESSION} --json"))]);
+        assert_eq!(
+            step_checks(&by_job_alone),
+            Vec::<String>::new(),
+            "{scenario}: {by_job_alone:?}"
+        );
+        let by_retranscribe = transcribing(vec![Use::Bash(format!(
+            "vsift transcript retranscribe {SESSION} --operation-id op_retx0000000000000000000000a001 --events jsonl | tail -n 1"
+        ))]);
+        assert_eq!(
+            step_checks(&by_retranscribe),
+            Vec::<String>::new(),
+            "{scenario}: the older form no longer satisfies the step: {by_retranscribe:?}"
+        );
+
+        // Neither command: the step is missing, and the failure names both.
+        let by_neither = transcribing(vec![Use::Bash(format!(
+            "vsift job status job_00000000000000000000000000a09f05 --json"
+        ))]);
+        assert_eq!(
+            by_neither.get("commands_any_of"),
+            Some(&vec![
+                "never ran any of job.start, transcript.retranscribe".to_owned()
+            ]),
+            "{scenario}: {by_neither:?}"
+        );
+        // The other required commands are still required on their own.
+        assert!(
+            !by_neither.contains_key("commands_required"),
+            "{scenario}: {by_neither:?}"
+        );
+    }
+    Ok(())
+}
+
+/// A scenario that supplies a transcript forbids both ways to transcribe the
+/// whole video: before this, `job start` there passed A-09-f05-supplied and
+/// H-01-f10-supplied-sidecar.
+#[test]
+fn a_supplied_transcript_forbids_job_start_as_it_forbids_retranscribe() -> TestResult {
+    for (holdout, scenario) in [
+        (false, "A-09-f05-supplied"),
+        (true, "H-01-f10-supplied-sidecar"),
+    ] {
+        let bench = if holdout {
+            Bench::holdout(scenario)?
+        } else {
+            Bench::new(scenario)?
+        };
+        let with_extra = |extra: Option<String>| -> BTreeMap<String, Vec<String>> {
+            let mut uses = good_uses(&bench);
+            if let Some(command) = extra {
+                uses.insert(5, Use::Bash(command));
+            }
+            let log = claude(&uses, &[], &report(&handoff()));
+            failed_checks(&bench.grade(&parse_claude(&log), &log))
+        };
+        let clean = with_extra(None);
+        assert!(
+            !clean.contains_key("commands_forbidden"),
+            "{scenario}: {clean:?}"
+        );
+        let job = with_extra(Some(format!("vsift job start {SESSION} --json")));
+        assert_eq!(
+            job.get("commands_forbidden"),
+            Some(&vec!["ran job.start".to_owned()]),
+            "{scenario}: {job:?}"
+        );
+        let first = with_extra(Some(format!(
+            "vsift job start {SESSION} --first 0:30000000 --json"
+        )));
+        assert_eq!(
+            first.get("commands_forbidden"),
+            Some(&vec!["ran job.start".to_owned()]),
+            "{scenario}: {first:?}"
+        );
+        let retranscribe = with_extra(Some(format!(
+            "vsift transcript retranscribe {SESSION} --operation-id op_retx0000000000000000000000a001 --events jsonl | tail -n 1"
+        )));
+        assert_eq!(
+            retranscribe.get("commands_forbidden"),
+            Some(&vec!["ran transcript.retranscribe".to_owned()]),
+            "{scenario}: {retranscribe:?}"
+        );
+    }
+    Ok(())
 }
 
 #[test]

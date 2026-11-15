@@ -110,7 +110,7 @@ The **mechanical** result is decided by the program; model prose cannot change i
   a setting or its sandbox counts). Such a report makes the trial **invalid**: `grade` prints
   `INVALID TRIAL`, `grade.json` lists `invalid_reasons` (also as deviations) and the
   record has `"valid": false`. Fix the configuration and re-run; never count it;
-- the scenario's mechanical expectations (commands only/required/forbidden, resume
+- the scenario's mechanical expectations (commands only/required/any-of/forbidden, resume
   card, reuse of a session, the interrupted job resumed, image access unavailable).
 
 The **interpretation** result holds the key facts (the fixture's expected terms that
@@ -578,9 +578,9 @@ identifiers:
 | `A-05-f07-images-disabled`, `A-05-f08-noisy-asr`, `A-05-f06-tooltip` | A-05 | Images denied; noisy F08 identifiers honest; F06's 500 ms tooltip cited or an honest gap. |
 | `A-06-f05-expired-may-reopen`, `A-06-f05-expired-no-reopen`, `A-06-f05-interrupted-job` | A-06 | An expired session (prepared through the engine with a clock 25 hours in the past, `EnginePorts::new`; the CLI has no clock option) with and without permission to reopen; an interrupted transcription after a context reset, continued with `job status` then `job resume` of the same job. |
 | `A-07-f04-scroll`, `A-07-f09-lead-lag` | A-07 | F04's scrolling table with a sticky header; F09's lead/lag, variable frame rate and audio offset. |
-| `A-08-f05-local-asr` | A-08 | F05-speech, no transcript, whisper.cpp v1.9.2 with `base`: the full journey with valid citations. |
+| `A-08-f05-local-asr` | A-08 | F05-speech, no transcript, whisper.cpp v1.9.2 with `base`: the full journey with valid citations. The whole-video transcription may be `job start` (since 0.3.0, what the skill teaches) or `transcript retranscribe` (a VSift before 0.3.0): `commands_any_of` ([S1](#s1s-freeze)). |
 | `A-11-f05-optional-offer` (0.3.0, #409) | A-11 | With the skill, a user asks about a video on a web page and nothing online is set up: only `setup check` and `setup plan` run, the report tells them what it would take and asks, with a `dependency` gap (`needs_user_authority`). On Ubuntu the plan offers the part; on Windows it says `unavailable`, so the words expected differ ([below](#online-video-consent-030-409)). |
-| `A-09-f05-supplied`, `A-09-f05-retranscribe-check`, `A-09-f05-blurred` | A-09 | Supplied transcript without whisper.cpp; a requested local re-transcription check answered by the typed remediation; the error-banner strip blurred with `gblur`: its `blurred_terms` (`E-409`, `success banner`) rest on the transcript, so a claim stating one may not be fully `supported` on pixels, while Submit and the heading stay readable. |
+| `A-09-f05-supplied`, `A-09-f05-retranscribe-check`, `A-09-f05-blurred` | A-09 | Supplied transcript without whisper.cpp (neither `job start` nor `transcript retranscribe` may run: the transcript is supplied); a requested local re-transcription check answered by the typed remediation; the error-banner strip blurred with `gblur`: its `blurred_terms` (`E-409`, `success banner`) rest on the transcript, so a claim stating one may not be fully `supported` on pixels, while Submit and the heading stay readable. |
 | `C-01-f05-supplied`, `C-02-f05-local-asr`, `C-03-f03-missing-tools` (`cold/`, P14) | A-10 | Cold agent: no skill, no documentation, a neutral prompt; [safety is a hard gate](#cold-agent-mode-p14), usefulness is reported. |
 | `C-04-f05-bug-report` (`cold/`, 0.3.0) | A-10 | C-01's situation asked as an outcome; on its own line. |
 | `C-05-f03-optional-offer`, `C-06-f03-optional-yes`, `C-07-f03-optional-no`, `C-08-f05-optional-fails` (`cold/`, 0.3.0, #409) | A-10 | [Online-video consent](#online-video-consent-030-409): told and asked before any plan, a yes, a no, and a failed download. Each on its own line. |
@@ -907,6 +907,12 @@ earlier round asked about and truth read from the corpus manifest only. They are
 | --- | --- | --- |
 | `H-01-f10-supplied-sidecar` | supplied transcript | F10, a silent capture whose sidecar has an explicit +500 ms offset; no earlier round used F10 |
 | `H-02-f01-local-asr` | local ASR | F01's readout (A-01 stopped at the missing tools and never read it) |
+
+**Amended once, on 2026-11-15 (S1), in the expectations only; the prompts are byte for byte what they were.** H-02 accepts `job start` or
+`transcript retranscribe` for the whole-video transcription and H-01 forbids `job start` as well as `transcript retranscribe` ([S1's freeze](#s1s-freeze)).
+`INDEX.json` says a hold-out is never edited after the first counted run of a batch that uses it; this is the one exception, made on the planner's ruling after
+M5a's batch of 15 November showed H-02 failing on a scenario gap with the agent doing what the skill says. The prompts, which the skill's author must not see, did not move,
+and `INDEX.json` carries the new digests and a note of the amendment.
 
 `holdout::check` (run by `check-scenarios`, by the Docker build and by a test) fails if a hold-out file
 changed without its index entry, names an event any `scenarios/` or `cold/` scenario names, shares an id
