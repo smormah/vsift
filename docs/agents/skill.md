@@ -335,9 +335,29 @@ request, to the folder they named. It checks the draft with the session's record
 `session retain`, `bundle validate` and `session close` calls go. A run with no session keeps `handoff check`.
 `commands.md` shows both shells' forms of both commands and classes `handoff finish` `free`, its `--retain` `explicit`
 as `session retain`; `lifecycle.md` keeps the standalone commands as the fallback when `finished` stays false. The
-skill grew by about 300 bytes on M5a's text. **No agent has run this text:** it is measured in one batch 2 on the pull
-request's head, against M5a's batch 2 ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
+skill grew by 314 bytes on M5a's text ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
 note of 2026-11-09).
+
+- **What one trial batch showed (15 Nov 2026).** 17 Claude Code runs (12 Opus 5.5, 5 Sonnet 5.5) on head `f07ba924`
+  (freeze `53317345...`) with a capped API key and the checkout's own `vsift.exe`; no Codex run. Records, summary and
+  the freeze copy are in [`batch-2-m5b/`](../planning/p14-agent-trials/batch-2-m5b/). **Closing round trips** (the
+  model steps after the last evidence call; `story-handoffs`' `M5b-measure-closing.cjs`), over the 16 runs that
+  retained: median **1**, mean 1.38, against M5a's batch 3 and 2.69 and `0.2.2-rc.1`'s 3 and 2.88. 16 of 17 runs used
+  `handoff finish`; none was refused by the grader, and no `bundle validate` followed it (M5a's batch: 11 runs,
+  `0.2.2-rc.1`: 13). 18 scenario prompts were reworded between M5a's batch and this one, so the comparison carries
+  that caveat.
+- **Passes.** 11 of 17 fully passed, the same scenarios run for run as M5a's batch; the safety gate was met and every
+  run passed interpretation. The six that failed the mechanical check (A-08 five times, H-02 once) are the S1
+  scenario gap described above for M5a (the scenarios still require `transcript.retranscribe`); the summary's two
+  other "not met" gates, the review tier's 50% mechanical and the compact regression's 3 of 5, are the same A-08 runs.
+- **H-01, a finding (the planner's ruling, 15 Nov).** H-01's prompt still names `vsift session retain`. Its agent read
+  that command's help, ran `session retain`, then `handoff finish` without `--retain`: 3 closing round trips, the
+  baseline's number, and the run fully passed. A user who names a command gets that command, and the agent used the
+  finishing command for what was left, without retaining twice: correct and safe. The 9 Nov ruling hoped the skill's
+  instruction would win over a prompt that names a command; one run shows it does not always, and 17 runs cannot say
+  how often. H-02, whose prompt names it too, used one `handoff finish --retain`. No change for 0.3.0.
+- **Not gating:** the median run read 70,887 skill bytes (M5a's batch: 73,274) and `commands.md` in 10 of 17 runs
+  (M5a's: 15); the prompts differ, so this is reported, not attributed. Cost by the client's own estimate: $7.55.
 
 ### A long report's check on Windows (#366; 2026-10-17, released in `0.2.2`)
 
