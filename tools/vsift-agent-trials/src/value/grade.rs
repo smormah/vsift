@@ -35,9 +35,9 @@ use crate::{
 pub const VALUE_GRADE_FILE: &str = "value-grade.json";
 
 /// The calls by which the skill finishes a report (`handoff check`,
-/// `handoff skeleton`): counted like any call, and shown on their own line
-/// (planner's ruling, question 9).
-const FINISHING: [&str; 2] = ["check", "skeleton"];
+/// `handoff skeleton`, `handoff finish`): counted like any call, and shown on
+/// their own line (planner's ruling, question 9; `finish` added by M5b).
+const FINISHING: [&str; 3] = ["check", "skeleton", "finish"];
 
 /// What the step summary, the grade and a refused record say when the
 /// sign-in's value appeared in a run's output (planner's review of #587).
@@ -59,7 +59,7 @@ pub struct Measures {
     /// Model round trips: steps that asked for a tool, plus the final answer.
     pub round_trips: u64,
     /// Round trips less the steps that only finished the report (V1's
-    /// `handoff check` and `skeleton`); reported, not gated.
+    /// `handoff check`, `skeleton` and `finish`); reported, not gated.
     pub round_trips_without_finishing: u64,
     /// Tool calls, all kinds.
     pub tool_calls: u64,
@@ -75,7 +75,7 @@ pub struct Measures {
     pub media_tool_calls: u64,
     /// Calls that ran `vsift`.
     pub vsift_calls: u64,
-    /// `vsift handoff check` and `skeleton` calls.
+    /// `vsift handoff check`, `skeleton` and `finish` calls.
     pub finishing_calls: u64,
     /// Images opened.
     pub images: u64,
@@ -406,6 +406,28 @@ mod tests {
         assert_eq!(measures.media_tool_calls, 4);
         assert_eq!(measures.vsift_calls, 1);
         assert_eq!(measures.finishing_calls, 1);
+    }
+
+    #[test]
+    fn every_handoff_operation_that_finishes_a_report_is_a_finishing_call() {
+        let trace = Trace {
+            calls: vec![
+                call(0, 0, "vsift handoff skeleton ses_1 --question \"Q\" --json", 0),
+                call(1, 1, "vsift handoff check --json <<'VSIFT_HANDOFF'", 0),
+                call(
+                    2,
+                    2,
+                    "/usr/local/bin/vsift handoff finish ses_1 --retain keep --json <<'VSIFT_HANDOFF'",
+                    0,
+                ),
+                call(3, 3, "vsift handoff help", 0),
+                call(4, 4, "vsift session retain ses_1 --output keep", 0),
+            ],
+            ..Trace::default()
+        };
+        let measures = measure(&trace, Path::new("."), TimeSplit::default());
+        assert_eq!(measures.finishing_calls, 3);
+        assert_eq!(measures.vsift_calls, 5);
     }
 
     #[test]
