@@ -63,10 +63,10 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// **S1's freeze: 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut** (2026-11-15): the trial
 /// scenarios follow `job start`. A new expectation, `commands_any_of`, lets A-08 and H-02 accept `job.start` or
 /// `transcript.retranscribe` for the whole-video transcription, and A-09-f05-supplied and H-01 forbid `job.start` as
-/// well as `transcript.retranscribe`. Three components moved: `grader` `55793d82...` to `b643b070...`, `scenarios`
+/// well as `transcript.retranscribe`. Three components moved: `grader` `55793d82...` to `68293b63...`, `scenarios`
 /// `916c8c22...` to `32f6860a...` and `holdout` `1963f6e4...` to `f4d526ea...` (the hold-outs' expectations only, their
 /// prompts unchanged), and this digest `615b93bf...` (M1's) to the value below; the other four components are
-/// unchanged. `freeze write` at `9f309fa056c7d1367827e9cbe1b628697271ec03`. M5a's and M5b's pull requests write it
+/// unchanged. `freeze write` at `c2906341d8ff89384ac11de55cf9e2eb6c9e67fa`. M5a's and M5b's pull requests write it
 /// again when they are rebased onto this one.
 ///
 /// The freeze before it, **M1's freeze: 0.3.0 draft freeze, rewritten at the merge rebase; the final freeze is recorded at the 0.3.0 cut**
@@ -195,7 +195,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "1e187ceae507cc966e1fbdac91752e75b5032bce5adc985a2e0940faf4865384";
+const CUT_FREEZE_SHA256: &str = "efd8633d3b88ec1beeb031a6bf7944b7f18924ddeeafb8c9155b0f662cf1d8ee";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

@@ -1061,9 +1061,9 @@ regression of M5a's skill trim. The change:
 - **The cold scenarios and the value arms** carry no command expectations, so they did not change.
 - **The hold-outs H-01 and H-02 changed in their expectations only; their prompts are byte for byte what they were** ([above](#hold-out-scenarios-p14)).
 
-`freeze write` at `9f309fa056c7d1367827e9cbe1b628697271ec03` gave the `grader` digest `b643b070e251c1a2c09d0f6bd5228497b4b0206404d775e5ce26f6b830e8313d` (it was `55793d82...`), the `scenarios`
+`freeze write` at `c2906341d8ff89384ac11de55cf9e2eb6c9e67fa` gave the `grader` digest `68293b63c38d4eb1734aa5596593d186b2324310245cab6a8db45d16607bea97` (it was `55793d82...`), the `scenarios`
 digest `32f6860a071f4c568d614a9ae809070decbafa3aa2ed3abe56dbb4def229f2fa` (it was `916c8c22...`), the `holdout` digest `f4d526eac9c8c8abd83f472959dbd348507b75f7434a22df4680e8d3a38eee56` (it was `1963f6e4...`)
-and the whole-freeze digest `1e187ceae507cc966e1fbdac91752e75b5032bce5adc985a2e0940faf4865384` (it was `615b93bf...`); `cold`, `settings`, `skill` and `truth` are unchanged, and `committed_freeze` pins the new value.
+and the whole-freeze digest `efd8633d3b88ec1beeb031a6bf7944b7f18924ddeeafb8c9155b0f662cf1d8ee` (it was `615b93bf...`); `cold`, `settings`, `skill` and `truth` are unchanged, and `committed_freeze` pins the new value.
 Batches 2 and 3 are bound to it. Batch 3 against batch 1's freeze needs `-AllowGraderChange`, as before. The batch of 15 November ran under #586's freeze (`d182c504...`), which this replaces; its six
 failures are the scenario gap and are not counted against M5a or M5b. M5a's (#586) and M5b's (#590) pull requests are rebased onto this and write their freezes again.
 
