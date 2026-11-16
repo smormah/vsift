@@ -173,6 +173,7 @@ fn render_value(
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),
         CommandName::HandoffSkeleton => handoff::skeleton(&envelope(value)?),
+        CommandName::HandoffFinish => handoff::finish(&envelope(value)?),
         CommandName::SkillInstall => skill::install(&envelope(value)?),
         CommandName::SkillStatus => skill::status(&envelope(value)?),
         CommandName::SkillShow => skill::show(&envelope(value)?),

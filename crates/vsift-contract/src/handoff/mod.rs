@@ -22,6 +22,9 @@
 //! identities against one session's records, which a host reads, and holds
 //! each stated clock time to what `VSift` returns for that item now.
 //!
+//! `handoff finish` (0.3.0, M5b) runs the same check with the session's
+//! records, then lets a host make at most one write: [`HandoffFinishRequest`].
+//!
 //! `handoff skeleton` (ADR 0038) uses the same checker the other way round:
 //! [`HandoffChecker::skeleton`] writes a valid handoff that states nothing
 //! yet, so an agent never builds the JSON from a text template.
@@ -34,6 +37,7 @@
 mod block;
 mod budget;
 mod case;
+mod finish;
 mod report_text;
 mod rule;
 mod rules;
@@ -48,6 +52,10 @@ pub use budget::{
     COMPACT_BUDGET, HandoffBudgetLimits, READ_THROUGH_BUDGET, STANDARD_BUDGET, budget_profile,
 };
 pub use case::{HandoffVocabulary, handoff_vocabulary};
+pub use finish::{
+    HandoffFinishData, HandoffFinishDecision, HandoffFinishLifecycle, HandoffFinishRequest,
+    HandoffFinishStop, HandoffLifecycleAction,
+};
 pub use rule::{HandoffFinding, HandoffRule, HandoffRuleScope};
 pub use rules::{MAX_RESUME_CARD_BYTES, handoff_is_cut_short};
 pub use schema::HandoffSchemaError;

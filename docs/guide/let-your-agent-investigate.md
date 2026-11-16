@@ -122,6 +122,12 @@ the command exits with status 0 even for a draft that is not valid: **read the v
 `handoff check` looks at the report's form and that its ids exist. It does not look at the video, so it cannot
 tell you the assistant read a frame correctly.
 
+**With the skill, the assistant finishes with `vsift handoff finish <session>`** (0.3.0): the same check, with
+every cited id looked up in the session, and then, only if the report passes, the one thing you asked for the
+session: `--retain <new-folder>` keeps it in a new folder you named (already validated), `--close` closes it,
+neither leaves it to expire. A report that does not pass keeps nothing and closes nothing; the first line of the
+output says "Not retained" or "Not closed" and why, and the exit status is still 0, so read `finished`.
+
 ## 7. Without the skill
 
 An assistant that has no skill can still use VSift from its own help: `vsift --help` (not the shorter `-h`) ends with

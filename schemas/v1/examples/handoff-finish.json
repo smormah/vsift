@@ -1,0 +1,49 @@
+{
+  "command": "handoff.finish",
+  "coverage": null,
+  "data": {
+    "bundle_validated": true,
+    "check": {
+      "case_notes": [],
+      "errors": [],
+      "handoff_version": "1",
+      "session": {
+        "gap": null,
+        "identities_checked": 2,
+        "resolved": true,
+        "session_id": "ses_0123456789abcdef0123456789abcdef"
+      },
+      "truncated": false,
+      "valid": true,
+      "warnings": []
+    },
+    "close": null,
+    "finished": true,
+    "lifecycle": {
+      "agrees": true,
+      "requested": "retained",
+      "stated": "retained"
+    },
+    "requested": "retain",
+    "retain": {
+      "artifact_bytes": 262144,
+      "artifact_count": 4,
+      "publication": "process_crash_consistent",
+      "reextraction_requires_matching_original": true,
+      "session_id": "ses_0123456789abcdef0123456789abcdef",
+      "source_bytes": 1048576,
+      "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "source_included": false
+    },
+    "stopped_at": null
+  },
+  "error": null,
+  "lifecycle": {
+    "expires_at": null,
+    "mode": "retained"
+  },
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

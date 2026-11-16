@@ -47,6 +47,7 @@ The `error.code` of a failed result is one of these (the schema's own list). Wha
 - [frame-evidence.schema.json](#frame-evidenceschemajson): VSift frame evidence record v1
 - [frame-stream-data.schema.json](#frame-stream-dataschemajson): VSift frame and crop JSON Lines terminal data v1
 - [handoff-check-data.schema.json](#handoff-check-dataschemajson): VSift handoff.check data v1
+- [handoff-finish-data.schema.json](#handoff-finish-dataschemajson): VSift handoff.finish data v1
 - [handoff-skeleton-data.schema.json](#handoff-skeleton-dataschemajson): VSift handoff.skeleton data v1
 - [ingest-data.schema.json](#ingest-dataschemajson): VSift ingest data v1
 - [job-batch-data.schema.json](#job-batch-dataschemajson): VSift job.batch data v1
@@ -1178,6 +1179,44 @@ The data member of a complete handoff.check result (P13 PR 5, issue #213, ADR 00
 | `session.identities_checked` | integer | yes | at least 0 |
 
 This schema also holds 4 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/handoff-check-data.schema.json) for them.
+
+### handoff-finish-data.schema.json
+
+**VSift handoff.finish data v1** ([the schema](../../../schemas/v1/handoff-finish-data.schema.json))
+
+The data member of a complete handoff.finish result (0.3.0, M5b; ADR 0023 note of 2026-11-09). vsift handoff finish <session> reads a draft report exactly as handoff check does, checks it with the session's committed records always resolved (check is the handoff.check data, with session never null), and then, only when the draft has no error and, for a write, its lifecycle.action states that write, makes at most one write: --retain <new-directory> retains the session as session retain does (ADR 0013; the bundle is revalidated before success, so bundle_validated is true and no bundle validate is needed), --close closes it as session close does. requested names the write asked for (check when none). finished is true exactly when every requested step was done; stopped_at says why a request stopped before any write: draft (check.errors is not empty) or lifecycle (the draft's lifecycle.action is not the requested write's; lifecycle says both). A stop writes nothing and is still complete with exit 0, so a script tests finished, not the exit status, before relying on a write. A write that fails is not a complete result: the command fails with that write's own code and exit, as the standalone command would, and a session that is closed, expired or not found with a write requested is such a failure. Without a write, a session that cannot be read is check.session.gap, as for handoff check --session. lifecycle.stated and lifecycle.requested are closed words only, never draft text.
+
+| Member | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `finished` | boolean | yes |  |
+| `stopped_at` | null \| "draft" \| "lifecycle" | yes |  |
+| `requested` | "check" \| "retain" \| "close" | yes |  |
+| `check` | object, see [handoff-check-data.schema.json](#handoff-check-dataschemajson) | yes |  |
+| `lifecycle` | object | yes |  |
+| `lifecycle.stated` | null \| "left_open" \| "closed" \| "retained" \| "not_opened" \| "expired" | yes |  |
+| `lifecycle.requested` | null \| "retained" \| "closed" | yes |  |
+| `lifecycle.agrees` | boolean | yes | False only when a write was requested and the draft does not state its action. |
+| `retain` | object or null | yes | session retain's data: the retained bundle as its revalidation read it; null when nothing was retained. |
+| `retain.session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `retain.source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `retain.source_bytes` | integer | yes | at least 0 |
+| `retain.source_included` | boolean | yes |  |
+| `retain.artifact_count` | integer | yes | at least 0 |
+| `retain.artifact_bytes` | integer | yes | at least 0 |
+| `retain.reextraction_requires_matching_original` | boolean | yes |  |
+| `retain.publication` | constant "process_crash_consistent" | yes |  |
+| `bundle_validated` | boolean | yes |  |
+| `close` | object or null | yes | session close's data: the session's committed status after the close; null when nothing was closed. |
+| `close.session_id` | string | yes | pattern `^ses_[a-z0-9]{16,64}$` |
+| `close.state` | "initializing" \| "open" \| "expired" \| "closed" \| "unavailable" | yes |  |
+| `close.source_id` | string | yes | pattern `^src_sha256_[0-9a-f]{64}$` |
+| `close.source_bytes` | integer | yes | at least 0 |
+| `close.artifact_count` | integer | yes | at least 0 |
+| `close.artifact_bytes` | integer | yes | at least 0 |
+| `close.generation` | integer | yes | at least 0 |
+| `close.expires_at` | string | yes |  |
+
+This schema also holds 7 conditional rules (a member that is required, or fixed, when another has a given value); read [the schema](../../../schemas/v1/handoff-finish-data.schema.json) for them.
 
 ### handoff-skeleton-data.schema.json
 

@@ -134,3 +134,13 @@ through the same `retain_bundle` as `session retain`, into a new subfolder the a
 destination is created exclusively and owner-private, the manifest is written last, the bundle is revalidated, and VSift
 never deletes what an interrupted or failed export leaves. Typing `--keep` is the explicit intent. The source is not
 included.
+
+## 2026-11-09 note: a bundle can come from `handoff finish` (0.3.0, M5b)
+
+`vsift handoff finish <session> --retain <new-directory>` ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md),
+note of 2026-11-09) writes a bundle through the same `retain_bundle` as `session retain`. Everything above holds: the
+destination is new, created exclusively and owner-private, the manifest is written last, and VSift never deletes what
+an interrupted or failed export leaves. Typing `--retain` with the folder is the explicit intent; without it the
+command never retains. The revalidation before success is the bundle validation, so the result states
+`bundle_validated` and no second `bundle validate` is needed. A draft that fails the check, or whose
+`lifecycle.action` is not `retained`, retains nothing.

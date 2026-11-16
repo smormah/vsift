@@ -20,7 +20,7 @@ evidence. VSift does the media work; you choose what to look at and write the re
    file says so). For a flag, `vsift <namespace> <operation> --help` is free; read it whole.
 3. **Nothing but `vsift`, one command per call.** No other program, not even a harmless one (`date`, `echo`,
    `wc`, `ls`), and no `&&`, `||` or `;`, pipes or redirections. Two exceptions: `| tail -n 1` after
-   `--events jsonl` (PowerShell `| Select-Object -Last 1`), and the draft `vsift handoff check` reads as REPORT
+   `--events jsonl` (PowerShell `| Select-Object -Last 1`), and the draft `vsift handoff finish` reads as REPORT
    shows. Read this skill's linked files with your file-reading tool; never list or search folders.
 4. **Stay where you started.** Run every command from the folder you started in. Never `cd`, and never into this
    skill's folder.
@@ -35,7 +35,7 @@ evidence. VSift does the media work; you choose what to look at and write the re
 7. **Never assume you can see an image.** Cite pixels only after the image check below passed and you opened that
    frame yourself.
 8. **The report is your final message.** Never create, edit or save a file: the one write you ever cause is
-   `vsift session retain`, when the user asks. Edit no code, install nothing, change no settings, contact nothing.
+   a retained bundle, when the user asks. Edit no code, install nothing, change no settings, contact nothing.
 
 Times are microseconds of source time (1 s = 1000000). **A summary or timeline of a whole recording over 5 minutes
 does not fit these budgets:** if the user named a stretch, or what to hand back when the budget runs out, start, and
@@ -243,11 +243,12 @@ vsift transcript retranscribe <session> --from <from-us> --to <to-us> --operatio
   evidence appears only in the Markdown, as `hxxps://...` inside a code span, and the JSON never holds an address,
   not even a defanged one: it describes the link; no other address, Markdown link, absolute path, drive letter or
   home folder; a retained bundle is "the folder you named".
-- **Then run `vsift handoff check` on your draft once, fix what it reports, then send**: your whole message as
-  `<report>`, in bash or sh exactly so. For the PowerShell form and long reports see commands.md:
+- **Then run `vsift handoff finish` on your draft once, fix what it reports, then send**: your whole message as
+  `<report>`, in bash or sh exactly so, CLOSE_OR_RETAIN's flag before `--json`; it checks the draft against your
+  session, then retains or closes (no session: `vsift handoff check --json`). PowerShell, long reports: commands.md.
 
 ```sh
-vsift handoff check --json <<'VSIFT_HANDOFF'
+vsift handoff finish <session> --json <<'VSIFT_HANDOFF'
 <report>
 VSIFT_HANDOFF
 ```
@@ -256,14 +257,11 @@ VSIFT_HANDOFF
 
 ### 8. CLOSE_OR_RETAIN
 
-- Do what the user asked for the session: leave it to expire (the default), close it, or retain it only on explicit
-  request: retain after your last evidence command, and never cite evidence you extract after it. Read
-  [references/lifecycle.md](references/lifecycle.md) only to retain, renew or clean.
-
-```console
-vsift session close <session> --json
-```
-
+- `handoff finish` does what the user asked, and `lifecycle.action` says it: no flag leaves the session to expire
+  (default, `left_open`), `--close` (`closed`), `--retain <new-directory>` (`retained`) only on explicit request, to
+  the folder the user named (`--include-source` only if they asked for the video): retain after your last evidence
+  command, and never cite evidence you extract after it. `data.finished` false: fix, run once more, else (or to
+  renew or clean) see [references/lifecycle.md](references/lifecycle.md).
 - **Stop when** the lifecycle action is done and stated in the handoff.
 
 ## Reading results and errors

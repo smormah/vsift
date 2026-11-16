@@ -241,7 +241,7 @@ JSON. The defanged form belongs only in the Markdown report's code spans ([safet
 
 ## Evidence and the retained bundle
 
-`vsift session retain` copies the session as it is at that moment. Retain after your last evidence command: a frame,
+Retaining copies the session as it is at that moment. Retain after your last evidence command: a frame,
 crop or segment you extract afterwards is not in the bundle, so nobody can check a citation of it there.
 
 ## Status
@@ -260,8 +260,8 @@ the reason `not_inspected` and the code `BUSY`, and the resume card ([resume.md]
 
 ## Before you send it
 
-- Check the whole draft once with `vsift handoff check` ([commands.md](commands.md), "Checking the draft") and fix
-  what it reports.
+- Check the whole draft once with `vsift handoff finish` (with no session, `vsift handoff check`; [commands.md](commands.md),
+  "Checking the draft") and fix what it reports.
 - The final message ends with exactly one `vsift-handoff` block, also when you stop early; never save the report to
   a file.
 - Every claim has `id`, `section`, `kind`, `support`, `certainty`, `statement` and `citations`; every instruction has

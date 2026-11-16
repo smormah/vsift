@@ -63,7 +63,7 @@ pub(crate) fn session_lifecycle(
     })
 }
 
-fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
+pub(crate) fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
     Ok(StatusData {
         session_id: snapshot.session_id().as_str().to_owned(),
         state: SessionState::observed(
@@ -128,7 +128,7 @@ fn session_status_response(
     Ok(response(CommandName::SessionStatus, &data)?.with_lifecycle(lifecycle))
 }
 
-fn bundle_data(bundle: &BundleSummary) -> BundleData {
+pub(crate) fn bundle_data(bundle: &BundleSummary) -> BundleData {
     let source = match bundle.source_retention() {
         SourceRetention::EvidenceOnly => BundleSourceInclusion::EvidenceOnly,
         SourceRetention::IncludeSource => BundleSourceInclusion::SourceIncluded,
