@@ -258,6 +258,22 @@ that fails without it. Protocol 1 has not shipped, so it is changed in place, no
   managed store keeps a component's files; every basename is unique. The digests are of the files
   the run loads, in either layout.
 
+## Note of 2026-11-18: the runtime comes from Microsoft's NuGet package (decision 1; L-254)
+
+Microsoft's GitHub release archives of ONNX Runtime 1.31.0, which the runner's stage tool pinned,
+began to answer 404 on 2026-11-18, the repository with them, and no official address serves them.
+The planner ruled for Microsoft's own package of the same release commit: `Microsoft.ML.OnnxRuntime`
+1.31.0 at nuget.org (MIT). `tools/p16_ocr_runner.py` pins the package by size and SHA-256, holds it to
+the SHA-512 nuget.org publishes, and pins each library and licence member it takes; a hosted job
+runs `dotnet nuget verify --all` on it (Microsoft's author signature, NuGet.org's repository
+signature). The decision is otherwise unchanged: the same version, the same runner, the same
+models. Its Linux and Windows libraries are byte for byte the archives'; its macOS library is a
+different file of the same release, whose digest `KNOWN_RUNTIMES` names as 1.31.0 beside the
+archive's. The parity and labels were measured again on all three systems (hosted `P16 OCR runner`, run
+44370591117) and equal the recorded figures exactly: 99.3 to 99.7% text agreement on the synthetic
+lines, 93.1, 88.6 and 90.4% on RM01, RM04 and RM10, the labels 30/34, 18/20 and 25/29, and Windows
+and macOS identical to Linux ([L-254](../planning/known-limits.md#l-254)).
+
 ## Consequences
 
 - An agent can find what was shown as it finds what was said, and cite the exact frame, time and

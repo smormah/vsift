@@ -152,12 +152,20 @@ impl Inference for OnnxSession {
 }
 
 /// The ONNX Runtime libraries the runner is released with, by the SHA-256 of
-/// the library file and the version Microsoft's archive names. The runtime's
-/// own build information names no release (`git-branch=HEAD` in 1.31.0), and its
-/// version string is reached only through the C API's raw calls, so the runner
-/// names the library by its bytes: a pinned library is its version; any other is
-/// `sha256-` and the first 16 hexadecimal digits of its digest, so a different
-/// library is always a different engine build and never claims a version.
+/// the library file and the version Microsoft's release names. Microsoft's GitHub
+/// release archives went away on 2026-11-18; the libraries are now taken from its
+/// `Microsoft.ML.OnnxRuntime` 1.31.0 package at nuget.org (hosted run of `P16 OCR
+/// runner`, the package's SHA-512 equal to the one nuget.org publishes, author and
+/// repository signatures verified). Its Linux and Windows libraries are byte for
+/// byte the archives' (the first and third entries); its macOS library is a
+/// different file of the same release (the last entry), and the archive's digest
+/// stays for a runner already built with it.
+///
+/// The runtime's own build information names no release (`git-branch=HEAD` in
+/// 1.31.0), and its version string is reached only through the C API's raw calls,
+/// so the runner names the library by its bytes: a pinned library is its version;
+/// any other is `sha256-` and the first 16 hexadecimal digits of its digest, so a
+/// different library is always a different engine build and never claims a version.
 pub const KNOWN_RUNTIMES: &[(&str, &str)] = &[
     // onnxruntime-linux-x64-1.31.0.tgz, lib/libonnxruntime.so.1.31.0 (hosted
     // staging of `P16 OCR runner`, run 39597504891).
@@ -173,6 +181,11 @@ pub const KNOWN_RUNTIMES: &[(&str, &str)] = &[
     // onnxruntime-win-x64-1.31.0.zip, lib/onnxruntime.dll (run 39598128889).
     (
         "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c",
+        "1.31.0",
+    ),
+    // Microsoft.ML.OnnxRuntime 1.31.0 (nuget.org), runtimes/osx-arm64/native/libonnxruntime.dylib.
+    (
+        "83973572676032b4ba9418afed0b51f45599d35bb4e4628ca8ae1954c8362e31",
         "1.31.0",
     ),
 ];
@@ -200,6 +213,11 @@ mod tests {
     fn a_pinned_library_is_its_version_and_any_other_is_named_by_its_digest() {
         assert_eq!(
             runtime_version_of("469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e"),
+            "1.31.0"
+        );
+        // The NuGet package's macOS library, as `P16 OCR runner`'s hosted fetch measured it.
+        assert_eq!(
+            runtime_version_of("83973572676032b4ba9418afed0b51f45599d35bb4e4628ca8ae1954c8362e31"),
             "1.31.0"
         );
         assert_eq!(
