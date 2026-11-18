@@ -1045,8 +1045,10 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
-            // #370: follow the transcription, then ask again.
-            EngineError::TranscriptionRunning { job, .. } => {
+            // #370: follow the transcription, then ask again; ADR 0031 note of
+            // 2026-11-18: follow the job until the revision to label is sealed.
+            EngineError::TranscriptionRunning { job, .. }
+            | EngineError::SpeakersRevisionOpen { job, .. } => {
                 vec![
                     "job".to_owned(),
                     "status".to_owned(),
@@ -1072,14 +1074,6 @@ impl From<EngineError> for CommandFailure {
                 vec![
                     "job".to_owned(),
                     "cancel".to_owned(),
-                    job.as_str().to_owned(),
-                ]
-            }
-            // ADR 0031 note of 2026-11-18: follow the job until the revision is sealed.
-            EngineError::SpeakersRevisionOpen { job, .. } => {
-                vec![
-                    "job".to_owned(),
-                    "status".to_owned(),
                     job.as_str().to_owned(),
                 ]
             }
