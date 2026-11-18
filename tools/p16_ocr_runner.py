@@ -79,14 +79,27 @@ RUNTIME_PACKAGE = {
     "registration": f"https://api.nuget.org/v3/registration5-gz-semver2/microsoft.ml.onnxruntime/{RUNTIME_VERSION}.json",
     "bytes": 159_626_085,
     "max_bytes": 159_626_085,
-    "sha256": "PIN-SHA256-OF-THE-PACKAGE",
+    "sha256": "7e35fdb4f5adb62f01e60798e2e5ed05108f5fbbe1cca03fbcc37903cf7c5e3b",
     "sha512": "27b6ab4e7fbb9eb59d67e3c5d9297d68d5b5fc16b90c2b75cb0677af99772caab38f7c3ca02ec297fb9a806dd7a758afb98258400312b9ec3479fffbe1fed70b",
 }
 # `member` is the library's path in the package and `library` the name it is staged under,
 # the one the runner loads (`crates/vsift-ocr-runner/src/cli.rs`, RUNTIME_LIBRARY).
-RUNTIMES: dict[str, dict] = {}
+RUNTIMES = {
+    "linux-x64": {"member": "runtimes/linux-x64/native/libonnxruntime.so", "bytes": 29_345_384,
+                  "sha256": "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
+                  "library": f"libonnxruntime.so.{RUNTIME_VERSION}"},
+    "osx-arm64": {"member": "runtimes/osx-arm64/native/libonnxruntime.dylib", "bytes": 44_830_288,
+                  "sha256": "83973572676032b4ba9418afed0b51f45599d35bb4e4628ca8ae1954c8362e31",
+                  "library": f"libonnxruntime.{RUNTIME_VERSION}.dylib"},
+    "win-x64": {"member": "runtimes/win-x64/native/onnxruntime.dll", "bytes": 17_253_176,
+                "sha256": "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c",
+                "library": "onnxruntime.dll"},
+}
 # The licence files at the package's top, pinned as the libraries are.
-RUNTIME_LICENCES: dict[str, tuple[int, str]] = {}
+RUNTIME_LICENCES = {
+    "LICENSE": (1_094, "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674"),
+    "ThirdPartyNotices.txt": (344_457, "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622"),
+}
 
 # RapidOCR's ModelScope list at v3.10.0, the files the evaluation measured
 # (docs/planning/ocr-runner-build-and-catalogue.md, section 4).
