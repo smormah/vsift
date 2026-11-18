@@ -5,10 +5,13 @@ stages VSift's own OCR runner with the pinned ONNX Runtime and models, and
 measures it on frames VSift itself extracts:
 
 - `stage`: the runner folder (`vsift-ocr-runner`, `onnxruntime/`, `models/`,
-  `LICENSES/`) from the built runner, Microsoft's ONNX Runtime archive and the
-  two PP-OCRv5 models, each download held to its pinned size and SHA-256
-  before anything is kept; writes the folder's inventory (every file's size
-  and SHA-256), the data a managed catalogue entry needs.
+  `LICENSES/`) from the built runner, Microsoft's ONNX Runtime NuGet package
+  and the two PP-OCRv5 models, each download held to its pinned size and
+  SHA-256 before anything is kept; writes the folder's inventory (every file's
+  size and SHA-256), the data a managed catalogue entry needs.
+- `provenance`: fetches the ONNX Runtime package, prints its size and digests,
+  holds them to the pins and to the SHA-512 nuget.org publishes for it, and
+  keeps the file for `dotnet nuget verify` (the workflow runs that).
 - `describe`: runs the runner's `describe` and holds it to the pins.
 - `recognise`: runs the runner over the frames of `p16_ocr_evaluation.py
   extract`, in the evaluation's reading format (`ocr-vsift-ocr-runner.jsonl`).
@@ -27,6 +30,8 @@ the runner: the report keeps numbers and which interface labels were found.
 from __future__ import annotations
 
 import argparse
+import base64
+import gzip
 import hashlib
 import io
 import json
@@ -35,8 +40,10 @@ from pathlib import Path
 import statistics
 import subprocess
 import sys
-import tarfile
+import stat
 import time
+import urllib.parse
+import urllib.request
 import zipfile
 from dataclasses import dataclass
 from typing import Callable, Sequence
@@ -49,28 +56,37 @@ RUNNER_NAME = "vsift-ocr-runner"
 ENGINE_NAME = "vsift-ocr-runner"
 REFERENCE_ENGINE = "ppocr-v5-mobile-latin"
 RUNTIME_VERSION = "1.31.0"
-RUNTIME_RELEASE = f"https://github.com/microsoft/onnxruntime/releases/download/v{RUNTIME_VERSION}"
 MAX_RUNTIME_ARCHIVE_BYTES = 128 * 1024 * 1024
 MAX_MODEL_BYTES = 64 * 1024 * 1024
 MAX_MEMBER_BYTES = 256 * 1024 * 1024
+MAX_METADATA_BYTES = 1024 * 1024
 IMAGES_PER_RUN = 8
 RUN_TIMEOUT_S = 600
 
-# Microsoft's 1.31.0 archives, by GitHub's asset digest. `library` is the file
-# the runner loads (`crates/vsift-ocr-runner/src/onnx.rs`, RUNTIME_LIBRARY);
-# `stage` lists the archive's `lib` folder when the member is not where pinned.
-RUNTIMES = {
-    "linux-x64": {"asset": f"onnxruntime-linux-x64-{RUNTIME_VERSION}.tgz", "bytes": 11_408_003,
-                  "sha256": "cc5c72baf5ae5c8238a6841f0897227be2d02826b9cf98eaf02fdefaeeb03a57",
-                  "library": f"libonnxruntime.so.{RUNTIME_VERSION}"},
-    "osx-arm64": {"asset": f"onnxruntime-osx-arm64-{RUNTIME_VERSION}.tgz", "bytes": 36_549_009,
-                  "sha256": "1031b36dd3bdaa8d976a6130d9cf2a05e9be320b93ae804f8427b91dc3432afc",
-                  "library": f"libonnxruntime.{RUNTIME_VERSION}.dylib"},
-    "win-x64": {"asset": f"onnxruntime-win-x64-{RUNTIME_VERSION}.zip", "bytes": 82_887_349,
-                "sha256": "3958d8a44984160692c1b4ffd0de3cb48f8c39f9d34bb31e433db06e30b82195",
-                "library": "onnxruntime.dll"},
+# Microsoft's ONNX Runtime 1.31.0 as nuget.org serves it (`Microsoft.ML.OnnxRuntime`, MIT,
+# built from release commit 402979ac1bef89dcd55add41eaa7277c407599eb). The release
+# archives this tool first pinned, at github.com/microsoft/onnxruntime, answered 404
+# from 2026-11-18 with no redirect and no new home (docs/planning/known-limits.md, L-254).
+# One package carries every platform's library. `sha512` is the value nuget.org publishes
+# for it (its catalogue entry's `packageHash`); `sha256` is the one this tool computes.
+# `max_bytes` is this one package's own allowance: any source without one keeps
+# MAX_RUNTIME_ARCHIVE_BYTES, so a larger archive is refused unless it is pinned like this.
+NUGET_HOST = "nuget.org"
+RUNTIME_PACKAGE = {
+    "asset": f"microsoft.ml.onnxruntime.{RUNTIME_VERSION}.nupkg",
+    "url": f"https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/{RUNTIME_VERSION}/"
+           f"microsoft.ml.onnxruntime.{RUNTIME_VERSION}.nupkg",
+    "registration": f"https://api.nuget.org/v3/registration5-gz-semver2/microsoft.ml.onnxruntime/{RUNTIME_VERSION}.json",
+    "bytes": 159_626_085,
+    "max_bytes": 159_626_085,
+    "sha256": "PIN-SHA256-OF-THE-PACKAGE",
+    "sha512": "27b6ab4e7fbb9eb59d67e3c5d9297d68d5b5fc16b90c2b75cb0677af99772caab38f7c3ca02ec297fb9a806dd7a758afb98258400312b9ec3479fffbe1fed70b",
 }
-RUNTIME_LICENCES = ("LICENSE", "ThirdPartyNotices.txt")
+# `member` is the library's path in the package and `library` the name it is staged under,
+# the one the runner loads (`crates/vsift-ocr-runner/src/cli.rs`, RUNTIME_LIBRARY).
+RUNTIMES: dict[str, dict] = {}
+# The licence files at the package's top, pinned as the libraries are.
+RUNTIME_LICENCES: dict[str, tuple[int, str]] = {}
 
 # RapidOCR's ModelScope list at v3.10.0, the files the evaluation measured
 # (docs/planning/ocr-runner-build-and-catalogue.md, section 4).
@@ -107,70 +123,111 @@ def sha256_bytes(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def sha512_bytes(content: bytes) -> str:
+    return hashlib.sha512(content).hexdigest()
+
+
 def checked_download(url: str, size: int, digest: str, limit: int,
-                     get: Callable[[str, int], bytes]) -> bytes:
-    """The body of `url`, refused unless it is exactly `size` bytes with SHA-256 `digest`."""
+                     get: Callable[[str, int], bytes], sha512: str | None = None) -> bytes:
+    """The body of `url`, refused unless it is exactly `size` bytes with SHA-256 `digest` (and SHA-512 `sha512`)."""
     content = get(url, limit)
-    if len(content) != size or sha256_bytes(content) != digest:
+    if len(content) != size or sha256_bytes(content) != digest or (sha512 is not None and sha512_bytes(content) != sha512):
         raise RunnerCheckError(f"{url.rsplit('/', 1)[-1]} differs from its pin")
     return content
 
 
-def archive_lib_listing(content: bytes, asset: str) -> list[tuple[str, int, str]]:
-    """Every entry of the archive's `lib` folder: name, size (0 for a link) and its kind."""
+def archive_limit(source: dict) -> int:
+    """The most bytes a runtime source may be: the general cap, or the source's own pinned allowance.
+
+    An allowance applies only when it is exactly the pinned size, so it can never
+    be wider than the one file it was granted for.
+    """
+    if source["bytes"] <= MAX_RUNTIME_ARCHIVE_BYTES:
+        return MAX_RUNTIME_ARCHIVE_BYTES
+    if source.get("max_bytes") != source["bytes"]:
+        raise RunnerCheckError(f"{source['asset']} is over the {MAX_RUNTIME_ARCHIVE_BYTES}-byte cap without its own pinned allowance")
+    return source["max_bytes"]
+
+
+def is_nuget_host(host: str | None) -> bool:
+    return host == NUGET_HOST or (host or "").endswith("." + NUGET_HOST)
+
+
+def nuget_get(url: str, limit: int) -> bytes:
+    """The body of an HTTPS GET from nuget.org, refused past `limit` bytes; a redirect must stay on nuget.org's hosts."""
+    from p06_windows_candidate_smoke import HttpsRedirectsOnly  # noqa: PLC0415 - only the hosted runs fetch
+
+    class NugetRedirectsOnly(HttpsRedirectsOnly):
+        def redirect_request(self, request, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+            if not is_nuget_host(urllib.parse.urlparse(newurl).hostname):
+                raise RunnerCheckError("a download redirected outside nuget.org")
+            return super().redirect_request(request, fp, code, msg, headers, newurl)
+
+    if not url.startswith("https://") or not is_nuget_host(urllib.parse.urlparse(url).hostname):
+        raise RunnerCheckError("only nuget.org HTTPS addresses are fetched here")
+    opener = urllib.request.build_opener(NugetRedirectsOnly())
+    request = urllib.request.Request(url, headers={"User-Agent": "vsift-p16-ocr-runner/1"})
+    with opener.open(request, timeout=300) as response:
+        final = urllib.parse.urlparse(response.geturl())
+        if final.scheme != "https" or not is_nuget_host(final.hostname):
+            raise RunnerCheckError("the download ended outside nuget.org")
+        body = response.read(limit + 1)
+    if len(body) > limit:
+        raise RunnerCheckError("the download exceeds its bound")
+    return body
+
+
+def fetch_runtime_package(get: Callable[[str, int], bytes]) -> bytes:
+    """The pinned ONNX Runtime package: its pinned size, SHA-256 and SHA-512, within its own allowance."""
+    pin = RUNTIME_PACKAGE
+    return checked_download(pin["url"], pin["bytes"], pin["sha256"], archive_limit(pin), get, sha512=pin["sha512"])
+
+
+def is_zip_link(info: zipfile.ZipInfo) -> bool:
+    """Whether the entry's Unix mode (when it carries one) says symbolic link."""
+    return stat.S_ISLNK(info.external_attr >> 16)
+
+
+def package_listing(content: bytes, platform: str) -> list[tuple[str, int, str]]:
+    """Every entry of the package under `runtimes/<platform>/native/`: name, size and its kind."""
+    prefix = f"runtimes/{platform}/native/"
     listing = []
-    if asset.endswith(".zip"):
-        with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            for info in archive.infolist():
-                if "/lib/" in info.filename:
-                    listing.append((info.filename, info.file_size, "dir" if info.is_dir() else "file"))
-    else:
-        with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as archive:
-            for member in archive.getmembers():
-                if "/lib/" in member.name:
-                    kind = "file" if member.isfile() else "link" if member.issym() or member.islnk() else "other"
-                    listing.append((member.name, member.size if member.isfile() else 0, kind))
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        for info in archive.infolist():
+            if info.filename.startswith(prefix):
+                kind = "dir" if info.is_dir() else "link" if is_zip_link(info) else "file"
+                listing.append((info.filename, info.file_size, kind))
     return sorted(listing)
 
 
-def archive_member(content: bytes, asset: str, name: str, limit: int = MAX_MEMBER_BYTES) -> bytes:
-    """One regular file of the archive, by its exact name; a link, a folder or a missing name is refused.
+def archive_member(content: bytes, name: str, limit: int = MAX_MEMBER_BYTES) -> bytes:
+    """One regular file of the zip package, by its exact name; a link, a folder, a duplicate or a missing name is refused.
 
     Nothing is extracted to disk by the archive library: the member's bytes are
     read and written by the caller, so no archive path decides where a file goes.
     """
-    if asset.endswith(".zip"):
-        with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            try:
-                info = archive.getinfo(name)
-            except KeyError as error:
-                raise RunnerCheckError(f"{asset} has no {name}") from error
-            if info.is_dir() or info.file_size > limit:
-                raise RunnerCheckError(f"{asset}'s {name} is not a bounded regular file")
-            with archive.open(info) as handle:
-                data = handle.read(limit + 1)
-    else:
-        with tarfile.open(fileobj=io.BytesIO(content), mode="r:gz") as archive:
-            # macOS's archive names its members `./<root>/...`, Linux's `<root>/...`.
-            names = set(archive.getnames())
-            found = next((candidate for candidate in (name, f"./{name}") if candidate in names), None)
-            if found is None:
-                raise RunnerCheckError(f"{asset} has no {name}")
-            member = archive.getmember(found)
-            if not member.isfile() or member.size > limit:
-                raise RunnerCheckError(f"{asset}'s {name} is not a bounded regular file")
-            handle = archive.extractfile(member)
-            if handle is None:
-                raise RunnerCheckError(f"{asset}'s {name} cannot be read")
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        if archive.namelist().count(name) > 1:
+            raise RunnerCheckError(f"the package names {name} more than once")
+        try:
+            info = archive.getinfo(name)
+        except KeyError as error:
+            raise RunnerCheckError(f"the package has no {name}") from error
+        if info.is_dir() or is_zip_link(info) or info.file_size > limit:
+            raise RunnerCheckError(f"the package's {name} is not a bounded regular file")
+        with archive.open(info) as handle:
             data = handle.read(limit + 1)
-    if len(data) > limit:
-        raise RunnerCheckError(f"{asset}'s {name} exceeds its bound")
+    if len(data) > limit or len(data) != info.file_size:
+        raise RunnerCheckError(f"the package's {name} is not its declared size or exceeds its bound")
     return data
 
 
-def runtime_root(asset: str) -> str:
-    """The archive's top folder: its asset name without the extension."""
-    return asset.removesuffix(".tgz").removesuffix(".zip")
+def checked_member(content: bytes, name: str, size: int, digest: str) -> bytes:
+    """A member of the package, refused unless it is exactly `size` bytes with SHA-256 `digest`."""
+    data = archive_member(content, name, limit=size)
+    if len(data) != size or sha256_bytes(data) != digest:
+        raise RunnerCheckError(f"{name} differs from its pin")
+    return data
 
 
 def write_new(path: Path, content: bytes, executable: bool = False) -> None:
@@ -181,34 +238,82 @@ def write_new(path: Path, content: bytes, executable: bool = False) -> None:
         path.chmod(0o755)
 
 
-def stage(out: Path, runner: Path, platform: str, get: Callable[[str, int], bytes]) -> dict:
-    """The runner folder in `out`, and its inventory: every file's path, size and SHA-256."""
+def stage(out: Path, runner: Path, platform: str, get: Callable[[str, int], bytes],
+          model_get: Callable[[str, int], bytes] | None = None) -> dict:
+    """The runner folder in `out`, and its inventory: every file's path, size and SHA-256.
+
+    `get` fetches the runtime package (nuget.org only), `model_get` the models
+    (any HTTPS host); a test passes one fake for both.
+    """
     if platform not in RUNTIMES:
         raise RunnerCheckError(f"unknown platform {platform}")
     pin = RUNTIMES[platform]
     out.mkdir(parents=True, exist_ok=False)
     executable = RUNNER_NAME + (".exe" if platform.startswith("win") else "")
     write_new(out / executable, runner.read_bytes(), executable=True)
-    archive = checked_download(f"{RUNTIME_RELEASE}/{pin['asset']}", pin["bytes"], pin["sha256"],
-                               MAX_RUNTIME_ARCHIVE_BYTES, get)
-    root = runtime_root(pin["asset"])
-    listing = archive_lib_listing(archive, pin["asset"])
+    package = fetch_runtime_package(get)
+    listing = package_listing(package, platform)
     try:
-        library = archive_member(archive, pin["asset"], f"{root}/lib/{pin['library']}")
+        library = checked_member(package, pin["member"], pin["bytes"], pin["sha256"])
     except RunnerCheckError as error:
         shown = ", ".join(f"{name} ({kind}, {size} bytes)" for name, size, kind in listing)
-        raise RunnerCheckError(f"{error}; its lib folder holds: {shown}") from error
+        raise RunnerCheckError(f"{error}; its native folder holds: {shown}") from error
     write_new(out / "onnxruntime" / pin["library"], library)
-    for licence in RUNTIME_LICENCES:
-        write_new(out / "LICENSES" / f"onnxruntime-{licence}", archive_member(archive, pin["asset"], f"{root}/{licence}"))
+    for licence, (size, digest) in RUNTIME_LICENCES.items():
+        write_new(out / "LICENSES" / f"onnxruntime-{licence}", checked_member(package, licence, size, digest))
     for name, (url, size, digest) in MODELS.items():
-        write_new(out / "models" / name, checked_download(url, size, digest, MAX_MODEL_BYTES, get))
+        write_new(out / "models" / name, checked_download(url, size, digest, MAX_MODEL_BYTES, model_get or get))
     write_new(out / "LICENSES" / "models-NOTICE.txt", MODELS_NOTICE.encode("utf-8"))
     files = []
     for path in sorted(item for item in out.rglob("*") if item.is_file()):
         files.append({"path": path.relative_to(out).as_posix(), "bytes": path.stat().st_size,
                       "sha256": evaluation.sha256_of(path)})
-    return {"platform": platform, "runtime_asset": pin["asset"], "runtime_lib_listing": listing, "files": files}
+    return {"platform": platform, "runtime_asset": RUNTIME_PACKAGE["asset"], "runtime_member": pin["member"],
+            "runtime_native_listing": listing, "files": files}
+
+
+def published_sha512(get: Callable[[str, int], bytes]) -> str:
+    """The SHA-512 (hex) nuget.org publishes for the package: its registration leaf's catalogue entry."""
+    def document(url: str) -> dict:
+        body = get(url, MAX_METADATA_BYTES)
+        if body[:2] == b"\x1f\x8b":
+            body = gzip.decompress(body)
+        return json.loads(body)
+
+    entry = document(RUNTIME_PACKAGE["registration"]).get("catalogEntry")
+    catalogue = document(entry) if isinstance(entry, str) else entry
+    if not isinstance(catalogue, dict) or catalogue.get("packageHashAlgorithm") != "SHA512" or not catalogue.get("packageHash"):
+        raise RunnerCheckError("nuget.org's catalogue entry publishes no SHA-512 for the package")
+    return base64.b64decode(catalogue["packageHash"]).hex()
+
+
+def provenance(out: Path, get: Callable[[str, int], bytes]) -> dict:
+    """What the package is, against its pins and against nuget.org's published SHA-512.
+
+    Everything is measured and kept before any mismatch is raised, so a failing
+    run still shows the values; the package file is written for `dotnet nuget verify`.
+    """
+    pin = RUNTIME_PACKAGE
+    content = get(pin["url"], archive_limit(pin))
+    out.mkdir(parents=True, exist_ok=True)
+    (out / pin["asset"]).write_bytes(content)
+    published = published_sha512(get)
+    report: dict = {"asset": pin["asset"], "url": pin["url"], "bytes": len(content), "sha256": sha256_bytes(content),
+                    "sha512": sha512_bytes(content), "published_sha512": published, "members": []}
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        for info in archive.infolist():
+            top_level = "/" not in info.filename
+            native = info.filename.startswith("runtimes/") and "/native/" in info.filename
+            if info.is_dir() or not (top_level or native):
+                continue
+            data = archive.read(info) if info.file_size <= MAX_MEMBER_BYTES else b""
+            report["members"].append({"name": info.filename, "bytes": info.file_size,
+                                      "link": is_zip_link(info), "sha256": sha256_bytes(data)})
+    checks = (("size", report["bytes"] == pin["bytes"]), ("sha256", report["sha256"] == pin["sha256"]),
+              ("sha512 against the pin", report["sha512"] == pin["sha512"]),
+              ("sha512 against nuget.org's", report["sha512"] == published))
+    report["differs"] = [name for name, ok in checks if not ok]
+    return report
 
 
 def run_runner(executable: Path, arguments: list[str], timeout: int = RUN_TIMEOUT_S) -> tuple[int, str, float]:
@@ -574,10 +679,21 @@ def end_to_end_real(vsift: evaluation.Vsift, item: str, video: Path, runner: Pat
 # --- the command line ---------------------------------------------------------------------------
 
 def command_stage(arguments: argparse.Namespace) -> int:
-    inventory = stage(Path(arguments.out), Path(arguments.runner), arguments.platform, evaluation.bounded_https_get)
+    inventory = stage(Path(arguments.out), Path(arguments.runner), arguments.platform, nuget_get,
+                      model_get=evaluation.bounded_https_get)
     Path(arguments.inventory).write_text(json.dumps(inventory, indent=1) + "\n", encoding="utf-8")
     for entry in inventory["files"]:
         print(f"{entry['path']}: {entry['bytes']} bytes, sha256 {entry['sha256']}")
+    return 0
+
+
+def command_provenance(arguments: argparse.Namespace) -> int:
+    report = provenance(Path(arguments.out), nuget_get)
+    Path(arguments.report).write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+    print(json.dumps(report, indent=1))
+    if report["differs"]:
+        print(f"the package differs from its pins in: {', '.join(report['differs'])}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -776,6 +892,10 @@ def main(argv: Sequence[str]) -> int:
         staging.add_argument(option, required=True)
     staging.add_argument("--platform", required=True, choices=sorted(RUNTIMES))
     staging.set_defaults(handler=command_stage)
+    proving = commands.add_parser("provenance")
+    for option in ("--out", "--report"):
+        proving.add_argument(option, required=True)
+    proving.set_defaults(handler=command_provenance)
     describing = commands.add_parser("describe")
     describing.add_argument("--runner", required=True)
     describing.set_defaults(handler=command_describe)
