@@ -114,6 +114,12 @@ pub enum CommandName {
     /// `handoff finish` (0.3.0, M5b): check a draft with the session's
     /// records and, only when it passes, make at most one write.
     HandoffFinish,
+    /// `transcript speakers` (ADR 0031): label a transcript revision's segments by
+    /// voice with the speaker-diarization engine.
+    TranscriptSpeakers,
+    /// `transcript name-speaker` (ADR 0031): record or clear the user's verified name
+    /// for a speaker label.
+    TranscriptNameSpeaker,
 }
 
 impl CommandName {
@@ -122,7 +128,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 47] = [
+    pub const ALL: [Self; 49] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -170,6 +176,8 @@ impl CommandName {
         Self::Clocks,
         Self::Changes,
         Self::HandoffFinish,
+        Self::TranscriptSpeakers,
+        Self::TranscriptNameSpeaker,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -223,6 +231,8 @@ impl CommandName {
             Self::JobStart => "job.start",
             Self::Setup => "setup",
             Self::Watch => "watch",
+            Self::TranscriptSpeakers => "transcript.speakers",
+            Self::TranscriptNameSpeaker => "transcript.name-speaker",
         }
     }
 
@@ -283,6 +293,8 @@ impl CommandName {
             Self::Clocks => 44,
             Self::Changes => 45,
             Self::HandoffFinish => 46,
+            Self::TranscriptSpeakers => 47,
+            Self::TranscriptNameSpeaker => 48,
         }
     }
 }

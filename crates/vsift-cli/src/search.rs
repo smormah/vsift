@@ -10,7 +10,7 @@ use vsift::{
 use vsift_contract::{
     LifecycleResponse, OperationResponse, ResultView, ScreenTextHitPresentation,
     ScreenTextSearchPresentation, SearchEvidenceStream, SearchPresentation, bundle_search_response,
-    search_response_with_view,
+    search_response_with_speakers,
 };
 
 use crate::{
@@ -35,6 +35,7 @@ fn run(engine: &Engine, arguments: SearchArguments) -> Result<SearchResults, Com
         limit: arguments.limit,
         cursor: arguments.cursor,
         since: arguments.since,
+        speaker: arguments.speaker,
     })?)
 }
 
@@ -94,8 +95,14 @@ pub(crate) fn search(
     view: ResultView,
 ) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
     let results = run(engine, arguments)?;
-    search_response_with_view(&presentation(&results), lifecycle(&results)?, view)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    search_response_with_speakers(
+        &presentation(&results),
+        results.speakers(),
+        results.speaker_filter(),
+        lifecycle(&results)?,
+        view,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Searches retained bundles and presents one page as one result, in `view`
@@ -128,6 +135,11 @@ pub(crate) fn search_stream(
 ) -> Result<SearchEvidenceStream, CommandFailure> {
     crate::read_view::refuse_brief_stream(arguments.view)?;
     let results = run(engine, arguments)?;
-    SearchEvidenceStream::new(&presentation(&results), lifecycle(&results)?)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    SearchEvidenceStream::with_speakers(
+        &presentation(&results),
+        results.speakers(),
+        results.speaker_filter(),
+        lifecycle(&results)?,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }

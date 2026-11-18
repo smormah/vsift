@@ -1,0 +1,34 @@
+{
+  "schema_version": "1",
+  "command": "transcript.speakers",
+  "operation_id": null,
+  "status": "failed",
+  "data": null,
+  "warnings": [],
+  "error": {
+    "code": "BUSY",
+    "message": "The requested operation is temporarily busy.",
+    "retryable": true,
+    "retry_after_ms": null,
+    "affected_ids": [
+      "ses_0123456789abcdef0123456789abcdef",
+      "job_0123456789abcdef0123456789abcdef"
+    ],
+    "remediation": [
+      {
+        "summary": "This session's transcript is still growing: a transcription of it (the job in affected_ids) is publishing it, and labels made now would not cover what it has yet to publish. Nothing was committed. Run the suggested job status command, and when it reports the job ended and the transcript sealed, run the same command again.",
+        "required_authority": "none",
+        "command": {
+          "executable": "vsift",
+          "arguments": [
+            "job",
+            "status",
+            "job_0123456789abcdef0123456789abcdef"
+          ]
+        }
+      }
+    ]
+  },
+  "coverage": null,
+  "lifecycle": null
+}

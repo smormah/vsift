@@ -381,9 +381,9 @@ test('a pin is anchored at the source, and a fetch of a pinned item contacts the
   assert.deepEqual(fetching.asked, [mirror]);
 });
 
-test('the set holds at most eight approved items and 500 MB', () => {
-  const nine = Array.from({ length: 9 }, (_, n) => item({ id: `RM${String(n + 1).padStart(2, '0')}`, file_name: `RM${String(n + 1).padStart(2, '0')}-x.webm`, url: `https://archive.org/download/x/${n}.webm`, bytes: 1000 }));
-  assert.ok(media.manifestProblems(manifest(nine)).some((problem) => /9 items are approved, more than 8/.test(problem)));
+test('the set holds at most nine approved items and 500 MB', () => {
+  const ten = Array.from({ length: 10 }, (_, n) => item({ id: `RM${String(n + 1).padStart(2, '0')}`, file_name: `RM${String(n + 1).padStart(2, '0')}-x.webm`, url: `https://archive.org/download/x/${n}.webm`, bytes: 1000 }));
+  assert.ok(media.manifestProblems(manifest(ten)).some((problem) => /10 items are approved, more than 9/.test(problem)));
   const heavy = [item({ bytes: 300_000_000 }), item({ id: 'RM02', file_name: 'RM02-x.webm', url: 'https://archive.org/download/x/2.webm', bytes: 200_000_001 })];
   assert.ok(media.manifestProblems(manifest(heavy)).some((problem) => /approved items hold 500000001 bytes, more than 500000000/.test(problem)));
 });

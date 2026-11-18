@@ -23,6 +23,7 @@ mod screen_text_search;
 mod search;
 mod session;
 mod since;
+mod speakers;
 mod storage;
 mod transcript;
 mod verification;
@@ -95,7 +96,10 @@ pub use screen_text_search::{
     ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_plan_coverage,
     screen_text_query_digest,
 };
-pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
+pub use search::{
+    SearchPage, SearchPageRequest, SpeakerFilter, page_search, page_search_by_speaker,
+    search_query_digest,
+};
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
     OpenSessionRequest, SessionSource, SourcePathFault, SpecialFileKind, StageCancellation,
@@ -141,6 +145,11 @@ pub use screen_change::{
     ScreenChangeResumeReason, ScreenChangeStop, TakenFrame, compare_screen_changes,
     crop_screen_changes, dropped_changes, first_unanalysed, page_continuation, page_screen_changes,
     screen_change_id, screen_change_page_limit,
+};
+pub use speakers::{
+    DiarizationRequest, DiarizationRunError, LabelSpeakersRequest, MAX_DIARIZATION_MICROS,
+    MIN_DIARIZATION_MICROS, SpeakerDiarizer, SpeakerLabelError, diarization_range, label_speakers,
+    name_speaker, speaker_record_id,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,

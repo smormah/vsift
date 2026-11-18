@@ -303,6 +303,20 @@ pub(crate) const TRANSCRIPT_GET: &str = command_help!(
     "vsift transcript get <session> --from 60000000 --to 120000000",
     "  What was said from 1:00 to 2:00 (times are microseconds)",
 );
+pub(crate) const TRANSCRIPT_SPEAKERS: &str = command_help!(
+    "guide/speaker-labels.md",
+    "vsift transcript speakers <session>",
+    "  Label who speaks in each segment, counting the voices",
+    "vsift transcript speakers <session> --speakers 3",
+    "  The user says three people speak",
+);
+pub(crate) const TRANSCRIPT_NAME_SPEAKER: &str = command_help!(
+    "guide/speaker-labels.md",
+    "vsift transcript name-speaker <session> --label S2 --name Dana",
+    "  Record the name the user gave for S2",
+    "vsift transcript name-speaker <session> --label S2 --clear",
+    "  Remove that name",
+);
 pub(crate) const TRANSCRIPT_RETRANSCRIBE: &str = command_help!(
     "guide/investigate-a-recording.md",
     "vsift transcript retranscribe <session>",

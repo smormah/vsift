@@ -84,6 +84,8 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
+| `transcript speakers` | Speaker labels by voice (S1, S2, ...) for a transcript revision, from an external diarization engine, with honest coverage; provisional labels, segment precision | `0.3.0` (ADR 0031) |
+| `transcript name-speaker` | Record or clear the user's verified name for a speaker label, as the next speaker record | `0.3.0` (ADR 0031) |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
 | `changes` | Bounded pages of what changed on screen in a range: each change's exact before and after frames as frame evidence, and the rectangles where they differ; analyses missing windows first, as `candidates` does | 0.3.0 (ADR 0034); `--crops` cuts each change's two largest regions out of both frames |
 | `clocks` | Opt-in, bounded, resumable: finds the clocks in what `ocr` read and how each moves against the video; only `--screen-zone` and `--accept-gap`, on the user's word, change a clock time | 0.3.0 (ADR 0029, stage 2) |
@@ -2096,6 +2098,123 @@ or retained again rejects it with `INVALID_ARGUMENT`. Pages never repeat or skip
 **Failures** use existing codes: `INVALID_ARGUMENT` for a rejected query, a path with no bundle, more
 than 64 paths, more than 4,096 entries or a rejected cursor, each with a fixed remediation; `--limit 0`,
 `--limit 101` and no path are parse errors.
+
+### Speaker labels (`0.3.0`, ADR 0031)
+
+```console
+vsift transcript speakers ses_0123456789abcdef --json
+vsift transcript speakers ses_0123456789abcdef --speakers 2 --json
+vsift transcript speakers ses_0123456789abcdef --from 0 --to 3600000000 --json
+vsift transcript name-speaker ses_0123456789abcdef --label S2 --name "Alice Example" --json
+vsift transcript name-speaker ses_0123456789abcdef --label S2 --clear --json
+vsift search ses_0123456789abcdef --query "export" --speaker S2 --json
+```
+
+`transcript speakers <session> [--revision trv_...] [--from <us> --to <us>] [--speakers <1..16>]
+[--diarizer <path>] [--segmentation-model <path>] [--embedding-model <path>]` labels the segments of a
+transcript revision (the newest by default) by voice. The external engine (sherpa-onnx's
+`sherpa-onnx-offline-speaker-diarization` with the pyannote segmentation 3.0 and NeMo TitaNet small
+models) hears the session's committed audio, which VSift decodes into a 16 kHz mono WAV in the
+operation's private work folder; the engine never sees the source file, and the WAV is removed when
+the run ends. A given `--speakers` count is passed to the engine as given; without it the engine counts
+with its reviewed distance threshold (0.9). A given count is not a guarantee: the engine can still keep fewer
+voices apart (on RM11, told three, it kept two). Then the `speakers` block carries `count_shortfall`
+(`requested_speaker_count`, `found_speaker_count`, a `warning` that voices may be merged, and a `remediation`
+pointing at the automatic count); the member is absent otherwise, so an answer without a shortfall is unchanged
+([L-207](../planning/known-limits.md#l-207)). One diarization hears at most two hours (the duration cap;
+a longer source is labelled a part at a time with `--from` and `--to`, and labels of different parts are
+not linked). The engine's turns become a new immutable **speaker record** (`spk_...`) of the session;
+its labels are derived from the turns and the revision whenever it is read.
+
+**What a label is.** `S1`, `S2` and so on group segments the engine heard in one voice, numbered by when
+each voice is first heard. A label is provisional ("S2, by voice"): it is not who the person is, two
+similar voices can share one label (L-207), and a segment in which two people speak is not split. The
+precision is the segment: a segment gets the label that holds at least 70% of the speech the engine
+heard inside it, when that speech covers at least half of the segment (`speaker-labels-v1`); otherwise it
+has **no confident speaker** (`little_speech` or `mixed`). Every answer that shows labels carries this in
+`speakers.statement`.
+
+**Names.** `transcript name-speaker` records the user's verified name for a label of the revision's
+newest speaker record, or clears it with `--clear`, as the next speaker record of the same turns, so an
+earlier answer stays as it was. A name is the user's statement, kept as given (1 to 128 bytes, no control
+character) and shown as `Alice Example (S2, named by the user)`; VSift never infers a name from a voice
+or from text on the screen. The skill runs it only on the user's explicit instruction.
+
+**Where labels appear.** `transcript get` and `search` (full and brief views) carry, when the revision
+has a speaker record, a `speakers` block (record, labels with their verified names, engine and model
+digests, the count asked for, the diarized range and the coverage) and a `speaker_label` on each item
+(the label or `null`, how it reads, the verified name and the shares). Both are absent when the revision
+has none, so an answer without speaker labels is exactly what it was. They are distinct from a segment's
+`speaker`, which is a voice tag of a supplied WebVTT file. `search --speaker <label or verified name>`
+searches only the segments with that label; its cursor names the record and the label, and a segment
+with no confident speaker is never found by it (`query.speaker` echoes the filter). With `--events jsonl`
+each evidence record carries its `speaker_label` and the terminal data the `speakers` block.
+
+**Coverage.** The block's `coverage` counts and lists the segments with a label, with no confident
+speaker, and outside the diarized range. When any segment has no label, `transcript speakers` and
+`transcript name-speaker` answer `partial` with a fixed warning, and `transcript get` and `search` add
+the same warning to their own status.
+
+**Transcripts that are not sealed** (ADR 0033; [ADR 0031](../decisions/0031-speaker-labels.md) note of
+2026-11-18). Labels belong to the revision they were made on. `transcript speakers` refuses a revision that
+is still **open** (its transcription is publishing it): labels made over a growing transcript would be stale
+as it grows. The refusal comes before any tool is looked for, is `BUSY` with the session and the publishing
+job in `affected_ids`, and its remediation's command is that job's `job status`; nothing is committed. A job
+that ended without sealing its revision answers `BUSY` with `job cancel` instead, as every write does
+([`transcript-speakers.revision-open.json`](../../schemas/v1/examples/transcript-speakers.revision-open.json)):
+
+```json
+{
+  "command": "transcript.speakers",
+  "status": "failed",
+  "error": {
+    "code": "BUSY",
+    "retryable": true,
+    "retry_after_ms": null,
+    "affected_ids": ["ses_0123456789abcdef0123456789abcdef", "job_0123456789abcdef0123456789abcdef"],
+    "remediation": [
+      {
+        "summary": "This session's transcript is still growing: a transcription of it (the job in affected_ids) is publishing it, and labels made now would not cover what it has yet to publish. Nothing was committed. Run the suggested job status command, and when it reports the job ended and the transcript sealed, run the same command again.",
+        "required_authority": "none",
+        "command": { "executable": "vsift", "arguments": ["job", "status", "job_0123456789abcdef0123456789abcdef"] }
+      }
+    ]
+  }
+}
+```
+
+A **stopped** revision (its transcription was cancelled or could not finish) is labelled: the record covers
+the segments the revision holds and no other time, `speakers.revision_state` is `stopped`, and every answer
+that shows those labels carries the fixed warning that they cover only the segments it holds (the terminal
+output says the same). A **sealed** revision is labelled as before (`revision_state` `sealed`). `transcript
+get` and `search` show a speaker record only on the revision it labels: a newer revision of the session,
+open or sealed, starts without labels. `vsift <video>` (`watch`) never runs `transcript speakers`; labels
+stay opt-in.
+
+**Privacy.** The engine computes its voice embeddings in its own process memory and returns times and
+cluster numbers only. A speaker record holds turns, labels and the user's names, never audio or any
+voice-derived vector, under the session's lifetime and retention: disposable by default, kept only in a
+bundle the user makes. There is no cross-session voice database.
+
+Schemas: `speakers.schema.json` (the block, the per-segment label, the result data) and
+`transcript-speakers-data.schema.json`; the bundle's `speaker_record` artifacts are decoded strictly by
+`bundle validate` (identity, bounds, values). Examples: `transcript-speakers.json`,
+`transcript-get.speakers.json`, `search.speakers.json`, `transcript-speakers.revision-open.json`.
+
+**Rolling back.** A release before `0.3.0` does not know the `speaker_record` kind and reads a session that holds one
+as damaged (`INTEGRITY_FAILURE`): every command on that session fails, and `bundle validate` refuses a bundle made
+from it. A session that never ran `transcript speakers` is unchanged. Use the newer version, or discard the session
+([L-218](../planning/known-limits.md#l-218), an accepted residual).
+
+**Failures.** `MISSING_CAPABILITY` when the engine or a model is neither given nor installed (the
+remediation names `setup install` and the three options; transcripts and search work without them) or
+the engine fails or answers in another format; `RESOURCE_LIMIT` for a range longer than the cap (the
+remediation names `--from` and `--to`), more turns or speakers than reviewed, or an engine that ended
+abnormally; `INVALID_ARGUMENT` for a bad range, count, label or name, a revision without a transcript or
+the requested revision, a label the record does not have, and `name-speaker` or `search --speaker` on a
+revision without speaker labels (the remediation names `transcript speakers`); `INVALID_SOURCE` for a
+source with no decodable audio; `BUSY` for an open revision (above); `DEADLINE_EXCEEDED`, `CANCELLED` and `BUSY` as for a transcription;
+`INTEGRITY_FAILURE` when the source copy changed during the run. Nothing is committed on a failure.
 
 ### P08 visual candidates
 
@@ -4570,7 +4689,7 @@ producer emits it every time, and a test pins that.
 | C-07 | checked time/range/crop invariants and property tests |
 | C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`); and time anchoring (`0.3.0`, ADR 0029: the domain's `time_anchor` tests, the stored form `filesystem_session_store::time_anchors` and `time_anchor_store`, the contract's `clock` tests, `anchored_results_match_their_examples`, `candidates_carry_the_clock_times_of_their_span_and_frame`, `a_frame_carries_the_clock_time_of_the_delivered_frame`, through the binary `time_anchor_cli_contract`, and on real tags written by the pinned FFmpeg the opt-in `time_anchor_real_tags` in `P07 local ASR`); and `ingest --url` (`0.3.0`, ADR 0028: the examples and every reason, `link_contract`; through the binary with no network, `link_ingest_cli_contract`; the fetch against a local HTTPS server, `link_transfer`; the address policy, `link_acquisition` unit tests) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
-| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
+| C-10 | speaker labels (`0.3.0`: `speakers_contract` for the results, blocks, labels, filter and examples; the domain's and application's `speakers` tests for the labelling rule, names, coverage and the cap; `speaker_record` for the strict record; `sherpa_diarizer` for the engine's output and the WAV), unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 
 These tests establish the public boundary only. Provider execution, filesystem
 durability, media correctness, concurrency, and load guarantees belong to later

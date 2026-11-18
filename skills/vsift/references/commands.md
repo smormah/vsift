@@ -50,6 +50,8 @@ whole; do not pipe it into anything.
 | `vsift job start` | free | Once per investigation, the whole-video transcription of your own session; for 10 minutes or more it answers at once and transcribes in the background (resume.md). `--first` puts the range the user named (at most 30 minutes) first; `--mode queued` (several recordings, or no rush) waits its turn. |
 | `vsift transcript retranscribe` | free | Only when the session has no usable transcript or a range needs checking (once, if the question needs it, see handoff.md); always with `--operation-id`. |
 | `vsift search` | free | Literal words, never a pattern. |
+| `vsift transcript speakers` | free | Only when the question is who said what: labels the transcript's segments by voice (S1, S2) once per session; add `--speakers <n>` when the user says how many people speak. Labels are provisional ("S2, by voice"), never who the person is. |
+| `vsift transcript name-speaker` | explicit | Records a name the user gives for a label; never a name you inferred from a voice, the screen or the words. |
 | `vsift candidates` | free | Shortlist only. |
 | `vsift changes` | free | What changed on screen between two times, each change with its before and after frames; page with `--cursor`, continue from `resume` with a new `--from`. Cite a change by its two frames' evidence ids, never its `chg_` id. |
 | `vsift ocr` | explicit | Reads on-screen text with the optional OCR runner (minutes of CPU on a long video): only when the user asks for on-screen text. At most `--max-frames` frames per call. |

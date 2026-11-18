@@ -627,3 +627,113 @@ async fn a_sealed_revision_is_presented_as_before() -> TestResult {
     assert_eq!(response["status"], "complete");
     Ok(())
 }
+
+/// A speaker record of `revision` (ADR 0031) with one voice over its first ten
+/// seconds and another over the next ten, diarized over the whole source.
+fn speaker_record(
+    revision: &TranscriptRevision,
+    source: &SourceSegment,
+) -> Result<vsift_domain::SpeakerRecord, vsift_domain::DiarizationError> {
+    let turn = |start: u64, end: u64, speaker: u16| {
+        TimeRange::new(
+            MediaTime::from_micros(start * SECOND),
+            MediaTime::from_micros(end * SECOND),
+        )
+        .map(|range| {
+            vsift_domain::DiarizedTurn::new(range, vsift_domain::EngineSpeaker::new(speaker))
+        })
+    };
+    let digest = || Sha256Hex::parse(DIGEST);
+    let (Ok(first), Ok(second), Ok(id), Ok(a), Ok(b), Ok(c)) = (
+        turn(0, 10, 0),
+        turn(10, 20, 1),
+        vsift_domain::SpeakerRecordId::parse("spk_0123456789abcdef"),
+        digest(),
+        digest(),
+        digest(),
+    ) else {
+        return Err(vsift_domain::DiarizationError::TurnOutsideAudio);
+    };
+    vsift_domain::SpeakerRecord::derive(
+        vsift_domain::SpeakerRecordParts {
+            id,
+            number: NonZeroU32::MIN,
+            source_id: revision.source_id().clone(),
+            revision_id: revision.id().clone(),
+            diarized_range: source.range(),
+            count: vsift_domain::SpeakerCount::Automatic,
+            profile: vsift_domain::SpeakerLabellingProfile::V1,
+            provenance: vsift_domain::DiarizationProvenance::new(
+                vsift_domain::DiarizationEngine::SherpaOnnx,
+                a,
+                b,
+                c,
+            ),
+            turns: vec![first, second],
+            names: std::collections::BTreeMap::new(),
+        },
+        revision,
+    )
+}
+
+/// ADR 0031 note of 2026-11-18: speaker labels belong to a revision that no longer
+/// grows. A sealed revision's labels are presented as before; a stopped revision's
+/// say so (`speakers.revision_state` and a fixed warning), because they cover only the
+/// segments it holds; an open revision is never labelled.
+#[tokio::test]
+async fn speaker_labels_say_whether_their_revision_is_sealed_or_stopped() -> TestResult {
+    let source = source()?;
+    let (sealed, open) = run(&source, 1, None, false).await?;
+    let growing = open.get(1).ok_or("no second cut")?;
+    let stopped = build_stopped_asr_revision(growing, None)?;
+    let session = SessionId::parse(SESSION)?;
+    for (revision, state) in [(&sealed, "sealed"), (&stopped, "stopped")] {
+        let record = speaker_record(revision, &source)?;
+        let page = page_transcript(
+            &session,
+            revision,
+            &TranscriptPageRequest {
+                range: source.range(),
+                limit: PageLimit::new(100)?,
+                cursor: None,
+            },
+            CURSOR_EXPIRES_US,
+            NOW_US,
+        )?;
+        let segments: Vec<_> = page.segments.into_iter().cloned().collect();
+        let response =
+            serde_json::to_value(vsift_contract::transcript_get_response_with_speakers(
+                &TranscriptPresentation {
+                    session_id: &session,
+                    revision,
+                    range: source.range(),
+                    segments: &segments,
+                    next_cursor: None,
+                    coverage: &page.coverage,
+                    growth: ReadGrowth::default(),
+                    time_anchors: &vsift_domain::TimeAnchors::none(),
+                },
+                Some(&record),
+                LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
+                ResultView::Full,
+            )?)?;
+        validate("operation-response.schema.json", &response)?;
+        validate("transcript-get-data.schema.json", &response["data"])?;
+        assert_eq!(response["data"]["speakers"]["revision_state"], state);
+        // The labels cover the revision's own segments, one attribution each.
+        let items = response["data"]["items"].as_array().ok_or("no items")?;
+        assert_eq!(items.len(), revision.segments().len());
+        let warned = response["warnings"].as_array().is_some_and(|warnings| {
+            warnings
+                .iter()
+                .any(|warning| warning == vsift_contract::STOPPED_REVISION_LABELS_WARNING)
+        });
+        assert_eq!(warned, state == "stopped", "{state}");
+    }
+    assert_eq!(growing.state(), RevisionState::Open);
+    assert_eq!(
+        speaker_record(growing, &source).err(),
+        Some(vsift_domain::DiarizationError::RevisionOpen)
+    );
+    Ok(())
+}

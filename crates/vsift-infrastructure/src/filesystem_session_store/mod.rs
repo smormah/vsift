@@ -67,7 +67,8 @@ use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
     DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, RegisteredClock,
     SessionArtifactKind, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
-    SourceOrigin, StorageGeneration, TimeAnchors, WorkspacePolicy, WorkspaceRetention,
+    SourceOrigin, SpeakerRecordParts, StorageGeneration, TimeAnchors, WorkspacePolicy,
+    WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
@@ -381,6 +382,18 @@ pub struct EvidenceMediaFile<'a> {
     pub kind: EvidenceMediaKind,
     /// The file's bytes.
     pub bytes: &'a [u8],
+}
+
+/// The newest speaker record of a revision, as read (ADR 0031).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeakerRecordRead {
+    /// The record's stored fields, decoded strictly; `None` when the session holds no
+    /// record of the revision asked for.
+    pub record: Option<SpeakerRecordParts>,
+    /// How many speaker records the session holds, of any revision.
+    pub records: usize,
+    /// The committed session state the record was read from.
+    pub status: SessionStatus,
 }
 
 /// A session's committed evidence and what it may still take (ADR 0019 D4).
@@ -1429,6 +1442,7 @@ enum StoredArtifactKind {
     EvidenceRecord,
     ScreenTextIndexRecord,
     TranscriptPart,
+    SpeakerRecord,
 }
 
 impl StoredArtifactKind {
@@ -1442,6 +1456,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
             SessionArtifactKind::ScreenTextIndexRecord => Self::ScreenTextIndexRecord,
             SessionArtifactKind::TranscriptPart => Self::TranscriptPart,
+            SessionArtifactKind::SpeakerRecord => Self::SpeakerRecord,
         }
     }
 
@@ -1461,7 +1476,8 @@ impl StoredArtifactKind {
             | Self::VisualIndexRecord
             | Self::EvidenceRecord
             | Self::ScreenTextIndexRecord
-            | Self::TranscriptPart => "json",
+            | Self::TranscriptPart
+            | Self::SpeakerRecord => "json",
         }
     }
 
@@ -1473,7 +1489,8 @@ impl StoredArtifactKind {
             Self::TranscriptRecord
             | Self::VisualIndexRecord
             | Self::ScreenTextIndexRecord
-            | Self::TranscriptPart => false,
+            | Self::TranscriptPart
+            | Self::SpeakerRecord => false,
         }
     }
 
@@ -1488,6 +1505,7 @@ impl StoredArtifactKind {
             Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
             Self::ScreenTextIndexRecord => crate::MAX_SCREEN_TEXT_INDEX_RECORD_BYTES,
             Self::TranscriptPart => crate::MAX_TRANSCRIPT_PART_BYTES,
+            Self::SpeakerRecord => crate::MAX_SPEAKER_RECORD_BYTES,
         }
     }
 }

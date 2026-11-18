@@ -419,7 +419,8 @@ impl FilesystemSessionStore {
                 | StoredArtifactKind::TranscriptRecord
                 | StoredArtifactKind::VisualIndexRecord
                 | StoredArtifactKind::ScreenTextIndexRecord
-                | StoredArtifactKind::TranscriptPart => {}
+                | StoredArtifactKind::TranscriptPart
+                | StoredArtifactKind::SpeakerRecord => {}
             }
         }
         Ok(EvidenceInventory {

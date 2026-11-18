@@ -335,6 +335,7 @@ async fn a_transcription_is_read_while_it_runs_and_seals_what_it_published() -> 
         limit: Some(100),
         cursor: None,
         since: None,
+        speaker: None,
     })?;
     assert!(!searched.coverage().is_complete());
     assert_eq!(searched.hits().len(), published.segments().len());
