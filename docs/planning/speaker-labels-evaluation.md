@@ -163,6 +163,37 @@ On this call the caller and the astronaut are two men on a space-to-ground link;
 WeSpeaker merge them for long stretches, while TitaNet does not. The automatic settings that found 4 or 5 speakers added
 short extra labels (the closing controller is a real third voice).
 
+**RM06 on another runner CPU (2026-11-18).** The table above was measured on hosted runners with an AMD EPYC 7763
+(runs 39527538316 and 39567789710). #500's hosted run at its merge rebase, **44339807860**, drew an Intel Xeon 6975P-C,
+and RM06's figures moved. The cause is the CPU, and nothing else:
+- **The same in both:** RM06's bytes, the reference file, every engine and model digest, whisper.cpp `b5454` (v1.9.5)
+  with the same `base` model, and the scorer's code and settings.
+- **Not FFmpeg:** the FFmpeg build did change in between (the `0.2.4` re-pin), but the diagnostic run **44356219985**,
+  on the Intel CPU, decoded RM06 with both pinned builds to one identical WAV
+  (`5a9e383a7937e715b124d5b830d4093b12bcaafa4a4cd88884b6d58081151136`), and whisper.cpp gave the same 120 segments
+  with either.
+- **What the CPU moved:** whisper.cpp segments RM06 into 108 segments on the AMD runner and 120 on the Intel one (the
+  first eleven are the same; they part at 42.88 s), which changes which segments are scored. sherpa-onnx's turns
+  are identical on both CPUs (every DER the same to 17 digits). polyvoice's own turns are not.
+
+The same turns and transcripts scored offline with the tool's own scorer, the earlier table reproduced exactly first;
+114 scored segments (106 on the AMD runner, in brackets):
+
+| Candidate | Speakers found | Confusion | Segments labelled | Of those, right | Wrong, of all segments |
+| --- | --- | --- | --- | --- | --- |
+| polyvoice, automatic | 4 | 0.4% (0.3%) | 98.2% | 100% (99.0%) | 0.0% (0.9%) |
+| polyvoice, told 2 | 2 | 1.2% (26.9%) | 98.2% | 99.1% (71.2%) | 0.9% (28.3%) |
+| sherpa-onnx + TitaNet small, told 2 | 2 | 1.2% (1.2%) | 98.2% | 99.1% (98.1%) | 0.9% (1.9%) |
+| sherpa-onnx + TitaNet small, auto-0.9 | 5 | 1.2% (1.2%) | 98.2% | 99.1% (98.1%) | 0.9% (1.9%) |
+| sherpa-onnx + TitaNet small, auto-0.7 / 0.5 | 6 / 14 | 3.6 / 16.1% | 95.6 / 93.0% | 95.4 / 83.0% | 4.4 / 15.8% |
+| sherpa-onnx + WeSpeaker ResNet34, told 2 / auto-0.5 | 2 / 6 | 28.2 / 15.8% | 98.2 / 92.1% | 67.0 / 83.8% | 32.5 / 14.9% |
+| sherpa-onnx + CAM++, told 2 | 2 | 40.8% | 89.5% | 58.8% | 36.8% |
+
+On the Intel runner polyvoice, told two speakers, no longer merges the two men. TitaNet's confusion is unchanged, and
+only the segments it is scored on differ. RM11 did not move: its transcript and every score in run 44339807860 equal
+those of 39595991957 and 39597641002. Reference figures read from a whisper.cpp transcript are reproducible only on the
+same CPU model ([L-207](known-limits.md#l-207), [L-200](known-limits.md#l-200)'s kind).
+
 **RM11's accuracy against its reference as the maintainer heard it** (run 39595991957's turns, scored again on 2026-11-18 from the
 log of run 39597641002; 142 scored segments; five unscored stretches (two short interjections, a sentence the interviewer cut
 off, laughter, and the closing stretch from 1099.42 s to the end, where the maintainer heard Mission Control and an unnamed
@@ -251,7 +282,8 @@ user gives one (`--clustering.num-clusters`) and otherwise with the distance thr
   defeats every candidate. polyvoice is a little better (RM06 0.9% wrong automatically; `SPK3-MFM` 0.2% against 9.1%),
   but only automatically: **told the speaker count, polyvoice merged the two men of RM06 (28% wrong)**, because its
   `--speakers` caps the clustering instead of setting it, and "I know there are two of us" is the user's most natural
-  input.
+  input. (These RM06 figures are the AMD EPYC 7763 runner's. On an Intel Xeon 6975P-C runner, 2026-11-18, TitaNet is
+  0.9% wrong, and polyvoice told two is 0.9% wrong and does not merge the men; section 6.2 and section 9's note.)
 - **Memory.** 377 MiB on RM06 and 588 MiB on RM09's 28 minutes, against polyvoice's 1.2 and 2.2 GiB; both grow with
   length ([L-205](known-limits.md#l-205)), sherpa-onnx far more slowly.
 - **Supply chain.** A large, active Apache-2.0 project with official builds for every system VSift supports, against a
@@ -287,6 +319,22 @@ The options as they were put:
 
 1. **The engine.** sherpa-onnx + TitaNet small (recommended), polyvoice, or neither for `0.3.0` (speaker labels move
    to `1.0`).
+
+   *Note of 2026-11-18, on the recommendation's reasons after RM06 was measured on a second CPU (section 6.2).* One
+   reason was that polyvoice, told two speakers, merged the two men of RM06 (28% wrong). That held on the AMD runner
+   and does not on an Intel one (0.9% wrong), so it is no longer evidence that polyvoice's count fails the user. The
+   recommendation's other reasons hold unchanged:
+   - **Memory:** polyvoice's peak grows to 2.2 GiB on 28 minutes, against 0.6 GiB for sherpa-onnx; this is measured,
+     not CPU-dependent.
+   - **Supply chain:** a large, active project with official builds on every system, against a young
+     single-maintainer one.
+   - **Accuracy:** TitaNet's own turns were identical on both CPUs, while polyvoice's moved enough to change its
+     told-two answer from merged to not merged. A result that flips with the runner is a weaker footing for the engine
+     a user relies on.
+
+   polyvoice's automatic accuracy stays a little better on RM06, as it was. The accuracy margin was never sherpa-onnx's
+   argument, so the recommendation stands. The maintainer's choice of 2026-10-21 stands unless the planner puts it
+   back to them.
 2. **The embedding model's licence reading.** TitaNet small's NGC page puts it under the NeMo Toolkit's Apache-2.0,
    while NVIDIA's card for TitaNet large says CC-BY-4.0: ship it with an attribution notice either way (recommended),
    or ask NVIDIA.
