@@ -24,6 +24,7 @@ mod search;
 mod session;
 mod source_origin;
 mod spans;
+mod speakers;
 mod storage;
 mod time_anchor;
 mod timeline;
@@ -89,7 +90,7 @@ pub use evidence::{
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
     ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, ScreenChangeId,
-    ScreenTextIndexId, ScreenTextLineId, SessionId, SourceId, SourceSegmentId,
+    ScreenTextIndexId, ScreenTextLineId, SessionId, SourceId, SourceSegmentId, SpeakerRecordId,
     TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
 pub use job::{
@@ -133,7 +134,7 @@ pub use search::{
     MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice, SearchCoverage, SearchHit,
     SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
     normalise_search_text, rank_bundle_hits, screen_text_occurrences, search_hits, search_revision,
-    search_screen_text,
+    search_revision_among, search_screen_text,
 };
 pub use session::{
     MAX_TRANSCRIPT_PARTS, SessionArtifactKind, SessionLifetime, SessionLifetimePolicy,
@@ -147,6 +148,14 @@ pub use source_origin::{
     MAX_PAGE_TOOL_VERSION_BYTES, MAX_PAGE_VIDEO_ID_BYTES, MAX_SOURCE_LINK_BYTES,
     MAX_SOURCE_REDIRECTS, PageJoin, PageOrigin, PageProvider, PageToolRecord, PageToolVersion,
     PageVideoId, SourceFetchReason, SourceLink, SourceOrigin, SourceOriginError,
+};
+pub use speakers::{
+    DiarizationEngine, DiarizationError, DiarizationProvenance, DiarizedTurn, EngineSpeaker,
+    LabelledTurn, MAX_DIARIZED_SPEAKERS, MAX_DIARIZED_TURNS, MAX_GIVEN_SPEAKERS,
+    MAX_VERIFIED_NAME_BYTES, MAX_VERIFIED_NAMES, NoConfidentSpeaker, SegmentAttribution,
+    SegmentSpeaker, SpeakerCount, SpeakerCountError, SpeakerCountShortfall, SpeakerCoverage,
+    SpeakerLabellingProfile, SpeakerRecord, SpeakerRecordParts, SpeakerSummary, SpeakerTag,
+    SpeakerTagError, VerifiedName, VerifiedNameError, label_turns, segment_speaker,
 };
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,

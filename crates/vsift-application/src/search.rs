@@ -6,10 +6,12 @@
 //! the session do, and the same request always returns the same page
 //! (ADR 0018).
 
+use std::collections::BTreeSet;
+
 use vsift_domain::{
     CursorError, CursorToken, PageLimit, QueryDigest, SearchCoverage, SearchHit, SearchMatch,
-    SearchPosition, SearchQuery, SessionId, TimeRange, TranscriptRevision, TranscriptRevisionId,
-    search_revision,
+    SearchPosition, SearchQuery, SessionId, SpeakerRecord, SpeakerTag, TimeRange,
+    TranscriptRevision, TranscriptRevisionId, TranscriptSegmentId, search_revision_among,
 };
 
 use crate::{TranscriptQueryError, transcript::sha256_hex};
@@ -62,8 +64,66 @@ pub fn page_search<'a>(
     cursor_expires_at_micros: u64,
     now_micros: u64,
 ) -> Result<SearchPage<'a>, TranscriptQueryError> {
-    let digest = search_query_digest(revision.id(), request.range, &request.query)
+    page_search_by_speaker(
+        session_id,
+        revision,
+        request,
+        None,
+        cursor_expires_at_micros,
+        now_micros,
+    )
+}
+
+/// A search filtered to the segments one speaker label holds (ADR 0031).
+#[derive(Clone, Copy, Debug)]
+pub struct SpeakerFilter<'a> {
+    /// The revision's speaker record the label belongs to.
+    pub record: &'a SpeakerRecord,
+    /// The label.
+    pub tag: SpeakerTag,
+}
+
+/// [`page_search`] over only the segments `filter`'s label holds, when given.
+///
+/// The cursor's digest names the record and the label, so a cursor continues only a
+/// search with the same filter; without a filter the digest, and so every cursor, is
+/// exactly [`page_search`]'s. Segments with no confident speaker are never found by a
+/// filtered search; the answer's speaker coverage says which they are.
+///
+/// # Errors
+///
+/// Returns [`TranscriptQueryError::Cursor`] for a rejected cursor.
+pub fn page_search_by_speaker<'a>(
+    session_id: &SessionId,
+    revision: &'a TranscriptRevision,
+    request: &SearchPageRequest,
+    filter: Option<SpeakerFilter<'_>>,
+    cursor_expires_at_micros: u64,
+    now_micros: u64,
+) -> Result<SearchPage<'a>, TranscriptQueryError> {
+    let mut digest = search_query_digest(revision.id(), request.range, &request.query)
         .map_err(TranscriptQueryError::Cursor)?;
+    let among: Option<BTreeSet<TranscriptSegmentId>> = filter.map(|filter| {
+        filter
+            .record
+            .attributions()
+            .iter()
+            .filter(|attribution| attribution.speaker().tag() == Some(filter.tag))
+            .map(|attribution| attribution.segment().clone())
+            .collect()
+    });
+    if let Some(filter) = filter {
+        digest = QueryDigest::parse(sha256_hex(
+            format!(
+                "vsift.search.speaker.v1\n{}\n{}\n{}",
+                digest.as_str(),
+                filter.record.id().as_str(),
+                filter.tag
+            )
+            .as_bytes(),
+        ))
+        .map_err(TranscriptQueryError::Cursor)?;
+    }
     let snapshot = u64::from(revision.number());
     let after = match &request.cursor {
         None => None,
@@ -75,12 +135,13 @@ pub fn page_search<'a>(
             Some(parse_position(token.last_item_key(), revision)?)
         }
     };
-    let slice = search_revision(
+    let slice = search_revision_among(
         revision,
         &request.query,
         request.range,
         after,
         request.limit,
+        among.as_ref(),
     );
     let next_cursor = match (slice.has_more, slice.hits.last()) {
         (true, Some(last)) => Some(

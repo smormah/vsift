@@ -13,7 +13,7 @@
 //! same stream for the same page.
 
 use serde::Serialize;
-use vsift_domain::{TimeAnchors, TranscriptRevision, TranscriptSegment};
+use vsift_domain::{SpeakerRecord, TimeAnchors, TranscriptRevision, TranscriptSegment};
 
 use crate::growth::SinceData;
 use crate::{
@@ -21,6 +21,7 @@ use crate::{
     OperationResponse, ScreenChangeData, TerminalEventResponse, TranscriptRevisionData,
     TranscriptSegmentData, VisualCandidateData,
     search::TranscriptCoverageData,
+    speakers::{SpeakersData, with_unlabelled_warning},
     transcript::{RangeData, TranscriptPresentation, finish_transcript_read},
 };
 
@@ -203,12 +204,15 @@ pub struct EvidenceEventResponse {
 }
 
 impl EvidenceEventResponse {
+    /// A segment's evidence event with its speaker label under `speakers`, the
+    /// revision's newest speaker record, when there is one (ADR 0031).
     pub(crate) fn transcript_segment(
         sequence: u64,
         command: CommandName,
         revision: &TranscriptRevision,
         segment: &TranscriptSegment,
         anchors: &TimeAnchors,
+        speakers: Option<&SpeakerRecord>,
     ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
@@ -219,7 +223,8 @@ impl EvidenceEventResponse {
             record_type: EvidenceRecordType::TranscriptSegment.identifier(),
             key: segment.id().as_str().to_owned(),
             record: EvidenceRecord::TranscriptSegment(Box::new(
-                TranscriptSegmentData::new(revision, segment).with_clock_time(anchors),
+                TranscriptSegmentData::labelled(revision, segment, speakers)
+                    .with_clock_time(anchors),
             )),
         }
     }
@@ -332,6 +337,9 @@ pub struct TranscriptStreamData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
+    /// The revision's newest speaker record (ADR 0031); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 /// One `transcript.get` page as a JSON Lines evidence stream.
@@ -361,6 +369,22 @@ impl TranscriptEvidenceStream {
         page: &TranscriptPresentation<'_>,
         lifecycle: LifecycleResponse,
     ) -> Result<Self, serde_json::Error> {
+        Self::with_speakers(page, None, lifecycle)
+    }
+
+    /// [`Self::new`] with the revision's speaker labels (ADR 0031): each record's
+    /// `speaker_label` and the terminal data's `speakers`, from `speakers`, the
+    /// revision's newest speaker record.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serialization error when the terminal data cannot be
+    /// represented as JSON.
+    pub fn with_speakers(
+        page: &TranscriptPresentation<'_>,
+        speakers: Option<&SpeakerRecord>,
+        lifecycle: LifecycleResponse,
+    ) -> Result<Self, serde_json::Error> {
         let command = CommandName::TranscriptGet;
         let records: Vec<_> = (0_u64..)
             .zip(page.segments)
@@ -371,6 +395,7 @@ impl TranscriptEvidenceStream {
                     page.revision,
                     segment,
                     page.time_anchors,
+                    speakers,
                 )
             })
             .collect();
@@ -382,10 +407,14 @@ impl TranscriptEvidenceStream {
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
             since: page.growth.since.map(SinceData::new),
+            speakers: speakers.map(SpeakersData::new),
         };
-        let result = finish_transcript_read(
-            OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
-            page.coverage,
+        let result = with_unlabelled_warning(
+            finish_transcript_read(
+                OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
+                page.coverage,
+            ),
+            speakers,
         );
         let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
         Ok(Self {

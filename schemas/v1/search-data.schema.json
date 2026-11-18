@@ -41,7 +41,11 @@
       "description": "Since 0.3.0 (ADR 0030), on a first page only: the query's occurrences in on-screen text read by ocr, with each hit's frame, time and region, and how much of the searched range's plan is read. Absent on a page a cursor continues and from releases before 0.3.0. It never changes the envelope's status or coverage.",
       "$ref": "screen-text-data.schema.json#/$defs/search_part"
     },
-    "since": { "$ref": "#/$defs/since" }
+    "since": { "$ref": "#/$defs/since" },
+    "speakers": {
+      "description": "The revision's newest speaker record (0.3.0, ADR 0031), present only when the revision has one: see speakers.schema.json. Each item then carries its speaker_label.",
+      "$ref": "speakers.schema.json#/$defs/speakers"
+    }
   },
   "$defs": {
     "since": {
@@ -80,6 +84,10 @@
           "minItems": 1,
           "maxItems": 16,
           "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+        },
+        "speaker": {
+          "description": "The speaker label the search was filtered by (search --speaker, 0.3.0), present only for a filtered search: only segments with that label were searched, and segments with no confident speaker never are.",
+          "$ref": "speakers.schema.json#/$defs/label"
         }
       }
     },

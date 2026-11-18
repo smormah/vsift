@@ -23,8 +23,8 @@ use super::{
     publication::evidence_artifact_count,
     read_bounded_manifest,
     reads::{
-        read_evidence_artifact, read_screen_text_index_artifact, read_transcript_artifact,
-        read_visual_index_artifact,
+        read_evidence_artifact, read_screen_text_index_artifact, read_speaker_artifact,
+        read_transcript_artifact, read_visual_index_artifact,
     },
     root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
     sha256_hex,
@@ -329,6 +329,11 @@ impl FilesystemSessionStore {
                 // The same again for on-screen text (ADR 0030): decoded with
                 // its domain bounds and every identity derived again.
                 read_screen_text_index_artifact(&bundle, artifact, &session_id, &source_id)?;
+            } else if artifact.kind == StoredArtifactKind::SpeakerRecord {
+                // A speaker record is decoded with the identity, bound and value
+                // rules a session read applies (ADR 0031); its labels are derived
+                // from its turns and its revision whenever it is read.
+                read_speaker_artifact(&bundle, artifact, &session_id, &source_id)?;
             } else {
                 let file =
                     open_regular_file(&bundle, &artifact.name, false).map_err(map_committed_io)?;

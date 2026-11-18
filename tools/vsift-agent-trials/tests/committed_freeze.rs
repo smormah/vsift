@@ -60,6 +60,13 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// **#500's freeze (speaker labels): 0.3.0 development freeze, written at #500's merge rebase onto `main` at
+/// `25ab0407` (2026-11-18):** `references/commands.md` gains the rows `transcript speakers` (free) and `transcript
+/// name-speaker` (explicit), so only the `skill` component moved, `14b6ddd6...` (M5b's) to `5ee66624...`, and this
+/// digest `71858de9...` (M5b's) to the value below; the other six components are `main`'s. `freeze write` at
+/// `c177ef92a86d31fd5dcca9306df4f5cf9f00e55f`. No batch runs for it: the cut's batches measure the shipped skill.
+///
+/// The freeze before it, M5b's, is told in `docs/agents/trials.md`; before that,
 /// **M5a's freeze: 0.3.0 development freeze, rewritten at the rebase onto S1 (2026-11-15):** the lighter skill moves only
 /// the `skill` component, `SKILL.md` and its references, to `ec08dba7...`; on S1's `main` the other six components are
 /// S1's, so this digest `efd8633d...` (S1's) becomes the value below. `freeze write` at `4266488507b8c2d0011ae74f538a485183d6baff`.
@@ -199,7 +206,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "71858de9a6b72b83cdae035e88ccf1e76630eb4ab32c9a96e618a69863cf89b1";
+const CUT_FREEZE_SHA256: &str = "4f009d5ffb738b631d8dca7237ef1bfb36247b70428a532db408491cab9bbec2";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

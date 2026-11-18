@@ -149,6 +149,7 @@ mod session;
 mod setup;
 mod setup_door;
 mod skill;
+mod speakers;
 mod storage;
 mod stream;
 mod text;
@@ -298,7 +299,8 @@ pub use screen_text::{
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,
     SearchStreamData, UNPLACED_WORDS_SEARCH_WARNING, UNTRANSCRIBED_SEARCH_WARNING,
-    search_query_rejection_summary, search_response, search_response_with_view,
+    search_query_rejection_summary, search_response, search_response_with_speakers,
+    search_response_with_view,
 };
 pub use session::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, ListedSession,
@@ -320,6 +322,12 @@ pub use skill::{
     SKILL_PROJECT_REMEDIATION, SKILL_SHOW_ENTRY_REMEDIATION, SkillFolderData, SkillInstallData,
     SkillInstallFolderData, SkillInstallFolderOutcome, SkillShowData, SkillStatusData,
     SkillStatusFolderData, shipped_skill, skill_digest,
+};
+pub use speakers::{
+    DIARIZATION_RANGE_REMEDIATION, DIARIZER_REMEDIATION, NO_SPEAKER_RECORD_REMEDIATION,
+    SPEAKER_COUNT_SHORTFALL_REMEDIATION, SPEAKER_LABELS_STATEMENT,
+    SPEAKERS_REVISION_OPEN_REMEDIATION, STOPPED_REVISION_LABELS_WARNING, SpeakersData,
+    SpeakersPresentation, SpeakersResultData, UNLABELLED_SEGMENTS_WARNING, speakers_response,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
@@ -344,8 +352,8 @@ pub use transcript::{
     TRANSCRIPT_RUNNING_REMEDIATION, TranscriptBriefPageData, TranscriptPageData,
     TranscriptPresentation, TranscriptRetranscribeData, TranscriptRevisionData,
     TranscriptSegmentData, UNTRANSCRIBED_READ_WARNING, finish_retranscription,
-    retranscription_gaps, transcript_get_response, transcript_rejection_summary,
-    transcript_warning_messages,
+    retranscription_gaps, transcript_get_response, transcript_get_response_with_speakers,
+    transcript_rejection_summary, transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;
 pub use view::{BRIEF_VIEW_STREAM_REMEDIATION, ResultView};

@@ -198,6 +198,16 @@ These files are the machine-readable public v1 boundary:
   `last_time_us`, `frames` and `candidate_ids`, then `total_hits`, the `state`
   (`not_run`, `partial`, `complete`) and the same coverage. The member is absent on a page a
   cursor continues and never changes a search's status;
+- `speakers.schema.json` - speaker labels (`0.3.0`, ADR 0031): the `speakers` block that
+  `transcript get`, `search`, `transcript speakers` and `transcript name-speaker` carry, the
+  per-segment `speaker_label` (full and brief) and the result data of the two speaker
+  commands. Labels are provisional, by voice, with segment precision; a verified name is
+  the user's statement. `count_shortfall` appears in the block only when a given speaker
+  count was not kept (voices may be merged). Both members are absent when a revision has no speaker record,
+  so an answer without labels is unchanged (examples `transcript-speakers.json`,
+  `transcript-get.speakers.json`, `search.speakers.json`);
+- `transcript-speakers-data.schema.json` - the `data` member of a complete or partial
+  `transcript speakers` or `transcript name-speaker` result;
 - `candidates-data.schema.json` â the `data` member of a complete or partial
   `candidates` result (P08 PR 4): the requested `range`, the `index` revision and its
   fixed sampling grid, `coverage` (the searched range, the `analyzed` ranges and every

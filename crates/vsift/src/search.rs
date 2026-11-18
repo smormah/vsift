@@ -1,15 +1,15 @@
 //! Bounded literal search of a session's transcript.
 
 use vsift_application::{
-    ScreenTextPageRequest, SearchPageRequest, page_screen_text, page_search,
-    screen_text_plan_coverage,
+    ScreenTextPageRequest, SearchPageRequest, SpeakerFilter, page_screen_text,
+    page_search_by_speaker, screen_text_plan_coverage,
 };
 use vsift_contract::{ScreenTextUnavailable, UnreadableIndex, UnreadableReason};
 use vsift_domain::{
     CursorError, FrameRef, MediaTime, PageLimit, ScreenTextCoverage, ScreenTextIndex,
     ScreenTextLine, ScreenTextOccurrence, SearchCoverage, SearchMatch, SearchQuery, SessionId,
-    TimeRange, TranscriptRevision, TranscriptRevisionId, TranscriptSegment, VisualCandidateId,
-    VisualIndex, screen_text_occurrences,
+    SpeakerRecord, SpeakerTag, TimeRange, TranscriptRevision, TranscriptRevisionId,
+    TranscriptSegment, VisualCandidateId, VisualIndex, screen_text_occurrences,
 };
 use vsift_infrastructure::FilesystemSessionStore;
 
@@ -51,6 +51,9 @@ pub struct SearchRequest {
     /// A `since` token of an earlier answer (ADR 0033): search only what the
     /// revision it follows published after it, in start order.
     pub since: Option<String>,
+    /// Only segments of this speaker are searched (ADR 0031): a label such as `S2`,
+    /// or a name the user verified for one. `None` searches every segment.
+    pub speaker: Option<String>,
 }
 
 /// One segment that matched, and how.
@@ -214,6 +217,8 @@ pub struct SearchResults {
     coverage: SearchCoverage,
     screen_text: Option<ScreenTextSearch>,
     growth: crate::growth::ReadGrowth,
+    speakers: Option<SpeakerRecord>,
+    speaker_filter: Option<SpeakerTag>,
 }
 
 impl SearchResults {
@@ -222,6 +227,19 @@ impl SearchResults {
     #[must_use]
     pub const fn screen_text(&self) -> Option<&ScreenTextSearch> {
         self.screen_text.as_ref()
+    }
+
+    /// The revision's newest speaker record, with every label derived (ADR 0031);
+    /// `None` when the revision has no speaker labels.
+    #[must_use]
+    pub const fn speakers(&self) -> Option<&SpeakerRecord> {
+        self.speakers.as_ref()
+    }
+
+    /// The speaker label the search was filtered by, if any.
+    #[must_use]
+    pub const fn speaker_filter(&self) -> Option<SpeakerTag> {
+        self.speaker_filter
     }
 
     /// Session state observed when the search ran.
@@ -324,7 +342,12 @@ impl Engine {
             .lifetime()
             .expires_at_unix_seconds()
             .saturating_mul(MICROS_PER_SECOND);
-        let page = page_search(
+        let speakers = crate::speakers::newest_record(&store, &request.session, &revision, now)?;
+        let speaker_filter = match &request.speaker {
+            None => None,
+            Some(wanted) => Some(crate::speakers::resolve_speaker(speakers.as_ref(), wanted)?),
+        };
+        let page = page_search_by_speaker(
             &request.session,
             &revision,
             &SearchPageRequest {
@@ -333,6 +356,10 @@ impl Engine {
                 limit,
                 cursor: request.cursor,
             },
+            speakers
+                .as_ref()
+                .zip(speaker_filter)
+                .map(|(record, tag)| SpeakerFilter { record, tag }),
             expires_at,
             now.saturating_mul(MICROS_PER_SECOND),
         )
@@ -378,6 +405,8 @@ impl Engine {
             coverage,
             screen_text,
             growth,
+            speakers,
+            speaker_filter,
         })
     }
 }
@@ -659,9 +688,31 @@ fn search_since(
         expires_at,
     )
     .map_err(crate::growth::cursor_error)?;
+    // Only a sealed or stopped revision can hold speaker labels (ADR 0031 note of
+    // 2026-11-18); a since read of an open one finds none. With `--speaker`, the
+    // page's hits are kept to that label's segments, as a first page's are.
+    let speakers = crate::speakers::newest_record(store, &request.session, &revision, now)?;
+    let speaker_filter = match &request.speaker {
+        None => None,
+        Some(wanted) => Some(crate::speakers::resolve_speaker(speakers.as_ref(), wanted)?),
+    };
+    let among: Option<std::collections::BTreeSet<&vsift_domain::TranscriptSegmentId>> =
+        speakers.as_ref().zip(speaker_filter).map(|(record, tag)| {
+            record
+                .attributions()
+                .iter()
+                .filter(|attribution| attribution.speaker().tag() == Some(tag))
+                .map(vsift_domain::SegmentAttribution::segment)
+                .collect()
+        });
     let hits = page
         .segments
         .iter()
+        .filter(|(segment, _)| {
+            among
+                .as_ref()
+                .is_none_or(|among| among.contains(segment.id()))
+        })
         .filter_map(|(segment, tier)| {
             tier.map(|tier| SearchResultHit {
                 segment: (*segment).clone(),
@@ -691,5 +742,7 @@ fn search_since(
         // first page's (ADR 0030).
         screen_text: None,
         growth,
+        speakers,
+        speaker_filter,
     })
 }

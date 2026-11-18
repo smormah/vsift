@@ -7,7 +7,7 @@ use vsift_application::{
     page_transcript,
 };
 use vsift_domain::{
-    MediaTime, PageLimit, RuntimeDependency, SearchCoverage, SessionId, TimeRange,
+    MediaTime, PageLimit, RuntimeDependency, SearchCoverage, SessionId, SpeakerRecord, TimeRange,
     TranscriptImportError, TranscriptOffset, TranscriptRevision, TranscriptRevisionId,
     TranscriptSegment,
 };
@@ -57,9 +57,17 @@ pub struct TranscriptExcerpt {
     next_cursor: Option<String>,
     coverage: SearchCoverage,
     growth: crate::growth::ReadGrowth,
+    speakers: Option<SpeakerRecord>,
 }
 
 impl TranscriptExcerpt {
+    /// The revision's newest speaker record, with every label derived (ADR 0031);
+    /// `None` when the revision has no speaker labels.
+    #[must_use]
+    pub const fn speakers(&self) -> Option<&SpeakerRecord> {
+        self.speakers.as_ref()
+    }
+
     /// Session state observed when the page was read.
     #[must_use]
     pub const fn session(&self) -> &SessionSnapshot {
@@ -175,6 +183,7 @@ impl Engine {
             expires_at,
             now,
         )?;
+        let speakers = crate::speakers::newest_record(&store, &query.session, &revision, now)?;
         Ok(TranscriptExcerpt {
             session: SessionSnapshot::observe(&status, now),
             revision,
@@ -183,6 +192,7 @@ impl Engine {
             next_cursor,
             coverage,
             growth,
+            speakers,
         })
     }
 }
@@ -243,6 +253,9 @@ fn transcript_since(
         expires_at,
         now,
     )?;
+    // Labels belong to the revision they were made on; an open revision has none
+    // (ADR 0031 note of 2026-11-18).
+    let speakers = crate::speakers::newest_record(store, &query.session, &revision, now)?;
     Ok(TranscriptExcerpt {
         session: SessionSnapshot::observe(&status, now),
         revision,
@@ -251,6 +264,7 @@ fn transcript_since(
         next_cursor: None,
         coverage,
         growth,
+        speakers,
     })
 }
 

@@ -121,7 +121,7 @@ const NEVER: [&str; 9] = [
 ];
 
 /// Commands the skill runs only on the user's explicit instruction.
-const EXPLICIT: [&str; 8] = [
+const EXPLICIT: [&str; 9] = [
     "setup.configure",
     "setup.configure-model",
     "session.renew",
@@ -134,6 +134,8 @@ const EXPLICIT: [&str; 8] = [
     // Reading around rollovers costs CPU like ocr, and its two options change
     // clock times, so they carry only what the user stated (ADR 0029 decision 17).
     "clocks",
+    // A verified name is the user's own statement (ADR 0031).
+    "transcript.name-speaker",
 ];
 
 /// Read-only forms of `explicit` commands that the skill may run freely: the

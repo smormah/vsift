@@ -507,3 +507,50 @@ async fn a_skeleton_names_the_open_revision_a_read_cites() -> TestResult {
     assert_eq!(checked["session"]["resolved"], true, "{checked}");
     Ok(())
 }
+
+/// ADR 0031 note of 2026-11-18: `transcript speakers` refuses a revision that is still
+/// open, whatever is installed, with `BUSY` naming the job that publishes it, its `job
+/// status` as the suggested command and a fixed remediation; nothing is committed, and
+/// a read of the open revision carries no speaker labels.
+#[tokio::test]
+async fn transcript_speakers_refuses_an_open_revision_and_names_its_job() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root).await?;
+    let first = seeded.open.get(1).ok_or("no second cut")?;
+    seeded.publish(1, first, 1, 0)?;
+    let base = root.path("user");
+    let output: Output = Command::cargo_bin("vsift")?
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .arg("--session-root")
+        .arg(root.sessions())
+        .args(["transcript", "speakers", SESSION, "--json"])
+        .output()?;
+    assert!(!output.status.success());
+    let refused: Value = serde_json::from_slice(&output.stdout)?;
+    // The contract's example is this answer, byte for byte in meaning.
+    let example: Value = serde_json::from_str(&fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/v1/examples/transcript-speakers.revision-open.json"),
+    )?)?;
+    assert_eq!(refused, example);
+    assert_eq!(
+        refused["error"]["remediation"][0]["summary"],
+        vsift_contract::SPEAKERS_REVISION_OPEN_REMEDIATION
+    );
+    let read = vsift(
+        &root,
+        &[
+            "transcript",
+            "get",
+            SESSION,
+            "--from",
+            "0",
+            "--to",
+            "120000000",
+        ],
+    )?;
+    assert!(read.get("speakers").is_none());
+    Ok(())
+}

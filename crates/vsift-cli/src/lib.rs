@@ -60,20 +60,22 @@ use vsift::{
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
     CANDIDATE_CURSOR_REMEDIATION, CLOCK_RULES_REMEDIATION, CommandName, ConfiguredModelResponse,
-    ConfiguredSelectionResponse, DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream,
-    IDEMPOTENCY_CONFLICT_REMEDIATION, ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION,
-    JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
-    JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
-    OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OperationResponse,
-    REVISION_LEFT_OPEN_REMEDIATION, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SESSION_ROOT_NAME_REMEDIATION, SESSION_ROOT_OWN_ACCESS_REMEDIATION,
-    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
-    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    ConfiguredSelectionResponse, DIARIZATION_RANGE_REMEDIATION, DIARIZER_REMEDIATION,
+    DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
+    JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
+    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, MANAGED_INSTALL_BUSY_REMEDIATION,
+    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
+    NO_SPEAKER_RECORD_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
+    OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION, OCR_RUNNER_REMEDIATION,
+    OCR_SEARCH_CURSOR_REMEDIATION, OperationResponse, REVISION_LEFT_OPEN_REMEDIATION,
+    SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
+    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION,
+    SPEAKERS_REVISION_OPEN_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
     TRANSCRIPT_INTERRUPTED_REMEDIATION, TRANSCRIPT_QUEUED_REMEDIATION,
     TRANSCRIPT_RUNNING_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
     UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
@@ -127,7 +129,10 @@ const fn is_long_running(command: &Command) -> bool {
         | Command::Crop(_)
         | Command::Audio(_) => true,
         Command::Transcript(arguments) => {
-            matches!(arguments.command, TranscriptCommand::Retranscribe(_))
+            matches!(
+                arguments.command,
+                TranscriptCommand::Retranscribe(_) | TranscriptCommand::Speakers(_)
+            )
         }
         Command::Job(arguments) => {
             matches!(
@@ -639,6 +644,15 @@ where
                     .await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
+                TranscriptCommand::Speakers(arguments) => {
+                    let result =
+                        session::transcript_speakers(&engine, arguments, &cancellation).await;
+                    write_session_result(&mut writer, mode, operation, result)
+                }
+                TranscriptCommand::NameSpeaker(arguments) => {
+                    let result = session::transcript_name_speaker(&engine, arguments);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
             }
         }
         Command::Session(arguments) => {
@@ -1031,8 +1045,10 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
-            // #370: follow the transcription, then ask again.
-            EngineError::TranscriptionRunning { job, .. } => {
+            // #370: follow the transcription, then ask again; ADR 0031 note of
+            // 2026-11-18: follow the job until the revision to label is sealed.
+            EngineError::TranscriptionRunning { job, .. }
+            | EngineError::SpeakersRevisionOpen { job, .. } => {
                 vec![
                     "job".to_owned(),
                     "status".to_owned(),
@@ -1113,6 +1129,11 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
             .to_owned(),
         ),
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
+        EngineError::DiarizerUnavailable => Some(DIARIZER_REMEDIATION.to_owned()),
+        EngineError::SpeakerRecordNotFound => Some(NO_SPEAKER_RECORD_REMEDIATION.to_owned()),
+        EngineError::SpeakerLabels(vsift::SpeakerLabelError::RangeTooLong { .. }) => {
+            Some(DIARIZATION_RANGE_REMEDIATION.to_owned())
+        }
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
         EngineError::Clocks(_) => Some(CLOCK_RULES_REMEDIATION.to_owned()),
@@ -1131,6 +1152,10 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
             Some(TRANSCRIPTION_RUNNING_REMEDIATION.to_owned())
         }
         EngineError::RevisionLeftOpen { .. } => Some(REVISION_LEFT_OPEN_REMEDIATION.to_owned()),
+        EngineError::SpeakersRevisionOpen { .. }
+        | EngineError::SpeakerLabels(vsift::SpeakerLabelError::Record(
+            vsift::DiarizationError::RevisionOpen,
+        )) => Some(SPEAKERS_REVISION_OPEN_REMEDIATION.to_owned()),
         EngineError::IdempotencyConflict { .. } => {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }
