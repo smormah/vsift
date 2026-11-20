@@ -1320,6 +1320,47 @@ async fn a_failed_on_screen_text_test_points_to_the_visual_cpp_runtime_on_window
     Ok(())
 }
 
+/// L-225: only a failed install test names the Visual C++ runtime. Another
+/// reason for the OCR runner, an integrity failure here, gets the ordinary
+/// advice on every system.
+#[tokio::test]
+async fn a_non_smoke_on_screen_text_failure_gets_the_ordinary_advice() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "ocr",
+        "status": "included",
+        "summary": "VSift's own OCR runner reads on-screen text on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "ocr_runner",
+            "ocr-runner-0.1.0-r1-windows-x64",
+            "VSift engine release",
+            18_437_413
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let before = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let after = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![before, after])
+        .with_plan(plan)
+        .with_install(Ok(install_results(
+            json!([component(
+                "ocr_runner",
+                "failed",
+                Some("import"),
+                Some("digest_mismatch")
+            )]),
+            None,
+        )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::OnScreenText]).await?;
+
+    assert!(!stdout.contains("Visual C++"), "{stdout}");
+    assert!(stdout.contains("troubleshooting guide"), "{stdout}");
+    Ok(())
+}
+
 /// W5b: an installed on-screen-text extra is reported by its own part name.
 #[tokio::test]
 async fn unattended_reports_the_on_screen_text_part() -> TestResult {

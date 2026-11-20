@@ -789,7 +789,11 @@ fn advice_on(installed: &InstallResults, windows: bool) -> Option<Advice> {
                 Some(Advice::Connection)
             }
             Some("storage") => Some(Advice::Space),
-            _ if windows && component.component == "ocr_runner" => Some(Advice::VisualCppRuntime),
+            // Only the install test (the smoke): any other reason, an
+            // integrity failure for one, is not the missing runtime.
+            Some("smoke") if windows && component.component == "ocr_runner" => {
+                Some(Advice::VisualCppRuntime)
+            }
             _ => Some(Advice::Again),
         })
 }
