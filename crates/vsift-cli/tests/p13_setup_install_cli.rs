@@ -77,15 +77,20 @@ impl Base {
         self.0.join("data")
     }
 
+    /// The per-user folder the binary puts `vsift/managed-v1` in.
+    fn managed_base(&self) -> PathBuf {
+        if cfg!(windows) {
+            self.0.join("local")
+        } else if cfg!(target_os = "macos") {
+            self.0.join("Library/Application Support")
+        } else {
+            self.data()
+        }
+    }
+
     /// Where the binary puts its managed root under this base.
     fn managed_root(&self) -> PathBuf {
-        #[cfg(windows)]
-        let base = self.0.join("local");
-        #[cfg(target_os = "macos")]
-        let base = self.0.join("Library/Application Support");
-        #[cfg(all(unix, not(target_os = "macos")))]
-        let base = self.data();
-        base.join("vsift/managed-v1")
+        self.managed_base().join("vsift/managed-v1")
     }
 
     /// The binary with this base, an empty `PATH`, no proxy and no stdin.
@@ -130,14 +135,14 @@ impl Drop for Base {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
-            let _ = fs::set_permissions(self.data(), fs::Permissions::from_mode(0o700));
+            let _ = fs::set_permissions(self.managed_base(), fs::Permissions::from_mode(0o700));
         }
         let _ = fs::remove_dir_all(&self.0);
     }
 }
 
 fn qualified() -> bool {
-    // ADR 0032: Ubuntu 24.04 and Windows x86-64 have a catalogue.
+    // ADR 0032: Ubuntu 24.04, Windows x86-64 and macOS arm64 have a catalogue.
     vsift_infrastructure::accepted_host_catalogue().is_ok_and(|catalogue| catalogue.is_some())
 }
 
@@ -407,8 +412,10 @@ fn a_denied_managed_folder_gives_the_manual_path() -> TestResult {
     let base = Base::new()?;
     let (plan, digest) = base.saved_plan()?;
     let digest = digest.ok_or("the qualified plan has no digest")?;
-    fs::create_dir_all(base.data())?;
-    fs::set_permissions(base.data(), fs::Permissions::from_mode(0o500))?;
+    // The folder the managed root is created in: `$XDG_DATA_HOME` on Linux,
+    // `~/Library/Application Support` on macOS (ADR 0032).
+    fs::create_dir_all(base.managed_base())?;
+    fs::set_permissions(base.managed_base(), fs::Permissions::from_mode(0o500))?;
     let output = base
         .vsift()?
         .args(["setup", "install", "--plan", path_text(&plan)?])
