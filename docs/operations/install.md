@@ -50,10 +50,10 @@ source ([`development.md`](../development.md)) also works.
   machine has shown and what is still missing ([L-035](../planning/known-limits.md#l-035)).
   What was run where is in [`p13-distribution.md`](../planning/p13-distribution.md) and the P14
   plan.
-- **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu
-  24.04 x64 (ADR 0023 decision E). Since `0.3.0` it also installs the tools on Windows x64
-  and macOS on Apple silicon (section 5.1b, ADR 0032), shown on hosted runners only
-  ([L-215](../planning/known-limits.md#l-215)). With 0.2.4 and earlier, on Windows and macOS
+- **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu 24.04 x64 only
+  (ADR 0023 decision E). Since `0.3.0` it also installs the tools on Windows x64 and macOS on
+  Apple silicon (section 5.1b, ADR 0032); hosted runners have shown those installs, with no
+  power-loss campaign there ([L-215](../planning/known-limits.md#l-215)). With 0.2.4 and earlier, on Windows and macOS
   you install FFmpeg, FFprobe, whisper.cpp and the speech model yourself and tell VSift
   where they are (section 5.2).
 - **What 0.2.4 promises** (as 0.2.0, 0.2.1, 0.2.2 and 0.2.3 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON

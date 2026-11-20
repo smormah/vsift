@@ -475,7 +475,10 @@ fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogu
 /// managed smoke checks the banner, against the catalogue being installed;
 /// bring-your-own verification keeps [`reviewed_compatibility_policy`].
 fn macos_compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
-    compatibility_policy_for(EXPECTED_MACOS_FFMPEG_VERSION, EXPECTED_MACOS_FFPROBE_VERSION)
+    compatibility_policy_for(
+        EXPECTED_MACOS_FFMPEG_VERSION,
+        EXPECTED_MACOS_FFPROBE_VERSION,
+    )
 }
 
 fn compatibility_policy_for(
@@ -1325,7 +1328,7 @@ struct EngineRelease {
     url: &'static str,
     archive_bytes: u64,
     archive_sha256: &'static str,
-    entries: u64,
+    entries: usize,
     expanded_bytes: u64,
     tar_stream_bytes: u64,
     /// Path under the root, bytes, SHA-256, executable. The runtime name is
@@ -1338,7 +1341,8 @@ struct EngineRelease {
 
 /// whisper.cpp v1.9.5 for Windows x86-64, `VSift`'s build (decision D2):
 /// static C runtime, AVX2, FMA and F16C, no `OpenMP`, one executable that
-/// imports only system DLLs. Inventory SHA-256
+/// imports only system DLLs. P07 local ASR ran its speech clips on the
+/// published archive before this pin (run 44733161663). Inventory SHA-256
 /// `91b11f3b9cd354ce32526dcd3a5443979fc7955d359047433b294faa499b0f27`,
 /// publish run 44299218614.
 const WINDOWS_WHISPER: EngineRelease = EngineRelease {
@@ -1457,7 +1461,9 @@ const MACOS_FFMPEG: EngineRelease = EngineRelease {
 
 /// The accepted artifact of one engine release: every inventory file is
 /// selected by its path under the root and installed flat by its last part.
-fn engine_artifact(release: &EngineRelease) -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+fn engine_artifact(
+    release: &EngineRelease,
+) -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(release.archive_bytes, release.archive_sha256)?;
     validate_source(release.url, PublisherOrigin::GitHubRelease, integrity)?;
     let runtime_name = |path: &'static str| path.rsplit('/').next().unwrap_or(path);
@@ -1489,7 +1495,10 @@ fn engine_artifact(release: &EngineRelease) -> Result<AcceptedManagedArtifact, M
         runtime_copies: Vec::new(),
         licence: String::from(release.licence),
         notice_url: String::from(release.notice_url),
-        source_code_url: format!("https://github.com/smormah/vsift/releases/tag/{}", release.tag),
+        source_code_url: format!(
+            "https://github.com/smormah/vsift/releases/tag/{}",
+            release.tag
+        ),
         trust_limit: String::from(release.trust_limit),
         files: release
             .files
@@ -1971,8 +1980,14 @@ mod tests {
                 .map(|artifact| artifact.component)
                 .collect();
             assert_eq!(components, core);
-            assert!(catalogue.optional_artifacts.is_empty());
-            assert!(catalogue.superseded.is_empty());
+            assert_eq!(
+                catalogue.optional_artifacts,
+                [] as [vsift_application::AcceptedManagedArtifact; 0]
+            );
+            assert_eq!(
+                catalogue.superseded,
+                [] as [vsift_application::SupersededManagedVersion; 0]
+            );
             assert_eq!(catalogue.artifacts[2].integrity, pinned_whisper_model()?);
             assert!(
                 catalogue
@@ -1985,7 +2000,11 @@ mod tests {
         assert_eq!(ffmpeg.format, vsift_domain::ManagedArtifactFormat::Zip);
         assert_eq!(ffmpeg.integrity.bytes(), 168_715_328);
         let names = |artifact: &vsift_application::AcceptedManagedArtifact| -> Vec<String> {
-            artifact.files.iter().map(|file| file.name.clone()).collect()
+            artifact
+                .files
+                .iter()
+                .map(|file| file.name.clone())
+                .collect()
         };
         assert_eq!(names(ffmpeg), ["LICENSE.txt", "ffmpeg.exe", "ffprobe.exe"]);
         assert_eq!(names(&windows.artifacts[1]), ["LICENSE", "whisper-cli.exe"]);
@@ -2008,8 +2027,8 @@ mod tests {
     /// inventory reports them (a header for the root folder, each subfolder
     /// and each file; the tar stream padded to whole 10 KiB records).
     #[test]
-    fn each_engine_pin_is_the_archive_its_release_publishes() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn each_engine_pin_is_the_archive_its_release_publishes()
+    -> Result<(), Box<dyn std::error::Error>> {
         for release in [&WINDOWS_WHISPER, &MACOS_WHISPER, &MACOS_FFMPEG] {
             assert_eq!(
                 release.url,
@@ -2033,10 +2052,7 @@ mod tests {
                 .filter_map(|(path, _, _, _)| path.rsplit_once('/').map(|(folder, _)| folder))
                 .collect::<HashSet<_>>()
                 .len();
-            assert_eq!(
-                release.entries,
-                u64::try_from(1 + folders + release.files.len())?
-            );
+            assert_eq!(release.entries, 1 + folders + release.files.len());
             assert!(release.tar_stream_bytes >= release.expanded_bytes);
             assert_eq!(release.tar_stream_bytes % 10_240, 0);
             assert!(vsift_domain::is_canonical_managed_key(release.version));

@@ -348,7 +348,7 @@ to a development machine.
   (decision D2), between FFmpeg and the model, so every core component is offered and the model is planned beside
   the managed whisper.cpp. P07's speech clips ran on the published build before the pin (the workflow's
   `vsift_whisper_windows_tag` input fetches the archive and its inventory from the release and refuses any
-  disagreement; the run is in #585's description).
+  disagreement): run 44733161663 on 093802c3 passed on both legs, the Windows leg on the published archive, whose `whisper-cli.exe` it read as 2,147,328 bytes with the pinned SHA-256.
 - **macOS arm64, revision `macos-arm64-2026-11-20-r1`:** VSift's FFmpeg and whisper.cpp and the same model.
   `compatibility_policy()` was shared by every target; the macOS catalogue now carries its own policy, which differs
   only in the expected banners (`ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1` and the `ffprobe` one). Only the
