@@ -27,11 +27,29 @@ use crate::{
 /// 2026-10-31 (`n9.0.2-39`, the `0.2.4` hot fix); `r6` (2026-11-09) points the
 /// `FFmpeg` pin at the repository's new owner (see [`FFMPEG_BUILDS_PUBLISHER`]).
 const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-09-r6";
-/// The Windows x86-64 catalogue (ADR 0032): `FFmpeg` and the model;
-/// whisper.cpp joins with `VSift`'s own build. `r2` (2026-11-04) re-pins
+/// The Windows x86-64 catalogue (ADR 0032). `r2` (2026-11-04) re-pins
 /// `FFmpeg` to the same month-end build as Ubuntu; `r3` (2026-11-09) points it
-/// at the repository's new owner, like Ubuntu's `r6`.
-const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-09-r3";
+/// at the repository's new owner, like Ubuntu's `r6`; `r4` (2026-11-20) adds
+/// whisper.cpp, `VSift`'s own build (decision D2), so the catalogue is complete.
+const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-20-r4";
+/// The macOS arm64 catalogue (ADR 0032), first revision: `FFmpeg` and
+/// whisper.cpp from `VSift`'s own engine releases, and the same model.
+const MACOS_CATALOGUE_REVISION: &str = "macos-arm64-2026-11-20-r1";
+/// The publisher record of every engine `VSift` builds and publishes itself
+/// (`engines.yml`, ADR 0032 decision D): each archive is built twice and
+/// compared, attested, and pinned here from its release's `.inventory.json`.
+const VSIFT_ENGINE_PUBLISHER: &str = "VSift engine release";
+/// Where `engines.yml` publishes: `<this>/<tag>/<stem>.tar.gz`.
+#[cfg(test)]
+const VSIFT_ENGINE_RELEASES: &str = "https://github.com/smormah/vsift/releases/download";
+const WINDOWS_WHISPER_URL: &str = "https://github.com/smormah/vsift/releases/download/whisper-cli-windows-v1.9.5-r1/whisper-cli-windows-1.9.5-r1-windows-x64.tar.gz";
+const MACOS_WHISPER_URL: &str = "https://github.com/smormah/vsift/releases/download/whisper-cli-macos-v1.9.5-r1/whisper-cli-macos-1.9.5-r1-macos-arm64.tar.gz";
+const MACOS_FFMPEG_URL: &str = "https://github.com/smormah/vsift/releases/download/ffmpeg-macos-v9.0.2.39-r1/ffmpeg-macos-9.0.2.39-r1-macos-arm64.tar.gz";
+/// The first-line prefixes of `VSift`'s macOS `FFmpeg` build: the same
+/// upstream commit as the other pins, with `VSift`'s revision as its extra
+/// version (`docs/operations/engines.md`).
+const EXPECTED_MACOS_FFMPEG_VERSION: &str = "ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1";
+const EXPECTED_MACOS_FFPROBE_VERSION: &str = "ffprobe version n9.0.2-39-g7adfbe40dc-vsift-r1";
 /// The reviewed `FFmpeg` publisher: the maintainer of the `FFmpeg-Builds`
 /// repository, whose month-end builds both `FFmpeg` pins come from.
 ///
@@ -96,13 +114,16 @@ const EXPECTED_DENO_VERSION: &str = "deno 2.9.7 ";
 
 /// Every reviewed publisher route of every catalogue, with the origin its
 /// redirects are held to: the only URLs a managed download ever starts from.
-const REVIEWED_ROUTES: [(&str, PublisherOrigin); 6] = [
+const REVIEWED_ROUTES: [(&str, PublisherOrigin); 9] = [
     (FFMPEG_URL, PublisherOrigin::GitHubRelease),
     (WHISPER_URL, PublisherOrigin::GitHubRelease),
     (MODEL_URL, PublisherOrigin::HuggingFaceModel),
     (DENO_URL, PublisherOrigin::GitHubRelease),
     (YT_DLP_URL, PublisherOrigin::GitHubRelease),
     (WINDOWS_FFMPEG_URL, PublisherOrigin::GitHubRelease),
+    (WINDOWS_WHISPER_URL, PublisherOrigin::GitHubRelease),
+    (MACOS_FFMPEG_URL, PublisherOrigin::GitHubRelease),
+    (MACOS_WHISPER_URL, PublisherOrigin::GitHubRelease),
 ];
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
@@ -189,8 +210,7 @@ fn trim_os_release_value(value: &str) -> &str {
 }
 
 /// The accepted catalogue of `target`, or `None` for a target that has none
-/// (ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64 today; macOS arm64 once
-/// its engines are published and pinned).
+/// (ADR 0032: Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64).
 ///
 /// # Errors
 ///
@@ -201,7 +221,8 @@ pub fn accepted_catalogue(
     match target {
         ManagedTarget::Ubuntu2404X86_64 => accepted_ubuntu_catalogue().map(Some),
         ManagedTarget::WindowsX86_64 => accepted_windows_catalogue().map(Some),
-        ManagedTarget::MacOsArm64 | ManagedTarget::Unsupported => Ok(None),
+        ManagedTarget::MacOsArm64 => accepted_macos_catalogue().map(Some),
+        ManagedTarget::Unsupported => Ok(None),
     }
 }
 
@@ -216,28 +237,73 @@ pub fn accepted_host_catalogue() -> Result<Option<AcceptedManagedCatalogue>, Man
 }
 
 /// The accepted Windows x86-64 catalogue (ADR 0032): `FFmpeg` and `FFprobe`
-/// from the same `FFmpeg-Builds` month-end release as the Ubuntu pin, as its LGPL zip,
-/// and the same model. whisper.cpp is not offered yet: upstream's Windows build
-/// needs the Visual C++ runtime (D2), and `VSift`'s own build joins this
-/// catalogue once it is published and pinned; until then the plan leaves
-/// whisper.cpp to the user and plans the model only beside a working one.
+/// from the same `FFmpeg-Builds` month-end release as the Ubuntu pin, as its
+/// LGPL zip; whisper.cpp v1.9.5 as `VSift`'s own build, because upstream's
+/// Windows build needs the Visual C++ runtime (decision D2); and the same model.
+///
+/// The catalogue lists no superseded versions: no earlier release installed
+/// anything on Windows. It offers no optional group yet; the OCR and speaker
+/// groups join as `optional_artifacts`.
 ///
 /// # Errors
 ///
 /// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
 pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
-    let artifacts = vec![windows_ffmpeg_artifact()?, model_artifact()?];
+    target_catalogue(
+        WINDOWS_CATALOGUE_REVISION,
+        ManagedTarget::WindowsX86_64,
+        vec![
+            windows_ffmpeg_artifact()?,
+            engine_artifact(&WINDOWS_WHISPER)?,
+            model_artifact()?,
+        ],
+        compatibility_policy()?,
+    )
+}
+
+/// The accepted macOS arm64 catalogue (ADR 0032): `FFmpeg` and `FFprobe` and
+/// whisper.cpp v1.9.5, each `VSift`'s own build (decision D1 for `FFmpeg`: no
+/// publisher offers an LGPL static macOS build), and the same model.
+///
+/// Its compatibility policy is the shared one with the banner of `VSift`'s
+/// `FFmpeg` build ([`macos_compatibility_policy`]). Like Windows it lists no
+/// superseded versions and no optional group yet.
+///
+/// # Errors
+///
+/// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
+pub fn accepted_macos_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
+    target_catalogue(
+        MACOS_CATALOGUE_REVISION,
+        ManagedTarget::MacOsArm64,
+        vec![
+            engine_artifact(&MACOS_FFMPEG)?,
+            engine_artifact(&MACOS_WHISPER)?,
+            model_artifact()?,
+        ],
+        macos_compatibility_policy()?,
+    )
+}
+
+/// A catalogue of core artifacts only, each layout checked, under the shared
+/// stop-new-plans boundary.
+fn target_catalogue(
+    revision: &str,
+    target: ManagedTarget,
+    artifacts: Vec<AcceptedManagedArtifact>,
+    compatibility: ReviewedCompatibilityPolicy,
+) -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
     for artifact in &artifacts {
         validate_layout(artifact)?;
     }
     Ok(AcceptedManagedCatalogue {
-        revision: String::from(WINDOWS_CATALOGUE_REVISION),
-        target: ManagedTarget::WindowsX86_64,
+        revision: String::from(revision),
+        target,
         stop_new_plans_at: STOP_NEW_PLANS_AT,
         stop_new_plans_date: String::from(STOP_NEW_PLANS_DATE),
         artifacts,
         optional_artifacts: Vec::new(),
-        compatibility: compatibility_policy()?,
+        compatibility,
         superseded: Vec::new(),
     })
 }
@@ -245,14 +311,16 @@ pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedC
 /// Every artifact the compiled catalogues of all targets accept: the only
 /// actions that ever receive publisher authority.
 fn every_accepted_artifact() -> Result<Vec<AcceptedManagedArtifact>, ManagedCatalogueError> {
-    let ubuntu = accepted_ubuntu_catalogue()?;
-    let windows = accepted_windows_catalogue()?;
-    Ok(ubuntu
-        .artifacts
-        .into_iter()
-        .chain(ubuntu.optional_artifacts)
-        .chain(windows.artifacts)
-        .collect())
+    let mut artifacts = Vec::new();
+    for catalogue in [
+        accepted_ubuntu_catalogue()?,
+        accepted_windows_catalogue()?,
+        accepted_macos_catalogue()?,
+    ] {
+        artifacts.extend(catalogue.artifacts);
+        artifacts.extend(catalogue.optional_artifacts);
+    }
+    Ok(artifacts)
 }
 
 /// Returns the complete accepted catalogue for Ubuntu 24.04 x86-64.
@@ -396,14 +464,31 @@ pub fn whisper_model_profile(bytes: u64, sha256: [u8; 32]) -> AsrModelProfile {
         .map_or(AsrModelProfile::Unreviewed, |model| model.profile.profile())
 }
 
+/// The policy of the Ubuntu and Windows catalogues, whose `FFmpeg` pins are
+/// the same `FFmpeg-Builds` release and print the same banner.
 fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
+    compatibility_policy_for(EXPECTED_FFMPEG_VERSION, EXPECTED_FFPROBE_VERSION)
+}
+
+/// The macOS catalogue's policy: the shared fixture, limits, deadlines and
+/// audio contract, with the banner of `VSift`'s own `FFmpeg` build. Only the
+/// managed smoke checks the banner, against the catalogue being installed;
+/// bring-your-own verification keeps [`reviewed_compatibility_policy`].
+fn macos_compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
+    compatibility_policy_for(EXPECTED_MACOS_FFMPEG_VERSION, EXPECTED_MACOS_FFPROBE_VERSION)
+}
+
+fn compatibility_policy_for(
+    ffmpeg_banner: &str,
+    ffprobe_banner: &str,
+) -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
     Ok(ReviewedCompatibilityPolicy {
         fixture: ArtifactIntegrity::from_sha256_hex(
             COMPATIBILITY_FIXTURE_BYTES,
             COMPATIBILITY_FIXTURE_SHA256,
         )?,
-        expected_ffmpeg_version: String::from(EXPECTED_FFMPEG_VERSION),
-        expected_ffprobe_version: String::from(EXPECTED_FFPROBE_VERSION),
+        expected_ffmpeg_version: String::from(ffmpeg_banner),
+        expected_ffprobe_version: String::from(ffprobe_banner),
         stream_limit_bytes: 64 * 1024,
         audio_file_limit_bytes: 256 * 1024,
         transcript_file_limit_bytes: 64 * 1024,
@@ -759,8 +844,8 @@ impl ReviewedUbuntuAction {
 
 /// The file name a managed runtime gives an executable role on this host:
 /// the reviewed name (`ffmpeg`, `ffprobe`, `whisper-cli`, `deno`, `yt-dlp`)
-/// with the platform's executable suffix, which is empty on the one managed
-/// target. `None` for the model, whose name is its catalogue file's.
+/// with the platform's executable suffix (`.exe` on Windows, empty on Ubuntu
+/// and macOS). `None` for the model, whose name is its catalogue file's.
 #[must_use]
 pub fn managed_executable_name(role: ManagedRuntimeRole) -> Option<String> {
     let base = match role {
@@ -1218,6 +1303,204 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
     })
 }
 
+/// One archive of `VSift`'s engine release workflow, as its published
+/// `.inventory.json` describes it (ADR 0032 decision D).
+///
+/// Every engine archive has the same shape: a gzip tar whose one root folder
+/// is the archive stem `<engine>-<version>-<target>`, holding only regular
+/// files. So one table per archive is the whole review, and a new engine (the
+/// OCR runner, W5b) is one more table. The pins are copied from the
+/// inventory, never from a local download: `entries` counts the root folder,
+/// `expanded_bytes` the files, and `tar_stream_bytes` the whole tar stream
+/// with its record padding, which is the reviewed stream cap.
+struct EngineRelease {
+    component: ManagedComponent,
+    /// The managed version key: the upstream version, `VSift`'s revision and the target.
+    version: &'static str,
+    /// The release tag, `<engine>-v<version>`.
+    tag: &'static str,
+    /// The archive stem and its root folder.
+    stem: &'static str,
+    /// `<VSIFT_ENGINE_RELEASES>/<tag>/<stem>.tar.gz`, one of [`REVIEWED_ROUTES`].
+    url: &'static str,
+    archive_bytes: u64,
+    archive_sha256: &'static str,
+    entries: u64,
+    expanded_bytes: u64,
+    tar_stream_bytes: u64,
+    /// Path under the root, bytes, SHA-256, executable. The runtime name is
+    /// the path's last part.
+    files: &'static [(&'static str, u64, &'static str, bool)],
+    licence: &'static str,
+    notice_url: &'static str,
+    trust_limit: &'static str,
+}
+
+/// whisper.cpp v1.9.5 for Windows x86-64, `VSift`'s build (decision D2):
+/// static C runtime, AVX2, FMA and F16C, no `OpenMP`, one executable that
+/// imports only system DLLs. Inventory SHA-256
+/// `91b11f3b9cd354ce32526dcd3a5443979fc7955d359047433b294faa499b0f27`,
+/// publish run 44299218614.
+const WINDOWS_WHISPER: EngineRelease = EngineRelease {
+    component: ManagedComponent::WhisperCli,
+    version: "whisper.cpp-v1.9.5-vsift-r1-windows-x64",
+    tag: "whisper-cli-windows-v1.9.5-r1",
+    stem: "whisper-cli-windows-1.9.5-r1-windows-x64",
+    url: WINDOWS_WHISPER_URL,
+    archive_bytes: 860_865,
+    archive_sha256: "1b52871d69438a6d3c612bd020f865540d0021ab58aefcf1dd7c395e78d4501f",
+    entries: 3,
+    expanded_bytes: 2_148_427,
+    tar_stream_bytes: 2_160_640,
+    files: &[
+        (
+            "LICENSE",
+            1_099,
+            "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285",
+            false,
+        ),
+        (
+            "whisper-cli.exe",
+            2_147_328,
+            "5e69216878a5f0ea533e067146d3bbd85183b0eb6198ab40dd89d57dc55454ec",
+            true,
+        ),
+    ],
+    licence: "MIT",
+    notice_url: "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE",
+    trust_limit: "VSift's own build of whisper.cpp v1.9.5 (static runtime, no OpenMP), built twice and compared byte for byte, attested, and checked by P07 on hosted Windows. It needs a CPU with AVX2, FMA and F16C (L-216); arbitrary Windows hosts remain unqualified.",
+};
+
+/// whisper.cpp v1.9.5 for macOS arm64, `VSift`'s build: static, with
+/// Accelerate and Metal (its shaders embedded), one executable that links
+/// only system libraries. `VSift` runs it with `-ng`, so recognition stays on
+/// the CPU whether or not the Mac has Metal. Inventory SHA-256
+/// `c8938490876857da881829c1992abaad483bafc9bec5c229747dd8c3304e367b`,
+/// publish run 44303732626.
+const MACOS_WHISPER: EngineRelease = EngineRelease {
+    component: ManagedComponent::WhisperCli,
+    version: "whisper.cpp-v1.9.5-vsift-r1-macos-arm64",
+    tag: "whisper-cli-macos-v1.9.5-r1",
+    stem: "whisper-cli-macos-1.9.5-r1-macos-arm64",
+    url: MACOS_WHISPER_URL,
+    archive_bytes: 2_093_165,
+    archive_sha256: "999cc618b47f28b88f182a693947b23da7c705a01b3c0cc8e7880ac1b8ca8367",
+    entries: 3,
+    expanded_bytes: 8_025_022,
+    tar_stream_bytes: 8_028_160,
+    files: &[
+        (
+            "LICENSE",
+            1_078,
+            "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+            false,
+        ),
+        (
+            "whisper-cli",
+            8_023_944,
+            "39abe0df7b80c16e20b6ea722fcb32500730e004c90fb7458c49ac92dc164601",
+            true,
+        ),
+    ],
+    licence: "MIT",
+    notice_url: "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE",
+    trust_limit: "VSift's own build of whisper.cpp v1.9.5, built twice and compared byte for byte and attested; recognition runs on the CPU (-ng). Checked on hosted macOS arm64 runners only; other Macs remain unqualified.",
+};
+
+/// `FFmpeg` and `FFprobe` for macOS arm64, `VSift`'s LGPL static build of the
+/// same upstream commit as the other pins (`7adfbe40dc`, decision D1), with
+/// `VideoToolbox`, `AudioToolbox` and zlib only. Its corresponding source is
+/// published in the same release. Inventory SHA-256
+/// `977c93ac3736e59c1cfa8de2ed0ffcb02459dfd229c8959f997f373af81663ce`,
+/// publish run 44380924394.
+const MACOS_FFMPEG: EngineRelease = EngineRelease {
+    component: ManagedComponent::MediaTools,
+    version: "n9.0.2-39-g7adfbe40dc-vsift-r1-macos-arm64",
+    tag: "ffmpeg-macos-v9.0.2.39-r1",
+    stem: "ffmpeg-macos-9.0.2.39-r1-macos-arm64",
+    url: MACOS_FFMPEG_URL,
+    archive_bytes: 20_546_705,
+    archive_sha256: "6d44a5a18ab3e253975874627763dc6ac110f57eda87a72d75c0f3e7f4b7fe01",
+    entries: 6,
+    expanded_bytes: 43_342_607,
+    tar_stream_bytes: 43_356_160,
+    files: &[
+        (
+            "COPYING.LGPLv2.1",
+            26_517,
+            "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30",
+            false,
+        ),
+        (
+            "LICENSE.md",
+            4_346,
+            "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af",
+            false,
+        ),
+        (
+            "bin/ffmpeg",
+            21_743_608,
+            "f1caaadcf9d4f53d988b59a7feefac8cf6ad32dfa0f1d09f958d4573d98759ea",
+            true,
+        ),
+        (
+            "bin/ffprobe",
+            21_568_136,
+            "24893fd88308056ec17174055e4bb69e6327fd49fb3ec5d154b4be7313b01b5e",
+            true,
+        ),
+    ],
+    licence: "LGPL-2.1-or-later (configured without GPL or nonfree parts)",
+    notice_url: "https://github.com/FFmpeg/FFmpeg/blob/7adfbe40dcde598f93a6963d2f7b22cd75202ccc/COPYING.LGPLv2.1",
+    trust_limit: "VSift's own static build, built twice and compared byte for byte and attested, with its corresponding source in the same release. It has no dav1d, so AV1 has no software decoder (L-216). Checked on hosted macOS arm64 runners only; legal clearance is not claimed.",
+};
+
+/// The accepted artifact of one engine release: every inventory file is
+/// selected by its path under the root and installed flat by its last part.
+fn engine_artifact(release: &EngineRelease) -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+    let integrity = integrity(release.archive_bytes, release.archive_sha256)?;
+    validate_source(release.url, PublisherOrigin::GitHubRelease, integrity)?;
+    let runtime_name = |path: &'static str| path.rsplit('/').next().unwrap_or(path);
+    Ok(AcceptedManagedArtifact {
+        component: release.component,
+        version: String::from(release.version),
+        publisher: String::from(VSIFT_ENGINE_PUBLISHER),
+        source_url: String::from(release.url),
+        integrity,
+        format: ManagedArtifactFormat::TarGz,
+        archive_limits: Some(ReviewedArchiveLimits {
+            max_stream_bytes: release.tar_stream_bytes,
+            entries: release.entries,
+            expanded_bytes: release.expanded_bytes,
+        }),
+        selected_files: release
+            .files
+            .iter()
+            .map(|(path, bytes, sha256, _)| {
+                selection(
+                    &format!("{}/{path}", release.stem),
+                    runtime_name(path),
+                    *bytes,
+                    sha256,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from(release.licence),
+        notice_url: String::from(release.notice_url),
+        source_code_url: format!("https://github.com/smormah/vsift/releases/tag/{}", release.tag),
+        trust_limit: String::from(release.trust_limit),
+        files: release
+            .files
+            .iter()
+            .map(|(path, bytes, sha256, executable)| {
+                file(runtime_name(path), *bytes, sha256, *executable)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
 fn whisper_archive_links() -> Vec<ReviewedArchiveLink> {
     [
         ("libwhisper.so", "libwhisper.so.1"),
@@ -1389,11 +1672,14 @@ mod tests {
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
-        FFMPEG_BUILDS_PUBLISHER, ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction,
-        accepted_catalogue, accepted_ubuntu_catalogue, accepted_windows_catalogue,
-        detect_managed_target, every_accepted_artifact, pinned_whisper_model,
-        reviewed_whisper_models, validate_layout, whisper_model_profile,
+        FFMPEG_BUILDS_PUBLISHER, MACOS_FFMPEG, MACOS_WHISPER, ManagedCatalogueError,
+        REVIEWED_ROUTES, ReviewedUbuntuAction, VSIFT_ENGINE_PUBLISHER, VSIFT_ENGINE_RELEASES,
+        WINDOWS_WHISPER, accepted_catalogue, accepted_macos_catalogue, accepted_ubuntu_catalogue,
+        accepted_windows_catalogue, detect_managed_target, every_accepted_artifact,
+        pinned_whisper_model, reviewed_compatibility_policy, reviewed_whisper_models,
+        validate_layout, whisper_model_profile,
     };
+    use crate::{WhisperBuildIdentity, WhisperBuildRecognition};
 
     /// D6: the quantized profile sits beside the default, in the same
     /// repository, and a file is its profile only by exact size and digest.
@@ -1659,41 +1945,160 @@ mod tests {
         Ok(())
     }
 
-    /// ADR 0032: Windows x86-64 has a catalogue of `FFmpeg` (the zip of the
-    /// Ubuntu pin's release) and the model; macOS and other hosts have none
-    /// yet.
+    /// ADR 0032: Windows x86-64 and macOS arm64 each have a complete
+    /// catalogue of `FFmpeg`, whisper.cpp and the model, in that order; other
+    /// hosts have none.
     #[test]
     fn each_target_has_its_catalogue() -> Result<(), Box<dyn std::error::Error>> {
+        let core = [
+            ManagedComponent::MediaTools,
+            ManagedComponent::WhisperCli,
+            ManagedComponent::WhisperModel,
+        ];
         let windows =
             accepted_catalogue(ManagedTarget::WindowsX86_64)?.ok_or("no Windows catalogue")?;
         assert_eq!(windows, accepted_windows_catalogue()?);
         assert_eq!(windows.target, ManagedTarget::WindowsX86_64);
-        let components: Vec<ManagedComponent> = windows
-            .artifacts
-            .iter()
-            .map(|artifact| artifact.component)
-            .collect();
-        assert_eq!(
-            components,
-            [ManagedComponent::MediaTools, ManagedComponent::WhisperModel]
-        );
+        assert_eq!(windows.revision, "windows-x86_64-2026-11-20-r4");
+        let macos = accepted_catalogue(ManagedTarget::MacOsArm64)?.ok_or("no macOS catalogue")?;
+        assert_eq!(macos, accepted_macos_catalogue()?);
+        assert_eq!(macos.target, ManagedTarget::MacOsArm64);
+        assert_eq!(macos.revision, "macos-arm64-2026-11-20-r1");
+        for catalogue in [&windows, &macos] {
+            let components: Vec<ManagedComponent> = catalogue
+                .artifacts
+                .iter()
+                .map(|artifact| artifact.component)
+                .collect();
+            assert_eq!(components, core);
+            assert!(catalogue.optional_artifacts.is_empty());
+            assert!(catalogue.superseded.is_empty());
+            assert_eq!(catalogue.artifacts[2].integrity, pinned_whisper_model()?);
+            assert!(
+                catalogue
+                    .artifacts
+                    .iter()
+                    .all(|artifact| validate_layout(artifact).is_ok())
+            );
+        }
         let ffmpeg = &windows.artifacts[0];
         assert_eq!(ffmpeg.format, vsift_domain::ManagedArtifactFormat::Zip);
         assert_eq!(ffmpeg.integrity.bytes(), 168_715_328);
-        let names: Vec<&str> = ffmpeg.files.iter().map(|file| file.name.as_str()).collect();
-        assert_eq!(names, ["LICENSE.txt", "ffmpeg.exe", "ffprobe.exe"]);
-        assert!(
-            windows
-                .artifacts
-                .iter()
-                .all(|artifact| validate_layout(artifact).is_ok())
+        let names = |artifact: &vsift_application::AcceptedManagedArtifact| -> Vec<String> {
+            artifact.files.iter().map(|file| file.name.clone()).collect()
+        };
+        assert_eq!(names(ffmpeg), ["LICENSE.txt", "ffmpeg.exe", "ffprobe.exe"]);
+        assert_eq!(names(&windows.artifacts[1]), ["LICENSE", "whisper-cli.exe"]);
+        assert_eq!(
+            names(&macos.artifacts[0]),
+            ["COPYING.LGPLv2.1", "LICENSE.md", "ffmpeg", "ffprobe"]
         );
+        assert_eq!(names(&macos.artifacts[1]), ["LICENSE", "whisper-cli"]);
         assert_eq!(
             accepted_catalogue(ManagedTarget::Ubuntu2404X86_64)?,
             Some(accepted_ubuntu_catalogue()?)
         );
-        assert_eq!(accepted_catalogue(ManagedTarget::MacOsArm64)?, None);
         assert_eq!(accepted_catalogue(ManagedTarget::Unsupported)?, None);
+        Ok(())
+    }
+
+    /// Each engine table is the archive its release URL names: the URL is the
+    /// engine release route of its tag and stem, the tag names the engine and
+    /// version of the stem, and the counts add up the way the published
+    /// inventory reports them (a header for the root folder, each subfolder
+    /// and each file; the tar stream padded to whole 10 KiB records).
+    #[test]
+    fn each_engine_pin_is_the_archive_its_release_publishes() -> Result<(), Box<dyn std::error::Error>>
+    {
+        for release in [&WINDOWS_WHISPER, &MACOS_WHISPER, &MACOS_FFMPEG] {
+            assert_eq!(
+                release.url,
+                format!(
+                    "{VSIFT_ENGINE_RELEASES}/{}/{}.tar.gz",
+                    release.tag, release.stem
+                )
+            );
+            let (engine, version) = release.tag.split_once("-v").ok_or("not an engine tag")?;
+            assert!(
+                release.stem.starts_with(&format!("{engine}-{version}-")),
+                "{} is not the stem of {}",
+                release.stem,
+                release.tag
+            );
+            let expanded: u64 = release.files.iter().map(|(_, bytes, _, _)| bytes).sum();
+            assert_eq!(expanded, release.expanded_bytes);
+            let folders = release
+                .files
+                .iter()
+                .filter_map(|(path, _, _, _)| path.rsplit_once('/').map(|(folder, _)| folder))
+                .collect::<HashSet<_>>()
+                .len();
+            assert_eq!(
+                release.entries,
+                u64::try_from(1 + folders + release.files.len())?
+            );
+            assert!(release.tar_stream_bytes >= release.expanded_bytes);
+            assert_eq!(release.tar_stream_bytes % 10_240, 0);
+            assert!(vsift_domain::is_canonical_managed_key(release.version));
+        }
+        Ok(())
+    }
+
+    /// The managed whisper.cpp of every target is a reviewed v1.9.5 build, so
+    /// `setup check` names it as the pin rather than an unrecognised build.
+    #[test]
+    fn every_managed_whisper_is_a_reviewed_build() -> Result<(), Box<dyn std::error::Error>> {
+        let mut checked = 0_usize;
+        for artifact in every_accepted_artifact()? {
+            if artifact.component != ManagedComponent::WhisperCli {
+                continue;
+            }
+            let executable = artifact
+                .files
+                .iter()
+                .find(|file| file.name.starts_with("whisper-cli"))
+                .ok_or("no whisper-cli in the artifact")?;
+            let identity = WhisperBuildIdentity::for_tests(
+                executable.integrity.bytes(),
+                executable.integrity.sha256(),
+            );
+            assert_eq!(
+                identity.recognition(),
+                WhisperBuildRecognition::ReviewedV1_9_5,
+                "{}",
+                artifact.version
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 3);
+        Ok(())
+    }
+
+    /// The macOS policy differs from the shared one only in the banners of
+    /// `VSift`'s `FFmpeg` build; bring-your-own verification keeps the shared one.
+    #[test]
+    fn the_macos_policy_differs_only_in_its_ffmpeg_banner() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let shared = reviewed_compatibility_policy()?;
+        let macos = accepted_macos_catalogue()?.compatibility;
+        assert_eq!(
+            macos.expected_ffmpeg_version,
+            "ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1"
+        );
+        assert_eq!(
+            macos.expected_ffprobe_version,
+            "ffprobe version n9.0.2-39-g7adfbe40dc-vsift-r1"
+        );
+        let mut aligned = macos.clone();
+        aligned
+            .expected_ffmpeg_version
+            .clone_from(&shared.expected_ffmpeg_version);
+        aligned
+            .expected_ffprobe_version
+            .clone_from(&shared.expected_ffprobe_version);
+        assert_eq!(aligned, shared);
+        assert_eq!(accepted_windows_catalogue()?.compatibility, shared);
+        assert_eq!(accepted_ubuntu_catalogue()?.compatibility, shared);
         Ok(())
     }
 
@@ -1744,8 +2149,9 @@ mod tests {
     /// repository, so a repository move (as `FFmpeg-Builds` made on
     /// 2026-11-07) cannot leave the URLs and the record apart: the move is made
     /// here and in the catalogue together, after a person has read it.
-    const PUBLISHER_REPOSITORIES: [(&str, &str); 4] = [
+    const PUBLISHER_REPOSITORIES: [(&str, &str); 5] = [
         (FFMPEG_BUILDS_PUBLISHER, "FFmpeg-Builds/FFmpeg-Builds"),
+        (VSIFT_ENGINE_PUBLISHER, "smormah/vsift"),
         ("ggml-org whisper.cpp", "ggml-org/whisper.cpp"),
         ("Deno Land deno", "denoland/deno"),
         ("yt-dlp", "yt-dlp/yt-dlp"),
@@ -1785,8 +2191,9 @@ mod tests {
             );
             checked += 1;
         }
-        // Ubuntu: FFmpeg, whisper.cpp, Deno, yt-dlp; Windows: FFmpeg.
-        assert_eq!(checked, 5);
+        // Ubuntu: FFmpeg, whisper.cpp, Deno, yt-dlp; Windows: FFmpeg,
+        // whisper.cpp; macOS: FFmpeg, whisper.cpp.
+        assert_eq!(checked, 8);
         Ok(())
     }
 

@@ -74,7 +74,7 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `setup check` | Read-only dependency diagnosis | Implemented |
 | `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner`, `yt-dlp` and `js-runtime` since 0.3.0) | Implemented in P06 (scope narrowed by ADR 0015) |
 | `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Implemented in P06 (scope narrowed by ADR 0015) |
-| `setup plan` | Read-only diagnosis plus exact reviewed catalogue actions and digest (Ubuntu 24.04 x86-64 and Windows x86-64, see "Catalogues per target"); manual guidance on unaccepted targets | Implemented in P06 (read-only plans); a Windows catalogue since 0.3.0 (ADR 0032) |
+| `setup plan` | Read-only diagnosis plus exact reviewed catalogue actions and digest (Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64, see "Catalogues per target"); manual guidance on unaccepted targets | Implemented in P06 (read-only plans); Windows and macOS catalogues since 0.3.0 (ADR 0032) |
 | `setup install` | Apply an accepted plan (Ubuntu 24.04 x86-64 or Windows x86-64): download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
 | `setup list`, `setup repair` | Read-only: the managed versions of each component and whether each verifies; a diagnosis and the plan of existing commands that fixes it | Implemented in P13 PR 6 |
 | `setup rollback`, `setup remove` | Select the previous or a named verified managed version; remove a version, a component or abandoned stages | Implemented in P13 PR 6 |
@@ -3195,7 +3195,7 @@ second) with `status: "timed_out"` beside `existing_executable_probe_only`. Both
 then true of the moment each was observed; the step always follows the first, because it is
 part of what acceptance compares. Sharing one deadline between the two is not done. On **Ubuntu 24.04
 x86-64** it consults the reviewed, pinned catalogue for the paired FFmpeg and
-FFprobe build, whisper.cpp CLI and multilingual `base` model (**Windows x86-64** has its own catalogue, which offers FFmpeg, FFprobe and the model: see "Catalogues per target" below). It returns only
+FFprobe build, whisper.cpp CLI and multilingual `base` model (**Windows x86-64** and **macOS arm64** have their own catalogues of the same three components: see "Catalogues per target" below). It returns only
 actions needed by the current probe and configured-model presence, with exact
 publisher URL, sizes, SHA-256, archive inventory, installed files, licence and
 notice/source links, known trust limits, private destination and permissions.
@@ -3204,8 +3204,9 @@ revision, current probe results, configured selections, all planned actions and
 the revision's reviewed compatibility policy. For the current Ubuntu revision,
 that policy fixes the exact F01 fixture identity, expected FFmpeg/FFprobe build
 identities, per-stream and generated-file limits, media and inference deadlines,
-and 16-kHz mono audio contract. The policy remains an installer safety constraint rather than a claim
-that compatibility execution has passed.
+and 16-kHz mono audio contract. The Windows revision has the same policy; the macOS revision differs only in
+the expected FFmpeg/FFprobe banners, those of VSift's own build. The policy remains an installer safety
+constraint rather than a claim that compatibility execution has passed.
 The same unchanged observations produce the same digest. Any changed catalogue
 or observed selection requires a fresh plan and acceptance. No configured paths
 are echoed in the response. The plan is **read-only**; `setup install` applies it
@@ -3230,8 +3231,8 @@ install. After a complete install `setup plan` shows every action `current`,
 `install_needed: false` and readiness no longer blocked on the managed tools, under
 the same digest.
 
-macOS ARM64, other hosts and expired or invalid catalogue
-entries return typed `unavailable_*` status, no actions or digest, and manual
+Other hosts (macOS on Intel, Linux other than Ubuntu 24.04 x86-64, Windows on Arm) and expired or invalid
+catalogue entries return typed `unavailable_*` status, no actions or digest, and manual
 BYO guidance. Missing and unhealthy tools receive
 `manual_selection_required` unless a reviewed managed action applies.
 
@@ -3959,11 +3960,16 @@ A reader that maps the `setup` result's `web_videos` to `setup check`'s `optiona
   `setup configure`, it validates only that the path is an absolute regular file and runs nothing; the response
   names the dependency (`yt_dlp` or `js_runtime`) and what to do next. On Windows and macOS, where no managed yt-dlp
   is offered, this is the way to use public video pages. `ingest --url` of a page uses it (a later pull request).
-- **Catalogues per target (ADR 0032):** Windows x86-64 has a catalogue (FFmpeg and FFprobe, and the model) beside
-  Ubuntu 24.04 x86-64's; a target's catalogue may offer only some core components. A dependency whose component
-  it does not offer is `manual_selection_required` in the plan, and its `setup check` remediation's
-  `managed_install` is `unavailable_target` while the other dependencies' say `catalogue_accepted`; the model is
-  planned only where a whisper.cpp can smoke it.
+- **Catalogues per target (ADR 0032):** Windows x86-64 (revision `windows-x86_64-2026-11-20-r4`) and macOS arm64
+  (`macos-arm64-2026-11-20-r1`) each have a catalogue of FFmpeg and FFprobe, whisper.cpp and the model beside
+  Ubuntu 24.04 x86-64's, so on all three every core dependency's `managed_install` is `catalogue_accepted`. The
+  `target` is `windows_x86_64` or `macos_arm64`. On Windows and macOS, whisper.cpp, and on macOS FFmpeg, come from
+  VSift's own engine releases: their actions' `publisher` is `VSift engine release`, `source_url` is a
+  `github.com/smormah/vsift/releases/download/...` address and `source_code_url` the release page. Neither
+  catalogue offers an optional component yet. A target's catalogue may still offer only some core components: a
+  dependency whose component it does not offer is `manual_selection_required` in the plan, and its `setup check`
+  remediation's `managed_install` is `unavailable_target` while the other dependencies' say `catalogue_accepted`;
+  the model is planned only where a whisper.cpp can smoke it.
 - **Archive formats:** a plan action's `format` gains `zip` (read by the bounded zip reader: stored or deflated
   entries, no Zip64, no links, no comments) and `tar_bz2` (one bzip2 stream).
 - **Values that may grow (D3, the maintainer's decision of 2026-10-21).** The catalogue-content fields may gain

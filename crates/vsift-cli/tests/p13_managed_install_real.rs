@@ -1,8 +1,9 @@
 //! Opt-in P13 checkpoint: a real managed installation through the compiled
 //! binary on a host with a catalogue (D-02, D-03, D-06, D-07; ADR 0023 §3;
-//! ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64). On a host whose catalogue
-//! offers fewer components (Windows until `VSift`'s whisper.cpp is pinned) it
-//! installs and checks what the plan offers, and the local-ASR part waits.
+//! ADR 0032: Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64). On a host
+//! whose catalogue offered fewer components it would install and check what
+//! the plan offers, and the local-ASR part would wait; every catalogue offers
+//! all three today.
 //!
 //! From a fresh per-user base with an empty `PATH`, it runs `setup plan`,
 //! accepts the plan with `setup install --events jsonl` (which downloads the
@@ -15,7 +16,9 @@
 //! current with nothing to install. Last it times a warm `setup check` and
 //! a first and a warm `frame get` against the managed tools: every use
 //! re-hashes the managed version (L-087), and these lines are the evidence
-//! of what that costs. It sends no credentials and no personal detail: the
+//! of what that costs. With whisper.cpp installed it then transcribes F05's
+//! speech variant with the managed tools alone, and the transcript must hear
+//! its words: the transcription check of each target (ADR 0032). It sends no credentials and no personal detail: the
 //! publisher requests carry only `VSift`'s neutral user agent.
 //!
 //! `VSIFT_P13_REAL_INSTALL=1 cargo test --release --locked -p vsift-cli
@@ -133,7 +136,7 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
                 .collect()
         })
         .unwrap_or_default();
-    // Every core component, or (Windows) what the catalogue offers.
+    // Every core component, or what a smaller catalogue would offer.
     let complete = planned.contains(&"whisper_cli");
     println!(
         "plan: {actions} actions ({planned:?}), catalogue {}",
@@ -198,7 +201,11 @@ fn real_managed_install_selects_every_tool_and_a_rerun_is_current() -> TestResul
     );
 
     assert_installed(&base, &digest, actions, complete)?;
-    time_managed_use(&base)
+    time_managed_use(&base)?;
+    if complete {
+        assert_transcription_works(&base)?;
+    }
+    Ok(())
 }
 
 /// `setup check` after the install resolves every installed tool as the
@@ -328,6 +335,79 @@ fn time_managed_use(base: &Base) -> TestResult {
             Some(0),
             "{}",
             String::from_utf8_lossy(&frame.stdout)
+        );
+    }
+    Ok(())
+}
+
+/// The transcription check: F05's speech variant, opened with a plain
+/// `ingest` and transcribed by `transcript retranscribe` on the managed tools
+/// alone (the `PATH` is empty), must hear its words. On macOS this is also the
+/// Metal check: `VSift` runs whisper.cpp with the GPU off (`-ng`), so it must
+/// transcribe on the CPU whether or not the runner has Metal.
+fn assert_transcription_works(base: &Base) -> TestResult {
+    let video = fs::canonicalize(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/corpus/generated/F05-speech.mp4"),
+    )?;
+    let data = |arguments: &[&str]| -> Result<Value, Box<dyn Error>> {
+        let output = base.vsift()?.args(arguments).arg("--json").output()?;
+        let value: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{arguments:?}: {}",
+            value["error"]
+        );
+        Ok(value["data"].clone())
+    };
+    let opened = data(&["ingest", path_text(&video)?])?;
+    let session = opened["session_id"]
+        .as_str()
+        .ok_or("ingest returned no session")?
+        .to_owned();
+    let started = Instant::now();
+    let retranscribed = data(&["transcript", "retranscribe", &session])?;
+    println!(
+        "transcription: {:.1} s, {}",
+        started.elapsed().as_secs_f64(),
+        serde_json::to_string_pretty(&retranscribed["revision"]["local_asr"])?
+    );
+    let page = data(&[
+        "transcript",
+        "get",
+        &session,
+        "--from",
+        "0",
+        "--to",
+        "20000000",
+        "--limit",
+        "100",
+    ])?;
+    let heard = page["items"]
+        .as_array()
+        .ok_or("no transcript items")?
+        .iter()
+        .filter_map(|item| item["text"].as_str())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() {
+                character.to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    println!("heard: {heard}");
+    for word in ["success banner", "submit"] {
+        assert!(
+            heard.contains(word),
+            "the transcript lacks {word:?}: {heard}"
         );
     }
     Ok(())

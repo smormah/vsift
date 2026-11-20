@@ -340,7 +340,7 @@ pub const MANAGED_INSTALL_BUSY_REMEDIATION: &str = "Another setup install, setup
 pub const MANAGED_STORAGE_REMEDIATION: &str = "VSift could not create or write its private managed folder, so nothing was installed. Free disk space or fix the folder's permissions and run the same setup install again; or install FFmpeg, FFprobe and the whisper.cpp CLI yourself, register each with setup configure ffmpeg|ffprobe|whisper --executable <absolute-path> and the model with setup configure-model --file <absolute-path>, then run setup check.";
 
 /// Remediation when this host has no managed installation to accept.
-pub const MANAGED_UNAVAILABLE_REMEDIATION: &str = "Managed installation is not available on this host (it is qualified on Ubuntu 24.04 x86-64 only), so there is no plan to accept. Install FFmpeg, FFprobe and the whisper.cpp CLI yourself, register each with setup configure ffmpeg|ffprobe|whisper --executable <absolute-path> and the model with setup configure-model --file <absolute-path>, then run setup check.";
+pub const MANAGED_UNAVAILABLE_REMEDIATION: &str = "Managed installation is not available on this host (it is offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64), so there is no plan to accept. Install FFmpeg, FFprobe and the whisper.cpp CLI yourself, register each with setup configure ffmpeg|ffprobe|whisper --executable <absolute-path> and the model with setup configure-model --file <absolute-path>, then run setup check.";
 
 /// Remediation when the saved plan or its digest no longer describes the
 /// current plan.
