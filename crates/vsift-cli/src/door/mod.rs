@@ -492,6 +492,7 @@ impl DoorOptions {
             .iter()
             .fold(OptionalComponentSet::EMPTY, |set, extra| match extra {
                 DoorExtra::WebVideos => set.with(OptionalComponent::OnlineLinks),
+                DoorExtra::OnScreenText => set.with(OptionalComponent::Ocr),
             })
     }
 }

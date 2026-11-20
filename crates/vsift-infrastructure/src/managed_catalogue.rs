@@ -25,16 +25,19 @@ use crate::{
 /// Revision `r4` (2026-10-21) added the optional online-video components
 /// (#409); `r5` (2026-11-04) re-pins `FFmpeg` to the month-end build of
 /// 2026-10-31 (`n9.0.2-39`, the `0.2.4` hot fix); `r6` (2026-11-09) points the
-/// `FFmpeg` pin at the repository's new owner (see [`FFMPEG_BUILDS_PUBLISHER`]).
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-09-r6";
+/// `FFmpeg` pin at the repository's new owner (see [`FFMPEG_BUILDS_PUBLISHER`]);
+/// `r7` (2026-11-20) adds the optional `ocr` group (W5b).
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-20-r7";
 /// The Windows x86-64 catalogue (ADR 0032). `r2` (2026-11-04) re-pins
 /// `FFmpeg` to the same month-end build as Ubuntu; `r3` (2026-11-09) points it
 /// at the repository's new owner, like Ubuntu's `r6`; `r4` (2026-11-20) adds
-/// whisper.cpp, `VSift`'s own build (decision D2), so the catalogue is complete.
-const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-20-r4";
-/// The macOS arm64 catalogue (ADR 0032), first revision: `FFmpeg` and
-/// whisper.cpp from `VSift`'s own engine releases, and the same model.
-const MACOS_CATALOGUE_REVISION: &str = "macos-arm64-2026-11-20-r1";
+/// whisper.cpp, `VSift`'s own build (decision D2), so the catalogue is complete;
+/// `r5` (2026-11-20) adds the optional `ocr` group (W5b).
+const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-20-r5";
+/// The macOS arm64 catalogue (ADR 0032). `r1` (2026-11-20) is the first
+/// revision: `FFmpeg` and whisper.cpp from `VSift`'s own engine releases, and
+/// the same model; `r2` (2026-11-20) adds the optional `ocr` group (W5b).
+const MACOS_CATALOGUE_REVISION: &str = "macos-arm64-2026-11-20-r2";
 /// The publisher record of every engine `VSift` builds and publishes itself
 /// (`engines.yml`, ADR 0032 decision D): each archive is built twice and
 /// compared, attested, and pinned here from its release's `.inventory.json`.
@@ -44,6 +47,9 @@ const VSIFT_ENGINE_PUBLISHER: &str = "VSift engine release";
 const VSIFT_ENGINE_RELEASES: &str = "https://github.com/smormah/vsift/releases/download";
 const WINDOWS_WHISPER_URL: &str = "https://github.com/smormah/vsift/releases/download/whisper-cli-windows-v1.9.5-r1/whisper-cli-windows-1.9.5-r1-windows-x64.tar.gz";
 const MACOS_WHISPER_URL: &str = "https://github.com/smormah/vsift/releases/download/whisper-cli-macos-v1.9.5-r1/whisper-cli-macos-1.9.5-r1-macos-arm64.tar.gz";
+const OCR_LINUX_URL: &str = "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-linux-x64.tar.gz";
+const OCR_WINDOWS_URL: &str = "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-windows-x64.tar.gz";
+const OCR_MACOS_URL: &str = "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-macos-arm64.tar.gz";
 const MACOS_FFMPEG_URL: &str = "https://github.com/smormah/vsift/releases/download/ffmpeg-macos-v9.0.2.39-r1/ffmpeg-macos-9.0.2.39-r1-macos-arm64.tar.gz";
 /// The first-line prefixes of `VSift`'s macOS `FFmpeg` build: the same
 /// upstream commit as the other pins, with `VSift`'s revision as its extra
@@ -111,10 +117,17 @@ const DENO_SHA256: &str = "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a1
 /// The reviewed prefix of the first line `deno --version` prints; the rest
 /// names the release channel and target.
 const EXPECTED_DENO_VERSION: &str = "deno 2.9.7 ";
+/// The reviewed prefix of the one line `vsift-ocr-runner describe` prints:
+/// the protocol `VSift` speaks, runner 0.1.0 and `ONNX` Runtime 1.31.0. The
+/// runner names the library by its digest (`KNOWN_RUNTIMES`), so a library
+/// of any other build prints `sha256-...` and fails this check; what follows
+/// (the library's and the two models' SHA-256) is pinned by the archive's
+/// per-file digests, not repeated here.
+const EXPECTED_OCR_RUNNER_DESCRIPTION: &str = "{\"record\":\"describe\",\"protocol\":1,\"runner_version\":\"0.1.0\",\"runtime_version\":\"1.31.0\"";
 
 /// Every reviewed publisher route of every catalogue, with the origin its
 /// redirects are held to: the only URLs a managed download ever starts from.
-const REVIEWED_ROUTES: [(&str, PublisherOrigin); 9] = [
+const REVIEWED_ROUTES: [(&str, PublisherOrigin); 12] = [
     (FFMPEG_URL, PublisherOrigin::GitHubRelease),
     (WHISPER_URL, PublisherOrigin::GitHubRelease),
     (MODEL_URL, PublisherOrigin::HuggingFaceModel),
@@ -124,6 +137,9 @@ const REVIEWED_ROUTES: [(&str, PublisherOrigin); 9] = [
     (WINDOWS_WHISPER_URL, PublisherOrigin::GitHubRelease),
     (MACOS_FFMPEG_URL, PublisherOrigin::GitHubRelease),
     (MACOS_WHISPER_URL, PublisherOrigin::GitHubRelease),
+    (OCR_LINUX_URL, PublisherOrigin::GitHubRelease),
+    (OCR_WINDOWS_URL, PublisherOrigin::GitHubRelease),
+    (OCR_MACOS_URL, PublisherOrigin::GitHubRelease),
 ];
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
@@ -242,8 +258,8 @@ pub fn accepted_host_catalogue() -> Result<Option<AcceptedManagedCatalogue>, Man
 /// Windows build needs the Visual C++ runtime (decision D2); and the same model.
 ///
 /// The catalogue lists no superseded versions: no earlier release installed
-/// anything on Windows. It offers no optional group yet; the OCR and speaker
-/// groups join as `optional_artifacts`.
+/// anything on Windows. Its one optional group is `ocr` (the runner's own
+/// release); the speaker group joins as more `optional_artifacts`.
 ///
 /// # Errors
 ///
@@ -257,6 +273,7 @@ pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedC
             engine_artifact(&WINDOWS_WHISPER)?,
             model_artifact()?,
         ],
+        vec![engine_artifact(&WINDOWS_OCR)?],
         compatibility_policy()?,
     )
 }
@@ -267,7 +284,7 @@ pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedC
 ///
 /// Its compatibility policy is the shared one with the banner of `VSift`'s
 /// `FFmpeg` build ([`macos_compatibility_policy`]). Like Windows it lists no
-/// superseded versions and no optional group yet.
+/// superseded versions; its one optional group is `ocr`.
 ///
 /// # Errors
 ///
@@ -281,19 +298,21 @@ pub fn accepted_macos_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCat
             engine_artifact(&MACOS_WHISPER)?,
             model_artifact()?,
         ],
+        vec![engine_artifact(&MACOS_OCR)?],
         macos_compatibility_policy()?,
     )
 }
 
-/// A catalogue of core artifacts only, each layout checked, under the shared
-/// stop-new-plans boundary.
+/// A catalogue of core artifacts and the optional groups' artifacts, each
+/// layout checked, under the shared stop-new-plans boundary.
 fn target_catalogue(
     revision: &str,
     target: ManagedTarget,
     artifacts: Vec<AcceptedManagedArtifact>,
+    optional_artifacts: Vec<AcceptedManagedArtifact>,
     compatibility: ReviewedCompatibilityPolicy,
 ) -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
-    for artifact in &artifacts {
+    for artifact in artifacts.iter().chain(&optional_artifacts) {
         validate_layout(artifact)?;
     }
     Ok(AcceptedManagedCatalogue {
@@ -302,7 +321,7 @@ fn target_catalogue(
         stop_new_plans_at: STOP_NEW_PLANS_AT,
         stop_new_plans_date: String::from(STOP_NEW_PLANS_DATE),
         artifacts,
-        optional_artifacts: Vec::new(),
+        optional_artifacts,
         compatibility,
         superseded: Vec::new(),
     })
@@ -330,7 +349,11 @@ fn every_accepted_artifact() -> Result<Vec<AcceptedManagedArtifact>, ManagedCata
 /// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
 pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
     let artifacts = vec![ffmpeg_artifact()?, whisper_artifact()?, model_artifact()?];
-    let optional_artifacts = vec![deno_artifact()?, yt_dlp_artifact()?];
+    let optional_artifacts = vec![
+        deno_artifact()?,
+        yt_dlp_artifact()?,
+        engine_artifact(&LINUX_OCR)?,
+    ];
     for artifact in artifacts.iter().chain(&optional_artifacts) {
         validate_layout(artifact)?;
     }
@@ -507,6 +530,10 @@ fn compatibility_policy_for(
             ReviewedBanner {
                 component: ManagedComponent::YtDlp,
                 first_line_prefix: String::from(EXPECTED_YT_DLP_VERSION),
+            },
+            ReviewedBanner {
+                component: ManagedComponent::OcrRunner,
+                first_line_prefix: String::from(EXPECTED_OCR_RUNNER_DESCRIPTION),
             },
         ],
     })
@@ -789,7 +816,8 @@ impl ReviewedUbuntuAction {
     /// The candidate names the reviewed smoke roles of its component: the
     /// media-tools archive supplies `ffmpeg` and `ffprobe`, the whisper.cpp
     /// archive `whisper-cli`, the model artifact its one model file, the
-    /// runtime zip `deno` and the yt-dlp artifact `yt-dlp`.
+    /// runtime zip `deno`, the yt-dlp artifact `yt-dlp` and the OCR archive
+    /// `vsift-ocr-runner` (the runtime library and models stay beside it).
     ///
     /// # Errors
     ///
@@ -815,6 +843,7 @@ impl ReviewedUbuntuAction {
                 .unwrap_or_default(),
             ManagedComponent::JsRuntimeDeno => named(ManagedRuntimeRole::Deno).collect(),
             ManagedComponent::YtDlp => named(ManagedRuntimeRole::YtDlp).collect(),
+            ManagedComponent::OcrRunner => named(ManagedRuntimeRole::OcrRunner).collect(),
         };
         let roles: Vec<(ManagedRuntimeRole, &str)> = owned
             .iter()
@@ -846,7 +875,8 @@ impl ReviewedUbuntuAction {
 }
 
 /// The file name a managed runtime gives an executable role on this host:
-/// the reviewed name (`ffmpeg`, `ffprobe`, `whisper-cli`, `deno`, `yt-dlp`)
+/// the reviewed name (`ffmpeg`, `ffprobe`, `whisper-cli`, `deno`, `yt-dlp`,
+/// `vsift-ocr-runner`)
 /// with the platform's executable suffix (`.exe` on Windows, empty on Ubuntu
 /// and macOS). `None` for the model, whose name is its catalogue file's.
 #[must_use]
@@ -857,6 +887,7 @@ pub fn managed_executable_name(role: ManagedRuntimeRole) -> Option<String> {
         ManagedRuntimeRole::WhisperCli => "whisper-cli",
         ManagedRuntimeRole::Deno => "deno",
         ManagedRuntimeRole::YtDlp => "yt-dlp",
+        ManagedRuntimeRole::OcrRunner => "vsift-ocr-runner",
         ManagedRuntimeRole::SpeechModel => return None,
     };
     Some(format!("{base}{}", std::env::consts::EXE_SUFFIX))
@@ -1459,6 +1490,240 @@ const MACOS_FFMPEG: EngineRelease = EngineRelease {
     trust_limit: "VSift's own static build, built twice and compared byte for byte and attested, with its corresponding source in the same release. It has no dav1d, so AV1 has no software decoder (L-216). Checked on hosted macOS arm64 runners only; legal clearance is not claimed.",
 };
 
+/// The OCR runner for Ubuntu 24.04 x86-64 (ADR 0030, ADR 0032): `VSift`'s runner, ONNX
+/// Runtime 1.31.0 (from Microsoft's `NuGet` package, H9), the two `PP-OCRv5` models
+/// and every licence file, one archive. The files install flat beside the
+/// runner, which finds them there (`Layout::beside`). Inventory SHA-256
+/// `edafc56b4a8d5c1fd36f78cb4475e2c4a2bb230baea9387aaf36ffb2ec1a6ad6`,
+/// publish run 44380930959.
+const LINUX_OCR: EngineRelease = EngineRelease {
+    component: ManagedComponent::OcrRunner,
+    version: "ocr-runner-0.1.0-r1-linux-x64",
+    tag: "ocr-runner-v0.1.0-r1",
+    stem: "ocr-runner-0.1.0-r1-linux-x64",
+    url: OCR_LINUX_URL,
+    archive_bytes: 23_268_888,
+    archive_sha256: "b9e562b8a91c55e80ef778670f8aa3d4a44b47891a3b8feace8bf1b67028488d",
+    entries: 13,
+    expanded_bytes: 43_064_458,
+    tar_stream_bytes: 43_079_680,
+    files: &[
+        (
+            "LICENSES/models-NOTICE.txt",
+            489,
+            "8d8a53d6cbc9f5f81084f71127c3f6b399d37e7945543ef260301bb52f551745",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-LICENSE",
+            1_094,
+            "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-ThirdPartyNotices.txt",
+            344_457,
+            "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-APACHE",
+            11_349,
+            "00527a09828e8be699061d136072a9069b3d7195c322e638429201bc371958d1",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-MIT",
+            1_076,
+            "e99e3e22f819c1e93603b993a69395256324f33163ece870b21b0367c5a68648",
+            false,
+        ),
+        (
+            "models/ch_PP-OCRv5_det_mobile.onnx",
+            4_819_576,
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+            false,
+        ),
+        (
+            "models/latin_PP-OCRv5_rec_mobile.onnx",
+            7_904_513,
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+            false,
+        ),
+        (
+            "onnxruntime/libonnxruntime.so.1.31.0",
+            29_345_384,
+            "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
+            false,
+        ),
+        (
+            "vsift-ocr-runner",
+            636_520,
+            "1fb40dd61f02c2918a6d1bb2c9f5178c874063eb1c7f4693e06d1ad048ab113a",
+            true,
+        ),
+    ],
+    licence: "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0",
+    notice_url: "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+    trust_limit: "VSift's own build of the OCR runner with Microsoft's ONNX Runtime 1.31.0 and the two PP-OCRv5 models (Apache-2.0, as converted by RapidOCR), built twice and compared byte for byte and attested. The runner reads untrusted pixels and runs only under VSift's supervisor. Checked on hosted Ubuntu 24.04 x86-64 runners only (parity against the reference pipeline on synthetic screens; real recordings agree with it less closely, L-204).",
+};
+
+/// The OCR runner for Windows x86-64 (ADR 0030, ADR 0032): `VSift`'s runner, ONNX
+/// Runtime 1.31.0 (from Microsoft's `NuGet` package, H9), the two `PP-OCRv5` models
+/// and every licence file, one archive. The files install flat beside the
+/// runner, which finds them there (`Layout::beside`). Inventory SHA-256
+/// `056f5e6686278df49446b924176d67be7e81cecb5464f5f5b33e54ab435a97f5`,
+/// publish run 44380930959.
+const WINDOWS_OCR: EngineRelease = EngineRelease {
+    component: ManagedComponent::OcrRunner,
+    version: "ocr-runner-0.1.0-r1-windows-x64",
+    tag: "ocr-runner-v0.1.0-r1",
+    stem: "ocr-runner-0.1.0-r1-windows-x64",
+    url: OCR_WINDOWS_URL,
+    archive_bytes: 18_437_413,
+    archive_sha256: "df0d5b7a39a6afec67e4afbd700ef84073a66c9f9fea443360d842c898c4a6e2",
+    entries: 13,
+    expanded_bytes: 30_930_162,
+    tar_stream_bytes: 30_945_280,
+    files: &[
+        (
+            "LICENSES/models-NOTICE.txt",
+            489,
+            "8d8a53d6cbc9f5f81084f71127c3f6b399d37e7945543ef260301bb52f551745",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-LICENSE",
+            1_094,
+            "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-ThirdPartyNotices.txt",
+            344_457,
+            "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-APACHE",
+            11_349,
+            "00527a09828e8be699061d136072a9069b3d7195c322e638429201bc371958d1",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-MIT",
+            1_076,
+            "e99e3e22f819c1e93603b993a69395256324f33163ece870b21b0367c5a68648",
+            false,
+        ),
+        (
+            "models/ch_PP-OCRv5_det_mobile.onnx",
+            4_819_576,
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+            false,
+        ),
+        (
+            "models/latin_PP-OCRv5_rec_mobile.onnx",
+            7_904_513,
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+            false,
+        ),
+        (
+            "onnxruntime/onnxruntime.dll",
+            17_253_176,
+            "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c",
+            false,
+        ),
+        (
+            "vsift-ocr-runner.exe",
+            594_432,
+            "a2acb40a8607a8950ee9ba15a70017be1d72c909fc6bf5ac6c6e948bb311443a",
+            true,
+        ),
+    ],
+    licence: "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0",
+    notice_url: "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+    trust_limit: "VSift's own build of the OCR runner with Microsoft's ONNX Runtime 1.31.0 and the two PP-OCRv5 models (Apache-2.0, as converted by RapidOCR), built twice and compared byte for byte and attested. The runner reads untrusted pixels and runs only under VSift's supervisor. Checked on hosted Windows runners only (parity against the reference pipeline on synthetic screens; real recordings agree with it less closely, L-204).",
+};
+
+/// The OCR runner for macOS arm64 (ADR 0030, ADR 0032): `VSift`'s runner, ONNX
+/// Runtime 1.31.0 (from Microsoft's `NuGet` package, H9), the two `PP-OCRv5` models
+/// and every licence file, one archive. The files install flat beside the
+/// runner, which finds them there (`Layout::beside`). Inventory SHA-256
+/// `ac702514cae258d2eeba7dd7ef6e72cc390929e5b87d04c0abb0fc2ae843aeb9`,
+/// publish run 44380930959.
+const MACOS_OCR: EngineRelease = EngineRelease {
+    component: ManagedComponent::OcrRunner,
+    version: "ocr-runner-0.1.0-r1-macos-arm64",
+    tag: "ocr-runner-v0.1.0-r1",
+    stem: "ocr-runner-0.1.0-r1-macos-arm64",
+    url: OCR_MACOS_URL,
+    archive_bytes: 24_661_466,
+    archive_sha256: "32d0b09e84e1f77208983d753c300568a11f86fffb4c28f195bc8ff101e3c273",
+    entries: 13,
+    expanded_bytes: 58_525_994,
+    tar_stream_bytes: 58_542_080,
+    files: &[
+        (
+            "LICENSES/models-NOTICE.txt",
+            489,
+            "8d8a53d6cbc9f5f81084f71127c3f6b399d37e7945543ef260301bb52f551745",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-LICENSE",
+            1_094,
+            "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-ThirdPartyNotices.txt",
+            344_457,
+            "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-APACHE",
+            11_349,
+            "00527a09828e8be699061d136072a9069b3d7195c322e638429201bc371958d1",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-MIT",
+            1_076,
+            "e99e3e22f819c1e93603b993a69395256324f33163ece870b21b0367c5a68648",
+            false,
+        ),
+        (
+            "models/ch_PP-OCRv5_det_mobile.onnx",
+            4_819_576,
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+            false,
+        ),
+        (
+            "models/latin_PP-OCRv5_rec_mobile.onnx",
+            7_904_513,
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+            false,
+        ),
+        (
+            "onnxruntime/libonnxruntime.1.31.0.dylib",
+            44_830_288,
+            "83973572676032b4ba9418afed0b51f45599d35bb4e4628ca8ae1954c8362e31",
+            false,
+        ),
+        (
+            "vsift-ocr-runner",
+            613_152,
+            "ea05bf85ff4fecd375ebcfe495b46f8a1b582621e5792f480ba999928100aab6",
+            true,
+        ),
+    ],
+    licence: "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0",
+    notice_url: "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+    trust_limit: "VSift's own build of the OCR runner with ONNX Runtime 1.31.0 from Microsoft's NuGet package and the two PP-OCRv5 models (Apache-2.0, as converted by RapidOCR), built twice and compared byte for byte and attested. The runner reads untrusted pixels and runs only under VSift's supervisor. Checked on hosted macOS arm64 runners only (parity against the reference pipeline on synthetic screens; real recordings agree with it less closely, L-204).",
+};
+
 /// The accepted artifact of one engine release: every inventory file is
 /// selected by its path under the root and installed flat by its last part.
 fn engine_artifact(
@@ -1681,12 +1946,13 @@ mod tests {
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
-        FFMPEG_BUILDS_PUBLISHER, MACOS_FFMPEG, MACOS_WHISPER, ManagedCatalogueError,
-        REVIEWED_ROUTES, ReviewedUbuntuAction, VSIFT_ENGINE_PUBLISHER, VSIFT_ENGINE_RELEASES,
-        WINDOWS_WHISPER, accepted_catalogue, accepted_macos_catalogue, accepted_ubuntu_catalogue,
-        accepted_windows_catalogue, detect_managed_target, every_accepted_artifact,
-        pinned_whisper_model, reviewed_compatibility_policy, reviewed_whisper_models,
-        validate_layout, whisper_model_profile,
+        FFMPEG_BUILDS_PUBLISHER, LINUX_OCR, MACOS_FFMPEG, MACOS_OCR, MACOS_WHISPER,
+        ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction, VSIFT_ENGINE_PUBLISHER,
+        VSIFT_ENGINE_RELEASES, WINDOWS_OCR, WINDOWS_WHISPER, accepted_catalogue,
+        accepted_macos_catalogue, accepted_ubuntu_catalogue, accepted_windows_catalogue,
+        detect_managed_target, every_accepted_artifact, pinned_whisper_model,
+        reviewed_compatibility_policy, reviewed_whisper_models, validate_layout,
+        whisper_model_profile,
     };
     use crate::{WhisperBuildIdentity, WhisperBuildRecognition};
 
@@ -1849,9 +2115,10 @@ mod tests {
         Ok(())
     }
 
-    /// #409: the optional part offers the runtime then yt-dlp, each pinned
-    /// to its publisher's release, with a reviewed banner, and the zip is
-    /// reviewed as exactly one executable.
+    /// #409 and W5b: the optional part offers the runtime and yt-dlp (online
+    /// links), then the OCR runner (`ocr`), each pinned to its publisher's
+    /// release, with a reviewed banner, and the zip is reviewed as exactly
+    /// one executable.
     #[test]
     fn the_optional_components_are_pinned_with_their_banners()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -1863,10 +2130,14 @@ mod tests {
             .collect();
         assert_eq!(
             components,
-            [ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp]
+            [
+                ManagedComponent::JsRuntimeDeno,
+                ManagedComponent::YtDlp,
+                ManagedComponent::OcrRunner
+            ]
         );
-        let [deno, yt_dlp] = catalogue.optional_artifacts.as_slice() else {
-            return Err("two optional artifacts".into());
+        let [deno, yt_dlp, _ocr] = catalogue.optional_artifacts.as_slice() else {
+            return Err("three optional artifacts".into());
         };
         assert_eq!(deno.format, vsift_domain::ManagedArtifactFormat::Zip);
         assert_eq!(deno.integrity.bytes(), 41_596_794);
@@ -1910,7 +2181,11 @@ mod tests {
     fn the_hosted_review_checks_the_catalogue_pins() -> Result<(), Box<dyn std::error::Error>> {
         let review = include_str!("../../../tools/online_video_component_review.py");
         let catalogue = accepted_ubuntu_catalogue()?;
-        for artifact in &catalogue.optional_artifacts {
+        for artifact in catalogue
+            .optional_artifacts
+            .iter()
+            .filter(|artifact| artifact.component != ManagedComponent::OcrRunner)
+        {
             assert!(
                 review.contains(&artifact.integrity.sha256_hex()),
                 "{}",
@@ -1968,11 +2243,11 @@ mod tests {
             accepted_catalogue(ManagedTarget::WindowsX86_64)?.ok_or("no Windows catalogue")?;
         assert_eq!(windows, accepted_windows_catalogue()?);
         assert_eq!(windows.target, ManagedTarget::WindowsX86_64);
-        assert_eq!(windows.revision, "windows-x86_64-2026-11-20-r4");
+        assert_eq!(windows.revision, "windows-x86_64-2026-11-20-r5");
         let macos = accepted_catalogue(ManagedTarget::MacOsArm64)?.ok_or("no macOS catalogue")?;
         assert_eq!(macos, accepted_macos_catalogue()?);
         assert_eq!(macos.target, ManagedTarget::MacOsArm64);
-        assert_eq!(macos.revision, "macos-arm64-2026-11-20-r1");
+        assert_eq!(macos.revision, "macos-arm64-2026-11-20-r2");
         for catalogue in [&windows, &macos] {
             let components: Vec<ManagedComponent> = catalogue
                 .artifacts
@@ -1980,10 +2255,13 @@ mod tests {
                 .map(|artifact| artifact.component)
                 .collect();
             assert_eq!(components, core);
-            assert_eq!(
-                catalogue.optional_artifacts,
-                [] as [vsift_application::AcceptedManagedArtifact; 0]
-            );
+            // The one optional group of Windows and macOS is `ocr`.
+            let optional: Vec<ManagedComponent> = catalogue
+                .optional_artifacts
+                .iter()
+                .map(|artifact| artifact.component)
+                .collect();
+            assert_eq!(optional, [ManagedComponent::OcrRunner]);
             assert_eq!(
                 catalogue.superseded,
                 [] as [vsift_application::SupersededManagedVersion; 0]
@@ -2029,7 +2307,14 @@ mod tests {
     #[test]
     fn each_engine_pin_is_the_archive_its_release_publishes()
     -> Result<(), Box<dyn std::error::Error>> {
-        for release in [&WINDOWS_WHISPER, &MACOS_WHISPER, &MACOS_FFMPEG] {
+        for release in [
+            &WINDOWS_WHISPER,
+            &MACOS_WHISPER,
+            &MACOS_FFMPEG,
+            &LINUX_OCR,
+            &WINDOWS_OCR,
+            &MACOS_OCR,
+        ] {
             assert_eq!(
                 release.url,
                 format!(
@@ -2207,9 +2492,103 @@ mod tests {
             );
             checked += 1;
         }
-        // Ubuntu: FFmpeg, whisper.cpp, Deno, yt-dlp; Windows: FFmpeg,
-        // whisper.cpp; macOS: FFmpeg, whisper.cpp.
-        assert_eq!(checked, 8);
+        // Ubuntu: FFmpeg, whisper.cpp, Deno, yt-dlp, the OCR runner; Windows:
+        // FFmpeg, whisper.cpp, the OCR runner; macOS: the same three.
+        assert_eq!(checked, 11);
+        Ok(())
+    }
+
+    /// W5b: the `ocr` group is one archive of the OCR runner's own release per
+    /// target, installed flat: the runner (the only executable), the ONNX
+    /// Runtime library, the two models and every licence file, each under the
+    /// name the runner looks for beside itself.
+    #[test]
+    fn the_ocr_group_is_one_flat_archive_of_the_runners_release_per_target()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let runner_cli = include_str!("../../vsift-ocr-runner/src/cli.rs");
+        let runner_onnx = include_str!("../../vsift-ocr-runner/src/onnx.rs");
+        let models_script = include_str!("../../../tools/p16_ocr_runner.py");
+        let expected_names = |library: &str, runner: &str| -> Vec<String> {
+            let mut names = vec![
+                String::from("models-NOTICE.txt"),
+                String::from("onnxruntime-LICENSE"),
+                String::from("onnxruntime-ThirdPartyNotices.txt"),
+                String::from("vsift-ocr-runner-LICENSE-APACHE"),
+                String::from("vsift-ocr-runner-LICENSE-MIT"),
+                String::from("ch_PP-OCRv5_det_mobile.onnx"),
+                String::from("latin_PP-OCRv5_rec_mobile.onnx"),
+                String::from(library),
+                String::from(runner),
+            ];
+            names.sort();
+            names
+        };
+        let targets = [
+            (
+                accepted_ubuntu_catalogue()?,
+                expected_names("libonnxruntime.so.1.31.0", "vsift-ocr-runner"),
+            ),
+            (
+                accepted_windows_catalogue()?,
+                expected_names("onnxruntime.dll", "vsift-ocr-runner.exe"),
+            ),
+            (
+                accepted_macos_catalogue()?,
+                expected_names("libonnxruntime.1.31.0.dylib", "vsift-ocr-runner"),
+            ),
+        ];
+        for (catalogue, expected) in targets {
+            let ocr = catalogue
+                .optional_artifacts
+                .iter()
+                .find(|artifact| artifact.component == ManagedComponent::OcrRunner)
+                .ok_or("no OCR runner artifact")?;
+            assert_eq!(ocr.format, vsift_domain::ManagedArtifactFormat::TarGz);
+            assert_eq!(ocr.publisher, VSIFT_ENGINE_PUBLISHER);
+            let mut names: Vec<String> = ocr.files.iter().map(|file| file.name.clone()).collect();
+            names.sort();
+            assert_eq!(names, expected, "{:?}", catalogue.target);
+            // Only the runner executes; every other file is data.
+            let executables: Vec<&str> = ocr
+                .files
+                .iter()
+                .filter(|file| file.executable)
+                .map(|file| file.name.as_str())
+                .collect();
+            assert_eq!(executables.len(), 1);
+            assert!(executables[0].starts_with("vsift-ocr-runner"));
+            // The names and digests are what the runner and its release
+            // script say: the files the runner finds beside itself, the two
+            // models' digests, and the pinned runtime libraries.
+            for file in &ocr.files {
+                let sha = file.integrity.sha256_hex();
+                if std::path::Path::new(&file.name)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("onnx"))
+                {
+                    assert!(runner_cli.contains(&format!("\"{}\"", file.name)));
+                    assert!(models_script.contains(&sha), "{}", file.name);
+                } else if file.name.contains("onnxruntime")
+                    && !file.name.contains("LICENSE")
+                    && !file.name.contains("Notices")
+                {
+                    assert!(runner_cli.contains(&format!("\"{}\"", file.name)));
+                    assert!(runner_onnx.contains(&sha), "{}", file.name);
+                }
+            }
+            assert!(
+                catalogue
+                    .compatibility
+                    .optional_banner(ManagedComponent::OcrRunner)
+                    .is_some_and(|banner| banner.starts_with("{\"record\":\"describe\""))
+            );
+        }
+        // The reviewed `describe` prefix names the runner version the tables pin.
+        assert!(super::EXPECTED_OCR_RUNNER_DESCRIPTION.contains("\"runner_version\":\"0.1.0\""));
+        for release in [&LINUX_OCR, &WINDOWS_OCR, &MACOS_OCR] {
+            assert_eq!(release.tag, "ocr-runner-v0.1.0-r1");
+            assert!(release.stem.starts_with("ocr-runner-0.1.0-r1-"));
+        }
         Ok(())
     }
 

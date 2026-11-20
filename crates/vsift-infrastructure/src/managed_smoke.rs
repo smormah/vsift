@@ -243,7 +243,7 @@ type OptionalBanner = (
 );
 
 /// The optional components' banner runs (ADR 0028 section 4, ADR 0032).
-const OPTIONAL_BANNERS: [OptionalBanner; 2] = [
+const OPTIONAL_BANNERS: [OptionalBanner; 3] = [
     (
         ManagedComponent::JsRuntimeDeno,
         ManagedRuntimeRole::Deno,
@@ -255,6 +255,16 @@ const OPTIONAL_BANNERS: [OptionalBanner; 2] = [
         ManagedRuntimeRole::YtDlp,
         &["--ignore-config", "--no-plugin-dirs", "--version"],
         &[("YTDLP_NO_PLUGINS", "1")],
+    ),
+    // The runner has no version flag: `describe` hashes its runtime library
+    // and models beside it, names the build in one JSON line and reads no
+    // environment, so a library, model or layout that does not load shows
+    // here, before the version is published.
+    (
+        ManagedComponent::OcrRunner,
+        ManagedRuntimeRole::OcrRunner,
+        &["describe"],
+        &[],
     ),
 ];
 

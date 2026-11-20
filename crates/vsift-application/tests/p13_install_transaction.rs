@@ -129,6 +129,7 @@ const fn key(component: ManagedComponent) -> u8 {
         ManagedComponent::WhisperModel => 2,
         ManagedComponent::JsRuntimeDeno => 3,
         ManagedComponent::YtDlp => 4,
+        ManagedComponent::OcrRunner => 5,
     }
 }
 
@@ -778,11 +779,13 @@ fn every_failure_reason_has_one_code_and_identifier() {
 
 const DENO: ManagedComponent = ManagedComponent::JsRuntimeDeno;
 const YT_DLP: ManagedComponent = ManagedComponent::YtDlp;
+const OCR: ManagedComponent = ManagedComponent::OcrRunner;
 
-/// The test catalogue with the two optional components (#409).
+/// The test catalogue with the optional groups: online links (the runtime
+/// and yt-dlp, #409) and `ocr` (the runner, W5b).
 fn optional_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
     let mut catalogue = test_catalogue()?;
-    for (component, fill) in [(DENO, 'd'), (YT_DLP, 'e')] {
+    for (component, fill) in [(DENO, 'd'), (YT_DLP, 'e'), (OCR, 'c')] {
         catalogue.optional_artifacts.push(AcceptedManagedArtifact {
             component,
             version: format!("{}-fixture", component.identifier()),
@@ -865,7 +868,22 @@ fn the_default_desktop_plan_offers_the_optional_component_and_installs_none_of_i
         OptionalComponentSet::EMPTY,
         ManagedTarget::Ubuntu2404X86_64,
     )?;
-    assert_eq!(plan.optional.len(), 1);
+    // A desktop plan lists every group the catalogue offers, none included.
+    assert_eq!(plan.optional.len(), 2);
+    assert_eq!(plan.optional[1].component, OptionalComponent::Ocr);
+    assert_eq!(
+        plan.optional[1].disposition,
+        OptionalComponentDisposition::NotIncluded
+    );
+    assert_eq!(
+        plan.optional[1]
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.component)
+            .collect::<Vec<_>>(),
+        [OCR]
+    );
+    assert_eq!(plan.optional[1].actions, [] as [ManagedSetupAction; 0]);
     let offer = &plan.optional[0];
     assert_eq!(offer.component, OptionalComponent::OnlineLinks);
     assert_eq!(offer.disposition, OptionalComponentDisposition::NotIncluded);
@@ -1174,6 +1192,137 @@ async fn an_optional_failure_never_fails_the_core() -> TestResult {
     assert_eq!(report.failure_code(), None);
     assert_eq!(optional_outcomes(&report), [smoked, smoked]);
     assert_eq!(installer.journal().discarded, [DENO, YT_DLP]);
+    Ok(())
+}
+
+const BOTH_GROUPS: OptionalComponentSet = OptionalComponentSet::EMPTY
+    .with(OptionalComponent::OnlineLinks)
+    .with(OptionalComponent::Ocr);
+
+fn both_groups_plan_actions() -> Result<PlanParts, Box<dyn std::error::Error>> {
+    let plan = optional_plan(
+        SetupProfile::Desktop,
+        &RuntimeDependency::ALL,
+        BOTH_GROUPS,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    let optional = plan.optional_actions().cloned().collect();
+    Ok((plan.actions, optional))
+}
+
+/// L-214: two optional groups fail apart. Each group is a part of its own,
+/// so a download that fails in one leaves the other installed, the core is
+/// never harmed, and the report says which group failed and which installed,
+/// in either order.
+#[tokio::test]
+async fn two_optional_groups_fail_apart() -> TestResult {
+    let (core, optional) = both_groups_plan_actions()?;
+    assert_eq!(
+        optional
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect::<Vec<_>>(),
+        [DENO, YT_DLP, OCR]
+    );
+    let download_failure = StageFailure {
+        failure: ComponentInstallFailure::at(
+            InstallStep::Download,
+            InstallFailureReason::Download(DownloadFailureReason::ProxyAuth),
+        ),
+        stage: None,
+    };
+
+    // Online links fails: the OCR runner still installs.
+    let mut installer = FakeInstaller::new();
+    installer
+        .stage_failures
+        .insert(key(YT_DLP), download_failure);
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+    assert_eq!(outcomes(&report), [ComponentInstallOutcome::Activated; 3]);
+    assert_eq!(report.failure_code(), None);
+    let yt_dlp_failed = failed(
+        Some(InstallStep::Download),
+        InstallFailureReason::Download(DownloadFailureReason::ProxyAuth),
+    );
+    assert_eq!(
+        optional_outcomes(&report),
+        [BLOCKED, yt_dlp_failed, ComponentInstallOutcome::Activated]
+    );
+    let groups = report.optional_groups();
+    assert_eq!(
+        groups
+            .iter()
+            .map(|outcome| (outcome.group, outcome.installed, outcome.failure.is_some()))
+            .collect::<Vec<_>>(),
+        [
+            (OptionalComponent::OnlineLinks, false, true),
+            (OptionalComponent::Ocr, true, false)
+        ]
+    );
+    assert_eq!(installer.journal().activated, [MEDIA, WHISPER, MODEL, OCR]);
+
+    // The OCR runner fails: online links still installs.
+    let mut installer = FakeInstaller::new();
+    installer.stage_failures.insert(key(OCR), download_failure);
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+    assert_eq!(outcomes(&report), [ComponentInstallOutcome::Activated; 3]);
+    assert_eq!(report.failure_code(), None);
+    let ocr_failed = failed(
+        Some(InstallStep::Download),
+        InstallFailureReason::Download(DownloadFailureReason::ProxyAuth),
+    );
+    assert_eq!(
+        optional_outcomes(&report),
+        [
+            ComponentInstallOutcome::Activated,
+            ComponentInstallOutcome::Activated,
+            ocr_failed
+        ]
+    );
+    let groups = report.optional_groups();
+    assert_eq!(
+        groups
+            .iter()
+            .map(|outcome| (outcome.group, outcome.installed, outcome.failure.is_some()))
+            .collect::<Vec<_>>(),
+        [
+            (OptionalComponent::OnlineLinks, true, false),
+            (OptionalComponent::Ocr, false, true)
+        ]
+    );
+    assert_eq!(
+        installer.journal().activated,
+        [MEDIA, WHISPER, MODEL, DENO, YT_DLP]
+    );
+
+    // A failed smoke of one group is the same: the groups before and after
+    // it stay installed. The smokes run in plan order: video, speech, online
+    // links, then the OCR runner on its own.
+    let installer = FakeInstaller::new();
+    let failure = CompatibilitySmokeFailure {
+        check: CompatibilitySmokeCheck::Banner,
+        reason: CompatibilitySmokeFailureReason::BannerMismatch,
+    };
+    *lock(&installer.smoke_verdicts) = vec![
+        CompatibilitySmokeVerdict::Passed,
+        CompatibilitySmokeVerdict::Passed,
+        CompatibilitySmokeVerdict::Failed(failure),
+        CompatibilitySmokeVerdict::Passed,
+    ];
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+    let smoked = failed(
+        Some(InstallStep::Smoke),
+        InstallFailureReason::Smoke(failure),
+    );
+    assert_eq!(
+        optional_outcomes(&report),
+        [smoked, smoked, ComponentInstallOutcome::Activated]
+    );
+    assert_eq!(installer.journal().discarded, [DENO, YT_DLP]);
+    assert_eq!(installer.journal().activated, [MEDIA, WHISPER, MODEL, OCR]);
     Ok(())
 }
 

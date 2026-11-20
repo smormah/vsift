@@ -67,6 +67,7 @@ fn component(
         ManagedComponent::WhisperModel => "whisper-base-multilingual-80da2d8",
         ManagedComponent::JsRuntimeDeno => "deno-2.9.7-x86_64-linux-gnu",
         ManagedComponent::YtDlp => "yt-dlp-2026.08.19-linux-x86_64",
+        ManagedComponent::OcrRunner => "ocr-runner-0.1.0-r1-linux-x64",
     };
     ComponentInstallReport {
         component,

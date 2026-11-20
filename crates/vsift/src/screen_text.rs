@@ -808,7 +808,9 @@ impl Engine {
         }
     }
 
-    /// The runner executable: `selected`, else the configured one, else `PATH`.
+    /// The runner executable: `selected`, else the configured one, else the
+    /// managed install of the `ocr` group (verified and held, as every managed
+    /// tool is), else `PATH`.
     pub(crate) fn resolve_ocr_runner(
         &self,
         selected: Option<PathBuf>,
@@ -822,8 +824,11 @@ impl Engine {
         };
         match configured {
             Some(path) => TrustedExecutable::explicit(path),
-            None => ExecutableResolver::from_current_path()
-                .resolve(std::ffi::OsStr::new(OCR_RUNNER_NAME)),
+            None => match self.managed_lookup().ocr_runner() {
+                Some(executable) => Ok(executable),
+                None => ExecutableResolver::from_current_path()
+                    .resolve(std::ffi::OsStr::new(OCR_RUNNER_NAME)),
+            },
         }
         .map_err(|error| match error {
             ExecutableResolutionError::NotFound => EngineError::Ocr(OcrError::RunnerUnavailable),

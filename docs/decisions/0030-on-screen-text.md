@@ -274,6 +274,18 @@ archive's. The parity and labels were measured again on all three systems (hoste
 lines, 93.1, 88.6 and 90.4% on RM01, RM04 and RM10, the labels 30/34, 18/20 and 25/29, and Windows
 and macOS identical to Linux ([L-254](../planning/known-limits.md#l-254)).
 
+## Note of 2026-11-20: the managed install (decision 2; ADR 0032, W5b; L-225)
+
+The runner is published (`ocr-runner-v0.1.0-r1`, one archive per system, with ONNX Runtime and the two models inside)
+and the managed catalogues of Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64 install it as the optional group
+`ocr` (`vsift setup plan --include ocr`, or the door's `--include on-screen-text`): one component, `ocr_runner`,
+installed flat (the layout of the note of 2026-10-22). `vsift ocr` resolves the runner as `--runner`, then the one
+registered with `setup configure ocr-runner`, then the managed one, then `PATH`; the runner's per-read proof of its own
+build (RV-2 finding 3) is unchanged and is what the install's hosted check reads back, in the index's `engine` digests.
+Decision 2's "until the managed install exists a user registers a runner" is therefore no longer the only way; it
+remains one ([ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md), its note of the
+same date).
+
 ## Consequences
 
 - An agent can find what was shown as it finds what was said, and cite the exact frame, time and

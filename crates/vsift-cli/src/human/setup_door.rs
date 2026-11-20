@@ -16,7 +16,9 @@ use vsift::{
 use vsift_contract::{SetupOutcome, SetupPartName, SetupResponse};
 
 use super::{
-    setup_check::{Door, Next, Standing, push_extras_line, push_guide, push_next, push_overview},
+    setup_check::{
+        Door, Next, Standing, extra_words, push_extras_line, push_guide, push_next, push_overview,
+    },
     text::{RenderedText, Styling, TerminalText, Tone, TooLarge},
     view::{InstallComponent, PlanAction, SetupPlan},
 };
@@ -52,14 +54,30 @@ pub(crate) enum Part {
     Speech,
     /// The optional web-video extra.
     WebVideos,
+    /// The optional on-screen-text extra.
+    OnScreenText,
 }
 
 impl Part {
+    /// The part an optional group is, by the group's own name in a plan
+    /// (`online_links`, `ocr`); `None` for a name this build does not know.
+    fn of_group(name: &str) -> Option<Self> {
+        OptionalComponent::from_identifier(name).map(Self::of_extra)
+    }
+
+    const fn of_extra(component: OptionalComponent) -> Self {
+        match component {
+            OptionalComponent::OnlineLinks => Self::WebVideos,
+            OptionalComponent::Ocr => Self::OnScreenText,
+        }
+    }
+
     const fn name(self) -> &'static str {
         match self {
             Self::Video => "Video",
             Self::Speech => "Speech",
-            Self::WebVideos => "Web videos",
+            Self::WebVideos => extra_words(OptionalComponent::OnlineLinks).part,
+            Self::OnScreenText => extra_words(OptionalComponent::Ocr).part,
         }
     }
 
@@ -67,7 +85,8 @@ impl Part {
         match self {
             Self::Video => "video",
             Self::Speech => "speech",
-            Self::WebVideos => "web videos",
+            Self::WebVideos => extra_words(OptionalComponent::OnlineLinks).sentence,
+            Self::OnScreenText => extra_words(OptionalComponent::Ocr).sentence,
         }
     }
 
@@ -86,6 +105,7 @@ fn piece(component: &str) -> Option<(Part, &'static str)> {
         "whisper_model" => (Part::Speech, "speech model"),
         "yt_dlp" => (Part::WebVideos, "yt-dlp"),
         "js_runtime_deno" => (Part::WebVideos, "Deno"),
+        "ocr_runner" => (Part::OnScreenText, "OCR runner"),
         _ => return None,
     })
 }
@@ -126,12 +146,15 @@ impl DoorOffer {
         let mut extra_summaries = Vec::new();
         for optional in &plan.optional_components {
             let before = pieces.len();
+            // A group this build does not know is offered under the first
+            // extra's name, as an unknown component always was.
+            let group = Part::of_group(&optional.name).unwrap_or(Part::WebVideos);
             pieces.extend(
                 optional
                     .actions
                     .iter()
                     .filter(pending)
-                    .map(|action| offered(action, Part::WebVideos)),
+                    .map(|action| offered(action, group)),
             );
             if pieces.len() > before {
                 extra_summaries.push(optional.summary.clone());
@@ -341,8 +364,9 @@ fn push_extras_not_here(
     let mut wrote = false;
     for extra in include.iter() {
         if extra_capability(checked, extra) == Some(&OptionalCapability::Unavailable) {
-            let OptionalComponent::OnlineLinks = extra;
-            text.push_fixed("VSift can't add web videos on this computer yet.")
+            text.push_fixed("VSift can't add ")
+                .push_fixed(extra_words(extra).sentence)
+                .push_fixed(" on this computer yet.")
                 .end_line();
             wrote = true;
         }
@@ -646,9 +670,7 @@ pub(crate) fn door_unattended_installing(
             vsift::CorePart::Speech => Part::Speech,
         })
         .collect();
-    if include.contains(OptionalComponent::OnlineLinks) {
-        named.push(Part::WebVideos);
-    }
+    named.extend(include.iter().map(Part::of_extra));
     text.push_fixed("Installing ");
     push_parts(&mut text, &named);
     text.push_fixed(" without questions:").end_line();
@@ -688,6 +710,7 @@ pub(crate) fn door_unattended_result(
                     SetupPartName::Video => "video",
                     SetupPartName::Speech => "speech",
                     SetupPartName::WebVideos => "web videos",
+                    SetupPartName::OnScreenText => "on-screen text",
                 })
                 .push_fixed(": ")
                 .push_value(next)
@@ -742,9 +765,19 @@ enum Advice {
     Space,
     Again,
     WhenReady,
+    /// On-screen text failed its test on Windows, where ONNX Runtime needs
+    /// Microsoft's Visual C++ Redistributable (L-225).
+    VisualCppRuntime,
 }
 
+/// Where to get Microsoft's Visual C++ Redistributable for x64.
+const VISUAL_CPP_REDISTRIBUTABLE: &str = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+
 fn advice(installed: &InstallResults) -> Option<Advice> {
+    advice_on(installed, cfg!(windows))
+}
+
+fn advice_on(installed: &InstallResults, windows: bool) -> Option<Advice> {
     installed
         .components
         .iter()
@@ -756,6 +789,11 @@ fn advice(installed: &InstallResults) -> Option<Advice> {
                 Some(Advice::Connection)
             }
             Some("storage") => Some(Advice::Space),
+            // Only the install test (the smoke): any other reason, an
+            // integrity failure for one, is not the missing runtime.
+            Some("smoke") if windows && component.component == "ocr_runner" => {
+                Some(Advice::VisualCppRuntime)
+            }
             _ => Some(Advice::Again),
         })
 }
@@ -790,6 +828,15 @@ pub(crate) fn door_after_install(
         Some(Advice::WhenReady) => {
             text.push_fixed("Next: run  vsift setup  when you're ready")
                 .end_line();
+        }
+        Some(Advice::VisualCppRuntime) => {
+            text.push_fixed(
+                "On-screen text needs Microsoft's Visual C++ Redistributable for x64, which this computer may lack. Install it from ",
+            )
+            .push_fixed(VISUAL_CPP_REDISTRIBUTABLE)
+            .end_line()
+            .push_fixed("Next: run  vsift setup --include on-screen-text  again")
+            .end_line();
         }
         Some(Advice::Again) => {
             text.push_fixed("If it fails again, the troubleshooting guide helps: ")

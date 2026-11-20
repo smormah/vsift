@@ -278,9 +278,10 @@ fn the_inventory_reports_the_selection_its_previous_version_and_verification() -
 /// them with their versions, rolled back, removed alone and repaired, and
 /// removing one never touches another component.
 #[test]
-fn the_online_links_components_are_listed_rolled_back_and_removed_like_the_core() -> TestResult {
+fn the_optional_components_are_listed_rolled_back_and_removed_like_the_core() -> TestResult {
     const YT_DLP: ManagedComponent = ManagedComponent::YtDlp;
     const DENO: ManagedComponent = ManagedComponent::JsRuntimeDeno;
+    const OCR: ManagedComponent = ManagedComponent::OcrRunner;
     let fixture = Fixture::new()?;
     let store = fixture.store()?;
     let guard = store.try_install_guard()?;
@@ -290,6 +291,18 @@ fn the_online_links_components_are_listed_rolled_back_and_removed_like_the_core(
     drop(publish_component(&store, &guard, DENO, "2.9.6")?);
     drop(publish_component(&store, &guard, YT_DLP, "2026.08.01")?);
     drop(publish_component(&store, &guard, YT_DLP, "2026.08.19")?);
+    drop(publish_component(
+        &store,
+        &guard,
+        OCR,
+        "ocr-runner-0.1.0-r1",
+    )?);
+    drop(publish_component(
+        &store,
+        &guard,
+        OCR,
+        "ocr-runner-0.1.0-r2",
+    )?);
     let maintainer = GuardedManagedStore::new(&store, &guard);
 
     let inventory = maintainer.inventory()?.ok_or("no root")?;
@@ -314,7 +327,33 @@ fn the_online_links_components_are_listed_rolled_back_and_removed_like_the_core(
             .selected_version(),
         Some("2.9.6")
     );
+    let ocr = inventory.component(OCR).ok_or("no OCR runner")?;
+    assert_eq!(ocr.selected_version(), Some("ocr-runner-0.1.0-r2"));
+    assert_eq!(ocr.previous_version(), Some("ocr-runner-0.1.0-r1"));
     assert_eq!(inventory.unexpected_entries, 0);
+
+    // The OCR runner rolls back and is removed like any component, apart
+    // from online links.
+    let back = roll_back_component(&maintainer, OCR, None)?;
+    assert_eq!(back.selected, "ocr-runner-0.1.0-r1");
+    let removed = remove_managed(&maintainer, &ManagedRemovalTarget::Component(OCR))?;
+    assert_eq!(removed.deselected, Some(OCR));
+    assert!(
+        maintainer
+            .inventory()?
+            .ok_or("no root")?
+            .component(OCR)
+            .is_none()
+    );
+    assert_eq!(
+        maintainer
+            .inventory()?
+            .ok_or("no root")?
+            .component(YT_DLP)
+            .ok_or("no yt-dlp")?
+            .selected_version(),
+        Some("2026.08.19")
+    );
 
     let back = roll_back_component(&maintainer, YT_DLP, None)?;
     assert_eq!(back.selected, "2026.08.01");

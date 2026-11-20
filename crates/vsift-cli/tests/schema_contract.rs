@@ -193,17 +193,33 @@ fn adjust_for_host(blocked: &mut Value) -> Result<(), Box<dyn std::error::Error>
         != vsift_domain::ManagedTarget::Ubuntu2404X86_64
     {
         // Nor is the optional online-links component offered there.
-        blocked["optional_components"] = serde_json::json!([{
-            "name": "online_links",
-            "status": "unavailable",
-            "components": [],
-            "next_step": vsift_contract::optional_check_step(
-                vsift_application::OptionalComponent::OnlineLinks,
-                &vsift_application::OptionalCapability::Unavailable,
-                vsift_application::SetupProfile::Desktop,
-            ),
-            "add_command": null,
-        }]);
+        let unavailable = |component: vsift_application::OptionalComponent| {
+            serde_json::json!({
+                "name": component.identifier(),
+                "status": "unavailable",
+                "components": [],
+                "next_step": vsift_contract::optional_check_step(
+                    component,
+                    &vsift_application::OptionalCapability::Unavailable,
+                    vsift_application::SetupProfile::Desktop,
+                ),
+                "add_command": null,
+            })
+        };
+        // The optional OCR runner is offered on every system with a
+        // catalogue (Ubuntu, Windows and macOS), so the frozen entry stands
+        // there; a host with no catalogue has neither group.
+        let mut groups = vec![unavailable(
+            vsift_application::OptionalComponent::OnlineLinks,
+        )];
+        match blocked["optional_components"]
+            .as_array()
+            .and_then(|groups| groups.iter().find(|group| group["name"] == "ocr"))
+        {
+            Some(ocr) if host.is_some() => groups.push(ocr.clone()),
+            _ => groups.push(unavailable(vsift_application::OptionalComponent::Ocr)),
+        }
+        blocked["optional_components"] = Value::Array(groups);
     }
     Ok(())
 }

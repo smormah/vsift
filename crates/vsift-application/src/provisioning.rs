@@ -67,17 +67,23 @@ pub enum OptionalComponent {
     /// a public platform page, with the managed JavaScript runtime it runs a
     /// page's player code with. Offered on Ubuntu 24.04 x86-64 only.
     OnlineLinks,
+    /// On-screen text (ADR 0030, ADR 0032): `VSift`'s own OCR runner with its
+    /// ONNX Runtime library, the two `PP-OCRv5` models and their licence
+    /// files, one archive of `VSift`'s engine release. Offered on every
+    /// target with a catalogue.
+    Ocr,
 }
 
 impl OptionalComponent {
     /// Every optional component, in plan order.
-    pub const ALL: [Self; 1] = [Self::OnlineLinks];
+    pub const ALL: [Self; 2] = [Self::OnlineLinks, Self::Ocr];
 
     /// The name `setup plan --include` takes and the plan shows.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::OnlineLinks => "online_links",
+            Self::Ocr => "ocr",
         }
     }
 
@@ -95,6 +101,7 @@ impl OptionalComponent {
     pub const fn components(self) -> &'static [ManagedComponent] {
         match self {
             Self::OnlineLinks => &[ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp],
+            Self::Ocr => &[ManagedComponent::OcrRunner],
         }
     }
 
@@ -110,6 +117,7 @@ impl OptionalComponent {
     const fn bit(self) -> u8 {
         match self {
             Self::OnlineLinks => 1,
+            Self::Ocr => 2,
         }
     }
 }
@@ -168,7 +176,9 @@ impl CorePart {
         match component {
             ManagedComponent::MediaTools => Some(Self::Video),
             ManagedComponent::WhisperCli | ManagedComponent::WhisperModel => Some(Self::Speech),
-            ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => None,
+            ManagedComponent::JsRuntimeDeno
+            | ManagedComponent::YtDlp
+            | ManagedComponent::OcrRunner => None,
         }
     }
 
@@ -378,9 +388,10 @@ pub struct AcceptedManagedCatalogue {
     pub stop_new_plans_date: String,
     /// Complete core component set in stable component order.
     pub artifacts: Vec<AcceptedManagedArtifact>,
-    /// The optional components' artifacts, in install order
-    /// ([`ManagedComponent::JsRuntimeDeno`], then [`ManagedComponent::YtDlp`]),
-    /// or none on a catalogue that offers none. Never planned unless the user
+    /// The optional components' artifacts, in group order
+    /// ([`ManagedComponent::JsRuntimeDeno`], then [`ManagedComponent::YtDlp`]
+    /// for online links; [`ManagedComponent::OcrRunner`] for `ocr`), or none
+    /// on a catalogue that offers none. Never planned unless the user
     /// includes them.
     pub optional_artifacts: Vec<AcceptedManagedArtifact>,
     /// Compatibility checks that must pass before publication.
@@ -1306,7 +1317,9 @@ pub fn plan_managed_setup_of_parts(
         ManagedComponent::WhisperModel => selection_state.model.is_none() && model_offered,
         // The core list holds no optional component (the catalogue check
         // refuses one); optional ones are planned below.
-        ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => false,
+        ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp | ManagedComponent::OcrRunner => {
+            false
+        }
     };
     let actions = core_actions(catalogue.as_ref().filter(|_| qualified), wanted);
 

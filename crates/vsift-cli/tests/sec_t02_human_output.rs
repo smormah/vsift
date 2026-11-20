@@ -542,6 +542,8 @@ fn normalise_setup_check(text: &str) -> String {
         }
         if line.starts_with("  Web videos") {
             lines.push(String::from("<WEB VIDEOS ROW>"));
+        } else if line.starts_with("  On-screen text") {
+            lines.push(String::from("<ON-SCREEN TEXT ROW>"));
         } else if line.starts_with("Next: ") {
             lines.push(String::from("Next: <NEXT STEP>"));
         } else if line.starts_with("  ") && line.trim_start().contains("  ") {
@@ -569,7 +571,8 @@ fn setup_commands_render_readable_text() -> TestResult {
     // does whether the optional web-video extra is offered (#409). The
     // snapshot records what both hosts share: the table with its cells
     // joined by single spaces (the column widths follow the longest cell),
-    // the optional row and the step as placeholders.
+    // the optional rows (web videos, on-screen text) and the step as
+    // placeholders.
     let text = normalise_setup_check(&text);
     check_snapshot("setup-check-blocked", &text)?;
 

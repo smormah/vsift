@@ -341,6 +341,45 @@ pub(super) fn push_overview<L>(
     }
 }
 
+/// How a person meets one optional extra (ADR 0036 section 7, the first-run
+/// design note C8): the words of its table row, the name in a sentence and
+/// the name `vsift setup --include` takes. The one place an extra is named
+/// for a person, so a new group adds its words here and nowhere else in
+/// the readable views.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ExtraWords {
+    /// The table's `Part` cell.
+    pub(crate) part: &'static str,
+    /// The table's `Uses` cell.
+    pub(crate) uses: &'static str,
+    /// The table's `What it's for` cell.
+    pub(crate) purpose: &'static str,
+    /// The extra in a sentence: `web videos`.
+    pub(crate) sentence: &'static str,
+    /// The door's `--include` name: `web-videos`.
+    pub(crate) include_name: &'static str,
+}
+
+/// The words of `component`'s extra.
+pub(crate) const fn extra_words(component: OptionalComponent) -> ExtraWords {
+    match component {
+        OptionalComponent::OnlineLinks => ExtraWords {
+            part: "Web videos",
+            uses: "yt-dlp",
+            purpose: "web page videos (optional)",
+            sentence: "web videos",
+            include_name: "web-videos",
+        },
+        OptionalComponent::Ocr => ExtraWords {
+            part: "On-screen text",
+            uses: "OCR runner",
+            purpose: "reading text shown on screen (optional)",
+            sentence: "on-screen text",
+            include_name: "on-screen-text",
+        },
+    }
+}
+
 /// One row of the table. Every cell is `VSift`'s own fixed word.
 struct Row {
     part: &'static str,
@@ -374,17 +413,17 @@ fn push_table(
         },
     ];
     for (component, capability) in optional {
-        let OptionalComponent::OnlineLinks = component;
+        let words = extra_words(*component);
         rows.push(Row {
-            part: "Web videos",
+            part: words.part,
             // A registered runtime that nothing uses does not change the row.
             status: match capability.base() {
                 usable if usable.is_usable() => ("added", Tone::Good),
                 OptionalCapability::Unavailable => ("not available", Tone::Quiet),
                 _ => ("none added", Tone::Quiet),
             },
-            uses: "yt-dlp",
-            purpose: "web page videos (optional)",
+            uses: words.uses,
+            purpose: words.purpose,
         });
     }
     // A styled status is two columns wider: its symbol and a space.
@@ -626,16 +665,34 @@ pub(super) fn push_extras_line(
     if profile == ExecutionProfile::Worker {
         return;
     }
-    let addable = optional
+    let addable: Vec<ExtraWords> = optional
         .iter()
-        .any(|(_, capability)| *capability.base() == OptionalCapability::NotInstalled);
-    if addable {
-        // Web videos are the only extra a catalogue has so far; the others
-        // join this line as their groups land (ADR 0036 section 7).
-        text.push_fixed(
-            "Optional extras: web videos. Add one with: vsift setup --include web-videos",
-        )
-        .end_line();
+        .filter(|(_, capability)| *capability.base() == OptionalCapability::NotInstalled)
+        .map(|(component, _)| extra_words(*component))
+        .collect();
+    // The line names every extra that could be added here and the flag of each
+    // (ADR 0036 section 7, the first-run design note C8): with one extra,
+    // `Add one with: vsift setup --include web-videos`; with more,
+    // `... --include web-videos, or --include on-screen-text`.
+    if let Some(first) = addable.first() {
+        text.push_fixed("Optional extras: ");
+        for (index, words) in addable.iter().enumerate() {
+            if index > 0 {
+                text.push_fixed(", ");
+            }
+            text.push_fixed(words.sentence);
+        }
+        text.push_fixed(". Add one with: vsift setup --include ")
+            .push_fixed(first.include_name);
+        for (index, words) in addable.iter().enumerate().skip(1) {
+            text.push_fixed(if index + 1 == addable.len() {
+                ", or --include "
+            } else {
+                ", --include "
+            })
+            .push_fixed(words.include_name);
+        }
+        text.end_line();
     }
 }
 

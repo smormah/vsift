@@ -473,6 +473,9 @@ and checks it before use, exactly as it does the other publishers' files.
 - **What has been shown:** both systems' installs, the check after them and a transcription ran on GitHub's hosted
   Windows Server 2025 and macOS 15 runners ([L-224](../planning/known-limits.md#l-224)); no person has run them on a
   Windows PC or a Mac yet, and no kill or power-loss test runs there (L-215).
+- **On-screen text:** the optional `ocr` group (section 5.1a) is offered on both systems and on Ubuntu: VSift's
+  own OCR runner for the system, 18 MB on Windows and 25 MB on macOS, installed after the core only when you ask
+  for it. The group's install smoke ran on the same hosted runners ([L-225](../planning/known-limits.md#l-225)).
 
 ### 5.1a Optional components (since `0.3.0`)
 
@@ -486,9 +489,26 @@ vsift setup plan --profile desktop --include online_links --json > plan.json
 vsift setup install --plan plan.json --accept-plan <the plan digest>
 ```
 
+`--include` is repeatable and takes the group's name below. A person at a terminal adds the same groups with the
+setup door instead, by their plain names: `vsift setup --include web-videos` or
+`vsift setup --include on-screen-text` (the door's table lists each one as added, not added or not available).
+
 - **`online_links`** is what fetching a video from a public web page (YouTube and other sites) needs: yt-dlp and
   the Deno runtime it runs, so `ingest --url` can read a public video page, about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
   Deno is MIT, and downloading from a site is subject to that site's terms. Direct HTTPS video links do not need it.
+- **`ocr`** is what reading the text shown on screen needs (`vsift ocr` and `vsift ocr search`): VSift's own OCR
+  runner with ONNX Runtime 1.31.0 and the two PP-OCRv5 text models, **one download of about 18 to 25 MB** (23 MB
+  on Ubuntu 24.04 x64, 18 MB on Windows x64, 25 MB on macOS on Apple silicon; `setup plan` states the next whole
+  megabyte, 24, 19 and 25). It is offered on all three systems. The
+  runner is MIT OR Apache-2.0, ONNX Runtime is MIT and the models are Apache-2.0 (PaddleOCR's, converted to ONNX
+  by RapidOCR); the archive carries every licence file beside them. Everything runs on your machine and nothing is
+  sent anywhere. The archive is one of VSift's own engine releases (`ocr-runner-v0.1.0-r1`), built twice and
+  compared byte for byte and attested like the other engines
+  ([`engines.md`](engines.md)); the ONNX Runtime library is already inside it (taken from Microsoft's NuGet
+  package since the GitHub archives went away, [L-254](../planning/known-limits.md#l-254)), so the group pins
+  VSift's own release and nothing else. The install smoke starts the runner with `describe`, which hashes the
+  library and the models beside it and names the build; `vsift ocr` then uses it with no setting, after a runner
+  you registered with `setup configure ocr-runner` and before one on `PATH`.
 - **Installed after the core.** `setup install` installs FFmpeg, whisper.cpp and the model first, then each
   optional component on its own. If an optional component cannot be installed (a proxy that blocks its download,
   say), the core stays installed, the result is `partial` (exit 0) with a warning, and its line says what failed and
@@ -496,6 +516,12 @@ vsift setup install --plan plan.json --accept-plan <the plan digest>
 - **`setup check`** lists each optional component as `installed`, `not_installed` or `unavailable` on this machine,
   apart from the status of local investigation. A component row says where it came from (`source`: `managed`, or
   `user_managed` for a tool you supplied, shown with the first line of its own version output and its SHA-256).
+- **On Windows, `ocr` needs Microsoft's Visual C++ Redistributable for x64.** ONNX Runtime's Windows library depends on it (it imports `MSVCP140.dll` and `VCRUNTIME140.dll`; read from the installed copy on a hosted Windows runner, [L-225](../planning/known-limits.md#l-225)). Most PCs have it already, because many programs install it. If yours does not, the `ocr` group's install test fails, the core stays installed and VSift says so: install the Redistributable from <https://aka.ms/vs/17/release/vc_redist.x64.exe> and run the same command again. VSift does not install it for you.
+- **Your own OCR runner.** To use a runner you built or were given, register it once with an absolute path:
+  `vsift setup configure ocr-runner --executable /absolute/path/to/vsift-ocr-runner`. Its ONNX Runtime library
+  and its two models must sit beside it (in `onnxruntime/` and `models/`, or flat); `vsift ocr` checks the build when
+  it runs. `setup check` does not look at a registered runner: its `ocr` row says `not_installed` until you add the
+  managed group ([L-225](../planning/known-limits.md#l-225)).
 - **Your own yt-dlp (any system).** A managed yt-dlp is offered on Ubuntu 24.04 x64 only. On Windows and macOS, or
   to use a yt-dlp of your own anywhere, install one yourself and register it once, with absolute paths, as with the
   other tools in section 5.2. Also register the JavaScript runtime it needs (Deno); without one, YouTube may
@@ -648,7 +674,8 @@ deleting them left no trace; the evidence bundle, the registered tools and the s
 1. **Managed tools first, if you used them** (you need the `vsift` command for this):
    `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup
    remove whisper_model`, then, if you added web videos, `vsift setup remove yt_dlp` and
-   `vsift setup remove js_runtime_deno`, then `vsift setup remove --stale-stages`. Content VSift cannot
+   `vsift setup remove js_runtime_deno`, then, if you added on-screen text, `vsift setup remove ocr_runner`,
+   then `vsift setup remove --stale-stages`. Content VSift cannot
    prove is its own (a link, an unknown file) is kept and `vsift setup repair` names it; delete
    the managed folder by hand in that case ([L-090](../planning/known-limits.md#l-090)).
 2. **The package:**

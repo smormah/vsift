@@ -40,6 +40,9 @@ pub enum SetupPartName {
     /// The optional extra that fetches videos from public web pages
     /// (`online_links` in `setup check` and `setup plan`).
     WebVideos,
+    /// The optional extra that reads the text shown on screen (`ocr` in
+    /// `setup check` and `setup plan`).
+    OnScreenText,
 }
 
 /// Where one part stands after the run.
@@ -156,6 +159,9 @@ pub fn setup_next_install(part: SetupPartName) -> String {
         SetupPartName::Video => "video",
         SetupPartName::Speech => "speech",
         SetupPartName::WebVideos => return String::from("vsift setup --include web-videos"),
+        SetupPartName::OnScreenText => {
+            return String::from("vsift setup --include on-screen-text");
+        }
     };
     format!("vsift setup --unattended --install {name}")
 }
