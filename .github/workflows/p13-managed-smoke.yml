@@ -336,6 +336,79 @@ jobs:
           real_managed_install_selects_every_tool_and_a_rerun_is_current
           -- --ignored --exact --nocapture
 
+  # ADR 0030, ADR 0032 (W5b): the same install with the optional `ocr` group
+  # (`setup plan --include ocr`) on all three systems, built from this ref (a
+  # dispatch only: the published binaries and the weekly schedule predate the
+  # group). Each job installs the core and the group's one archive (VSift's own
+  # OCR runner release with ONNX Runtime and the two models), checks
+  # `setup check`, then runs `vsift ocr` and `vsift ocr search` on F05 with an
+  # empty PATH, so the managed runner alone reads the frames; its index must
+  # name the pinned runner, models and runtime. The downloads are the pinned
+  # artifacts of the accepted catalogue; no credentials and no personal
+  # details are sent.
+  managed-install-ocr:
+    name: Managed install with on-screen text (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_ocr_installs_and_reads_on_screen_text
+          -- --ignored --exact --nocapture
+
+  managed-install-ocr-windows:
+    name: Managed install with on-screen text (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_ocr_installs_and_reads_on_screen_text
+          -- --ignored --exact --nocapture
+
+  managed-install-ocr-macos:
+    name: Managed install with on-screen text (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_ocr_installs_and_reads_on_screen_text
+          -- --ignored --exact --nocapture
+
   # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
   # base with an empty PATH it kills the accepted install (SIGKILL) during a
   # download and during a smoke, checks setup repair and setup list after

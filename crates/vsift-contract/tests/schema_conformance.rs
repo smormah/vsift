@@ -184,10 +184,16 @@ fn blocked_setup_check_matches_the_frozen_example() -> TestResult {
             &NOTHING_REGISTERED,
         )
         .with_optional_components(
-            &[(
-                vsift_application::OptionalComponent::OnlineLinks,
-                vsift_application::OptionalCapability::NotInstalled,
-            )],
+            &[
+                (
+                    vsift_application::OptionalComponent::OnlineLinks,
+                    vsift_application::OptionalCapability::NotInstalled,
+                ),
+                (
+                    vsift_application::OptionalComponent::Ocr,
+                    vsift_application::OptionalCapability::NotInstalled,
+                ),
+            ],
             SetupProfile::Desktop,
         ),
     )?;

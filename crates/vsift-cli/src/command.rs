@@ -216,7 +216,7 @@ pub(crate) struct SetupArguments {
     pub command: Option<SetupCommand>,
     /// Plain `vsift setup` only: also offer an optional extra (repeatable).
     /// `web-videos` fetches videos from public web pages (Ubuntu 24.04
-    /// x86-64 only for now).
+    /// x86-64 only for now); `on-screen-text` reads the text shown on screen.
     #[arg(long = "include", value_enum, value_name = "EXTRA")]
     pub include: Vec<DoorExtra>,
     /// Plain `vsift setup` only: nobody is there to answer. Installs the
@@ -259,6 +259,9 @@ pub(crate) enum DoorExtra {
     /// Videos from public web pages: `online_links` in the JSON results.
     #[value(name = "web-videos")]
     WebVideos,
+    /// Text shown on screen, read by the OCR runner: `ocr` in the JSON results.
+    #[value(name = "on-screen-text")]
+    OnScreenText,
 }
 
 /// Setup lifecycle operations.
@@ -348,8 +351,10 @@ pub(crate) struct SetupPlanArguments {
     pub profile: ExecutionProfile,
     /// Include an optional component (repeatable). `online_links` is what
     /// fetching a video from a public web page needs: yt-dlp and the
-    /// JavaScript runtime it runs (Ubuntu 24.04 x86-64 only). Ask the
-    /// operator first. The plan lists what it leaves out.
+    /// JavaScript runtime it runs (Ubuntu 24.04 x86-64 only). `ocr` is what
+    /// reading on-screen text needs: the OCR runner, ONNX Runtime and the
+    /// text models. Ask the operator first. The plan lists what it leaves
+    /// out.
     #[arg(long = "include", value_enum, value_name = "NAME")]
     pub include: Vec<OptionalComponentArgument>,
 }
@@ -361,6 +366,9 @@ pub(crate) enum OptionalComponentArgument {
     /// Online links: yt-dlp and the JavaScript runtime it needs.
     #[value(name = "online_links")]
     OnlineLinks,
+    /// On-screen text: the OCR runner with its runtime and models.
+    #[value(name = "ocr")]
+    Ocr,
 }
 
 impl OptionalComponentArgument {
@@ -370,6 +378,7 @@ impl OptionalComponentArgument {
             OptionalComponentSet::EMPTY,
             |set, argument| match argument {
                 Self::OnlineLinks => set.with(OptionalComponent::OnlineLinks),
+                Self::Ocr => set.with(OptionalComponent::Ocr),
             },
         )
     }
@@ -443,6 +452,9 @@ pub(crate) enum ManagedComponentArgument {
     /// The optional yt-dlp.
     #[value(name = "yt_dlp")]
     YtDlp,
+    /// The optional OCR runner with its runtime library and models.
+    #[value(name = "ocr_runner")]
+    OcrRunner,
 }
 
 impl From<ManagedComponentArgument> for ManagedComponent {
@@ -453,6 +465,7 @@ impl From<ManagedComponentArgument> for ManagedComponent {
             ManagedComponentArgument::WhisperModel => Self::WhisperModel,
             ManagedComponentArgument::JsRuntimeDeno => Self::JsRuntimeDeno,
             ManagedComponentArgument::YtDlp => Self::YtDlp,
+            ManagedComponentArgument::OcrRunner => Self::OcrRunner,
         }
     }
 }

@@ -37,7 +37,7 @@
         "type": "object", "additionalProperties": false,
         "required": ["name", "status", "component", "reason", "failure_code", "next_step"],
         "properties": {
-          "name": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["online_links"] },
+          "name": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["online_links", "ocr"] },
           "status": { "enum": ["installed", "not_installed"] },
           "component": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/component/properties/component" }] },
           "reason": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/component/properties/reason/oneOf/1" }] },
@@ -69,7 +69,7 @@
       "additionalProperties": false,
       "required": ["component", "version", "status"],
       "properties": {
-        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp", "ocr_runner"] },
         "version": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9._-]{0,62}[a-z0-9])?$" },
         "status": {
           "enum": ["removed", "already_absent", "in_use", "selected", "unexpected_content", "storage_failure"]
@@ -91,7 +91,7 @@
         "retention_reason"
       ],
       "properties": {
-        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
+        "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp", "ocr_runner"] },
         "version": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "status": { "enum": ["activated", "already_current", "failed"] },
         "step": {

@@ -378,3 +378,51 @@ to a development machine.
   amended and [L-224](../planning/known-limits.md#l-224) added.
 - **Left for later pull requests:** the OCR group (W5b, L-225 reserved) and the
   speaker group (W5c, L-217 and L-226 reserved).
+
+## Implementation note, 2026-11-20 (W5b: the `ocr` group)
+
+The fourth engine, `ocr-runner-v0.1.0-r1`, was published on 20 November 2026 with one archive per system
+(`ocr-runner-0.1.0-r1-linux-x64`, `-windows-x64` and `-macos-arm64`; publish run 44380930959, built twice and
+compared, attested, approved by the maintainer at the `release` environment, not marked latest). The group's pins
+were copied from each archive's `.inventory.json`, read with `gh` as data (the inventories' SHA-256s agree with the
+release's `SHA256SUMS` and with `engine-releases-2026-11.md`); no archive was downloaded to a development machine.
+
+- **One component, not three.** Section C expected OCR to need three components (the runner, ONNX Runtime and the
+  models), each with a publisher of its own. The release carries all of it: the runner, the ONNX Runtime library, the
+  two PP-OCRv5 models and every licence file are one archive of VSift's own engine release. So the `ocr` group is
+  **one managed component, `ocr_runner`**, and the catalogue pins VSift's release and nothing else. The ONNX
+  Runtime library comes from Microsoft's NuGet package since the GitHub archives went away
+  ([L-254](../planning/known-limits.md#l-254), H9, #609); that is the runner release's staging concern, already
+  done inside the archive, and no catalogue entry names NuGet. The group's tokens: `--include ocr` on
+  `setup plan` (and `on-screen-text` at the setup door, ADR 0036 section 7), the component `ocr_runner` in
+  `setup install`, `setup list`, `setup remove` and `setup rollback`, and the part `on_screen_text` in the
+  unattended door's result. All are additive (decision G).
+- **Flat in the store.** The component's nine files install flat in one folder, each under its archive file's own
+  name (`vsift-ocr-runner[.exe]`, the library, `ch_PP-OCRv5_det_mobile.onnx`, `latin_PP-OCRv5_rec_mobile.onnx`
+  and the five licence files). The runner already finds its library and models beside itself (ADR 0030,
+  `Layout::beside`, since #499). Only the runner is executable. A test holds the catalogue's names and digests to the
+  runner's own constants and to the release script, so the two cannot drift.
+- **All three targets, revisions bumped.** Ubuntu 24.04 x86-64 (`…-2026-11-20-r7`, after online links), Windows
+  x86-64 (`windows-x86_64-2026-11-20-r5`) and macOS arm64 (`macos-arm64-2026-11-20-r2`) each offer the group as
+  their `optional_artifacts`; no core entry changed. The group is 23.3, 18.4 and 24.7 MB (the archives'). A desktop
+  plan lists it as `not_included` with its add command, a worker plan only when asked, as for `online_links`.
+- **The smoke.** The compatibility smoke runs the staged runner's `describe` (it hashes the library and both models
+  beside it and names the build in one JSON line) and checks the line's reviewed prefix: protocol 1, runner
+  `0.1.0`, ONNX Runtime `1.31.0`. The runner names a library by its digest, so any other library prints
+  `sha256-…` and fails. The rest of the line is pinned by the archive's per-file digests. It does not read a frame:
+  that is the hosted install checkpoint's job.
+- **Use.** `vsift ocr` finds the runner in this order: `--runner`, the one registered with `setup configure
+  ocr-runner`, the managed one (verified and held like every managed tool), then `PATH`. The managed folder's files
+  are that version's own verified files, so the runner's per-read build proof (ADR 0030) stands as before.
+- **Two groups, one test.** With `ocr` beside `online_links`, `two_optional_groups_fail_apart` shows that one group's
+  download or smoke failing leaves the other installed and the core active ([L-214](../planning/known-limits.md#l-214)).
+- **The door and `setup check`.** The readable table and the setup door gain an "On-screen text" row (`OCR runner`,
+  "reading text shown on screen (optional)"), the extras line names every extra that could be added, and the
+  unattended door's refusal of an extra it cannot add names the extra being refused. [L-225](../planning/known-limits.md#l-225)
+  records that `setup check` does not report a runner registered by hand and that the group was checked on hosted
+  runners only.
+- **Proof (section F):** `P13 managed smoke` with the group on all three systems (the install checkpoint, then
+  `vsift ocr` and `vsift ocr search` on a synthetic video through the managed runner, with an empty `PATH`), and
+  `P16 OCR runner` parity staying green. The coordinator dispatches the runs; they are recorded on the pull request
+  and in L-225's evidence, not here.
+- **Left for a later pull request:** the speaker group (W5c, L-217 and L-226 reserved).

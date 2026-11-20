@@ -72,6 +72,37 @@
         "status": "not_included",
         "summary": "Not included (optional, about 83 MB to download): yt-dlp (GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms.",
         "terms_notice": "Downloading from a site is subject to that site's terms, which are yours to follow. VSift does not get round sign-in, DRM, age, region or bot checks."
+      },
+      {
+        "actions": [],
+        "add_command": {
+          "arguments": [
+            "setup",
+            "plan",
+            "--profile",
+            "desktop",
+            "--include",
+            "ocr",
+            "--json"
+          ],
+          "executable": "vsift"
+        },
+        "download_bytes": 23268888,
+        "installs": [
+          "ocr_runner"
+        ],
+        "licences": [
+          {
+            "component": "ocr_runner",
+            "licence": "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0"
+          }
+        ],
+        "name": "ocr",
+        "next_step": "Not included. Ask the operator first; to add it, run vsift setup plan --profile desktop --include ocr --json and review that plan instead.",
+        "purpose": "Reads the text shown on screen in a recording (a terminal, a slide, an error dialog) so that ocr can list it and ocr search can find it. The OCR runner, ONNX Runtime and the two text models run on this machine; nothing is sent anywhere.",
+        "status": "not_included",
+        "summary": "Not included (optional, about 24 MB to download): VSift's own OCR runner (MIT or Apache-2.0) with ONNX Runtime (MIT) and the PP-OCRv5 text models (Apache-2.0) reads on-screen text from a recording's frames on this machine.",
+        "terms_notice": null
       }
     ],
     "plan_digest": "a05d2b02e5242fc486d49377776c45faa807a6449fe9b5446c586c135e034936",

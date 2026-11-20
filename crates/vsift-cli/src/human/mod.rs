@@ -52,7 +52,7 @@ use serde::Deserialize;
 use vsift_contract::{CommandName, OperationResponse};
 
 pub(crate) use failure::{HumanDetail, failure};
-pub(crate) use setup_check::{Standing, setup_check};
+pub(crate) use setup_check::{Standing, extra_words, setup_check};
 pub(crate) use setup_door::{
     DoorOffer, door_after_install, door_declined, door_install_results, door_installing,
     door_no_terminal, door_nothing_to_offer, door_offer, door_opening, door_question,

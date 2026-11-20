@@ -48,6 +48,14 @@ pub const fn optional_component_text(component: OptionalComponent) -> OptionalCo
             installed: "Online links can be fetched with ingest --url: yt-dlp and its JavaScript runtime are installed. Sites change and can break extraction; a newer reviewed yt-dlp comes with a VSift release, and managed_updates names it when one is known.",
             name_in_prose: "online links",
         },
+        OptionalComponent::Ocr => OptionalComponentText {
+            purpose: "Reads the text shown on screen in a recording (a terminal, a slide, an error dialog) so that ocr can list it and ocr search can find it. The OCR runner, ONNX Runtime and the two text models run on this machine; nothing is sent anywhere.",
+            subject: "VSift's own OCR runner (MIT or Apache-2.0) with ONNX Runtime (MIT) and the PP-OCRv5 text models (Apache-2.0) reads on-screen text from a recording's frames on this machine.",
+            terms_notice: None,
+            unavailable: "A managed OCR runner is offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, register a runner you have with vsift setup configure ocr-runner --executable <absolute-path>. Every other command works without it.",
+            installed: "On-screen text can be read: the OCR runner, ONNX Runtime and the two text models are installed, so ocr reads a session's frames and ocr search finds the text.",
+            name_in_prose: "on-screen text",
+        },
     }
 }
 

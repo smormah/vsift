@@ -95,7 +95,7 @@ fn catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
         stop_new_plans_at: 2_000_000_000,
         stop_new_plans_date: String::from("2033-05-18T03:33:20Z"),
         artifacts: core_fixtures()?,
-        optional_artifacts: online_links_pins()?,
+        optional_artifacts: online_links_pins()?.into_iter().chain(ocr_pin()?).collect(),
         compatibility: ReviewedCompatibilityPolicy {
             fixture: integrity(10, &"f".repeat(64))?,
             expected_ffmpeg_version: String::from("ffmpeg version fixture"),
@@ -115,6 +115,10 @@ fn catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
                 ReviewedBanner {
                     component: YT_DLP,
                     first_line_prefix: String::from("2026.08.19"),
+                },
+                ReviewedBanner {
+                    component: ManagedComponent::OcrRunner,
+                    first_line_prefix: String::from("{\"record\":\"describe\""),
                 },
             ],
         },
@@ -214,6 +218,36 @@ fn online_links_pins() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::erro
     Ok(vec![deno, yt_dlp])
 }
 
+/// The `ocr` group's one artifact as the Ubuntu catalogue pins it (ADR 0032,
+/// W5b): `VSift`'s own OCR runner release, by its archive's size and SHA-256.
+/// The fixture keeps the real identity and a one-file review.
+fn ocr_pin() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::error::Error>> {
+    let archive_sha = "b9e562b8a91c55e80ef778670f8aa3d4a44b47891a3b8feace8bf1b67028488d";
+    Ok(vec![AcceptedManagedArtifact {
+        component: ManagedComponent::OcrRunner,
+        version: String::from("ocr-runner-0.1.0-r1-linux-x64"),
+        publisher: String::from("VSift engine release"),
+        source_url: String::from(
+            "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-linux-x64.tar.gz",
+        ),
+        integrity: integrity(23_268_888, archive_sha)?,
+        format: ManagedArtifactFormat::RawFile,
+        archive_limits: None,
+        selected_files: Vec::new(),
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from("Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0"),
+        notice_url: String::from(
+            "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+        ),
+        source_code_url: String::from(
+            "https://github.com/smormah/vsift/releases/tag/ocr-runner-v0.1.0-r1",
+        ),
+        trust_limit: String::from("VSift's own build, pinned by the release inventory."),
+        files: vec![file("vsift-ocr-runner", 23_268_888, archive_sha)?],
+    }])
+}
+
 fn every_tool_available() -> RuntimeDiagnosis {
     RuntimeDiagnosis {
         readiness: RuntimeReadiness::Ready,
@@ -292,6 +326,26 @@ fn the_default_desktop_plan_offers_online_links_and_asks_for_the_operator() -> T
         assert!(summary.contains(needed), "{needed}: {summary}");
     }
     assert_eq!(offer["actions"], Value::Array(Vec::new()));
+    // The second group the catalogue offers: on-screen text (W5b), one
+    // component, left out until it is asked for.
+    let ocr = &data["optional_components"][1];
+    assert_eq!(ocr["name"], "ocr");
+    assert_eq!(ocr["status"], "not_included");
+    assert_eq!(ocr["installs"], serde_json::json!(["ocr_runner"]));
+    assert_eq!(ocr["download_bytes"], 23_268_888);
+    assert_eq!(
+        ocr["add_command"],
+        serde_json::json!({
+            "executable": "vsift",
+            "arguments": ["setup", "plan", "--profile", "desktop", "--include", "ocr", "--json"]
+        })
+    );
+    assert!(ocr["terms_notice"].is_null());
+    let ocr_summary = ocr["summary"].as_str().ok_or("no OCR summary")?;
+    // The size is the archive's 23,268,888 bytes, rounded up to a whole megabyte.
+    for needed in ["about 24 MB", "OCR runner", "ONNX Runtime", "Apache-2.0"] {
+        assert!(ocr_summary.contains(needed), "{needed}: {ocr_summary}");
+    }
     matches_example(&response, "examples/setup-plan.optional-offered.json")
 }
 

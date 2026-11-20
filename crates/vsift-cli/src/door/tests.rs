@@ -1136,6 +1136,164 @@ async fn unattended_errors_refuse_before_anything_is_installed() -> TestResult {
     Ok(())
 }
 
+/// `checked` with the on-screen-text extra (W5b) standing as `capability`.
+fn with_on_screen_text(mut checked: CheckedSetup, capability: OptionalCapability) -> CheckedSetup {
+    checked.optional.push((OptionalComponent::Ocr, capability));
+    checked
+}
+
+/// W5b: on-screen text is the door's second extra. Asked for on a complete
+/// setup, the offer covers it alone, with its own words, and names the OCR
+/// runner as the piece it downloads.
+#[tokio::test]
+async fn an_included_on_screen_text_extra_is_offered_with_its_own_words() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "ocr",
+        "status": "included",
+        "summary": "VSift's own OCR runner reads on-screen text from a recording's frames on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "ocr_runner",
+            "ocr-runner-0.1.0-r1-linux-x64",
+            "VSift engine release",
+            23_268_888
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let steps = ScriptedSteps::new(vec![with_on_screen_text(
+        all_ready(),
+        OptionalCapability::NotInstalled,
+    )])
+    .with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::OnScreenText]).await?;
+
+    assert_eq!(steps.planned.get(), 1);
+    assert!(
+        stdout.contains("VSift can add on-screen text for you:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("OCR runner"), "{stdout}");
+    assert!(stdout.contains("from VSift engine release"), "{stdout}");
+    assert!(
+        stdout.contains("Add on-screen text now? [y/N] "),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5b: the table has a row for each extra, and the extras line names every
+/// extra that could be added here and the first one's flag; where web videos
+/// are not offered it names on-screen text alone.
+#[tokio::test]
+async fn the_table_and_the_extras_line_name_each_extra() -> TestResult {
+    let both = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![both]);
+    let mut console = ScriptedConsole::person(Answer::No);
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+    check_snapshot("setup-door-complete-two-extras", &stdout)?;
+    assert!(
+        stdout.contains("On-screen text"),
+        "the table has no row for on-screen text: {stdout}"
+    );
+    assert!(stdout.contains("OCR runner"), "{stdout}");
+    assert!(
+        stdout.contains(
+            "Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos\n"
+        ),
+        "{stdout}"
+    );
+
+    let mut elsewhere = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    elsewhere.optional[0].1 = OptionalCapability::Unavailable;
+    let steps = ScriptedSteps::new(vec![elsewhere]);
+    let mut console = ScriptedConsole::person(Answer::No);
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+    check_snapshot("setup-door-complete-on-screen-text-only", &stdout)?;
+    assert!(
+        stdout.contains(
+            "Optional extras: on-screen text. Add one with: vsift setup --include on-screen-text\n"
+        ),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5b: the unattended door refuses an extra it cannot add here before
+/// anything is installed, and its remediation names the extra it refuses,
+/// whichever extra that is.
+#[tokio::test]
+async fn unattended_refusal_names_the_extra_it_cannot_add() -> TestResult {
+    for (extra, words) in [
+        (OptionalComponent::Ocr, "on-screen text"),
+        (OptionalComponent::OnlineLinks, "web videos"),
+    ] {
+        let mut checked = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+        for (component, capability) in &mut checked.optional {
+            if *component == extra {
+                *capability = OptionalCapability::Unavailable;
+            }
+        }
+        let steps = ScriptedSteps::new(vec![checked]);
+
+        let (exit, stdout, _) = unattended_including(
+            &steps,
+            CorePartSet::EMPTY,
+            OptionalComponentSet::EMPTY.with(extra),
+            None,
+            OutputMode::Json,
+        )
+        .await?;
+
+        let failure: Value = serde_json::from_str(&stdout)?;
+        assert_eq!(failure["error"]["code"], "MISSING_CAPABILITY", "{stdout}");
+        assert!(
+            stdout.contains(&format!(
+                "VSift can't add {words} on this computer yet, so nothing was installed."
+            )),
+            "{stdout}"
+        );
+        assert_eq!(
+            exit,
+            ProcessExit::from(FailureCode::MissingCapability.class())
+        );
+        assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    }
+    Ok(())
+}
+
+/// W5b: an installed on-screen-text extra is reported by its own part name.
+#[tokio::test]
+async fn unattended_reports_the_on_screen_text_part() -> TestResult {
+    let installed = OptionalCapability::Installed(vec![(
+        ManagedComponent::OcrRunner,
+        String::from("ocr-runner-0.1.0-r1-linux-x64"),
+    )]);
+    let steps = ScriptedSteps::new(vec![with_on_screen_text(all_ready(), installed)]);
+
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::Ocr),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    let part = result["data"]["parts"]
+        .as_array()
+        .and_then(|parts| parts.iter().find(|part| part["part"] == "on_screen_text"))
+        .ok_or("no on_screen_text part")?;
+    assert_eq!(part["status"], "added", "{result}");
+    assert_eq!(part["requested"], true);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
 /// The bars name each piece, fill with its bytes and end with its stage.
 #[test]
 fn each_piece_has_a_bar_its_megabytes_and_its_stage() {

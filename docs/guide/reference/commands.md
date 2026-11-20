@@ -271,10 +271,11 @@ Options:
           [default: process-only]
 
       --include <EXTRA>
-          Plain `vsift setup` only: also offer an optional extra (repeatable). `web-videos` fetches videos from public web pages (Ubuntu 24.04 x86-64 only for now)
+          Plain `vsift setup` only: also offer an optional extra (repeatable). `web-videos` fetches videos from public web pages (Ubuntu 24.04 x86-64 only for now); `on-screen-text` reads the text shown on screen
 
           Possible values:
-          - web-videos: Videos from public web pages: `online_links` in the JSON results
+          - web-videos:     Videos from public web pages: `online_links` in the JSON results
+          - on-screen-text: Text shown on screen, read by the OCR runner: `ocr` in the JSON results
 
       --unattended
           Plain `vsift setup` only: nobody is there to answer. Installs the parts named with --install without asking, and reports pass, fail or error; --json gives the `setup` result
@@ -392,10 +393,11 @@ Options:
           - jsonl: One bounded JSON object per line
 
       --include <NAME>
-          Include an optional component (repeatable). `online_links` is what fetching a video from a public web page needs: yt-dlp and the JavaScript runtime it runs (Ubuntu 24.04 x86-64 only). Ask the operator first. The plan lists what it leaves out
+          Include an optional component (repeatable). `online_links` is what fetching a video from a public web page needs: yt-dlp and the JavaScript runtime it runs (Ubuntu 24.04 x86-64 only). `ocr` is what reading on-screen text needs: the OCR runner, ONNX Runtime and the text models. Ask the operator first. The plan lists what it leaves out
 
           Possible values:
           - online_links: Online links: yt-dlp and the JavaScript runtime it needs
+          - ocr:          On-screen text: the OCR runner with its runtime and models
 
       --session-root <SESSION_ROOT>
           For operators who run a worker host; an agent leaves it out. Explicit private disposable-session root; defaults to the per-user cache
@@ -570,6 +572,7 @@ Arguments:
           - whisper_model:   The speech-recognition model
           - js_runtime_deno: The optional yt-dlp's JavaScript runtime
           - yt_dlp:          The optional yt-dlp
+          - ocr_runner:      The optional OCR runner with its runtime library and models
 
 Options:
       --json
@@ -630,6 +633,7 @@ Arguments:
           - whisper_model:   The speech-recognition model
           - js_runtime_deno: The optional yt-dlp's JavaScript runtime
           - yt_dlp:          The optional yt-dlp
+          - ocr_runner:      The optional OCR runner with its runtime library and models
 
 Options:
       --json

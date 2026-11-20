@@ -1,0 +1,11 @@
+VSift 0.0.0-test setup
+
+  Part            Status         Uses         What it's for
+  Video           ready          FFmpeg       reading videos, taking frames
+  Speech          ready          whisper.cpp  turning speech into text
+  Web videos      not available  yt-dlp       web page videos (optional)
+  On-screen text  none added     OCR runner   reading text shown on screen (optional)
+
+Setup complete: video and speech both work.
+Optional extras: on-screen text. Add one with: vsift setup --include on-screen-text
+Try it: vsift ./your-video.mp4

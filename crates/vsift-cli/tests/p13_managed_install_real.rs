@@ -35,6 +35,15 @@
 //! reports them as managed, `setup list` shows them, and removing the
 //! runtime leaves the local-video readiness as it was.
 //!
+//! A further checkpoint does the same with `--include ocr` on every system
+//! with a catalogue (ADR 0030, ADR 0032, W5b): the OCR runner archive is
+//! downloaded, smoked (`describe`, which hashes its library and models) and
+//! activated after the core, `setup check` reports the group as installed and
+//! managed, and `vsift ocr` then reads F05's on-screen text with the managed
+//! runner alone (the `PATH` is empty): the index must name the pinned runner,
+//! the pinned models and ONNX Runtime 1.31.0, and `ocr search` must find the
+//! invoice number the clip draws for its whole length.
+//!
 //! A third checkpoint is for Windows and macOS, where no managed yt-dlp is
 //! offered (ADR 0028 section 4.6): the publisher's pinned `yt-dlp.exe` or
 //! `yt-dlp_macos` (2026.08.19), fetched by the workflow, is registered with
@@ -54,6 +63,7 @@ use std::{
 
 use assert_cmd::Command;
 use serde_json::Value;
+use vsift_domain::ManagedComponent;
 use vsift_infrastructure::accepted_host_catalogue;
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -508,6 +518,200 @@ fn real_managed_install_with_online_links_installs_reports_and_removes_the_pair(
     let row = managed_row(&base)?;
     assert_eq!(row["status"], "not_installed", "{row}");
     Ok(())
+}
+
+/// The SHA-256 digests the managed OCR runner must read with: the pinned runner
+/// executable and the two pinned models, from the host's own catalogue.
+struct PinnedOcr {
+    runner: String,
+    detector: String,
+    recognizer: String,
+}
+
+impl PinnedOcr {
+    fn of_host() -> Result<Self, Box<dyn Error>> {
+        let catalogue = accepted_host_catalogue()?
+            .ok_or("the host has no managed catalogue to install from")?;
+        let runner = catalogue
+            .optional_artifacts
+            .iter()
+            .find(|artifact| artifact.component == ManagedComponent::OcrRunner)
+            .ok_or("the catalogue offers no OCR runner")?;
+        let pinned = |predicate: &dyn Fn(&str, bool) -> bool| -> Result<String, Box<dyn Error>> {
+            runner
+                .files
+                .iter()
+                .find(|file| predicate(&file.name, file.executable))
+                .map(|file| file.integrity.sha256_hex())
+                .ok_or_else(|| "the pinned archive lacks a file".into())
+        };
+        Ok(Self {
+            runner: pinned(&|_, executable| executable)?,
+            detector: pinned(&|name, _| name == "ch_PP-OCRv5_det_mobile.onnx")?,
+            recognizer: pinned(&|name, _| name == "latin_PP-OCRv5_rec_mobile.onnx")?,
+        })
+    }
+}
+
+/// Plans with `--include ocr` and installs the plan: the group is included
+/// with its one action, and the install leaves the core ready and the runner
+/// activated.
+fn install_the_ocr_group(base: &Base) -> TestResult {
+    let plan = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop"])
+        .args(["--include", "ocr", "--json"])
+        .output()?;
+    assert!(plan.status.success(), "setup plan failed");
+    let plan_value: Value = serde_json::from_slice(&plan.stdout)?;
+    let digest = plan_value["data"]["plan_digest"]
+        .as_str()
+        .ok_or("the plan has no digest")?
+        .to_owned();
+    let group = plan_value["data"]["optional_components"]
+        .as_array()
+        .and_then(|groups| groups.iter().find(|group| group["name"] == "ocr"))
+        .ok_or("the plan lists no ocr group")?;
+    assert_eq!(group["status"], "included", "{group}");
+    assert_eq!(group["installs"], serde_json::json!(["ocr_runner"]));
+    assert_eq!(
+        group["actions"].as_array().map_or(0, Vec::len),
+        1,
+        "{group}"
+    );
+    let plan_path = base.0.join("plan.json");
+    fs::write(&plan_path, &plan.stdout)?;
+
+    let started = Instant::now();
+    let install = base
+        .vsift()?
+        .args(["setup", "install", "--plan", path_text(&plan_path)?])
+        .args(["--accept-plan", &digest, "--json"])
+        .output()?;
+    println!(
+        "install: exit {:?} in {:.1} s",
+        install.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    let installed: Value = serde_json::from_slice(&install.stdout)?;
+    println!("{}", serde_json::to_string_pretty(&installed["data"])?);
+    assert_eq!(install.status.code(), Some(0), "{}", installed["error"]);
+    assert_eq!(installed["status"], "complete", "no partial result");
+    assert_eq!(installed["data"]["core"], "ready");
+    let optional = installed["data"]["optional_components"]
+        .as_array()
+        .ok_or("no optional components")?;
+    assert_eq!(optional.len(), 1);
+    assert_eq!(optional[0]["component"], "ocr_runner");
+    assert_eq!(optional[0]["status"], "activated", "{}", optional[0]);
+    Ok(())
+}
+
+/// `setup check` reports the group as installed from the managed store.
+fn assert_the_ocr_row_is_installed(base: &Base) -> TestResult {
+    let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+    assert_eq!(check.status.code(), Some(0));
+    let check: Value = serde_json::from_slice(&check.stdout)?;
+    assert_eq!(check["status"], "ready");
+    let row = check["optional_components"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["name"] == "ocr"))
+        .ok_or("no ocr row in the check")?;
+    assert_eq!(row["status"], "installed", "{row}");
+    let components = row["components"].as_array().ok_or("no components")?;
+    assert_eq!(components.len(), 1);
+    assert_eq!(components[0]["component"], "ocr_runner");
+    assert_eq!(components[0]["source"], "managed");
+    Ok(())
+}
+
+/// `ocr` and `ocr search` on F05 with the managed runner alone: the `PATH` is
+/// empty and no runner is registered or given. The index must name the pinned
+/// runner and models, and the search must find the invoice number F05 draws
+/// for its whole length (the corpus README, the P12 truth amendment): the
+/// number or the word, whichever the recogniser reads whole.
+fn assert_the_managed_runner_reads_f05(base: &Base, pinned: &PinnedOcr) -> TestResult {
+    let data = |arguments: &[&str]| -> Result<Value, Box<dyn Error>> {
+        let output = base.vsift()?.args(arguments).arg("--json").output()?;
+        let value: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{arguments:?}: {}",
+            value["error"]
+        );
+        Ok(value)
+    };
+    let video = fs::canonicalize(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/corpus/generated/F05.mp4"),
+    )?;
+    let session = data(&["ingest", path_text(&video)?])?["data"]["session_id"]
+        .as_str()
+        .ok_or("ingest returned no session")?
+        .to_owned();
+    let started = Instant::now();
+    let mut answer = data(&["ocr", &session])?;
+    for _ in 0..4 {
+        if answer["status"] == "complete" {
+            break;
+        }
+        answer = data(&["ocr", &session])?;
+    }
+    println!(
+        "ocr: {:.1} s, {}",
+        started.elapsed().as_secs_f64(),
+        serde_json::to_string_pretty(&answer["data"])?
+    );
+    assert_eq!(
+        answer["status"], "complete",
+        "{}",
+        answer["data"]["coverage"]
+    );
+    assert_eq!(answer["data"]["coverage"]["pending"], 0);
+    let engine = &answer["data"]["index"]["engine"];
+    assert_eq!(
+        engine["runner_sha256"], pinned.runner,
+        "the managed runner read"
+    );
+    assert_eq!(engine["detector_sha256"], pinned.detector);
+    assert_eq!(engine["recognizer_sha256"], pinned.recognizer);
+    assert_eq!(engine["runtime_version"], "1.31.0");
+    assert!(
+        answer["data"]["index"]["lines"].as_u64().unwrap_or(0) > 0,
+        "the runner read no line of F05"
+    );
+    let mut hits = 0_usize;
+    for query in ["4407", "invoice"] {
+        let found = data(&["ocr", "search", &session, &format!("--query={query}")])?;
+        let count = found["data"]["hits"].as_array().map_or(0, Vec::len);
+        println!("ocr search {query:?}: {count} hits");
+        hits += count;
+    }
+    assert!(
+        hits > 0,
+        "ocr search found neither `4407` nor `invoice` on F05"
+    );
+    Ok(())
+}
+
+/// The checkpoint with the optional `ocr` group, on every system with a
+/// catalogue: a real install of the group, `setup check`, then `ocr` and `ocr
+/// search` through the managed runner alone.
+#[test]
+#[ignore = "opt-in real managed installation with ocr; set VSIFT_P13_REAL_INSTALL=1 on a host with a managed catalogue and run --release"]
+fn real_managed_install_with_ocr_installs_and_reads_on_screen_text() -> TestResult {
+    if env::var_os(OPT_IN).is_none() {
+        return Err(format!("set {OPT_IN}=1 to run the real managed installation").into());
+    }
+    let pinned = PinnedOcr::of_host()?;
+    println!("binary under test: {}", published_binary::report()?);
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let base = Base(env::temp_dir().join(format!("vsift-p13-real-ocr-{stamp}")));
+    fs::create_dir(&base.0)?;
+
+    install_the_ocr_group(&base)?;
+    assert_the_ocr_row_is_installed(&base)?;
+    assert_the_managed_runner_reads_f05(&base, &pinned)
 }
 
 /// The pinned publisher file for this system (ADR 0028 section 4.1): its

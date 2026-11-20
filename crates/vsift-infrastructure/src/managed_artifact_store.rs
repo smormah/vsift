@@ -2123,6 +2123,9 @@ pub enum ManagedRuntimeRole {
     Deno,
     /// The optional yt-dlp executable.
     YtDlp,
+    /// The optional OCR runner executable (its runtime library and models
+    /// stay beside it in the version's flat folder).
+    OcrRunner,
 }
 
 /// Why a staged artifact could not become an owned smoke candidate.

@@ -110,7 +110,7 @@
         "additionalProperties": false,
         "required": ["component", "selected_version", "reviewed_version", "reason", "next_step"],
         "properties": {
-          "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp"] },
+          "component": { "enum": ["ffmpeg_ffprobe", "whisper_cli", "whisper_model", "js_runtime_deno", "yt_dlp", "ocr_runner"] },
           "selected_version": { "type": "string", "minLength": 1, "maxLength": 64 },
           "reviewed_version": { "type": "string", "minLength": 1, "maxLength": 64 },
           "reason": { "enum": ["security_fixes", "maintenance"] },
@@ -127,14 +127,14 @@
       "additionalProperties": false,
       "required": ["name", "status", "components", "next_step", "add_command"],
       "properties": {
-        "name": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["online_links"] },
+        "name": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["online_links", "ocr"] },
         "status": { "enum": ["installed", "not_installed", "unavailable"] },
         "components": {
           "type": "array", "maxItems": 8,
           "items": {
             "type": "object", "additionalProperties": false, "required": ["component", "version", "source"],
             "properties": {
-              "component": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["js_runtime_deno", "yt_dlp", "js_runtime"] },
+              "component": { "description": "This list may gain values in a later release (ADR 0032, cli-v1.md): treat it as open, and skip a value you do not know.", "enum": ["js_runtime_deno", "yt_dlp", "ocr_runner", "js_runtime"] },
               "version": { "type": "string", "minLength": 1, "maxLength": 64 },
               "source": { "description": "Added in 0.3.0 (ADR 0028 section 4.6). managed: VSift installed and reviewed it, and version is its catalogue version key. user_managed: the user supplied it with setup configure (yt_dlp, js_runtime) and it is used instead of a managed one; version is the first line of its own version output and sha256 the file's digest. Nothing reviewed a user-managed file, and keeping it current is the user's job.", "enum": ["managed", "user_managed"] },
               "sha256": { "description": "Present when source is user_managed: the SHA-256 of the file as it was identified.", "type": "string", "pattern": "^[0-9a-f]{64}$" }

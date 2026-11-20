@@ -482,6 +482,11 @@ fn executable_name(role: ManagedRuntimeRole) -> Result<String, Box<dyn Error>> {
 /// binary's managed root: executables that exit 0 (so the plan's probes
 /// pass) or a model file, never the reviewed bytes, with nothing fetched.
 fn publish_stand_in(base: &Base, component: ManagedComponent, version: &str) -> TestResult {
+    // One executable, named for its role: the stand-in of every component
+    // but the media tools (two executables) and the model (a data file).
+    let one_executable = |role: ManagedRuntimeRole| -> Result<_, Box<dyn Error>> {
+        Ok((vec![(role, executable_name(role)?)], true))
+    };
     let (roles, executables) = match component {
         ManagedComponent::MediaTools => (
             vec![
@@ -496,31 +501,14 @@ fn publish_stand_in(base: &Base, component: ManagedComponent, version: &str) -> 
             ],
             true,
         ),
-        ManagedComponent::WhisperCli => (
-            vec![(
-                ManagedRuntimeRole::WhisperCli,
-                executable_name(ManagedRuntimeRole::WhisperCli)?,
-            )],
-            true,
-        ),
+        ManagedComponent::WhisperCli => one_executable(ManagedRuntimeRole::WhisperCli)?,
         ManagedComponent::WhisperModel => (
             vec![(ManagedRuntimeRole::SpeechModel, String::from("model.bin"))],
             false,
         ),
-        ManagedComponent::JsRuntimeDeno => (
-            vec![(
-                ManagedRuntimeRole::Deno,
-                executable_name(ManagedRuntimeRole::Deno)?,
-            )],
-            true,
-        ),
-        ManagedComponent::YtDlp => (
-            vec![(
-                ManagedRuntimeRole::YtDlp,
-                executable_name(ManagedRuntimeRole::YtDlp)?,
-            )],
-            true,
-        ),
+        ManagedComponent::JsRuntimeDeno => one_executable(ManagedRuntimeRole::Deno)?,
+        ManagedComponent::YtDlp => one_executable(ManagedRuntimeRole::YtDlp)?,
+        ManagedComponent::OcrRunner => one_executable(ManagedRuntimeRole::OcrRunner)?,
     };
     let contents: &[u8] = if executables {
         b"#!/bin/sh\nexit 0\n"

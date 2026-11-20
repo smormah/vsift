@@ -41,9 +41,14 @@ const CANNOT_INSTALL_HERE: &str = "VSift can't install this part on this compute
      (https://github.com/smormah/vsift/blob/main/docs/operations/install.md), then register \
      it with setup configure or setup configure-model.";
 
-/// The remediation of an included extra `VSift` cannot add here.
-const CANNOT_ADD_HERE: &str =
-    "VSift can't add web videos on this computer yet, so nothing was installed.";
+/// The remediation of an included extra `VSift` cannot add here: it names
+/// the extra that is refused, in the words its table row uses.
+fn cannot_add_here(extra: OptionalComponent) -> String {
+    format!(
+        "VSift can't add {} on this computer yet, so nothing was installed.",
+        human::extra_words(extra).sentence
+    )
+}
 
 /// One unattended run's parameters.
 pub(crate) struct UnattendedRun<'run, S> {
@@ -189,13 +194,13 @@ fn refuse_what_cannot_run(
             CANNOT_INSTALL_HERE.to_owned(),
         )));
     }
-    if include
+    if let Some(extra) = include
         .iter()
-        .any(|extra| extra_capability(checked, extra) == Some(&OptionalCapability::Unavailable))
+        .find(|extra| extra_capability(checked, *extra) == Some(&OptionalCapability::Unavailable))
     {
         return Err(Stop::Failed(CommandFailure::with_remediation(
             FailureCode::MissingCapability,
-            CANNOT_ADD_HERE.to_owned(),
+            cannot_add_here(extra),
         )));
     }
     Ok(())
@@ -258,7 +263,6 @@ fn response(
         });
     }
     for extra in include.iter() {
-        let OptionalComponent::OnlineLinks = extra;
         // `extra_capability` looks through a registered runtime that nothing
         // uses, so the state is the component's own.
         let status = match extra_capability(after, extra) {
@@ -267,7 +271,10 @@ fn response(
             Some(_) | None => SetupPartStatus::NotAdded,
         };
         results.push(SetupPartResult {
-            part: SetupPartName::WebVideos,
+            part: match extra {
+                OptionalComponent::OnlineLinks => SetupPartName::WebVideos,
+                OptionalComponent::Ocr => SetupPartName::OnScreenText,
+            },
             requested: true,
             status,
             next_step: (status != SetupPartStatus::Added).then(|| SETUP_NEXT_AGAIN.to_owned()),

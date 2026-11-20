@@ -3900,23 +3900,34 @@ crash-consistent (one rename per selection, removals and sweeps a rerun finishes
 ### Optional components and archive formats (0.3.0, ADR 0032)
 
 [ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) adds **optional
-components**: named groups of managed components that a plan installs only when asked. The one this release has is
-`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only); `ocr` and `speakers`
-come with their stories.
+components**: named groups of managed components that a plan installs only when asked. This release has two:
+`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only) and `ocr` (VSift's OCR
+runner with its ONNX Runtime library, the two text models and their licence files, one component, `ocr_runner`,
+offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64); `speakers` comes with its story.
 
-**One extra, its names (the planner's ruling on the Fable 0.3.0 review, P-3).** The extra for public video pages has
-a person-facing name on the setup door ([ADR 0036](../decisions/0036-the-setup-door.md)) and the catalogue's name
-everywhere else, and its main managed component has a name of its own. The names are deliberate and stay as they
-are; this table is the one place that relates them, and the 1.0 freeze statement points here.
+**Each extra, its names (the planner's ruling on the Fable 0.3.0 review, P-3).** An extra has a person-facing
+name on the setup door ([ADR 0036](../decisions/0036-the-setup-door.md)) and the catalogue's name everywhere else,
+and its main managed component has a name of its own. The names are deliberate and stay as they are; this table is
+the one place that relates them, and the 1.0 freeze statement points here. Public video pages are the first extra;
+on-screen text (`ocr`) is the second, and a story's group adds its rows.
 
 | Where | JSON identifier | On the command line |
 | --- | --- | --- |
 | The setup door: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `web_videos` | `--include web-videos` |
 | The catalogue's group: `setup plan`, `setup install`, `setup check` (`optional_components[].name`), `setup list`, `setup remove`, `setup rollback`, and the `web_page` remediation of `ingest --url` | `online_links` | `--include online_links` |
 | The managed yt-dlp inside that group (plan actions, the group's `installs`, `components[].component`), and a yt-dlp the user registered | `yt_dlp` (beside `js_runtime_deno`, or the registered `js_runtime`) | `setup configure yt-dlp` (`yt_dlp` is a hidden spelling) |
+| The setup door for on-screen text: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `on_screen_text` | `--include on-screen-text` |
+| The catalogue's group for on-screen text: `setup plan`, `setup install`, `setup check` (`optional_components[].name`) | `ocr` | `--include ocr` |
+| The managed OCR runner inside that group (plan actions `install-ocr_runner`, the group's `installs`, `components[].component`, `setup list`, `setup remove`, `setup rollback`), and the runner the user registered | `ocr_runner` | `setup configure ocr-runner` |
 
-A reader that maps the `setup` result's `web_videos` to `setup check`'s `optional_components` takes the row above:
-`web_videos` is the group `online_links`, which installs `yt_dlp` and `js_runtime_deno`.
+A reader that maps the `setup` result's `web_videos` to `setup check`'s `optional_components` takes the rows above:
+`web_videos` is the group `online_links`, which installs `yt_dlp` and `js_runtime_deno`, and `on_screen_text` is the
+group `ocr`, which installs `ocr_runner`. The `ocr` group's one component is a whole archive of VSift's engine
+release: the runner (the only executable), the ONNX Runtime library, the two models and the licence files, installed
+flat beside the runner, which finds them there. `vsift ocr` uses the runner given with `--runner`, then the one
+registered with `setup configure ocr-runner`, then the managed one, then one on `PATH`; `setup check`'s `ocr` row
+reads the managed group only. `ocr_runner` and the `ocr` and `on_screen_text` names are additive (ADR 0032
+decision G); a reader skips a value it does not know.
 
 - **`setup plan --include <name>`** (repeatable; an older release answers it as an unknown argument) adds the
   group's actions to the plan. The plan's additive `optional_components` array lists every optional component of
@@ -4253,7 +4264,8 @@ tool that is not simply missing, and last the line `Next: ...` with the one step
   `vsift setup check`; when everything works, `vsift ingest ./your-video.mp4`. With `--profile worker` the step is
   the concrete one: `vsift setup plan` where managed installation offers the missing part, otherwise the one
   `setup configure` or `setup configure-model` command. On a complete setup an extra that can be added here is
-  named: `Optional extras: web videos. Add one with: vsift setup --include web-videos`.
+  named: `Optional extras: web videos. Add one with: vsift setup --include web-videos`; with more than one it
+  lists them all (`web videos, on-screen text`) and names the first one's flag.
 - **Left out of the readable view, and kept in the JSON:** advice written for an assistant (who knows the path,
   the per-call options, folder-search advice), where each tool was found (`lookup`), the profile, the version
   line of each tool and the local-ASR lines. The only provenance the view mentions is a path the person gave
@@ -4292,7 +4304,7 @@ of the install's failure code when a piece failed. The skill classes it as never
 `setup plan` and the user's own `setup install`.
 
 **The unattended setup door (since `0.3.0`, ADR 0036 section 6).** `vsift setup --unattended --install
-video,speech [--include web-videos] [--accept-plan <digest>] [--json]` runs once and asks nothing. Naming the
+video,speech [--include web-videos|on-screen-text] [--accept-plan <digest>] [--json]` runs once and asks nothing. Naming the
 parts is the acceptance (the maintainer's decision of 2026-10-27, superseding that part of ADR 0023 for this form
 only): it installs the plan it builds for the named parts (`setup plan`'s plan limited to them; a plan of both
 parts is exactly `setup plan`'s, digest included), and every artifact stays pinned by URL, size and SHA-256 in the
@@ -4305,7 +4317,7 @@ digest, or nothing is installed. `--unattended` needs `--install`, and `--instal
   each part's entry says what to do next;
 - **error** (the failure code's exit status, the ordinary failure envelope under `setup`): it could not start: a
   named part VSift cannot install on this computer (`MISSING_CAPABILITY`, with the do-it-yourself step), an
-  included extra it cannot add here (`MISSING_CAPABILITY`), checks that ran out of time (`DEADLINE_EXCEEDED`), a
+  included extra it cannot add here (`MISSING_CAPABILITY`, naming the extra it refuses), checks that ran out of time (`DEADLINE_EXCEEDED`), a
   busy install (`BUSY`), or an `--accept-plan` digest that is not the plan's (`INVALID_ARGUMENT`, the stale-plan
   remediation). Each is refused before anything is installed.
 

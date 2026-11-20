@@ -54,7 +54,7 @@ pub(crate) struct ManagedModel {
 /// opened, verified and held at most once, on first use.
 pub(crate) struct ManagedLookup<'engine> {
     engine: &'engine Engine,
-    opened: [Opened; 5],
+    opened: [Opened; 6],
 }
 
 /// What one lookup found for one component.
@@ -75,6 +75,7 @@ const fn slot(component: ManagedComponent) -> usize {
         ManagedComponent::WhisperModel => 2,
         ManagedComponent::JsRuntimeDeno => 3,
         ManagedComponent::YtDlp => 4,
+        ManagedComponent::OcrRunner => 5,
     }
 }
 
@@ -106,6 +107,18 @@ impl ManagedLookup<'_> {
         let (component, role) = managed_source(dependency);
         let hold = self.hold(component)?;
         TrustedExecutable::managed_in(&hold, &managed_executable_name(role)?).ok()
+    }
+
+    /// The managed OCR runner, carrying its version's hold; the runtime
+    /// library and the models it finds beside itself are that version's
+    /// own verified files (ADR 0032).
+    pub(crate) fn ocr_runner(&mut self) -> Option<TrustedExecutable> {
+        let hold = self.hold(ManagedComponent::OcrRunner)?;
+        TrustedExecutable::managed_in(
+            &hold,
+            &managed_executable_name(ManagedRuntimeRole::OcrRunner)?,
+        )
+        .ok()
     }
 
     /// The version selected for `component` now, when it is verified.
@@ -158,6 +171,7 @@ impl Engine {
         ManagedLookup {
             engine: self,
             opened: [
+                Opened::NotYet,
                 Opened::NotYet,
                 Opened::NotYet,
                 Opened::NotYet,

@@ -1,6 +1,16 @@
 # OCR runner: build recipe and catalogue data (0.3.0, ADR 0030)
 
-Status (2026-10-21, 0.3.0 development): **input for the engine release workflow and the
+Status (2026-11-20): **published and installed by the managed catalogue.** The runner is the engine release
+`ocr-runner-v0.1.0-r1` (publish run 44380930959, one archive per system), and the `ocr` optional group of
+[ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) (W5b,
+[L-225](known-limits.md#l-225)) pins it from the release's `.inventory.json`: one component, `ocr_runner`, whose nine
+files install flat beside the runner. **Where this page and the published inventory differ, the inventory wins:**
+sections 3, 5 and 6 below are the 2026-10-21 plan. The runtime library has since come from Microsoft's NuGet
+package (L-254, H9), so the macOS library is `libonnxruntime.1.31.0.dylib` of SHA-256 `83973572...2e31` (44,830,288
+bytes), not section 6's `2a50a63e...4b70`, the Windows and Linux libraries are byte for byte the archives', and the
+licence files are the Windows ones on every system (`LICENSES/onnxruntime-LICENSE` 1,094 bytes, `c250d627...b674`).
+
+Original status (2026-10-21, 0.3.0 development): **input for the engine release workflow and the
 cross-platform managed install, which the infrastructure work owns (ADR 0030 decision 2).
 Nothing here is published yet.** The runner and its ONNX Runtime backend are in the tree; its
 parity with the reference pipeline is measured by the hosted workflow `P16 OCR runner`

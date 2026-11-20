@@ -422,3 +422,26 @@ result with a non-zero exit.
   catalogue's `online_links` and `--include online_links` and the managed component `yt_dlp`. `cli-v1.md`
   ("One extra, its names", under "Optional components and archive formats") is the one table that relates
   them; the 1.0 freeze statement points to it.
+
+## Implementation note, 2026-11-20 (W5b: the second extra, on-screen text)
+
+The `ocr` group of [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) is the
+door's second extra (section 7 expected it with its catalogue group; section 1's table named `web-videos` as the only
+accepted name until a second group existed, and `--include` now accepts two). Added, all additive:
+
+- **`--include on-screen-text`** on plain `vsift setup` and on `setup --unattended`, beside `web-videos`; both map to
+  their catalogue group (`on-screen-text` to `ocr`, as `web-videos` to `online_links`). `setup plan --include ocr`
+  is the assistants' name.
+- **A table row.** `setup check`'s readable table and the door show `On-screen text`, uses `OCR runner`, "reading
+  text shown on screen (optional)", with the same statuses as any extra (`added`, `none added`, `not available`).
+  The words of every extra live in one function (`extra_words`), so a story's group adds its words once.
+- **The extras line** (on a complete setup) names every extra that could be added here and gives the first one's
+  flag: `Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos`. On Windows and
+  macOS, where web videos are not offered, it names on-screen text alone.
+- **The unattended result** gains the part `on_screen_text` (`parts[].part`, `schemas/v1/setup.schema.json`).
+- **The refusal names the extra.** An included extra the catalogue cannot offer on this computer is refused before
+  anything is installed (`MISSING_CAPABILITY`), now naming that extra (`VSift can't add on-screen text on this
+  computer yet, so nothing was installed.`), not web videos only.
+- **The names (P-3, unchanged rule).** `cli-v1.md`'s table of names has the new rows: `on_screen_text` and
+  `--include on-screen-text` at the door, `ocr` and `--include ocr` in the catalogue, `ocr_runner` for the managed
+  component and `setup configure ocr-runner` for a runner the user registers.
