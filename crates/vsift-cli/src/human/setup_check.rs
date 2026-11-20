@@ -670,9 +670,10 @@ pub(super) fn push_extras_line(
         .filter(|(_, capability)| *capability.base() == OptionalCapability::NotInstalled)
         .map(|(component, _)| extra_words(*component))
         .collect();
-    // The line names every extra that could be added here, and the command
-    // that adds the first; the others take their own `--include` name from
-    // the table's rows (ADR 0036 section 7, the first-run design note C8).
+    // The line names every extra that could be added here and the flag of each
+    // (ADR 0036 section 7, the first-run design note C8): with one extra,
+    // `Add one with: vsift setup --include web-videos`; with more,
+    // `... --include web-videos, or --include on-screen-text`.
     if let Some(first) = addable.first() {
         text.push_fixed("Optional extras: ");
         for (index, words) in addable.iter().enumerate() {
@@ -682,8 +683,16 @@ pub(super) fn push_extras_line(
             text.push_fixed(words.sentence);
         }
         text.push_fixed(". Add one with: vsift setup --include ")
-            .push_fixed(first.include_name)
-            .end_line();
+            .push_fixed(first.include_name);
+        for (index, words) in addable.iter().enumerate().skip(1) {
+            text.push_fixed(if index + 1 == addable.len() {
+                ", or --include "
+            } else {
+                ", --include "
+            })
+            .push_fixed(words.include_name);
+        }
+        text.end_line();
     }
 }
 

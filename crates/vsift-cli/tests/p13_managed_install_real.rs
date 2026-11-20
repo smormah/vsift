@@ -92,7 +92,12 @@ impl Base {
 
 impl Drop for Base {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        // The Windows OCR job reads the installed library's imports after the
+        // test (W5b, L-225): it asks for the folder to be kept and removes it
+        // itself.
+        if env::var_os("VSIFT_P13_KEEP_BASE").is_none() {
+            let _ = fs::remove_dir_all(&self.0);
+        }
     }
 }
 

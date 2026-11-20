@@ -1185,7 +1185,7 @@ async fn an_included_on_screen_text_extra_is_offered_with_its_own_words() -> Tes
 }
 
 /// W5b: the table has a row for each extra, and the extras line names every
-/// extra that could be added here and the first one's flag; where web videos
+/// extra that could be added here and each one's flag; where web videos
 /// are not offered it names on-screen text alone.
 #[tokio::test]
 async fn the_table_and_the_extras_line_name_each_extra() -> TestResult {
@@ -1201,7 +1201,7 @@ async fn the_table_and_the_extras_line_name_each_extra() -> TestResult {
     assert!(stdout.contains("OCR runner"), "{stdout}");
     assert!(
         stdout.contains(
-            "Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos\n"
+            "Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos, or --include on-screen-text\n"
         ),
         "{stdout}"
     );

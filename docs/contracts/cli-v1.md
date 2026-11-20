@@ -4265,7 +4265,8 @@ tool that is not simply missing, and last the line `Next: ...` with the one step
   the concrete one: `vsift setup plan` where managed installation offers the missing part, otherwise the one
   `setup configure` or `setup configure-model` command. On a complete setup an extra that can be added here is
   named: `Optional extras: web videos. Add one with: vsift setup --include web-videos`; with more than one it
-  lists them all (`web videos, on-screen text`) and names the first one's flag.
+  lists them all (`web videos, on-screen text`) and gives each one's flag (`Add one with: vsift setup --include
+  web-videos, or --include on-screen-text`).
 - **Left out of the readable view, and kept in the JSON:** advice written for an assistant (who knows the path,
   the per-call options, folder-search advice), where each tool was found (`lookup`), the profile, the version
   line of each tool and the local-ASR lines. The only provenance the view mentions is a path the person gave

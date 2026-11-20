@@ -435,8 +435,9 @@ accepted name until a second group existed, and `--include` now accepts two). Ad
 - **A table row.** `setup check`'s readable table and the door show `On-screen text`, uses `OCR runner`, "reading
   text shown on screen (optional)", with the same statuses as any extra (`added`, `none added`, `not available`).
   The words of every extra live in one function (`extra_words`), so a story's group adds its words once.
-- **The extras line** (on a complete setup) names every extra that could be added here and gives the first one's
-  flag: `Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos`. On Windows and
+- **The extras line** (on a complete setup) names every extra that could be added here and gives each one's
+  flag: `Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos, or --include
+  on-screen-text`; with one extra the line is the form it always had. On Windows and
   macOS, where web videos are not offered, it names on-screen text alone.
 - **The unattended result** gains the part `on_screen_text` (`parts[].part`, `schemas/v1/setup.schema.json`).
 - **The refusal names the extra.** An included extra the catalogue cannot offer on this computer is refused before

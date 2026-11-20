@@ -7,5 +7,5 @@ VSift 0.0.0-test setup
   On-screen text  none added  OCR runner   reading text shown on screen (optional)
 
 Setup complete: video and speech both work.
-Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos
+Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos, or --include on-screen-text
 Try it: vsift ./your-video.mp4

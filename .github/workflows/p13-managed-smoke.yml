@@ -380,14 +380,63 @@ jobs:
         with:
           persist-credentials: false
 
+      # The test's base folder is kept (VSIFT_P13_KEEP_BASE) under the runner's
+      # temp folder, so the next step can read the installed library.
       - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
         env:
           VSIFT_P13_REAL_INSTALL: "1"
+          VSIFT_P13_KEEP_BASE: "1"
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
         run: >-
           cargo test --release --locked -p vsift-cli
           --test p13_managed_install_real
           real_managed_install_with_ocr_installs_and_reads_on_screen_text
           -- --ignored --exact --nocapture
+
+      # L-225: does Microsoft's onnxruntime.dll import the Visual C++ runtime?
+      # Read the import table of the installed copy and say so; the run fails
+      # if no tool can read it, so the answer is never silently missing.
+      - name: Read the imports of the installed onnxruntime.dll
+        if: always()
+        run: |
+          set -euo pipefail
+          dll="$(find "$RUNNER_TEMP" -path '*vsift-p13-real-ocr-*' -name onnxruntime.dll | head -n 1)"
+          test -n "$dll" || { echo "the installed onnxruntime.dll was not found"; exit 1; }
+          echo "library: $dll ($(wc -c < "$dll") bytes)"
+          imports="$RUNNER_TEMP/onnxruntime-imports.txt"
+          objdump="$(command -v llvm-objdump || true)"
+          if [ -z "$objdump" ] && [ -x "/c/Program Files/LLVM/bin/llvm-objdump.exe" ]; then objdump="/c/Program Files/LLVM/bin/llvm-objdump.exe"; fi
+          if [ -n "$objdump" ]; then
+            tool="llvm-objdump -p"
+            "$objdump" -p "$dll" | grep -i 'DLL Name:' | sed 's/^ *//' > "$imports"
+          else
+            vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+            dumpbin="$("$vswhere" -latest -products '*' -find '**/Hostx64/x64/dumpbin.exe' | head -n 1)"
+            test -n "$dumpbin" || { echo "neither llvm-objdump nor dumpbin is available"; exit 1; }
+            tool="dumpbin /dependents"
+            "$(cygpath -u "$dumpbin")" /dependents "$(cygpath -w "$dll")" | grep -i '\.dll' > "$imports"
+          fi
+          cat "$imports"
+          if grep -i -E 'vcruntime140|msvcp140|vcomp140|concrt140' "$imports" >/dev/null; then
+            verdict="IMPORTS the Visual C++ runtime"
+          else
+            verdict="does NOT import the Visual C++ runtime"
+          fi
+          {
+            echo "### onnxruntime.dll imports ($tool)"
+            echo
+            echo "The installed onnxruntime.dll $verdict."
+            echo
+            echo '```'
+            cat "$imports"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "onnxruntime.dll $verdict"
+
+      - name: Remove the kept base folder
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/vsift-p13-real-ocr-*
 
   managed-install-ocr-macos:
     name: Managed install with on-screen text (macOS arm64)
