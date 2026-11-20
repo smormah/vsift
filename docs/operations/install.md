@@ -38,9 +38,9 @@ source ([`development.md`](../development.md)) also works.
 
 | Machine | Status today | What has been shown (hosted runners, on the published versions) | Notes |
 | --- | --- | --- | --- |
-| Windows 11 x64 | R0 target | Installs with all four package managers, the archive runs and both journeys ran, on a hosted Windows Server 2025 image; the project's Windows 11 development machine ran the agent trials | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2). Smart App Control is untried (section 4) |
-| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); VSift has not been run on a Mac by the people who build it | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). Gatekeeper is untried (section 4) |
-| Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | The same checks passed, with the managed tools installed by the binary itself, also offline from the real files | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
+| Windows 11 x64 | R0 target | Installs with all four package managers, the archive runs and both journeys ran, on a hosted Windows Server 2025 image; the project's Windows 11 development machine ran the agent trials | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2), or, since `0.3.0`, let VSift install them (section 5.1b). Smart App Control is untried (section 4) |
+| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); VSift has not been run on a Mac by the people who build it | `@vsift/darwin-arm64`. Bring your own tools (section 5.2), or, since `0.3.0`, let VSift install them (section 5.1b). Gatekeeper is untried (section 4) |
+| Ubuntu 24.04 on x64 | R0 target, and the only machine where 0.2.4 installs its own tools | The same checks passed, with the managed tools installed by the binary itself, also offline from the real files | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
 | Another Linux on x64 with glibc 2.35 or later and OpenSSL 3 | not a target | Nothing | The binary is built on Ubuntu 22.04 and may run; it has not been tested |
 | Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | not supported | Nothing | The launcher says so and exits 127 (section 10) |
 
@@ -50,10 +50,12 @@ source ([`development.md`](../development.md)) also works.
   machine has shown and what is still missing ([L-035](../planning/known-limits.md#l-035)).
   What was run where is in [`p13-distribution.md`](../planning/p13-distribution.md) and the P14
   plan.
-- **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu
-  24.04 x64 only (ADR 0023 decision E). On Windows and macOS you install FFmpeg,
-  FFprobe, whisper.cpp and the speech model yourself and tell VSift where they are
-  (section 5.2).
+- **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu 24.04 x64 only
+  (ADR 0023 decision E). Since `0.3.0` it also installs the tools on Windows x64 and macOS on
+  Apple silicon (section 5.1b, ADR 0032); hosted runners have shown those installs, with no
+  power-loss campaign there ([L-215](../planning/known-limits.md#l-215)). With 0.2.4 and earlier, on Windows and macOS
+  you install FFmpeg, FFprobe, whisper.cpp and the speech model yourself and tell VSift
+  where they are (section 5.2).
 - **What 0.2.4 promises** (as 0.2.0, 0.2.1, 0.2.2 and 0.2.3 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON
   contracts ([`cli-v1.md`](../contracts/cli-v1.md)). They change only by addition: new commands,
   fields and failure codes may appear, and what exists keeps its meaning. Nothing else is
@@ -442,12 +444,35 @@ vsift setup check                                  # video and speech now say re
 If a download fails, section 9 lists each reason. VSift also falls back to section 5.2
 whenever it cannot install safely.
 
-### 5.1b Windows x64 (since `0.3.0`)
+### 5.1b Windows x64 and macOS on Apple silicon (since `0.3.0`)
 
-`vsift setup plan` and `vsift setup install` work the same way on Windows x64, with the managed folder under
-`%LOCALAPPDATA%\vsift\managed-v1`. For now they install FFmpeg and FFprobe (BtbN's LGPL build of the same version
-as on Ubuntu, a 147 MB zip) and, when a whisper.cpp already works on the machine, the speech model; whisper.cpp
-itself is still yours to install or register (section 5.2) until VSift's own Windows build of it joins the plan.
+`vsift setup plan` and `vsift setup install` work the same way on Windows x64 and on macOS arm64, and install the
+same three things: FFmpeg with FFprobe, whisper.cpp v1.9.5 and the same `base` speech model. The managed folder
+is `%LOCALAPPDATA%\vsift\managed-v1` on Windows and `~/Library/Application Support/vsift/managed-v1` on
+macOS.
+
+| | Windows x64 | macOS arm64 |
+| --- | --- | --- |
+| FFmpeg and FFprobe | The FFmpeg-Builds LGPL build of the same version as on Ubuntu (`n9.0.2-39`), a 169 MB zip | VSift's own LGPL build of the same FFmpeg commit, a 21 MB archive; its source is published beside it |
+| whisper.cpp | VSift's own build of v1.9.5, one executable that needs no Visual C++ runtime, a 0.9 MB archive | VSift's own build of v1.9.5, one executable, a 2.1 MB archive |
+| Speech model | `ggml-base.bin`, 148 MB, from the same pinned address as on Ubuntu | the same |
+
+VSift builds the Windows whisper.cpp and both macOS tools itself because no publisher offers what VSift needs there
+(upstream's Windows whisper.cpp needs the Visual C++ runtime; nobody publishes an LGPL static FFmpeg or a
+whisper.cpp command line for macOS). Each is built twice and compared, carries a build attestation, and is
+published as a VSift engine release ([`engines.md`](engines.md)); VSift pins each archive by size and SHA-256
+and checks it before use, exactly as it does the other publishers' files.
+
+- **Windows:** the whisper.cpp build needs a processor with AVX2, FMA and F16C, which every processor Windows 11
+  accepts has; on an older one the install's smoke test fails and whisper.cpp is not installed
+  ([L-216](../planning/known-limits.md#l-216)).
+- **macOS:** the whisper.cpp build can use Metal, but VSift always runs it on the processor (`-ng`), so it
+  transcribes the same way on every Mac and on a machine without Metal. The FFmpeg build has no software AV1
+  decoder, so AV1 video plays only where VideoToolbox decodes it (Apple M3 and later; L-216). Nothing is
+  notarized: VSift downloads and runs these files itself, so Gatekeeper does not check them (section 4).
+- **What has been shown:** both systems' installs, the check after them and a transcription ran on GitHub's hosted
+  Windows Server 2025 and macOS 15 runners ([L-224](../planning/known-limits.md#l-224)); no person has run them on a
+  Windows PC or a Mac yet, and no kill or power-loss test runs there (L-215).
 
 ### 5.1a Optional components (since `0.3.0`)
 
@@ -488,13 +513,14 @@ vsift setup install --plan plan.json --accept-plan <the plan digest>
   Nothing reviews a file you supply: keeping it current is yours, sites change, and yt-dlp's own builds are
   GPL-3.0-or-later. Downloading from a site is subject to that site's terms.
 
-### 5.2 Windows, macOS and other machines: bring your own
+### 5.2 Any machine: bring your own
 
-Install FFmpeg and FFprobe with whatever you normally use, and, for local speech
+On a machine without a catalogue (section 1), with a release before `0.3.0` on Windows and macOS, or whenever you
+prefer your own tools, install FFmpeg and FFprobe with whatever you normally use, and, for local speech
 recognition, whisper.cpp's `whisper-cli` and a model. VSift does not review, pin or
 redistribute these builds. whisper.cpp publishes no macOS command-line build (v1.9.5 has only a
 library framework for Apple systems), so there you
-build it from its source or take it from a package manager. Tools on your `PATH` are found
+build it from its source, take it from a package manager, or let VSift install its own (section 5.1b). Tools on your `PATH` are found
 automatically; tools elsewhere are registered once, with absolute paths:
 
 ```console
@@ -647,7 +673,7 @@ deleting them left no trace; the evidence bundle, the registered tools and the s
    | --- | --- | --- | --- |
    | Configuration (registered tool paths, and the record of the media-tool check) | `%LOCALAPPDATA%\vsift` | `~/Library/Application Support/vsift` | `$XDG_CONFIG_HOME/vsift` or `~/.config/vsift` |
    | Disposable sessions (private copies of videos you ingested) | `%LOCALAPPDATA%\VSift-sessions` | `~/Library/Caches/VSift-sessions` | `$XDG_CACHE_HOME/vsift-sessions` or `~/.cache/vsift-sessions` |
-   | Managed tools | not installed | not installed | `$XDG_DATA_HOME/vsift/managed-v1` or `~/.local/share/vsift/managed-v1` (the `vsift` folder above it holds nothing else: delete it too) |
+   | Managed tools | `%LOCALAPPDATA%\vsift\managed-v1` (since `0.3.0`) | `~/Library/Application Support/vsift/managed-v1` (since `0.3.0`) | `$XDG_DATA_HOME/vsift/managed-v1` or `~/.local/share/vsift/managed-v1` (the `vsift` folder above it holds nothing else: delete it too) |
 
    `vsift session clean --expired` removes expired sessions first, if you prefer.
 4. **What VSift never deletes:** your original videos and transcripts (it works on private

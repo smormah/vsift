@@ -14,7 +14,7 @@
   setup half this ADR absorbs from draft #503); the OCR and speaker-label stories (ADR 0030 and ADR 0031, in
   review), which add their components on top of it.
 - Register: [L-214](../planning/known-limits.md#l-214) (this pull request); L-215 and L-216 with the catalogue and
-  the engine workflow.
+  the engine workflow; [L-224](../planning/known-limits.md#l-224) with the Windows and macOS catalogues (W5a).
 
 ## Context
 
@@ -334,3 +334,47 @@ SHA-256 digests, archive bounds and file inventories are **unchanged**. The test
 drifting apart again. **`reviewed_redirect` is not widened**, and its tests are unchanged. The earlier planning records
 (`p06-*`, the P14 scan readings) keep their `BtbN/FFmpeg-Builds` links as written: GitHub redirects them, and they
 describe what was read at the time. See [L-254](../planning/known-limits.md#l-254).
+
+## Implementation note, 2026-11-20 (W5a: the Windows and macOS catalogues, slice 3's second part)
+
+The three engines of decision D were published from 18 to 20 November 2026, each built twice and compared, attested,
+and approved by the maintainer at the `release` environment, none marked latest: `whisper-cli-windows-v1.9.5-r1`
+(publish run 44299218614), `whisper-cli-macos-v1.9.5-r1` (44303732626) and `ffmpeg-macos-v9.0.2.39-r1`
+(44380924394, with its corresponding source). Their pins were copied from each release's `.inventory.json`, read with
+`gh` as data on 2026-11-20 (the inventories' own SHA-256s agree with the release records); no archive was downloaded
+to a development machine.
+
+- **Windows x86-64, revision `windows-x86_64-2026-11-20-r4`:** whisper.cpp joins the catalogue as VSift's build
+  (decision D2), between FFmpeg and the model, so every core component is offered and the model is planned beside
+  the managed whisper.cpp. P07's speech clips ran on the published build before the pin (the workflow's
+  `vsift_whisper_windows_tag` input fetches the archive and its inventory from the release and refuses any
+  disagreement): run 44733161663 on 093802c3 passed on both legs, the Windows leg on the published archive, whose `whisper-cli.exe` it read as 2,147,328 bytes with the pinned SHA-256.
+- **macOS arm64, revision `macos-arm64-2026-11-20-r1`:** VSift's FFmpeg and whisper.cpp and the same model.
+  `compatibility_policy()` was shared by every target; the macOS catalogue now carries its own policy, which differs
+  only in the expected banners (`ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1` and the `ffprobe` one). Only the
+  managed smoke checks the banner, against the catalogue being installed, so bring-your-own verification keeps the
+  shared policy on every host.
+- **Metal.** The macOS whisper.cpp is built with Metal, but VSift has always run whisper.cpp with `-ng`
+  (`whisper_cli.rs`, decoding profile `r0-v1`), so recognition is on the CPU on every Mac and the build needs no
+  GPU. The hosted macOS jobs of `P13 managed smoke` record whether the runner has a Metal device and must pass
+  either way. In run 44739937555 the `macos-15` runner reported no display adapter and no Metal support, and the
+  smoke, install and transcription all passed: the build starts and recognises without a GPU.
+- **One table per engine archive.** Every engine archive has the same shape (a gzip tar with one root folder named
+  by its stem, regular files only), so each is one `EngineRelease` table copied from its inventory, turned into a
+  catalogue action by `engine_artifact`. The OCR runner (W5b) is one more table and an optional group; nothing in
+  the catalogue's shape has to change for it.
+- **Reviewed whisper builds.** `REVIEWED_BUILDS` in `whisper_build.rs` names the two VSift builds beside upstream's,
+  so `setup check` reports them as the reviewed v1.9.5 build, by their exact bytes only.
+- **Publisher record.** The actions' publisher is `VSift engine release`; their `source_code_url` is the release
+  page, which holds the build information (upstream commit, recipe digest, runner image) and, for FFmpeg, the
+  source.
+- **Proof (section F):** `P13 managed smoke` gains macOS jobs beside the Windows ones; on all three systems the
+  install checkpoint now also transcribes F05's speech variant with the managed tools alone. Run 44739937555 on
+  `bfbc5ab5`: the smoke and the install passed on Ubuntu, Windows and macOS, and each transcript heard "success
+  banner" and "submit" (Windows install 21.4 s, transcription 6.4 s; macOS 30.7 s and 5.1 s). Its one failure, the
+  Ubuntu install E2E stage's killed-download check, is a race in that test since the video and speech parts
+  download at once (ADR 0036, #538): a kill can find one stage per started download, up to three, and the check
+  now allows that. [L-215](../planning/known-limits.md#l-215) and [L-216](../planning/known-limits.md#l-216) are
+  amended and [L-224](../planning/known-limits.md#l-224) added.
+- **Left for later pull requests:** the OCR group (W5b, L-225 reserved) and the
+  speaker group (W5c, L-217 and L-226 reserved).

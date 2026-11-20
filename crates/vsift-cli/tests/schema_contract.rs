@@ -263,11 +263,10 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         "executable_probe_and_reviewed_catalogue"
     );
     assert_eq!(plan_value["data"]["readiness"], "blocked");
-    // Ubuntu's catalogue installs all three core components; Windows's
-    // (ADR 0032) FFmpeg alone here, as no whisper.cpp could smoke the model.
+    // Every catalogue (ADR 0032: Ubuntu 24.04 x86-64, Windows x86-64 and
+    // macOS arm64) installs all three core components.
     let expected_actions = match plan_value["data"]["target"].as_str() {
-        Some("ubuntu_24_04_x86_64") => Some(3),
-        Some("windows_x86_64") => Some(1),
+        Some("ubuntu_24_04_x86_64" | "windows_x86_64" | "macos_arm64") => Some(3),
         _ => None,
     };
     if let Some(expected_actions) = expected_actions {

@@ -497,10 +497,9 @@ fn invalid_explicit_selection_does_not_fall_back_to_path() -> Result<(), Box<dyn
         "unhealthy"
     );
     // Whether managed installation could supply the tool on this host.
-    // Whisper.cpp is offered by Ubuntu's catalogue only (ADR 0032).
-    let expected = if vsift_infrastructure::detect_managed_target()
-        == vsift_domain::ManagedTarget::Ubuntu2404X86_64
-    {
+    // Every catalogue offers whisper.cpp (ADR 0032: Ubuntu 24.04 x86-64,
+    // Windows x86-64 and macOS arm64).
+    let expected = if vsift_infrastructure::accepted_host_catalogue()?.is_some() {
         "catalogue_accepted"
     } else {
         "unavailable_target"
@@ -696,7 +695,7 @@ fn reviewed_setup_plan_checks_first_and_never_installs() -> Result<(), Box<dyn s
     assert_eq!(value["command"], "setup.plan");
     assert_eq!(value["status"], "complete");
     assert_eq!(value["data"]["readiness"], "blocked");
-    assert_planning_target(&value["data"], 3, 1);
+    assert_planning_target(&value["data"], 3);
     assert_eq!(
         value["data"]["dependencies"][0]["required_authority"],
         "user"
@@ -747,7 +746,7 @@ fn setup_plan_uses_configured_off_path_tool_but_does_not_call_it_qualified()
         value["data"]["dependencies"][2]["disposition"],
         "existing_executable_probe_only"
     );
-    assert_planning_target(&value["data"], 2, 2);
+    assert_planning_target(&value["data"], 2);
     Ok(())
 }
 
@@ -767,21 +766,16 @@ fn headless_plan_jsonl_has_one_terminal_and_no_install_authority()
     let event: Value = serde_json::from_str(lines[0])?;
     assert_eq!(event["event"], "terminal");
     assert_eq!(event["command"], "setup.plan");
-    assert_planning_target(&event["result"]["data"], 3, 1);
+    assert_planning_target(&event["result"]["data"], 3);
     Ok(())
 }
 
-/// The plan's managed part on this host: Ubuntu's catalogue offers all three
-/// core components; Windows's (ADR 0032) offers `FFmpeg` and the model, and the
-/// model only beside a working whisper.cpp, which it does not offer yet.
-fn assert_planning_target(
-    data: &Value,
-    expected_ubuntu_actions: usize,
-    expected_windows_actions: usize,
-) {
+/// The plan's managed part on this host: the catalogues of Ubuntu 24.04
+/// x86-64, Windows x86-64 and macOS arm64 (ADR 0032) each offer all three core
+/// components, so each plans the same actions; any other host plans none.
+fn assert_planning_target(data: &Value, expected_actions: usize) {
     let expected_actions = match data["target"].as_str() {
-        Some("ubuntu_24_04_x86_64") => Some(expected_ubuntu_actions),
-        Some("windows_x86_64") => Some(expected_windows_actions),
+        Some("ubuntu_24_04_x86_64" | "windows_x86_64" | "macos_arm64") => Some(expected_actions),
         _ => None,
     };
     if let Some(expected_actions) = expected_actions {

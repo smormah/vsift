@@ -1,5 +1,6 @@
 //! Opt-in: the production compatibility smoke on the real pinned tools of the
-//! host's catalogue (ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64).
+//! host's catalogue (ADR 0032: Ubuntu 24.04 x86-64, Windows x86-64 and macOS
+//! arm64).
 //!
 //! Only a disposable host runs this, through the manual `P13 managed smoke`
 //! workflow or by hand:
@@ -9,10 +10,10 @@
 //!   --test p13_managed_smoke_real_tools -- --ignored --exact --nocapture
 //! ```
 //!
-//! It downloads the artifacts of the host's accepted catalogue (on Ubuntu the
-//! pinned `FFmpeg` build, whisper.cpp and the base model; on Windows `FFmpeg`,
-//! the model being left out while no whisper.cpp can smoke it) over HTTPS through the
-//! production publisher transfer, which verifies each one's size and SHA-256
+//! It downloads the artifacts of the host's accepted catalogue (the pinned
+//! `FFmpeg` build, whisper.cpp and the base model; on Windows and macOS
+//! `FFmpeg` and whisper.cpp are `VSift`'s own engine releases, except Windows
+//! `FFmpeg`) over HTTPS through the production publisher transfer, which verifies each one's size and SHA-256
 //! and sends only the neutral `VSift/0.1 managed setup` user agent. Each is
 //! staged into a private temporary managed root through the reviewed payload
 //! and runtime policy, then smoked together, unactivated, with the reviewed
@@ -48,8 +49,8 @@ static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 struct TestRoot(PathBuf);
 
 /// The host catalogue's artifacts the smoke can run: the model is smoked
-/// with a whisper.cpp, so a catalogue that offers none (Windows until
-/// `VSift`'s own build is pinned) smokes its other tools.
+/// with a whisper.cpp, so a catalogue that offered none would smoke its other
+/// tools. Every catalogue offers one today (ADR 0032).
 fn smokable(
     catalogue: &vsift_application::AcceptedManagedCatalogue,
 ) -> Vec<vsift_application::AcceptedManagedArtifact> {

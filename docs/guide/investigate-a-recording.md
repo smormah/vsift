@@ -14,8 +14,10 @@ image itself, so you can show someone else exactly where you got it.
 - For the words, either a transcript you already have (then use
   [use an existing transcript](use-an-existing-transcript.md) and skip step 3) or **speech
   recognition**: whisper.cpp and a speech model. `vsift setup check` says whether they are in place. On
-  Ubuntu 24.04 VSift can install them after you accept a plan; on Windows and macOS you install and
-  register them yourself ([install guide, section 5.2](../operations/install.md#52-windows-macos-and-other-machines-bring-your-own)).
+  Ubuntu 24.04, and since `0.3.0` on Windows x64 and macOS on Apple silicon
+  ([install guide, section 5.1b](../operations/install.md#51b-windows-x64-and-macos-on-apple-silicon-since-030)),
+  VSift can install them after you accept a plan; anywhere you can also install and register them yourself
+  ([section 5.2](../operations/install.md#52-any-machine-bring-your-own)).
 
 The loop is always the same: **ask a small question, list the candidates, look at one thing, note its id.**
 Ask for small pages (20 results at a time) and look at a handful of pictures; that is almost always enough,

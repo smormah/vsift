@@ -42,22 +42,28 @@ type TestResult = Result<(), Box<dyn Error>>;
 const CLI_DEADLINE: Duration = Duration::from_secs(60);
 const OWNED_PREFIX: &str = "vsift-p06-e2e-";
 const MAX_DIAGNOSTIC_CHARS: usize = 240;
-const QUALIFIED_TARGET: &str = "ubuntu_24_04_x86_64";
+/// The targets with a managed catalogue (ADR 0032), each offering every core
+/// component.
+const CATALOGUE_TARGETS: [&str; 3] = ["ubuntu_24_04_x86_64", "windows_x86_64", "macos_arm64"];
 const MISSING_MEDIA_TOOLS: &str = "FFmpeg or FFprobe is not on PATH; put trusted builds on PATH, or register them with setup configure ffmpeg|ffprobe --executable <absolute-path>";
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
 /// What `setup check` says managed installation can do for a missing tool
-/// on this host (P13): the reviewed catalogue applies to Ubuntu 24.04 x86-64
-/// only.
+/// on this host (P13, ADR 0032): a host with a catalogue can install it.
 fn host_managed_install() -> &'static str {
-    if vsift_infrastructure::detect_managed_target()
-        == vsift_domain::ManagedTarget::Ubuntu2404X86_64
-    {
+    if vsift_infrastructure::accepted_host_catalogue().is_ok_and(|catalogue| catalogue.is_some()) {
         "catalogue_accepted"
     } else {
         "unavailable_target"
     }
+}
+
+/// Whether a plan's target has a managed catalogue.
+fn catalogue_target(target: &Value) -> bool {
+    target
+        .as_str()
+        .is_some_and(|target| CATALOGUE_TARGETS.contains(&target))
 }
 
 /// A temporary directory this checkpoint created and alone may remove.
@@ -342,7 +348,7 @@ fn partial_setup(root: &OwnedRoot, tools: Option<&MediaTools>) -> StageResult {
         )?;
     }
     let whisper_plan = &data["dependencies"][2];
-    let expected = if data["target"] == QUALIFIED_TARGET {
+    let expected = if catalogue_target(&data["target"]) {
         "managed_install"
     } else {
         "manual_selection_required"
@@ -354,12 +360,12 @@ fn partial_setup(root: &OwnedRoot, tools: Option<&MediaTools>) -> StageResult {
     )?;
     ensure(
         step_mentions(&whisper_plan["next_step"], "supplied transcript")
-            || data["target"] == QUALIFIED_TARGET,
+            || catalogue_target(&data["target"]),
         "whisper plan step does not offer the supplied-transcript route",
     )?;
     ensure(
         step_mentions(&data["local_asr_model"]["next_step"], "supplied transcript")
-            || data["target"] == QUALIFIED_TARGET,
+            || catalogue_target(&data["target"]),
         "model plan step does not offer the supplied-transcript route",
     )?;
     Ok(json!({
@@ -439,7 +445,7 @@ fn managed_target_plan(root: &OwnedRoot) -> StageResult {
     )?;
     ensure(code == Some(0), "setup plan did not exit 0")?;
     let data = &plan["data"];
-    let qualified = data["target"] == QUALIFIED_TARGET;
+    let qualified = catalogue_target(&data["target"]);
     if qualified {
         ensure_eq(
             &data["managed_install"],

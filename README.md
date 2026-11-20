@@ -64,7 +64,7 @@ vsift setup configure-model --file /absolute/path/to/ggml-base.bin
 vsift setup check
 ```
 
-whisper.cpp publishes no macOS command-line build, so on a Mac you build it from its source or take it from a package manager. The [installation guide](docs/operations/install.md#52-windows-macos-and-other-machines-bring-your-own) names the reviewed model and shows Windows paths.
+whisper.cpp publishes no macOS command-line build, so on a Mac you build it from its source or take it from a package manager. The [installation guide](docs/operations/install.md#52-any-machine-bring-your-own) names the reviewed model and shows Windows paths.
 
 ### Use it with your AI assistant
 
