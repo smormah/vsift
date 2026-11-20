@@ -357,7 +357,8 @@ to a development machine.
 - **Metal.** The macOS whisper.cpp is built with Metal, but VSift has always run whisper.cpp with `-ng`
   (`whisper_cli.rs`, decoding profile `r0-v1`), so recognition is on the CPU on every Mac and the build needs no
   GPU. The hosted macOS jobs of `P13 managed smoke` record whether the runner has a Metal device and must pass
-  either way.
+  either way. In run 44739937555 the `macos-15` runner reported no display adapter and no Metal support, and the
+  smoke, install and transcription all passed: the build starts and recognises without a GPU.
 - **One table per engine archive.** Every engine archive has the same shape (a gzip tar with one root folder named
   by its stem, regular files only), so each is one `EngineRelease` table copied from its inventory, turned into a
   catalogue action by `engine_artifact`. The OCR runner (W5b) is one more table and an optional group; nothing in
@@ -368,8 +369,12 @@ to a development machine.
   page, which holds the build information (upstream commit, recipe digest, runner image) and, for FFmpeg, the
   source.
 - **Proof (section F):** `P13 managed smoke` gains macOS jobs beside the Windows ones; on all three systems the
-  install checkpoint now also transcribes F05's speech variant with the managed tools alone. Runs in #585's
-  description. [L-215](../planning/known-limits.md#l-215) and [L-216](../planning/known-limits.md#l-216) are
+  install checkpoint now also transcribes F05's speech variant with the managed tools alone. Run 44739937555 on
+  `bfbc5ab5`: the smoke and the install passed on Ubuntu, Windows and macOS, and each transcript heard "success
+  banner" and "submit" (Windows install 21.4 s, transcription 6.4 s; macOS 30.7 s and 5.1 s). Its one failure, the
+  Ubuntu install E2E stage's killed-download check, is a race in that test since the video and speech parts
+  download at once (ADR 0036, #538): a kill can find one stage per started download, up to three, and the check
+  now allows that. [L-215](../planning/known-limits.md#l-215) and [L-216](../planning/known-limits.md#l-216) are
   amended and [L-224](../planning/known-limits.md#l-224) added.
 - **Left for later pull requests:** the OCR group (W5b, L-225 reserved) and the
   speaker group (W5c, L-217 and L-226 reserved).
