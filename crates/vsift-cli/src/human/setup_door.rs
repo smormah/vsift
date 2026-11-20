@@ -765,9 +765,19 @@ enum Advice {
     Space,
     Again,
     WhenReady,
+    /// On-screen text failed its test on Windows, where ONNX Runtime needs
+    /// Microsoft's Visual C++ Redistributable (L-225).
+    VisualCppRuntime,
 }
 
+/// Where to get Microsoft's Visual C++ Redistributable for x64.
+const VISUAL_CPP_REDISTRIBUTABLE: &str = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+
 fn advice(installed: &InstallResults) -> Option<Advice> {
+    advice_on(installed, cfg!(windows))
+}
+
+fn advice_on(installed: &InstallResults, windows: bool) -> Option<Advice> {
     installed
         .components
         .iter()
@@ -779,6 +789,7 @@ fn advice(installed: &InstallResults) -> Option<Advice> {
                 Some(Advice::Connection)
             }
             Some("storage") => Some(Advice::Space),
+            _ if windows && component.component == "ocr_runner" => Some(Advice::VisualCppRuntime),
             _ => Some(Advice::Again),
         })
 }
@@ -813,6 +824,15 @@ pub(crate) fn door_after_install(
         Some(Advice::WhenReady) => {
             text.push_fixed("Next: run  vsift setup  when you're ready")
                 .end_line();
+        }
+        Some(Advice::VisualCppRuntime) => {
+            text.push_fixed(
+                "On-screen text needs Microsoft's Visual C++ Redistributable for x64, which this computer may lack. Install it from ",
+            )
+            .push_fixed(VISUAL_CPP_REDISTRIBUTABLE)
+            .end_line()
+            .push_fixed("Next: run  vsift setup --include on-screen-text  again")
+            .end_line();
         }
         Some(Advice::Again) => {
             text.push_fixed("If it fails again, the troubleshooting guide helps: ")

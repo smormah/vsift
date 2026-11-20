@@ -13,7 +13,8 @@ use std::{env, fs, io, path::PathBuf};
 
 use serde_json::Value;
 use vsift_application::{
-    AcceptedManagedArtifact, AcceptedManagedCatalogue, ComponentInstallFailure,
+    AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmokeCheck,
+    CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, ComponentInstallFailure,
     ComponentInstallOutcome, ComponentInstallReport, DownloadFailureReason, InstallFailureReason,
     InstallStep, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
     LocalAsrSetupStatus, ManagedInstallReport, ManagedPlanAvailability, ManagedPlanObservation,
@@ -825,4 +826,30 @@ fn setup_check_reports_a_registered_runtime_with_no_ytdlp_as_unused() -> TestRes
     assert!(step.contains("is not used"), "{step}");
     assert!(step.contains("Only Deno is accepted"), "{step}");
     Ok(())
+}
+
+/// L-225: a failed OCR smoke names the Visual C++ Redistributable on Windows
+/// (where ONNX Runtime imports its runtime) and keeps the ordinary advice
+/// elsewhere, within the same bound as every optional advice.
+#[test]
+fn a_failed_ocr_smoke_names_the_visual_cpp_runtime_on_windows() {
+    let advice = optional_install_failure_summary(
+        OptionalComponent::Ocr,
+        ManagedComponent::OcrRunner,
+        ComponentInstallFailure::at(
+            InstallStep::Smoke,
+            InstallFailureReason::Smoke(CompatibilitySmokeFailure {
+                check: CompatibilitySmokeCheck::Banner,
+                reason: CompatibilitySmokeFailureReason::ProviderFailed,
+            }),
+        ),
+    );
+    assert!(advice.len() <= 640, "{} bytes: {advice}", advice.len());
+    assert!(advice.contains("on-screen text"), "{advice}");
+    assert_eq!(
+        advice.contains("Visual C++ Redistributable"),
+        cfg!(windows),
+        "{advice}"
+    );
+    assert!(advice.contains("ready for local videos"), "{advice}");
 }

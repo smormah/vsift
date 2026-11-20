@@ -516,6 +516,7 @@ setup door instead, by their plain names: `vsift setup --include web-videos` or
 - **`setup check`** lists each optional component as `installed`, `not_installed` or `unavailable` on this machine,
   apart from the status of local investigation. A component row says where it came from (`source`: `managed`, or
   `user_managed` for a tool you supplied, shown with the first line of its own version output and its SHA-256).
+- **On Windows, `ocr` needs Microsoft's Visual C++ Redistributable for x64.** ONNX Runtime's Windows library depends on it (it imports `MSVCP140.dll` and `VCRUNTIME140.dll`; read from the installed copy on a hosted Windows runner, [L-225](../planning/known-limits.md#l-225)). Most PCs have it already, because many programs install it. If yours does not, the `ocr` group's install test fails, the core stays installed and VSift says so: install the Redistributable from <https://aka.ms/vs/17/release/vc_redist.x64.exe> and run the same command again. VSift does not install it for you.
 - **Your own OCR runner.** To use a runner you built or were given, register it once with an absolute path:
   `vsift setup configure ocr-runner --executable /absolute/path/to/vsift-ocr-runner`. Its ONNX Runtime library
   and its two models must sit beside it (in `onnxruntime/` and `models/`, or flat); `vsift ocr` checks the build when

@@ -414,6 +414,7 @@ release's `SHA256SUMS` and with `engine-releases-2026-11.md`); no archive was do
 - **Use.** `vsift ocr` finds the runner in this order: `--runner`, the one registered with `setup configure
   ocr-runner`, the managed one (verified and held like every managed tool), then `PATH`. The managed folder's files
   are that version's own verified files, so the runner's per-read build proof (ADR 0030) stands as before.
+- **Windows needs the Visual C++ runtime for ONNX Runtime.** The import step of the `managed-install-ocr-windows` job (`P13 managed smoke` run 44832924154) read the installed `onnxruntime.dll`: it imports `MSVCP140.dll`, `MSVCP140_1.dll`, `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`. VSift installs none of them; a Windows PC without the Redistributable fails the group's `describe` smoke, and the door and `setup install` point to it. The runner (static C runtime) is unchanged ([L-225](../planning/known-limits.md#l-225)).
 - **Two groups, one test.** With `ocr` beside `online_links`, `two_optional_groups_fail_apart` shows that one group's
   download or smoke failing leaves the other installed and the core active ([L-214](../planning/known-limits.md#l-214)).
 - **The door and `setup check`.** The readable table and the setup door gain an "On-screen text" row (`OCR runner`,

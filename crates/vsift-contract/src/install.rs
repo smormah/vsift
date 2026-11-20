@@ -300,6 +300,14 @@ pub fn optional_install_failure_summary(
             "the download did not complete",
             "Check the network or proxy, then",
         ),
+        // ONNX Runtime's Windows library imports the Visual C++ runtime
+        // (MSVCP140, VCRUNTIME140; measured in `P13 managed smoke` run
+        // 44832924154, L-225), so on Windows a failed OCR smoke most likely
+        // means that runtime is missing.
+        InstallFailureReason::Smoke(_) if group == OptionalComponent::Ocr && cfg!(windows) => (
+            "it did not pass its compatibility check on this machine (on Windows it needs Microsoft's Visual C++ Redistributable for x64, which may be missing)",
+            "Install the Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe, then",
+        ),
         InstallFailureReason::Smoke(_) => (
             "it did not pass its compatibility check on this machine",
             "If a retry fails the same way, report it; meanwhile",
