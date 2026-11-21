@@ -278,6 +278,10 @@ fn the_inventory_reports_the_selection_its_previous_version_and_verification() -
 /// them with their versions, rolled back, removed alone and repaired, and
 /// removing one never touches another component.
 #[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "One journey over every optional component, read in order"
+)]
 fn the_optional_components_are_listed_rolled_back_and_removed_like_the_core() -> TestResult {
     const YT_DLP: ManagedComponent = ManagedComponent::YtDlp;
     const DENO: ManagedComponent = ManagedComponent::JsRuntimeDeno;
@@ -303,6 +307,20 @@ fn the_optional_components_are_listed_rolled_back_and_removed_like_the_core() ->
         OCR,
         "ocr-runner-0.1.0-r2",
     )?);
+    // The speaker group's three components are optional components like the
+    // others: listed after the core and the others, by their own versions.
+    for component in [
+        ManagedComponent::SpeakerDiarizer,
+        ManagedComponent::SpeakerSegmentationModel,
+        ManagedComponent::SpeakerEmbeddingModel,
+    ] {
+        drop(publish_component(
+            &store,
+            &guard,
+            component,
+            "speaker-fixture-1",
+        )?);
+    }
     let maintainer = GuardedManagedStore::new(&store, &guard);
 
     let inventory = maintainer.inventory()?.ok_or("no root")?;

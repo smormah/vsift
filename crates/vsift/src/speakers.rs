@@ -14,8 +14,8 @@ use vsift_application::{
     LabelSpeakersRequest, SessionStorageError, SpeakerLabelError, label_speakers, name_speaker,
 };
 use vsift_domain::{
-    MediaSelection, MediaTime, RevisionState, SessionArtifactKind, SessionId, SpeakerCount,
-    SpeakerRecord, SpeakerRecordParts, SpeakerTag, TimeRange, TranscriptRevision,
+    ManagedComponent, MediaSelection, MediaTime, RevisionState, SessionArtifactKind, SessionId,
+    SpeakerCount, SpeakerRecord, SpeakerRecordParts, SpeakerTag, TimeRange, TranscriptRevision,
     TranscriptRevisionId, VerifiedName, recognizer_threads,
 };
 use vsift_infrastructure::{
@@ -33,19 +33,25 @@ use crate::{
 };
 
 /// The name the diarization tool has in sherpa-onnx's builds; looked up on the
-/// filtered `PATH` when no path is given. The models are never looked up there.
+/// filtered `PATH` when no path is given and no managed install holds one. The
+/// models are never looked up there.
 pub const DIARIZER_EXECUTABLE: &str = "sherpa-onnx-offline-speaker-diarization";
 
 const MAX_COMMIT_ATTEMPTS: usize = 3;
 
 /// The diarization tool and its two models, as the caller selected them.
+///
+/// Each piece the caller leaves out is the managed install's (the `speakers`
+/// group of `setup plan`, verified and held as every managed tool is); the
+/// tool is then looked up on the filtered `PATH`, the models never.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DiarizerSelection {
-    /// The tool; `None` looks for [`DIARIZER_EXECUTABLE`] on the filtered `PATH`.
+    /// The tool; `None` is the managed one, then [`DIARIZER_EXECUTABLE`] on the
+    /// filtered `PATH`.
     pub executable: Option<PathBuf>,
-    /// The pyannote segmentation 3.0 model (`model.onnx`).
+    /// The pyannote segmentation 3.0 model (`model.onnx`); `None` is the managed one.
     pub segmentation_model: Option<PathBuf>,
-    /// The speaker-embedding model (`NeMo` `TitaNet` small).
+    /// The speaker-embedding model (`NeMo` `TitaNet` small); `None` is the managed one.
     pub embedding_model: Option<PathBuf>,
 }
 
@@ -494,29 +500,61 @@ fn renumbered(
         .map_err(|error| EngineError::SpeakerLabels(SpeakerLabelError::Record(error)))
 }
 
-/// The tool from its path or the filtered `PATH`, and both models from their paths.
+/// Each piece from its path when the caller gave one, otherwise from the
+/// managed install (the tool, then, the filtered `PATH`; the models never).
+///
+/// A managed piece is opened through the store: its version must verify
+/// against its manifest before anything runs, and the executable keeps every
+/// managed version it uses in use for as long as it lives, as every managed
+/// tool does (ADR 0032). Pieces mix freely, so a caller can try its own model
+/// with the managed tool; a managed piece that is missing or does not verify
+/// is as good as none.
 fn select_diarizer(
     selection: &DiarizerSelection,
     threads: std::num::NonZeroU16,
     engine: &Engine,
 ) -> Result<SherpaOnnxDiarizer, EngineError> {
+    let mut lookup = engine.managed_lookup();
+    let mut holds = Vec::new();
     let executable = match &selection.executable {
         Some(path) => TrustedExecutable::explicit(absolute_selection(path)?),
-        None => ExecutableResolver::from_current_path().resolve(OsStr::new(DIARIZER_EXECUTABLE)),
+        None => match lookup.speaker_tool() {
+            Some(managed) => Ok(managed),
+            None => {
+                ExecutableResolver::from_current_path().resolve(OsStr::new(DIARIZER_EXECUTABLE))
+            }
+        },
     }
     .map_err(|error| match error {
         ExecutableResolutionError::NotFound => EngineError::DiarizerUnavailable,
         other => EngineError::Executable(ExecutableRejection::from(&other)),
     })?;
-    let (Some(segmentation), Some(embedding)) =
-        (&selection.segmentation_model, &selection.embedding_model)
-    else {
-        return Err(EngineError::DiarizerUnavailable);
-    };
+    let mut model =
+        |given: &Option<PathBuf>, component: ManagedComponent| -> Result<PathBuf, EngineError> {
+            if let Some(path) = given {
+                return absolute_selection(path);
+            }
+            let managed = lookup
+                .speaker_model(component)
+                .ok_or(EngineError::DiarizerUnavailable)?;
+            holds.push(managed.hold);
+            Ok(managed.path)
+        };
+    let segmentation = model(
+        &selection.segmentation_model,
+        ManagedComponent::SpeakerSegmentationModel,
+    )?;
+    let embedding = model(
+        &selection.embedding_model,
+        ManagedComponent::SpeakerEmbeddingModel,
+    )?;
+    let executable = holds
+        .into_iter()
+        .fold(executable, TrustedExecutable::retaining);
     SherpaOnnxDiarizer::new(
         executable,
-        &absolute_selection(segmentation)?,
-        &absolute_selection(embedding)?,
+        &segmentation,
+        &embedding,
         threads,
         engine.config().host_isolation.into_infrastructure(),
     )

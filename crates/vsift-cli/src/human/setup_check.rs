@@ -377,6 +377,13 @@ pub(crate) const fn extra_words(component: OptionalComponent) -> ExtraWords {
             sentence: "on-screen text",
             include_name: "on-screen-text",
         },
+        OptionalComponent::Speakers => ExtraWords {
+            part: "Speaker labels",
+            uses: "sherpa-onnx",
+            purpose: "labelling who speaks (optional)",
+            sentence: "speaker labels",
+            include_name: "speaker-labels",
+        },
     }
 }
 

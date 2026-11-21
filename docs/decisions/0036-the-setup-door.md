@@ -446,3 +446,23 @@ accepted name until a second group existed, and `--include` now accepts two). Ad
 - **The names (P-3, unchanged rule).** `cli-v1.md`'s table of names has the new rows: `on_screen_text` and
   `--include on-screen-text` at the door, `ocr` and `--include ocr` in the catalogue, `ocr_runner` for the managed
   component and `setup configure ocr-runner` for a runner the user registers.
+
+## Implementation note, 2026-11-21 (W5c: the third extra, speaker labels)
+
+The `speakers` group of [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) is the
+door's third extra, added the way W5b added the second (all additive):
+
+- **`--include speaker-labels`** on plain `vsift setup` and on `setup --unattended` maps to the catalogue group
+  `speakers`; `setup plan --include speakers` is the assistants' name.
+- **A table row.** `Speaker labels`, uses `sherpa-onnx`, "labelling who speaks (optional)", with the same statuses as
+  any extra. The words live in `extra_words`, still the one place an extra is named for a person.
+- **The extras line** names every extra that could be added and each one's flag (`Optional extras: web videos,
+  on-screen text, speaker labels. Add one with: vsift setup --include web-videos, --include on-screen-text, or
+  --include speaker-labels`); the unattended refusal of an extra the catalogue cannot offer names it (`VSift can't add
+  speaker labels on this computer yet, so nothing was installed.`).
+- **The unattended result** gains the part `speaker_labels` (`parts[].part`, `schemas/v1/setup.schema.json`).
+- **The names (P-3).** `cli-v1.md`'s table has the rows: `speaker_labels` and `--include speaker-labels` at the door,
+  `speakers` and `--include speakers` in the catalogue, and the three managed components `speaker_diarizer`,
+  `speaker_segmentation_model` and `speaker_embedding_model`.
+- **No Visual C++ advice.** A failed install test of this group gets the ordinary advice on Windows too: sherpa-onnx's
+  Windows libraries do not import the Visual C++ runtime ([L-225](../planning/known-limits.md#l-225), ADR 0032).

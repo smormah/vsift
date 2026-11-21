@@ -377,7 +377,7 @@ to a development machine.
   now allows that. [L-215](../planning/known-limits.md#l-215) and [L-216](../planning/known-limits.md#l-216) are
   amended and [L-224](../planning/known-limits.md#l-224) added.
 - **Left for later pull requests:** the OCR group (W5b, L-225 reserved) and the
-  speaker group (W5c, L-217 and L-226 reserved).
+  speaker group (W5c: see its note of 2026-11-21).
 
 ## Implementation note, 2026-11-20 (W5b: the `ocr` group)
 
@@ -426,4 +426,72 @@ release's `SHA256SUMS` and with `engine-releases-2026-11.md`); no archive was do
   `vsift ocr` and `vsift ocr search` on a synthetic video through the managed runner, with an empty `PATH`), and
   `P16 OCR runner` parity staying green. The coordinator dispatches the runs; they are recorded on the pull request
   and in L-225's evidence, not here.
-- **Left for a later pull request:** the speaker group (W5c, L-217 and L-226 reserved).
+- **Left for a later pull request:** the speaker group (W5c, below).
+
+## Implementation note, 2026-11-21 (W5c: the `speakers` group)
+
+The speaker group (ADR 0031) is the optional group `speakers`, offered on all three systems. Unlike the OCR group it
+is three components, because three publishers supply it and VSift builds none of it: sherpa-onnx's own release
+archive, pinned by URL, size and SHA-256 (GitHub's asset digest, the only one published, [L-217](../planning/known-limits.md#l-217)),
+the pyannote segmentation 3.0 model (one raw file at the Hugging Face revision `9403a690`, anchored by Hugging Face's
+LFS SHA-256) and the `NeMo` `TitaNet` small model (one raw file of sherpa-onnx's model release, anchored by that
+release's `checksum.txt`). Before pinning anything every upstream address and digest was re-read as metadata (`gh api`
+for the release assets and their digests, a HEAD request with a neutral client name for the two model files); all five
+resolved and agreed with the evaluation's pins (sizes, digests and the Hugging Face linked size), and nothing was
+downloaded to a development machine. The pins are the ones the evaluation's `flat-folder` job measured on hosted
+runners of all three systems (`P16 speakers evaluation` run 39621390749,
+[`speaker-labels-evaluation.md`](../planning/speaker-labels-evaluation.md) section 10.1).
+
+- **Three components, one group.** `speaker_diarizer` (sherpa-onnx's `sherpa-onnx-offline-speaker-diarization` with
+  ONNX Runtime's library beside it: two files out of the archive's 32 to 44, installed flat), `speaker_segmentation_model`
+  (`pyannote-segmentation-3.0.onnx`) and `speaker_embedding_model` (`nemo_en_titanet_small.onnx`). The group's tokens
+  are `--include speakers` on `setup plan` (and `speaker-labels` at the setup door), the three components in
+  `setup install`, `setup list`, `setup remove` and `setup rollback`, and the part `speaker_labels` in the unattended
+  door's result; all additive (decision G). Each component has its own version key, so a re-pin of one never moves
+  another; the group installs as one part (a failure of any component leaves none of the group active, the core and
+  the other groups untouched).
+- **The archive's bounds are pinned from the archive.** The reader takes a `.tar.bz2` (D5) and the catalogue
+  bounds it by the most entries it may hold, the sum of its declared sizes and a cap on its decompressed tar stream.
+  The first two were derived from the evaluation's inventory (every regular file, with the folders they sit in);
+  `tools/p13_archive_inventory.py` re-reads them from the archive itself on a hosted runner, first in each
+  `managed-install-speakers` job of `P13 managed smoke`, and fails if the pins do not describe the archive, so a wrong
+  bound shows there and not in a user's install.
+- **Two files, not the archive.** The tool needs ONNX Runtime beside it and nothing else (the evaluation ran it from
+  a flat folder with no library path variable on all three systems), so the catalogue selects exactly those two
+  files; every other member (more than forty other programs and libraries) is read for the inventory and discarded.
+  The tool is the only executable.
+- **Models are data and have no banner.** A catalogue's optional component had to have a reviewed banner; a model
+  prints nothing, so `ManagedComponent::is_model` exempts the three model components (the Whisper model among them)
+  from the rule, and only the tool has one.
+- **The smoke runs the tool.** sherpa-onnx's tool prints its usage on standard error, so it has no version line to
+  read. Its banner check is a run: the tool hears a three-second 16 kHz tone in the smoke directory with both staged
+  models, through the same closed argument list as a real run (`SherpaOnnxDiarizer::argv`), and must exit
+  successfully and print `OfflineSpeakerDiarizationConfig(` first, which proves the tool starts, finds its library and
+  parses both model paths. The tone is removed afterwards and the smoke directory must end empty. When a component
+  is staged without the others (a later re-pin of one), the others come from the selected installation
+  (`SmokeCompanions`), and without them the smoke refuses.
+- **Use.** `transcript speakers` takes each piece from its flag when given (`--diarizer`, `--segmentation-model`,
+  `--embedding-model`), otherwise from the managed install (verified and held like every managed tool, the tool's
+  executable retaining all three versions), and for the tool, finally, from the filtered `PATH`; the models are never
+  looked up there. A caller may mix: its own model with the managed tool.
+- **Three catalogue revisions.** Ubuntu `…-2026-11-21-r8`, Windows `windows-x86_64-2026-11-21-r6` and macOS
+  `macos-arm64-2026-11-21-r3`; no core entry changed.
+- **The notice.** `TitaNet`'s licences require attribution (decision 2 of ADR 0031). The plan's `speakers` entry
+  carries that notice as its `terms_notice`, for an agent to relay before the models are fetched; the summary
+  every offer shows (the setup door's included) names each licence and the attribution; and each artifact names its
+  licence and the page of its licence text. No licence **file** is installed beside the
+  tool or the models: the archives hold none, the group has no VSift release of its own to carry them, and the
+  store installs only the bytes of a pinned artifact ([L-226](../planning/known-limits.md#l-226)).
+- **Windows needs no Visual C++ runtime for this group.** The evaluation read the imports of the installed tool and
+  library on a hosted Windows runner: the tool imports `onnxruntime.dll` and `KERNEL32.dll`; sherpa-onnx's bundled
+  `onnxruntime.dll` imports `KERNEL32`, `ADVAPI32`, the `api-ms-win-core-path` set, `dbghelp`, `SETUPAPI` and `dxgi`, and
+  the archive is the `MT` build (static runtime). No Visual C++ import appears, unlike Microsoft's `onnxruntime.dll`
+  (L-225), so the door's advice after a failed smoke is not extended to this group. The `managed-install-speakers-windows`
+  job reads the imports of the installed copies again and records the verdict in its summary.
+- **Proof (section F):** `P13 managed smoke` with the group on all three systems: the archive's bounds re-read, a
+  real install, `setup check`, then `vsift transcript speakers` on F01's spoken sentence (opened with a supplied
+  transcript, so its revision is sealed) with an empty `PATH`, where the record must name the pinned tool and both
+  pinned models. The coordinator dispatches the runs; they are recorded on the pull request and in the register's
+  evidence, not here.
+- **Left for later:** the licence files (L-226), a person running the group on a Windows PC and a Mac (L-215), and
+  the archives' provenance gap (L-217).

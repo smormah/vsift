@@ -68,6 +68,9 @@ fn component(
         ManagedComponent::JsRuntimeDeno => "deno-2.9.7-x86_64-linux-gnu",
         ManagedComponent::YtDlp => "yt-dlp-2026.08.19-linux-x86_64",
         ManagedComponent::OcrRunner => "ocr-runner-0.1.0-r1-linux-x64",
+        ManagedComponent::SpeakerDiarizer => "sherpa-onnx-1.13.8-linux-x64",
+        ManagedComponent::SpeakerSegmentationModel => "pyannote-segmentation-3.0-9403a690",
+        ManagedComponent::SpeakerEmbeddingModel => "nemo-en-titanet-small",
     };
     ComponentInstallReport {
         component,

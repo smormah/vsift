@@ -130,6 +130,9 @@ const fn key(component: ManagedComponent) -> u8 {
         ManagedComponent::JsRuntimeDeno => 3,
         ManagedComponent::YtDlp => 4,
         ManagedComponent::OcrRunner => 5,
+        ManagedComponent::SpeakerDiarizer => 6,
+        ManagedComponent::SpeakerSegmentationModel => 7,
+        ManagedComponent::SpeakerEmbeddingModel => 8,
     }
 }
 
@@ -780,12 +783,23 @@ fn every_failure_reason_has_one_code_and_identifier() {
 const DENO: ManagedComponent = ManagedComponent::JsRuntimeDeno;
 const YT_DLP: ManagedComponent = ManagedComponent::YtDlp;
 const OCR: ManagedComponent = ManagedComponent::OcrRunner;
+const SPEAKER_TOOL: ManagedComponent = ManagedComponent::SpeakerDiarizer;
+const SPEAKER_SEGMENTATION: ManagedComponent = ManagedComponent::SpeakerSegmentationModel;
+const SPEAKER_EMBEDDING: ManagedComponent = ManagedComponent::SpeakerEmbeddingModel;
 
 /// The test catalogue with the optional groups: online links (the runtime
-/// and yt-dlp, #409) and `ocr` (the runner, W5b).
+/// and yt-dlp, #409), `ocr` (the runner, W5b) and `speakers` (the tool and two
+/// models, W5c; the models are data and have no banner).
 fn optional_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
     let mut catalogue = test_catalogue()?;
-    for (component, fill) in [(DENO, 'd'), (YT_DLP, 'e'), (OCR, 'c')] {
+    for (component, fill) in [
+        (DENO, 'd'),
+        (YT_DLP, 'e'),
+        (OCR, 'c'),
+        (SPEAKER_TOOL, 'f'),
+        (SPEAKER_SEGMENTATION, 'a'),
+        (SPEAKER_EMBEDDING, 'b'),
+    ] {
         catalogue.optional_artifacts.push(AcceptedManagedArtifact {
             component,
             version: format!("{}-fixture", component.identifier()),
@@ -804,16 +818,18 @@ fn optional_catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::
             files: vec![ReviewedManagedFile {
                 name: format!("{}-file", component.identifier()),
                 integrity: integrity(fill)?,
-                executable: true,
+                executable: !component.is_model(),
             }],
         });
-        catalogue
-            .compatibility
-            .optional_banners
-            .push(ReviewedBanner {
-                component,
-                first_line_prefix: format!("{} fixture", component.identifier()),
-            });
+        if !component.is_model() {
+            catalogue
+                .compatibility
+                .optional_banners
+                .push(ReviewedBanner {
+                    component,
+                    first_line_prefix: format!("{} fixture", component.identifier()),
+                });
+        }
     }
     Ok(catalogue)
 }
@@ -869,7 +885,20 @@ fn the_default_desktop_plan_offers_the_optional_component_and_installs_none_of_i
         ManagedTarget::Ubuntu2404X86_64,
     )?;
     // A desktop plan lists every group the catalogue offers, none included.
-    assert_eq!(plan.optional.len(), 2);
+    assert_eq!(plan.optional.len(), 3);
+    assert_eq!(plan.optional[2].component, OptionalComponent::Speakers);
+    assert_eq!(
+        plan.optional[2].disposition,
+        OptionalComponentDisposition::NotIncluded
+    );
+    assert_eq!(
+        plan.optional[2]
+            .artifacts
+            .iter()
+            .map(|artifact| artifact.component)
+            .collect::<Vec<_>>(),
+        [SPEAKER_TOOL, SPEAKER_SEGMENTATION, SPEAKER_EMBEDDING]
+    );
     assert_eq!(plan.optional[1].component, OptionalComponent::Ocr);
     assert_eq!(
         plan.optional[1].disposition,
@@ -1323,6 +1352,86 @@ async fn two_optional_groups_fail_apart() -> TestResult {
     );
     assert_eq!(installer.journal().discarded, [DENO, YT_DLP]);
     assert_eq!(installer.journal().activated, [MEDIA, WHISPER, MODEL, OCR]);
+    Ok(())
+}
+
+const SPEAKERS_ONLY: OptionalComponentSet =
+    OptionalComponentSet::EMPTY.with(OptionalComponent::Speakers);
+
+/// W5c: the speaker group is one part of three components, the tool then the
+/// two models. A plan that includes it lists the three in that order, the
+/// install smokes them together once (the tool is run with both models), and
+/// a failed download of one model leaves the core installed and the whole
+/// group not installed, with the tool's stage discarded and nothing activated.
+#[tokio::test]
+async fn the_speaker_group_installs_as_one_part_of_three_components() -> TestResult {
+    let plan = optional_plan(
+        SetupProfile::Desktop,
+        &RuntimeDependency::ALL,
+        SPEAKERS_ONLY,
+        ManagedTarget::Ubuntu2404X86_64,
+    )?;
+    let core = plan.actions.clone();
+    let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
+    assert_eq!(
+        optional
+            .iter()
+            .map(|action| action.artifact.component)
+            .collect::<Vec<_>>(),
+        [SPEAKER_TOOL, SPEAKER_SEGMENTATION, SPEAKER_EMBEDDING]
+    );
+
+    // All three install, smoked together as one check.
+    let installer = FakeInstaller::new();
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+    assert_eq!(report.failure_code(), None);
+    assert_eq!(
+        optional_outcomes(&report),
+        [ComponentInstallOutcome::Activated; 3]
+    );
+    assert!(report.optional_installed());
+    assert_eq!(
+        installer.journal().activated,
+        [
+            MEDIA,
+            WHISPER,
+            MODEL,
+            SPEAKER_TOOL,
+            SPEAKER_SEGMENTATION,
+            SPEAKER_EMBEDDING
+        ]
+    );
+
+    // A model that cannot be downloaded stops the group, never the core.
+    let mut installer = FakeInstaller::new();
+    installer.stage_failures.insert(
+        key(SPEAKER_SEGMENTATION),
+        StageFailure {
+            failure: ComponentInstallFailure::at(
+                InstallStep::Download,
+                InstallFailureReason::Download(DownloadFailureReason::Offline),
+            ),
+            stage: None,
+        },
+    );
+    let report =
+        install_managed_plan(&installer, &core, &optional, &RecordedProgress::default()).await;
+    assert_eq!(report.failure_code(), None);
+    assert!(!report.optional_installed());
+    assert_eq!(
+        report.optional_failure().map(|(component, _)| component),
+        Some(SPEAKER_SEGMENTATION)
+    );
+    assert_eq!(installer.journal().activated, [MEDIA, WHISPER, MODEL]);
+    let groups = report.optional_groups();
+    assert_eq!(
+        groups
+            .iter()
+            .map(|outcome| (outcome.group, outcome.installed, outcome.failure.is_some()))
+            .collect::<Vec<_>>(),
+        [(OptionalComponent::Speakers, false, true)]
+    );
     Ok(())
 }
 

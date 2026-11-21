@@ -509,6 +509,21 @@ fn publish_stand_in(base: &Base, component: ManagedComponent, version: &str) -> 
         ManagedComponent::JsRuntimeDeno => one_executable(ManagedRuntimeRole::Deno)?,
         ManagedComponent::YtDlp => one_executable(ManagedRuntimeRole::YtDlp)?,
         ManagedComponent::OcrRunner => one_executable(ManagedRuntimeRole::OcrRunner)?,
+        ManagedComponent::SpeakerDiarizer => one_executable(ManagedRuntimeRole::SpeakerDiarizer)?,
+        ManagedComponent::SpeakerSegmentationModel => (
+            vec![(
+                ManagedRuntimeRole::SpeakerSegmentationModel,
+                String::from("segmentation.onnx"),
+            )],
+            false,
+        ),
+        ManagedComponent::SpeakerEmbeddingModel => (
+            vec![(
+                ManagedRuntimeRole::SpeakerEmbeddingModel,
+                String::from("embedding.onnx"),
+            )],
+            false,
+        ),
     };
     let contents: &[u8] = if executables {
         b"#!/bin/sh\nexit 0\n"

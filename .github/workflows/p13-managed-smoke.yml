@@ -458,6 +458,173 @@ jobs:
           real_managed_install_with_ocr_installs_and_reads_on_screen_text
           -- --ignored --exact --nocapture
 
+  # ADR 0031, ADR 0032 (W5c): the same install with the optional `speakers`
+  # group (`setup plan --include speakers`) on all three systems, built from this
+  # ref (a dispatch only, like the `ocr` jobs). Each job first reads the
+  # sherpa-onnx archive it will install from (its entry count, expanded size and
+  # tar stream, beside the digest the catalogue pins) so the pins are checked
+  # against the archive itself; then it installs the core and the group's three
+  # components (sherpa-onnx's archive, the segmentation model and the TitaNet
+  # model), checks `setup check`, and runs `vsift transcript speakers` on F01's
+  # spoken sentence, opened with a supplied transcript (a sealed revision) and an
+  # empty PATH, so the managed tool and models alone label it; the record must
+  # name the pinned tool and both pinned models. The downloads are the pinned
+  # artifacts of the accepted catalogue; no credentials and no personal details
+  # are sent.
+  managed-install-speakers:
+    name: Managed install with speaker labels (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the sherpa-onnx archive's inventory against the pins
+        env:
+          ARCHIVE_URL: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2
+          ARCHIVE_BYTES: "28156791"
+          ARCHIVE_SHA256: c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4
+          PINNED_ENTRIES: "50"
+          PINNED_EXPANDED: "86050728"
+          PINNED_STREAM: "86400000"
+        run: python3 tools/p13_archive_inventory.py
+
+      - name: Plan with speakers, install, check, then label F01's sentence with the managed tool
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_speakers_installs_and_labels_a_sentence
+          -- --ignored --exact --nocapture
+
+  managed-install-speakers-windows:
+    name: Managed install with speaker labels (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the sherpa-onnx archive's inventory against the pins
+        env:
+          ARCHIVE_URL: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2
+          ARCHIVE_BYTES: "24805859"
+          ARCHIVE_SHA256: 6dffdc715a4465b989446a6105265d2cb345e7101591a17d35534b6758f6e8df
+          PINNED_ENTRIES: "38"
+          PINNED_EXPANDED: "67766399"
+          PINNED_STREAM: "68100000"
+        run: python tools/p13_archive_inventory.py
+
+      # The test's base folder is kept (VSIFT_P13_KEEP_BASE) under the runner's
+      # temp folder, so the next step can read the installed files.
+      - name: Plan with speakers, install, check, then label F01's sentence with the managed tool
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+          VSIFT_P13_KEEP_BASE: "1"
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_speakers_installs_and_labels_a_sentence
+          -- --ignored --exact --nocapture
+
+      # L-225 asked whether ONNX Runtime's Windows library imports the Visual
+      # C++ runtime. Microsoft's did; sherpa-onnx's bundled build and its tool
+      # are measured here the same way, so the speaker group's advice rests on
+      # a reading and not on L-225's. The run fails if no tool can read an
+      # import table, so the answer is never silently missing.
+      - name: Read the imports of the installed tool and ONNX Runtime library
+        if: always()
+        run: |
+          set -euo pipefail
+          objdump="$(command -v llvm-objdump || true)"
+          if [ -z "$objdump" ] && [ -x "/c/Program Files/LLVM/bin/llvm-objdump.exe" ]; then objdump="/c/Program Files/LLVM/bin/llvm-objdump.exe"; fi
+          if [ -z "$objdump" ]; then
+            vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+            dumpbin="$("$vswhere" -latest -products '*' -find '**/Hostx64/x64/dumpbin.exe' | head -n 1)"
+            test -n "$dumpbin" || { echo "neither llvm-objdump nor dumpbin is available"; exit 1; }
+            tool="dumpbin /dependents"
+          else
+            tool="llvm-objdump -p"
+          fi
+          verdict_all="does NOT import the Visual C++ runtime"
+          {
+            echo "### sherpa-onnx imports ($tool)"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          for name in sherpa-onnx-offline-speaker-diarization.exe onnxruntime.dll; do
+            file="$(find "$RUNNER_TEMP" -path '*vsift-p13-real-speakers-*' -name "$name" | head -n 1)"
+            test -n "$file" || { echo "the installed $name was not found"; exit 1; }
+            echo "file: $file ($(wc -c < "$file") bytes)"
+            imports="$RUNNER_TEMP/$name-imports.txt"
+            if [ -n "$objdump" ]; then
+              "$objdump" -p "$file" | grep -i 'DLL Name:' | sed 's/^ *//' > "$imports"
+            else
+              "$(cygpath -u "$dumpbin")" /dependents "$(cygpath -w "$file")" | grep -i '\.dll' > "$imports"
+            fi
+            cat "$imports"
+            if grep -i -E 'vcruntime140|msvcp140|vcomp140|concrt140' "$imports" >/dev/null; then
+              verdict="IMPORTS the Visual C++ runtime"
+              verdict_all="IMPORTS the Visual C++ runtime"
+            else
+              verdict="does NOT import the Visual C++ runtime"
+            fi
+            {
+              echo "The installed $name $verdict."
+              echo
+              echo '```'
+              cat "$imports"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "$name $verdict"
+          done
+          echo "speakers group: $verdict_all"
+
+      - name: Remove the kept base folder
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/vsift-p13-real-speakers-*
+
+  managed-install-speakers-macos:
+    name: Managed install with speaker labels (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the sherpa-onnx archive's inventory against the pins
+        env:
+          ARCHIVE_URL: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2
+          ARCHIVE_BYTES: "20314448"
+          ARCHIVE_SHA256: b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56
+          PINNED_ENTRIES: "42"
+          PINNED_EXPANDED: "66830207"
+          PINNED_STREAM: "67200000"
+        run: python3 tools/p13_archive_inventory.py
+
+      - name: Plan with speakers, install, check, then label F01's sentence with the managed tool
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_speakers_installs_and_labels_a_sentence
+          -- --ignored --exact --nocapture
+
   # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
   # base with an empty PATH it kills the accepted install (SIGKILL) during a
   # download and during a smoke, checks setup repair and setup list after

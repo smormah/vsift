@@ -193,6 +193,10 @@ fn blocked_setup_check_matches_the_frozen_example() -> TestResult {
                     vsift_application::OptionalComponent::Ocr,
                     vsift_application::OptionalCapability::NotInstalled,
                 ),
+                (
+                    vsift_application::OptionalComponent::Speakers,
+                    vsift_application::OptionalCapability::NotInstalled,
+                ),
             ],
             SetupProfile::Desktop,
         ),

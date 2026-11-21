@@ -72,11 +72,16 @@ pub enum OptionalComponent {
     /// files, one archive of `VSift`'s engine release. Offered on every
     /// target with a catalogue.
     Ocr,
+    /// Speaker labels (ADR 0031, ADR 0032): sherpa-onnx's diarization tool
+    /// with its ONNX Runtime library, the pyannote segmentation 3.0 model and
+    /// the `NeMo` `TitaNet` small embedding model, each from its publisher's
+    /// own release. Offered on every target with a catalogue.
+    Speakers,
 }
 
 impl OptionalComponent {
     /// Every optional component, in plan order.
-    pub const ALL: [Self; 2] = [Self::OnlineLinks, Self::Ocr];
+    pub const ALL: [Self; 3] = [Self::OnlineLinks, Self::Ocr, Self::Speakers];
 
     /// The name `setup plan --include` takes and the plan shows.
     #[must_use]
@@ -84,6 +89,7 @@ impl OptionalComponent {
         match self {
             Self::OnlineLinks => "online_links",
             Self::Ocr => "ocr",
+            Self::Speakers => "speakers",
         }
     }
 
@@ -102,6 +108,11 @@ impl OptionalComponent {
         match self {
             Self::OnlineLinks => &[ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp],
             Self::Ocr => &[ManagedComponent::OcrRunner],
+            Self::Speakers => &[
+                ManagedComponent::SpeakerDiarizer,
+                ManagedComponent::SpeakerSegmentationModel,
+                ManagedComponent::SpeakerEmbeddingModel,
+            ],
         }
     }
 
@@ -118,6 +129,7 @@ impl OptionalComponent {
         match self {
             Self::OnlineLinks => 1,
             Self::Ocr => 2,
+            Self::Speakers => 4,
         }
     }
 }
@@ -178,7 +190,10 @@ impl CorePart {
             ManagedComponent::WhisperCli | ManagedComponent::WhisperModel => Some(Self::Speech),
             ManagedComponent::JsRuntimeDeno
             | ManagedComponent::YtDlp
-            | ManagedComponent::OcrRunner => None,
+            | ManagedComponent::OcrRunner
+            | ManagedComponent::SpeakerDiarizer
+            | ManagedComponent::SpeakerSegmentationModel
+            | ManagedComponent::SpeakerEmbeddingModel => None,
         }
     }
 
@@ -390,7 +405,9 @@ pub struct AcceptedManagedCatalogue {
     pub artifacts: Vec<AcceptedManagedArtifact>,
     /// The optional components' artifacts, in group order
     /// ([`ManagedComponent::JsRuntimeDeno`], then [`ManagedComponent::YtDlp`]
-    /// for online links; [`ManagedComponent::OcrRunner`] for `ocr`), or none
+    /// for online links; [`ManagedComponent::OcrRunner`] for `ocr`; the
+    /// diarizer, then the segmentation model, then the embedding model for
+    /// `speakers`), or none
     /// on a catalogue that offers none. Never planned unless the user
     /// includes them.
     pub optional_artifacts: Vec<AcceptedManagedArtifact>,
@@ -1317,7 +1334,8 @@ pub fn plan_managed_setup_of_parts(
         ManagedComponent::WhisperModel => selection_state.model.is_none() && model_offered,
         // The core list holds no optional component (the catalogue check
         // refuses one); optional ones are planned below.
-        ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp | ManagedComponent::OcrRunner => {
+        optional => {
+            debug_assert!(optional.is_optional());
             false
         }
     };
@@ -1481,10 +1499,12 @@ fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
                     .iter()
                     .all(|earlier| earlier.component != artifact.component)
                 && artifact_is_complete(artifact)
-                && entry
-                    .compatibility
-                    .optional_banner(artifact.component)
-                    .is_some_and(|banner| !banner.is_empty())
+                // A model is data and prints nothing: only a program has a banner.
+                && (artifact.component.is_model()
+                    || entry
+                        .compatibility
+                        .optional_banner(artifact.component)
+                        .is_some_and(|banner| !banner.is_empty()))
         });
     // The core components a target's catalogue offers, in plan order, each
     // once: all three, or fewer while a target's reviewed build of one is

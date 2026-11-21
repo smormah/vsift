@@ -98,6 +98,24 @@
       "name": "ocr",
       "next_step": "The optional on-screen text component is not installed; local investigation does not need it. Ask the operator first; to add it, run vsift setup plan --profile desktop --include ocr --json and accept that plan.",
       "status": "not_installed"
+    },
+    {
+      "add_command": {
+        "arguments": [
+          "setup",
+          "plan",
+          "--profile",
+          "desktop",
+          "--include",
+          "speakers",
+          "--json"
+        ],
+        "executable": "vsift"
+      },
+      "components": [],
+      "name": "speakers",
+      "next_step": "The optional speaker labels component is not installed; local investigation does not need it. Ask the operator first; to add it, run vsift setup plan --profile desktop --include speakers --json and accept that plan.",
+      "status": "not_installed"
     }
   ],
   "profile": "desktop",
