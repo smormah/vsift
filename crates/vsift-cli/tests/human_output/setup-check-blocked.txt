@@ -5,7 +5,7 @@ VSift setup check
   Speech not set up whisper.cpp turning speech into text
 <WEB VIDEOS ROW>
 <ON-SCREEN TEXT ROW>
-  Speaker labels none added sherpa-onnx labelling who speaks (optional)
+<SPEAKER LABELS ROW>
 
 Your setup isn't complete: video and speech are missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.

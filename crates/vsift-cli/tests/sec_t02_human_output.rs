@@ -544,6 +544,8 @@ fn normalise_setup_check(text: &str) -> String {
             lines.push(String::from("<WEB VIDEOS ROW>"));
         } else if line.starts_with("  On-screen text") {
             lines.push(String::from("<ON-SCREEN TEXT ROW>"));
+        } else if line.starts_with("  Speaker labels") {
+            lines.push(String::from("<SPEAKER LABELS ROW>"));
         } else if line.starts_with("Next: ") {
             lines.push(String::from("Next: <NEXT STEP>"));
         } else if line.starts_with("  ") && line.trim_start().contains("  ") {
@@ -559,6 +561,19 @@ fn normalise_setup_check(text: &str) -> String {
     lines.join("\n")
 }
 
+/// The status cell of the optional row that starts with `part`: `added`,
+/// `none added` or `not available`.
+fn optional_row_status<'a>(text: &'a str, part: &str) -> Result<&'a str, Box<dyn Error>> {
+    let line = text
+        .lines()
+        .find(|line| line.trim_start().starts_with(part))
+        .ok_or_else(|| format!("no {part} row in {text}"))?;
+    ["not available", "none added", "added"]
+        .into_iter()
+        .find(|status| line.contains(status))
+        .ok_or_else(|| format!("no known status in {line}").into())
+}
+
 /// `setup check`, `setup configure` and `setup configure-model` without
 /// `--json`, with no tools on `PATH`.
 #[test]
@@ -571,8 +586,16 @@ fn setup_commands_render_readable_text() -> TestResult {
     // does whether the optional web-video extra is offered (#409). The
     // snapshot records what both hosts share: the table with its cells
     // joined by single spaces (the column widths follow the longest cell),
-    // the optional rows (web videos, on-screen text) and the step as
-    // placeholders.
+    // the optional rows (web videos, on-screen text, speaker labels) and the step as
+    // placeholders. Whether a group is offered at all (`none added` against
+    // `not available`) is decided by the host's managed catalogue, which
+    // carries the on-screen text and speaker groups together on every
+    // system, so the two rows must agree whatever the host says.
+    assert_eq!(
+        optional_row_status(&text, "Speaker labels")?,
+        optional_row_status(&text, "On-screen text")?,
+        "the speaker and on-screen text groups are offered together: {text}"
+    );
     let text = normalise_setup_check(&text);
     check_snapshot("setup-check-blocked", &text)?;
 
