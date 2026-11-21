@@ -73,6 +73,13 @@ ships this attribution notice with the models, which covers both of `TitaNet`'s 
 > licence of NVIDIA's `TitaNet` model card requires), run by sherpa-onnx (Apache License 2.0) with ONNX Runtime (MIT
 > licence).
 
+**Note of 2026-11-21 (W5c; [ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md), its note of that date).** The managed
+install is the optional group `speakers` (`vsift setup plan --include speakers`, or the door's `--include speaker-labels`).
+The three components, their pins and the smoke are as this section says; `transcript speakers` now finds the tool and both
+models in the managed install when no flag names them. The attribution notice is carried by the plan (its `terms_notice`)
+and not installed as a file beside the models ([L-226](../planning/known-limits.md#l-226)); the archive provenance gap is
+[L-217](../planning/known-limits.md#l-217).
+
 ### A speaker record per transcript revision, derived on every read
 
 - Transcript revisions stay immutable, and the stored transcript record keeps rejecting unknown

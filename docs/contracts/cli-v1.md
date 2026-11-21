@@ -3900,16 +3900,18 @@ crash-consistent (one rename per selection, removals and sweeps a rerun finishes
 ### Optional components and archive formats (0.3.0, ADR 0032)
 
 [ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) adds **optional
-components**: named groups of managed components that a plan installs only when asked. This release has two:
-`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only) and `ocr` (VSift's OCR
+components**: named groups of managed components that a plan installs only when asked. This release has three:
+`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only), `ocr` (VSift's OCR
 runner with its ONNX Runtime library, the two text models and their licence files, one component, `ocr_runner`,
-offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64); `speakers` comes with its story.
+offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64) and `speakers` (sherpa-onnx's speaker-diarization
+tool with its ONNX Runtime library, the pyannote segmentation 3.0 model and the `NeMo` `TitaNet` small model, three
+components, offered on the same three systems).
 
 **Each extra, its names (the planner's ruling on the Fable 0.3.0 review, P-3).** An extra has a person-facing
 name on the setup door ([ADR 0036](../decisions/0036-the-setup-door.md)) and the catalogue's name everywhere else,
 and its main managed component has a name of its own. The names are deliberate and stay as they are; this table is
 the one place that relates them, and the 1.0 freeze statement points here. Public video pages are the first extra;
-on-screen text (`ocr`) is the second, and a story's group adds its rows.
+on-screen text (`ocr`) is the second and speaker labels (`speakers`) the third, and a story's group adds its rows.
 
 | Where | JSON identifier | On the command line |
 | --- | --- | --- |
@@ -3919,6 +3921,9 @@ on-screen text (`ocr`) is the second, and a story's group adds its rows.
 | The setup door for on-screen text: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `on_screen_text` | `--include on-screen-text` |
 | The catalogue's group for on-screen text: `setup plan`, `setup install`, `setup check` (`optional_components[].name`) | `ocr` | `--include ocr` |
 | The managed OCR runner inside that group (plan actions `install-ocr_runner`, the group's `installs`, `components[].component`, `setup list`, `setup remove`, `setup rollback`), and the runner the user registered | `ocr_runner` | `setup configure ocr-runner` |
+| The setup door for speaker labels: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `speaker_labels` | `--include speaker-labels` |
+| The catalogue's group for speaker labels: `setup plan`, `setup install`, `setup check` (`optional_components[].name`) | `speakers` | `--include speakers` |
+| The three managed components inside that group (plan actions `install-speaker_diarizer` and so on, the group's `installs`, `components[].component`, `setup list`, `setup remove`, `setup rollback`) | `speaker_diarizer`, `speaker_segmentation_model`, `speaker_embedding_model` | `transcript speakers --diarizer`, `--segmentation-model`, `--embedding-model` for a tool or model of the user's own |
 
 A reader that maps the `setup` result's `web_videos` to `setup check`'s `optional_components` takes the rows above:
 `web_videos` is the group `online_links`, which installs `yt_dlp` and `js_runtime_deno`, and `on_screen_text` is the
@@ -3928,6 +3933,16 @@ flat beside the runner, which finds them there. `vsift ocr` uses the runner give
 registered with `setup configure ocr-runner`, then the managed one, then one on `PATH`; `setup check`'s `ocr` row
 reads the managed group only. `ocr_runner` and the `ocr` and `on_screen_text` names are additive (ADR 0032
 decision G); a reader skips a value it does not know.
+
+The `speakers` group is three components, because three publishers supply it: `speaker_diarizer` (the tool and the
+ONNX Runtime library beside it, two files of sherpa-onnx's own release archive; the tool is the only executable),
+`speaker_segmentation_model` and `speaker_embedding_model` (one raw model file each). They install as one part: a
+failure of any leaves none of them active and the core and the other groups untouched. The plan's `speakers` entry
+carries `terms_notice`, the attribution notice `TitaNet`'s licences require ([ADR 0031](../decisions/0031-speaker-labels.md)
+decision 2); no licence file is installed beside the pieces ([L-226](../planning/known-limits.md#l-226)).
+`vsift transcript speakers` takes each piece from its flag when given, otherwise from the managed install, and the
+tool, last, from the filtered `PATH`; the models are never looked up there. `speaker_labels`, `speakers` and the
+three component names are additive (ADR 0032 decision G).
 
 - **`setup plan --include <name>`** (repeatable; an older release answers it as an unknown argument) adds the
   group's actions to the plan. The plan's additive `optional_components` array lists every optional component of
@@ -4265,8 +4280,8 @@ tool that is not simply missing, and last the line `Next: ...` with the one step
   the concrete one: `vsift setup plan` where managed installation offers the missing part, otherwise the one
   `setup configure` or `setup configure-model` command. On a complete setup an extra that can be added here is
   named: `Optional extras: web videos. Add one with: vsift setup --include web-videos`; with more than one it
-  lists them all (`web videos, on-screen text`) and gives each one's flag (`Add one with: vsift setup --include
-  web-videos, or --include on-screen-text`).
+  lists them all (`web videos, on-screen text, speaker labels`) and gives each one's flag (`Add one with: vsift setup
+  --include web-videos, --include on-screen-text, or --include speaker-labels`).
 - **Left out of the readable view, and kept in the JSON:** advice written for an assistant (who knows the path,
   the per-call options, folder-search advice), where each tool was found (`lookup`), the profile, the version
   line of each tool and the local-ASR lines. The only provenance the view mentions is a path the person gave
@@ -4305,7 +4320,7 @@ of the install's failure code when a piece failed. The skill classes it as never
 `setup plan` and the user's own `setup install`.
 
 **The unattended setup door (since `0.3.0`, ADR 0036 section 6).** `vsift setup --unattended --install
-video,speech [--include web-videos|on-screen-text] [--accept-plan <digest>] [--json]` runs once and asks nothing. Naming the
+video,speech [--include web-videos|on-screen-text|speaker-labels] [--accept-plan <digest>] [--json]` runs once and asks nothing. Naming the
 parts is the acceptance (the maintainer's decision of 2026-10-27, superseding that part of ADR 0023 for this form
 only): it installs the plan it builds for the named parts (`setup plan`'s plan limited to them; a plan of both
 parts is exactly `setup plan`'s, digest included), and every artifact stays pinned by URL, size and SHA-256 in the

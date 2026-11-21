@@ -276,8 +276,8 @@ pub use navigation::{
     audio_response, frame_response, frame_selection_summary, partial_evidence_warning,
 };
 pub use optional_component::{
-    OptionalComponentText, SITE_TERMS_NOTICE, include_command_arguments, optional_check_step,
-    optional_component_text,
+    OptionalComponentText, SITE_TERMS_NOTICE, SPEAKER_MODELS_NOTICE, include_command_arguments,
+    optional_check_step, optional_component_text,
 };
 pub use screen_changes::{
     CHANGES_COVERAGE_WARNING, CHANGES_CROPS_STOPPED_WARNING, CHANGES_CURSOR_REMEDIATION,

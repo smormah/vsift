@@ -44,6 +44,15 @@
 //! the pinned models and ONNX Runtime 1.31.0, and `ocr search` must find the
 //! invoice number the clip draws for its whole length.
 //!
+//! A further checkpoint does the same with `--include speakers` (ADR 0031,
+//! ADR 0032, W5c): sherpa-onnx's tool and the two speaker models are
+//! downloaded, smoked (the tool hears a tone with both models) and activated
+//! after the core, `setup check` reports the group as installed and managed,
+//! and `vsift transcript speakers` then labels F01's spoken sentence with the
+//! managed pieces alone (the `PATH` is empty, no flag names a tool or model):
+//! the record must name the pinned tool and both pinned models. The video is
+//! opened with a supplied transcript, so its revision is sealed.
+//!
 //! A third checkpoint is for Windows and macOS, where no managed yt-dlp is
 //! offered (ADR 0028 section 4.6): the publisher's pinned `yt-dlp.exe` or
 //! `yt-dlp_macos` (2026.08.19), fetched by the workflow, is registered with
@@ -717,6 +726,230 @@ fn real_managed_install_with_ocr_installs_and_reads_on_screen_text() -> TestResu
     install_the_ocr_group(&base)?;
     assert_the_ocr_row_is_installed(&base)?;
     assert_the_managed_runner_reads_f05(&base, &pinned)
+}
+
+/// The SHA-256 digests the managed speaker group must label with: the pinned
+/// tool executable and the two pinned models, from the host's own catalogue.
+struct PinnedSpeakers {
+    tool: String,
+    segmentation: String,
+    embedding: String,
+}
+
+impl PinnedSpeakers {
+    fn of_host() -> Result<Self, Box<dyn Error>> {
+        let catalogue = accepted_host_catalogue()?
+            .ok_or("the host has no managed catalogue to install from")?;
+        let artifact = |component: ManagedComponent| {
+            catalogue
+                .optional_artifacts
+                .iter()
+                .find(|artifact| artifact.component == component)
+                .ok_or_else(|| format!("the catalogue offers no {}", component.identifier()))
+        };
+        let model = |component: ManagedComponent| -> Result<String, Box<dyn Error>> {
+            let [file] = artifact(component)?.files.as_slice() else {
+                return Err("a speaker model is one file".into());
+            };
+            Ok(file.integrity.sha256_hex())
+        };
+        let tool = artifact(ManagedComponent::SpeakerDiarizer)?
+            .files
+            .iter()
+            .find(|file| file.executable)
+            .map(|file| file.integrity.sha256_hex())
+            .ok_or("the pinned archive has no executable")?;
+        Ok(Self {
+            tool,
+            segmentation: model(ManagedComponent::SpeakerSegmentationModel)?,
+            embedding: model(ManagedComponent::SpeakerEmbeddingModel)?,
+        })
+    }
+}
+
+/// Plans with `--include speakers` and installs the plan: the group is
+/// included with its three actions, and the install leaves the core ready and
+/// the tool and both models activated.
+fn install_the_speakers_group(base: &Base) -> TestResult {
+    let plan = base
+        .vsift()?
+        .args(["setup", "plan", "--profile", "desktop"])
+        .args(["--include", "speakers", "--json"])
+        .output()?;
+    assert!(plan.status.success(), "setup plan failed");
+    let plan_value: Value = serde_json::from_slice(&plan.stdout)?;
+    let digest = plan_value["data"]["plan_digest"]
+        .as_str()
+        .ok_or("the plan has no digest")?
+        .to_owned();
+    let group = plan_value["data"]["optional_components"]
+        .as_array()
+        .and_then(|groups| groups.iter().find(|group| group["name"] == "speakers"))
+        .ok_or("the plan lists no speakers group")?;
+    assert_eq!(group["status"], "included", "{group}");
+    assert_eq!(
+        group["installs"],
+        serde_json::json!([
+            "speaker_diarizer",
+            "speaker_segmentation_model",
+            "speaker_embedding_model"
+        ])
+    );
+    assert_eq!(
+        group["actions"].as_array().map_or(0, Vec::len),
+        3,
+        "{group}"
+    );
+    // The notice TitaNet's licences require travels with the offer.
+    assert!(
+        group["terms_notice"]
+            .as_str()
+            .is_some_and(|notice| notice.contains("TitaNet") && notice.contains("CNRS")),
+        "{group}"
+    );
+    let plan_path = base.0.join("plan.json");
+    fs::write(&plan_path, &plan.stdout)?;
+
+    let started = Instant::now();
+    let install = base
+        .vsift()?
+        .args(["setup", "install", "--plan", path_text(&plan_path)?])
+        .args(["--accept-plan", &digest, "--json"])
+        .output()?;
+    println!(
+        "install: exit {:?} in {:.1} s",
+        install.status.code(),
+        started.elapsed().as_secs_f64()
+    );
+    let installed: Value = serde_json::from_slice(&install.stdout)?;
+    println!("{}", serde_json::to_string_pretty(&installed["data"])?);
+    assert_eq!(install.status.code(), Some(0), "{}", installed["error"]);
+    assert_eq!(installed["status"], "complete", "no partial result");
+    assert_eq!(installed["data"]["core"], "ready");
+    let optional = installed["data"]["optional_components"]
+        .as_array()
+        .ok_or("no optional components")?;
+    assert_eq!(optional.len(), 3);
+    for (result, name) in optional.iter().zip([
+        "speaker_diarizer",
+        "speaker_segmentation_model",
+        "speaker_embedding_model",
+    ]) {
+        assert_eq!(result["component"], name, "{result}");
+        assert_eq!(result["status"], "activated", "{result}");
+    }
+    Ok(())
+}
+
+/// `setup check` reports the group as installed from the managed store.
+fn assert_the_speakers_row_is_installed(base: &Base) -> TestResult {
+    let check = base.vsift()?.args(["setup", "check", "--json"]).output()?;
+    assert_eq!(check.status.code(), Some(0));
+    let check: Value = serde_json::from_slice(&check.stdout)?;
+    assert_eq!(check["status"], "ready");
+    let row = check["optional_components"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["name"] == "speakers"))
+        .ok_or("no speakers row in the check")?;
+    assert_eq!(row["status"], "installed", "{row}");
+    let components = row["components"].as_array().ok_or("no components")?;
+    assert_eq!(components.len(), 3, "{row}");
+    for name in [
+        "speaker_diarizer",
+        "speaker_segmentation_model",
+        "speaker_embedding_model",
+    ] {
+        let component = components
+            .iter()
+            .find(|component| component["component"] == name)
+            .ok_or_else(|| format!("no {name} in the row"))?;
+        assert_eq!(component["source"], "managed", "{component}");
+    }
+    Ok(())
+}
+
+/// `transcript speakers` on F01's spoken sentence with the managed group alone:
+/// the `PATH` is empty and no flag names a tool or a model. The video is opened
+/// with a supplied transcript (one cue over the whole clip), so its revision is
+/// sealed and cannot race a transcription (ADR 0031's note of 2026-11-18). The
+/// record must name the pinned tool and both pinned models, and the tool must
+/// have heard a voice.
+fn assert_the_managed_group_labels_a_sentence(base: &Base, pinned: &PinnedSpeakers) -> TestResult {
+    let data = |arguments: &[&str]| -> Result<Value, Box<dyn Error>> {
+        let output = base.vsift()?.args(arguments).arg("--json").output()?;
+        let value: Value = serde_json::from_slice(&output.stdout)?;
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{arguments:?}: {}",
+            value["error"]
+        );
+        Ok(value)
+    };
+    let video = fs::canonicalize(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/corpus/generated/F01-speech.mp4"),
+    )?;
+    let transcript = base.0.join("sentence.srt");
+    fs::write(
+        &transcript,
+        "1\n00:00:00,000 --> 00:00:05,900\nThe service status is healthy and the build is 2048.\n",
+    )?;
+    let session = data(&[
+        "ingest",
+        path_text(&video)?,
+        "--transcript",
+        path_text(&transcript)?,
+    ])?["data"]["session_id"]
+        .as_str()
+        .ok_or("ingest returned no session")?
+        .to_owned();
+    let started = Instant::now();
+    let labelled = data(&["transcript", "speakers", &session])?;
+    println!(
+        "transcript speakers: {:.1} s, {}",
+        started.elapsed().as_secs_f64(),
+        serde_json::to_string_pretty(&labelled["data"]["speakers"])?
+    );
+    let speakers = &labelled["data"]["speakers"];
+    assert_eq!(
+        speakers["revision_state"], "sealed",
+        "the smoke labels a finished revision"
+    );
+    let engine = &speakers["engine"];
+    assert_eq!(
+        engine["executable_sha256"], pinned.tool,
+        "the managed tool ran"
+    );
+    assert_eq!(engine["segmentation_model_sha256"], pinned.segmentation);
+    assert_eq!(engine["embedding_model_sha256"], pinned.embedding);
+    assert!(
+        speakers["labels"]
+            .as_array()
+            .is_some_and(|labels| !labels.is_empty()),
+        "the managed tool heard no voice in F01's sentence: {speakers}"
+    );
+    Ok(())
+}
+
+/// The checkpoint with the optional `speakers` group, on every system with a
+/// catalogue: a real install of the group, `setup check`, then `transcript
+/// speakers` through the managed tool and models alone.
+#[test]
+#[ignore = "opt-in real managed installation with speakers; set VSIFT_P13_REAL_INSTALL=1 on a host with a managed catalogue and run --release"]
+fn real_managed_install_with_speakers_installs_and_labels_a_sentence() -> TestResult {
+    if env::var_os(OPT_IN).is_none() {
+        return Err(format!("set {OPT_IN}=1 to run the real managed installation").into());
+    }
+    let pinned = PinnedSpeakers::of_host()?;
+    println!("binary under test: {}", published_binary::report()?);
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+    let base = Base(env::temp_dir().join(format!("vsift-p13-real-speakers-{stamp}")));
+    fs::create_dir(&base.0)?;
+
+    install_the_speakers_group(&base)?;
+    assert_the_speakers_row_is_installed(&base)?;
+    assert_the_managed_group_labels_a_sentence(&base, &pinned)
 }
 
 /// The pinned publisher file for this system (ADR 0028 section 4.1): its

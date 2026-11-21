@@ -2126,6 +2126,13 @@ pub enum ManagedRuntimeRole {
     /// The optional OCR runner executable (its runtime library and models
     /// stay beside it in the version's flat folder).
     OcrRunner,
+    /// The optional speaker-diarization executable (its ONNX Runtime library
+    /// stays beside it in the version's flat folder).
+    SpeakerDiarizer,
+    /// The optional pyannote segmentation 3.0 model file.
+    SpeakerSegmentationModel,
+    /// The optional `TitaNet` small embedding model file.
+    SpeakerEmbeddingModel,
 }
 
 /// Why a staged artifact could not become an owned smoke candidate.

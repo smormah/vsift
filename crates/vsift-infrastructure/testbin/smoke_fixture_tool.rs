@@ -1,5 +1,5 @@
 //! A stand-in for `FFmpeg`, `FFprobe`, `whisper-cli`, and the optional
-//! `deno` and `yt-dlp` (#409), in the P13 compatibility-smoke tests
+//! `deno` and `yt-dlp` (#409), and the speaker-diarization `diarizer` (W5c), in the P13 compatibility-smoke tests
 //! (`tests/p13_smoke_executor.rs`). It is never shipped or run outside those
 //! tests.
 //!
@@ -28,6 +28,12 @@
 //! directory (`TMPDIR`, `TEMP` and `TMP` alike) and their fixed variables
 //! (`YTDLP_NO_PLUGINS=1` for yt-dlp, `DENO_NO_UPDATE_CHECK=1` for Deno).
 //! Anything else exits 65, so a smoke that forgot one fails.
+//!
+//! The `diarizer` answers only the diarization run the smoke makes: both model
+//! paths name files that exist and the one positional argument is the smoke's
+//! three-second 16 kHz mono WAV. It then prints a configuration line first, as
+//! sherpa-onnx's tool does, and `Started`; for any other argument list it
+//! prints nothing.
 
 use std::{
     env,
@@ -43,6 +49,8 @@ const FIXTURE_BUILD: &str = "vsift-smoke-fixture";
 const SCRIBBLE_FILE: &str = "vsift-smoke-scribble";
 /// The file `templeft` leaves in its temporary folder.
 const TEMP_LEFT_FILE: &str = "_MEI-left-behind";
+/// The first words of the diarizer's configuration line.
+const DIARIZER_CONFIG: &str = "OfflineSpeakerDiarizationConfig(fixture)";
 
 fn main() -> ExitCode {
     match run() {
@@ -73,7 +81,10 @@ fn run() -> io::Result<ExitCode> {
         "yt-dlp" => arguments == ["--ignore-config", "--no-plugin-dirs", "--version"],
         _ => false,
     };
-    let banner = optional_banner || matches!(arguments.as_slice(), [only] if only == "-version");
+    let speaker_run = tool == "diarizer" && speaker_arguments_are_reviewed(&arguments);
+    let banner = optional_banner
+        || speaker_run
+        || matches!(arguments.as_slice(), [only] if only == "-version");
     let help = matches!(arguments.as_slice(), [only] if only == "--help");
     if optional_banner && !optional_environment_is_reviewed(tool) {
         writeln!(io::stderr(), "{tool}: fixture environment differs")?;
@@ -133,7 +144,10 @@ fn run() -> io::Result<ExitCode> {
                     b"left by a one-file build",
                 )?;
             }
-            if banner {
+            if speaker_run {
+                writeln!(stdout, "{DIARIZER_CONFIG}")?;
+                writeln!(stdout, "Started")?;
+            } else if banner {
                 writeln!(
                     stdout,
                     "{tool} version {FIXTURE_BUILD} Copyright (c) fixture"
@@ -146,6 +160,33 @@ fn run() -> io::Result<ExitCode> {
         }
         _ => Ok(ExitCode::from(64)),
     }
+}
+
+/// Whether `arguments` are the diarization run the smoke must make: both model
+/// paths name existing files, and the last argument is the smoke's WAV file,
+/// a canonical 44-byte header and three seconds of 16 kHz 16-bit samples.
+fn speaker_arguments_are_reviewed(arguments: &[String]) -> bool {
+    let path_after = |prefix: &str| {
+        arguments
+            .iter()
+            .find_map(|argument| argument.strip_prefix(prefix))
+            .map(std::path::PathBuf::from)
+    };
+    let (Some(segmentation), Some(embedding), Some(wave)) = (
+        path_after("--segmentation.pyannote-model="),
+        path_after("--embedding.model="),
+        arguments.last().map(std::path::PathBuf::from),
+    ) else {
+        return false;
+    };
+    let Ok(bytes) = std::fs::read(&wave) else {
+        return false;
+    };
+    segmentation.is_file()
+        && embedding.is_file()
+        && bytes.len() == 44 + 16_000 * 3 * 2
+        && bytes.starts_with(b"RIFF")
+        && bytes.get(8..16) == Some(b"WAVEfmt ".as_slice())
 }
 
 /// Whether the optional `tool` was given the smoke's environment.

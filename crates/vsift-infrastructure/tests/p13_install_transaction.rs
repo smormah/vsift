@@ -734,6 +734,7 @@ impl SmokeCompanionSource for StoreCompanions {
             media,
             whisper: self.executable(WHISPER, ManagedRuntimeRole::WhisperCli),
             model,
+            ..SmokeCompanions::default()
         }
     }
 }

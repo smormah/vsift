@@ -23,12 +23,13 @@ use std::{
 use sha2::{Digest, Sha256};
 use tar::{Builder, Header};
 use vsift::{
-    DEFAULT_PROBE_TIMEOUT, Engine, EngineConfig, EnginePorts, ExecutableSelections, HostIsolation,
-    LocalAsrModelStatus, ManagedRootLocation, RuntimeDependency, SessionRootLocation,
-    SetupCheckRequest, UserConfigurationLocation,
+    Cancellation, DEFAULT_PROBE_TIMEOUT, DiarizerSelection, Engine, EngineConfig, EngineError,
+    EnginePorts, ExecutableSelections, HostIsolation, LocalAsrModelStatus, ManagedRootLocation,
+    RuntimeDependency, SessionRootLocation, SetupCheckRequest, SpeakersRequest,
+    UserConfigurationLocation,
 };
 use vsift_contract::DependencyLookup;
-use vsift_domain::{ArtifactIntegrity, ManagedComponent};
+use vsift_domain::{ArtifactIntegrity, ManagedComponent, SessionId};
 use vsift_infrastructure::{
     ArchiveInventoryBounds, ManagedArtifactStore, ManagedRuntimeIdentity, ManagedRuntimeRole,
     ReviewedArchiveFile, ReviewedPayloadArchive, ReviewedRuntimeLayout, StagedManagedCandidate,
@@ -289,5 +290,136 @@ async fn a_changed_managed_version_is_not_used() -> TestResult {
         report.lookup(RuntimeDependency::Whisper),
         DependencyLookup::ManagedVersion
     );
+    Ok(())
+}
+
+/// Publishes the speaker group (the tool and the two models, as stand-ins)
+/// into `root`; `pieces` says which of the three are published.
+fn install_speakers(root: &Path, pieces: [bool; 3]) -> TestResult {
+    let store = ManagedArtifactStore::at(root.to_path_buf())?;
+    let tool = name(ManagedRuntimeRole::SpeakerDiarizer)?;
+    if pieces[0] {
+        publish(
+            &store,
+            ManagedComponent::SpeakerDiarizer,
+            &[(tool.clone(), true)],
+            &[(ManagedRuntimeRole::SpeakerDiarizer, &tool)],
+        )?;
+    }
+    if pieces[1] {
+        publish(
+            &store,
+            ManagedComponent::SpeakerSegmentationModel,
+            &[(String::from("segmentation.onnx"), false)],
+            &[(
+                ManagedRuntimeRole::SpeakerSegmentationModel,
+                "segmentation.onnx",
+            )],
+        )?;
+    }
+    if pieces[2] {
+        publish(
+            &store,
+            ManagedComponent::SpeakerEmbeddingModel,
+            &[(String::from("embedding.onnx"), false)],
+            &[(ManagedRuntimeRole::SpeakerEmbeddingModel, "embedding.onnx")],
+        )?;
+    }
+    Ok(())
+}
+
+/// The refusal `label_speakers` gives when it cannot select the diarizer, or
+/// the error of the stage after the selection (the media tools, then the
+/// session): which one is what these tests tell apart. The stand-ins never
+/// run; selection, not execution, is under test.
+async fn label_with(
+    engine: &Engine,
+    selection: DiarizerSelection,
+) -> Result<EngineError, Box<dyn Error>> {
+    let request = SpeakersRequest {
+        session: SessionId::parse("ses_0123456789abcdef0123456789abcdef")?,
+        revision: None,
+        range: None,
+        speakers: None,
+        diarizer: selection,
+        cancellation: Cancellation::new(),
+    };
+    match engine.label_speakers(request).await {
+        Err(error) => Ok(error),
+        Ok(_) => Err("labelling an absent session cannot succeed".into()),
+    }
+}
+
+/// W5c (ADR 0032): `transcript speakers` takes each piece of the diarizer from
+/// its flag when given and otherwise from the managed install, which must be
+/// the whole group and must verify; the tool alone then falls back to the
+/// filtered `PATH`, the models never.
+#[tokio::test]
+async fn the_diarizer_comes_from_flags_then_the_managed_group_and_never_a_partial_one() -> TestResult
+{
+    let selected = |error: &EngineError| !matches!(error, EngineError::DiarizerUnavailable);
+
+    // Nothing installed, nothing given: unavailable.
+    let root = OwnedRoot::new()?;
+    let error = label_with(&root.engine("managed"), DiarizerSelection::default()).await?;
+    assert!(!selected(&error), "{error:?}");
+
+    // The whole managed group is found with no flag: selection succeeds and
+    // the next stage's error is returned instead.
+    install_speakers(&root.path("managed"), [true, true, true])?;
+    let error = label_with(&root.engine("managed"), DiarizerSelection::default()).await?;
+    assert!(selected(&error), "{error:?}");
+
+    // A partial group is not used: the tool without its two models, a model
+    // missing, or the tool missing.
+    for pieces in [
+        [true, false, false],
+        [true, true, false],
+        [false, true, true],
+    ] {
+        let partial = OwnedRoot::new()?;
+        install_speakers(&partial.path("managed"), pieces)?;
+        let error = label_with(&partial.engine("managed"), DiarizerSelection::default()).await?;
+        assert!(!selected(&error), "{pieces:?}: {error:?}");
+    }
+
+    // A caller's own models with the managed tool: no managed model is
+    // needed, and a model of the caller's alone cannot make a selection.
+    let own = OwnedRoot::new()?;
+    install_speakers(&own.path("managed"), [true, false, false])?;
+    let segmentation = own.path("my-segmentation.onnx");
+    let embedding = own.path("my-embedding.onnx");
+    fs::write(&segmentation, b"my segmentation model")?;
+    fs::write(&embedding, b"my embedding model")?;
+    let both = DiarizerSelection {
+        executable: None,
+        segmentation_model: Some(segmentation.clone()),
+        embedding_model: Some(embedding),
+    };
+    let error = label_with(&own.engine("managed"), both).await?;
+    assert!(selected(&error), "{error:?}");
+    let one = DiarizerSelection {
+        executable: None,
+        segmentation_model: Some(segmentation),
+        embedding_model: None,
+    };
+    let error = label_with(&own.engine("managed"), one).await?;
+    assert!(!selected(&error), "{error:?}");
+
+    // A changed managed version is never used (L-006 for managed tools).
+    let changed = OwnedRoot::new()?;
+    install_speakers(&changed.path("managed"), [true, true, true])?;
+    let model = changed
+        .path("managed")
+        .join("versions-v1")
+        .join("speaker_segmentation_model--fixture-1")
+        .join("segmentation.onnx");
+    let mut altered = fs::read(&model)?;
+    if let Some(byte) = altered.first_mut() {
+        *byte ^= 0xff;
+    }
+    fs::write(&model, &altered)?;
+    let error = label_with(&changed.engine("managed"), DiarizerSelection::default()).await?;
+    assert!(!selected(&error), "{error:?}");
     Ok(())
 }

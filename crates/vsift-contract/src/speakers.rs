@@ -334,7 +334,7 @@ pub(crate) fn with_unlabelled_warning(
 }
 
 /// Fixed remediation when the diarization tool or a model is missing.
-pub const DIARIZER_REMEDIATION: &str = "Speaker labels need the speaker-diarization tool (sherpa-onnx-offline-speaker-diarization) and its two models: the pyannote segmentation 3.0 model and the NeMo TitaNet small embedding model. Install them with setup install, or give their paths with --diarizer, --segmentation-model and --embedding-model. No need to search folders: ask the user where they are. Transcripts and search work without them.";
+pub const DIARIZER_REMEDIATION: &str = "Speaker labels need the speaker-diarization tool (sherpa-onnx-offline-speaker-diarization) and its two models: the pyannote segmentation 3.0 model and the NeMo TitaNet small embedding model. Ask the user first, then install them with setup plan --profile desktop --include speakers --json and accept that plan (a person can run vsift setup --include speaker-labels), or give their paths with --diarizer, --segmentation-model and --embedding-model. No need to search folders: ask the user where they are. Transcripts and search work without them.";
 
 /// Fixed remediation when the range is longer than one diarization may hear.
 pub const DIARIZATION_RANGE_REMEDIATION: &str = "One diarization hears at most two hours. Label a part of the recording with --from and --to (microseconds), at most two hours long; labels of different parts are not linked, so S1 in one part need not be S1 in another.";

@@ -274,6 +274,7 @@ fn response(
             part: match extra {
                 OptionalComponent::OnlineLinks => SetupPartName::WebVideos,
                 OptionalComponent::Ocr => SetupPartName::OnScreenText,
+                OptionalComponent::Speakers => SetupPartName::SpeakerLabels,
             },
             requested: true,
             status,
