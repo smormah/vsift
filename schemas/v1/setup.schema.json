@@ -24,7 +24,7 @@
       "additionalProperties": false,
       "required": ["part", "requested", "status", "next_step"],
       "properties": {
-        "part": { "enum": ["video", "speech", "web_videos", "on_screen_text"] },
+        "part": { "enum": ["video", "speech", "web_videos", "on_screen_text", "speaker_labels"] },
         "requested": { "type": "boolean" },
         "status": {
           "enum": ["ready", "not_set_up", "added", "not_added", "not_available_here"]

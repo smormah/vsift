@@ -56,6 +56,8 @@ pub(crate) enum Part {
     WebVideos,
     /// The optional on-screen-text extra.
     OnScreenText,
+    /// The optional speaker-labels extra.
+    SpeakerLabels,
 }
 
 impl Part {
@@ -69,6 +71,7 @@ impl Part {
         match component {
             OptionalComponent::OnlineLinks => Self::WebVideos,
             OptionalComponent::Ocr => Self::OnScreenText,
+            OptionalComponent::Speakers => Self::SpeakerLabels,
         }
     }
 
@@ -78,6 +81,7 @@ impl Part {
             Self::Speech => "Speech",
             Self::WebVideos => extra_words(OptionalComponent::OnlineLinks).part,
             Self::OnScreenText => extra_words(OptionalComponent::Ocr).part,
+            Self::SpeakerLabels => extra_words(OptionalComponent::Speakers).part,
         }
     }
 
@@ -87,6 +91,7 @@ impl Part {
             Self::Speech => "speech",
             Self::WebVideos => extra_words(OptionalComponent::OnlineLinks).sentence,
             Self::OnScreenText => extra_words(OptionalComponent::Ocr).sentence,
+            Self::SpeakerLabels => extra_words(OptionalComponent::Speakers).sentence,
         }
     }
 
@@ -106,6 +111,9 @@ fn piece(component: &str) -> Option<(Part, &'static str)> {
         "yt_dlp" => (Part::WebVideos, "yt-dlp"),
         "js_runtime_deno" => (Part::WebVideos, "Deno"),
         "ocr_runner" => (Part::OnScreenText, "OCR runner"),
+        "speaker_diarizer" => (Part::SpeakerLabels, "speaker tool"),
+        "speaker_segmentation_model" => (Part::SpeakerLabels, "segmentation model"),
+        "speaker_embedding_model" => (Part::SpeakerLabels, "voice model"),
         _ => return None,
     })
 }
@@ -711,6 +719,7 @@ pub(crate) fn door_unattended_result(
                     SetupPartName::Speech => "speech",
                     SetupPartName::WebVideos => "web videos",
                     SetupPartName::OnScreenText => "on-screen text",
+                    SetupPartName::SpeakerLabels => "speaker labels",
                 })
                 .push_fixed(": ")
                 .push_value(next)

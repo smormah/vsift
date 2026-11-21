@@ -52,18 +52,33 @@ pub enum ManagedComponent {
     /// as one archive of `VSift`'s engine release. Never in a plan unless the
     /// user includes the `ocr` group.
     OcrRunner,
+    /// The optional speaker-diarization tool (ADR 0031, ADR 0032):
+    /// sherpa-onnx's `sherpa-onnx-offline-speaker-diarization` with its ONNX
+    /// Runtime library beside it, from the publisher's own release archive.
+    /// Never in a plan unless the user includes the `speakers` group.
+    SpeakerDiarizer,
+    /// The optional pyannote segmentation 3.0 model of the `speakers` group
+    /// (ADR 0031): one raw file at a pinned Hugging Face revision.
+    SpeakerSegmentationModel,
+    /// The optional `NeMo` `TitaNet` small speaker-embedding model of the
+    /// `speakers` group (ADR 0031): one raw file of sherpa-onnx's model
+    /// release.
+    SpeakerEmbeddingModel,
 }
 
 impl ManagedComponent {
     /// Every component, the core three first and then the optional ones, in
     /// the order a plan installs them.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 9] = [
         Self::MediaTools,
         Self::WhisperCli,
         Self::WhisperModel,
         Self::JsRuntimeDeno,
         Self::YtDlp,
         Self::OcrRunner,
+        Self::SpeakerDiarizer,
+        Self::SpeakerSegmentationModel,
+        Self::SpeakerEmbeddingModel,
     ];
 
     /// Stable identifier used by the catalogue and public plans.
@@ -76,6 +91,9 @@ impl ManagedComponent {
             Self::JsRuntimeDeno => "js_runtime_deno",
             Self::YtDlp => "yt_dlp",
             Self::OcrRunner => "ocr_runner",
+            Self::SpeakerDiarizer => "speaker_diarizer",
+            Self::SpeakerSegmentationModel => "speaker_segmentation_model",
+            Self::SpeakerEmbeddingModel => "speaker_embedding_model",
         }
     }
 
@@ -87,6 +105,16 @@ impl ManagedComponent {
             .find(|component| component.identifier() == identifier)
     }
 
+    /// Whether the component is one model file: data the program of another
+    /// component loads, never run itself, so it has no version banner.
+    #[must_use]
+    pub const fn is_model(self) -> bool {
+        matches!(
+            self,
+            Self::WhisperModel | Self::SpeakerSegmentationModel | Self::SpeakerEmbeddingModel
+        )
+    }
+
     /// Whether the component is optional: never in a plan unless the user
     /// includes it, and its failure never fails the core installation
     /// (#409). Local investigation never needs an optional component.
@@ -94,7 +122,12 @@ impl ManagedComponent {
     pub const fn is_optional(self) -> bool {
         match self {
             Self::MediaTools | Self::WhisperCli | Self::WhisperModel => false,
-            Self::JsRuntimeDeno | Self::YtDlp | Self::OcrRunner => true,
+            Self::JsRuntimeDeno
+            | Self::YtDlp
+            | Self::OcrRunner
+            | Self::SpeakerDiarizer
+            | Self::SpeakerSegmentationModel
+            | Self::SpeakerEmbeddingModel => true,
         }
     }
 }
@@ -447,7 +480,10 @@ mod tests {
                 "whisper_model",
                 "js_runtime_deno",
                 "yt_dlp",
-                "ocr_runner"
+                "ocr_runner",
+                "speaker_diarizer",
+                "speaker_segmentation_model",
+                "speaker_embedding_model"
             ]
         );
         for component in ManagedComponent::ALL {
@@ -459,7 +495,7 @@ mod tests {
         }
         assert_eq!(
             ManagedComponent::ALL.map(ManagedComponent::is_optional),
-            [false, false, false, true, true, true]
+            [false, false, false, true, true, true, true, true, true]
         );
         assert_eq!(ManagedComponent::from_identifier("YT_DLP"), None);
         assert_eq!(ManagedComponent::from_identifier("yt-dlp"), None);

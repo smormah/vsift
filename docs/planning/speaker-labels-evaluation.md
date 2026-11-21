@@ -423,6 +423,13 @@ the tool (Linux `RPATH` `$ORIGIN` first, macOS `LC_RPATH` `@loader_path` first, 
 archives carry no licence file:** neither sherpa-onnx's Apache-2.0 text nor ONNX Runtime's MIT licence and third-party
 notices are in them, so the install has to ship those from a pinned source of its own.
 
+**Note of 2026-11-21 (W5c).** The managed catalogues pin exactly these files (`managed_catalogue.rs`, `LINUX_SHERPA`,
+`WINDOWS_SHERPA`, `MACOS_SHERPA` and the two model pins; a test holds each digest to this table and to
+`tools/p16_speakers_eval.py`), as the optional group `speakers` ([ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md),
+its note of that date). The licence gap above is not closed by pinning a source of VSift's own: the install shows the
+attribution notice with the plan and installs no licence file ([L-226](known-limits.md#l-226)), and the archives'
+provenance is [L-217](known-limits.md#l-217).
+
 ## 11. Reproduce
 
 `gh workflow run p16-speakers-eval.yml --ref <branch>` once the workflow is on `main` (on a pull request it runs when

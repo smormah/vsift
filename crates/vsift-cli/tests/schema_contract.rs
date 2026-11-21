@@ -206,18 +206,23 @@ fn adjust_for_host(blocked: &mut Value) -> Result<(), Box<dyn std::error::Error>
                 "add_command": null,
             })
         };
-        // The optional OCR runner is offered on every system with a
-        // catalogue (Ubuntu, Windows and macOS), so the frozen entry stands
-        // there; a host with no catalogue has neither group.
+        // The optional OCR runner and the speaker group are offered on every
+        // system with a catalogue (Ubuntu, Windows and macOS), so their frozen
+        // entries stand there; a host with no catalogue has neither group.
         let mut groups = vec![unavailable(
             vsift_application::OptionalComponent::OnlineLinks,
         )];
-        match blocked["optional_components"]
-            .as_array()
-            .and_then(|groups| groups.iter().find(|group| group["name"] == "ocr"))
-        {
-            Some(ocr) if host.is_some() => groups.push(ocr.clone()),
-            _ => groups.push(unavailable(vsift_application::OptionalComponent::Ocr)),
+        for (name, group) in [
+            ("ocr", vsift_application::OptionalComponent::Ocr),
+            ("speakers", vsift_application::OptionalComponent::Speakers),
+        ] {
+            match blocked["optional_components"]
+                .as_array()
+                .and_then(|groups| groups.iter().find(|group| group["name"] == name))
+            {
+                Some(frozen) if host.is_some() => groups.push(frozen.clone()),
+                _ => groups.push(unavailable(group)),
+            }
         }
         blocked["optional_components"] = Value::Array(groups);
     }

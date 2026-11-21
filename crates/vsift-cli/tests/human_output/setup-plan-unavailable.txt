@@ -11,6 +11,8 @@ Optional components:
   Next: This plan cannot include it here. A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only; elsewhere, register a yt-dlp you supply with vsift setup configure yt-dlp --executable <absolute-path>. Direct HTTPS video links (ingest --url) work without it, as does every local file.
   Not available here: VSift's own OCR runner (MIT or Apache-2.0) with ONNX Runtime (MIT) and the PP-OCRv5 text models (Apache-2.0) reads on-screen text from a recording's frames on this machine.
   Next: This plan cannot include it here. A managed OCR runner is offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, register a runner you have with vsift setup configure ocr-runner --executable <absolute-path>. Every other command works without it.
+  Not available here: sherpa-onnx (Apache-2.0) with ONNX Runtime (MIT), the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT) and NVIDIA's NeMo TitaNet small model (Copyright NVIDIA Corporation, Apache-2.0, attributed under CC BY 4.0) group a recording's speech by voice on this machine.
+  Next: This plan cannot include it here. A managed speaker-diarization tool and its two models are offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, give their paths to transcript speakers with --diarizer, --segmentation-model and --embedding-model. Transcripts, search and every other command work without them.
 
 ffmpeg: missing, manual_selection_required (needs user authority)
   Next: Install a trusted FFmpeg or register a working one with setup configure ffmpeg --executable <absolute-path>, then run setup check. No need to search folders: ask the user where it is.

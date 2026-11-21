@@ -96,7 +96,11 @@ fn catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
         stop_new_plans_at: 2_000_000_000,
         stop_new_plans_date: String::from("2033-05-18T03:33:20Z"),
         artifacts: core_fixtures()?,
-        optional_artifacts: online_links_pins()?.into_iter().chain(ocr_pin()?).collect(),
+        optional_artifacts: online_links_pins()?
+            .into_iter()
+            .chain(ocr_pin()?)
+            .chain(speaker_pins()?)
+            .collect(),
         compatibility: ReviewedCompatibilityPolicy {
             fixture: integrity(10, &"f".repeat(64))?,
             expected_ffmpeg_version: String::from("ffmpeg version fixture"),
@@ -120,6 +124,10 @@ fn catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
                 ReviewedBanner {
                     component: ManagedComponent::OcrRunner,
                     first_line_prefix: String::from("{\"record\":\"describe\""),
+                },
+                ReviewedBanner {
+                    component: ManagedComponent::SpeakerDiarizer,
+                    first_line_prefix: String::from("OfflineSpeakerDiarizationConfig("),
                 },
             ],
         },
@@ -249,6 +257,74 @@ fn ocr_pin() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::error::Error>>
     }])
 }
 
+/// The `speakers` group as the Ubuntu catalogue pins it (ADR 0031, ADR 0032,
+/// W5c): sherpa-onnx's archive by its size and SHA-256 and the two models by
+/// theirs. The fixture keeps the real identities and one-file reviews.
+fn speaker_pins() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::error::Error>> {
+    let archive_sha = "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4";
+    let segmentation_sha = "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079";
+    let embedding_sha = "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e";
+    let artifact = |component,
+                    version: &str,
+                    publisher: &str,
+                    url: &str,
+                    bytes: u64,
+                    sha: &str,
+                    licence: &str,
+                    name: &str|
+     -> Result<AcceptedManagedArtifact, Box<dyn std::error::Error>> {
+        Ok(AcceptedManagedArtifact {
+            component,
+            version: version.to_owned(),
+            publisher: publisher.to_owned(),
+            source_url: url.to_owned(),
+            integrity: integrity(bytes, sha)?,
+            format: ManagedArtifactFormat::RawFile,
+            archive_limits: None,
+            selected_files: Vec::new(),
+            archive_links: Vec::new(),
+            runtime_copies: Vec::new(),
+            licence: licence.to_owned(),
+            notice_url: String::from("https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/LICENSE"),
+            source_code_url: String::from("https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8"),
+            trust_limit: String::from("The publisher's own release, pinned by size and SHA-256."),
+            files: vec![file(name, bytes, sha)?],
+        })
+    };
+    Ok(vec![
+        artifact(
+            ManagedComponent::SpeakerDiarizer,
+            "sherpa-onnx-1.13.8-linux-x64",
+            "k2-fsa sherpa-onnx",
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
+            28_156_791,
+            archive_sha,
+            "Apache-2.0 (sherpa-onnx); MIT (ONNX Runtime)",
+            "sherpa-onnx-offline-speaker-diarization",
+        )?,
+        artifact(
+            ManagedComponent::SpeakerSegmentationModel,
+            "pyannote-segmentation-3.0-9403a690",
+            "csukuangfj sherpa-onnx pyannote segmentation (Hugging Face)",
+            "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.onnx",
+            5_992_913,
+            segmentation_sha,
+            "MIT",
+            "pyannote-segmentation-3.0.onnx",
+        )?,
+        artifact(
+            ManagedComponent::SpeakerEmbeddingModel,
+            "nemo-en-titanet-small",
+            "k2-fsa sherpa-onnx",
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx",
+            40_257_283,
+            embedding_sha,
+            "Apache-2.0 (NeMo Toolkit); CC-BY-4.0 attribution (TitaNet model card)",
+            "nemo_en_titanet_small.onnx",
+        )?,
+    ])
+}
+
 fn every_tool_available() -> RuntimeDiagnosis {
     RuntimeDiagnosis {
         readiness: RuntimeReadiness::Ready,
@@ -346,6 +422,51 @@ fn the_default_desktop_plan_offers_online_links_and_asks_for_the_operator() -> T
     // The size is the archive's 23,268,888 bytes, rounded up to a whole megabyte.
     for needed in ["about 24 MB", "OCR runner", "ONNX Runtime", "Apache-2.0"] {
         assert!(ocr_summary.contains(needed), "{needed}: {ocr_summary}");
+    }
+    // The third group: speaker labels (W5c), three components, whose offer
+    // carries the attribution notice the models' licences require (ADR 0031).
+    let speakers = &data["optional_components"][2];
+    assert_eq!(speakers["name"], "speakers");
+    assert_eq!(speakers["status"], "not_included");
+    assert_eq!(
+        speakers["installs"],
+        serde_json::json!([
+            "speaker_diarizer",
+            "speaker_segmentation_model",
+            "speaker_embedding_model"
+        ])
+    );
+    // 28,156,791 + 5,992,913 + 40,257,283 bytes.
+    assert_eq!(speakers["download_bytes"], 74_406_987);
+    assert_eq!(
+        speakers["add_command"],
+        serde_json::json!({
+            "executable": "vsift",
+            "arguments": ["setup", "plan", "--profile", "desktop", "--include", "speakers", "--json"]
+        })
+    );
+    assert_eq!(
+        speakers["terms_notice"],
+        vsift_contract::SPEAKER_MODELS_NOTICE
+    );
+    let notice = speakers["terms_notice"].as_str().ok_or("no notice")?;
+    for needed in [
+        "pyannote segmentation 3.0",
+        "CNRS",
+        "TitaNet",
+        "Creative Commons Attribution 4.0",
+        "sherpa-onnx",
+        "ONNX Runtime",
+    ] {
+        assert!(notice.contains(needed), "{needed}: {notice}");
+    }
+    let speaker_summary = speakers["summary"].as_str().ok_or("no speaker summary")?;
+    // The size is 74,406,987 bytes, rounded up to a whole megabyte.
+    for needed in ["about 75 MB", "sherpa-onnx", "TitaNet", "MIT"] {
+        assert!(
+            speaker_summary.contains(needed),
+            "{needed}: {speaker_summary}"
+        );
     }
     matches_example(&response, "examples/setup-plan.optional-offered.json")
 }
