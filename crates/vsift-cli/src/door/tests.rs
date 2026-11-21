@@ -1391,6 +1391,200 @@ async fn unattended_reports_the_on_screen_text_part() -> TestResult {
     Ok(())
 }
 
+/// `checked` with the speaker-labels extra (W5c) standing as `capability`.
+fn with_speaker_labels(mut checked: CheckedSetup, capability: OptionalCapability) -> CheckedSetup {
+    checked
+        .optional
+        .push((OptionalComponent::Speakers, capability));
+    checked
+}
+
+/// W5c: speaker labels are the door's third extra. Asked for on a complete
+/// setup, the offer covers it alone, with its own words, and names each of the
+/// three pieces it downloads.
+#[tokio::test]
+async fn an_included_speaker_labels_extra_is_offered_with_its_own_words() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "speakers",
+        "status": "included",
+        "summary": "sherpa-onnx (Apache-2.0) with ONNX Runtime (MIT), the pyannote segmentation 3.0 model and NVIDIA's NeMo TitaNet small model group a recording's speech by voice on this machine.",
+        "add_command": null,
+        "actions": [
+            action(
+                "speaker_diarizer",
+                "sherpa-onnx-1.13.8-linux-x64",
+                "k2-fsa sherpa-onnx",
+                28_156_791
+            ),
+            action(
+                "speaker_segmentation_model",
+                "pyannote-segmentation-3.0-9403a690",
+                "csukuangfj sherpa-onnx pyannote segmentation (Hugging Face)",
+                5_992_913
+            ),
+            action(
+                "speaker_embedding_model",
+                "nemo-en-titanet-small",
+                "k2-fsa sherpa-onnx",
+                40_257_283
+            ),
+        ],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let steps = ScriptedSteps::new(vec![with_speaker_labels(
+        all_ready(),
+        OptionalCapability::NotInstalled,
+    )])
+    .with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::SpeakerLabels]).await?;
+
+    assert_eq!(steps.planned.get(), 1);
+    assert!(
+        stdout.contains("VSift can add speaker labels for you:"),
+        "{stdout}"
+    );
+    for piece in ["speaker tool", "segmentation model", "voice model"] {
+        assert!(stdout.contains(piece), "{piece}: {stdout}");
+    }
+    assert!(
+        stdout.contains("Add speaker labels now? [y/N] "),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5c: with all three extras offered, the table has a row for each, and the
+/// extras line names every one with its flag.
+#[tokio::test]
+async fn the_table_and_the_extras_line_name_all_three_extras() -> TestResult {
+    let all = with_speaker_labels(
+        with_on_screen_text(all_ready(), OptionalCapability::NotInstalled),
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![all]);
+    let mut console = ScriptedConsole::person(Answer::No);
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+    check_snapshot("setup-door-complete-three-extras", &stdout)?;
+    for row in ["Web videos", "On-screen text", "Speaker labels"] {
+        assert!(stdout.contains(row), "{row}: {stdout}");
+    }
+    assert!(
+        stdout.contains(
+            "Optional extras: web videos, on-screen text, speaker labels. Add one with: vsift setup --include web-videos, --include on-screen-text, or --include speaker-labels\n"
+        ),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5c: the unattended door refuses speaker labels where they cannot be added,
+/// by name, and reports an installed group by its own part name.
+#[tokio::test]
+async fn unattended_speaker_labels_are_refused_by_name_and_reported_by_part() -> TestResult {
+    let mut checked = with_speaker_labels(all_ready(), OptionalCapability::Unavailable);
+    checked.optional.reverse();
+    let steps = ScriptedSteps::new(vec![checked]);
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::Speakers),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+    let failure: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(failure["error"]["code"], "MISSING_CAPABILITY", "{stdout}");
+    assert!(
+        stdout.contains(
+            "VSift can't add speaker labels on this computer yet, so nothing was installed."
+        ),
+        "{stdout}"
+    );
+    assert_eq!(
+        exit,
+        ProcessExit::from(FailureCode::MissingCapability.class())
+    );
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+
+    let installed = OptionalCapability::Installed(vec![
+        (
+            ManagedComponent::SpeakerDiarizer,
+            String::from("sherpa-onnx-1.13.8-linux-x64"),
+        ),
+        (
+            ManagedComponent::SpeakerSegmentationModel,
+            String::from("pyannote-segmentation-3.0-9403a690"),
+        ),
+        (
+            ManagedComponent::SpeakerEmbeddingModel,
+            String::from("nemo-en-titanet-small"),
+        ),
+    ]);
+    let steps = ScriptedSteps::new(vec![with_speaker_labels(all_ready(), installed)]);
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::Speakers),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+    let result: Value = serde_json::from_str(&stdout)?;
+    let part = result["data"]["parts"]
+        .as_array()
+        .and_then(|parts| parts.iter().find(|part| part["part"] == "speaker_labels"))
+        .ok_or("no speaker_labels part")?;
+    assert_eq!(part["status"], "added", "{result}");
+    assert_eq!(part["requested"], true);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
+/// W5c: sherpa-onnx's Windows libraries do not import the Visual C++ runtime
+/// (L-225), so a failed install test of the speaker group gets the ordinary
+/// advice on every system, Windows included.
+#[tokio::test]
+async fn a_failed_speaker_labels_test_never_points_to_the_visual_cpp_runtime() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "speakers",
+        "status": "included",
+        "summary": "sherpa-onnx groups a recording's speech by voice on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "speaker_diarizer",
+            "sherpa-onnx-1.13.8-windows-x64",
+            "k2-fsa sherpa-onnx",
+            24_805_859
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let before = with_speaker_labels(all_ready(), OptionalCapability::NotInstalled);
+    let after = with_speaker_labels(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![before, after])
+        .with_plan(plan)
+        .with_install(Ok(install_results(
+            json!([component(
+                "speaker_diarizer",
+                "failed",
+                Some("smoke"),
+                Some("smoke")
+            )]),
+            None,
+        )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::SpeakerLabels]).await?;
+
+    assert!(!stdout.contains("Visual C++"), "{stdout}");
+    assert!(stdout.contains("troubleshooting guide"), "{stdout}");
+    Ok(())
+}
+
 /// The bars name each piece, fill with its bytes and end with its stage.
 #[test]
 fn each_piece_has_a_bar_its_megabytes_and_its_stage() {

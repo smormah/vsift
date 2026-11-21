@@ -6,8 +6,13 @@ cannot tell you.
 
 ## Label the voices
 
-Speaker labels need the speaker-diarization tool and its two models. `setup install` installs them where VSift
-manages its tools; you can also give their paths each time:
+Speaker labels need the speaker-diarization tool and its two models. On Ubuntu 24.04 x64, Windows x64 and macOS on
+Apple silicon, VSift installs them when you ask (`vsift setup --include speaker-labels`; about 67 to 75 MB in three
+downloads, nothing else needs them). The tool is sherpa-onnx's (Apache-2.0, with ONNX Runtime, MIT); the models are
+the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT licence; ONNX export by the sherpa-onnx project)
+and NVIDIA's NeMo TitaNet small speaker-embedding model (Copyright NVIDIA Corporation; Apache License 2.0, and
+attributed here as the Creative Commons Attribution 4.0 licence of NVIDIA's TitaNet model card requires). You can also
+give their paths each time:
 
 ```console
 vsift transcript speakers <session> --json

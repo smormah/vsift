@@ -36,6 +36,12 @@ pub struct OptionalComponentText {
 /// The notice every offer of online links carries.
 pub const SITE_TERMS_NOTICE: &str = "Downloading from a site is subject to that site's terms, which are yours to follow. VSift does not get round sign-in, DRM, age, region or bot checks.";
 
+/// The attribution notice every offer of speaker labels carries (ADR 0031,
+/// "The managed install and its notice"): it covers both of `TitaNet`'s licence
+/// statements and the engine and runtime the models run with. The plan carries
+/// it, so whoever accepts the plan has read it before the models are fetched.
+pub const SPEAKER_MODELS_NOTICE: &str = "Speaker diarization uses the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT licence; ONNX export by the sherpa-onnx project) and NVIDIA's NeMo TitaNet small speaker-embedding model (Copyright NVIDIA Corporation; distributed under the NeMo Toolkit's Apache License 2.0, and attributed here as the Creative Commons Attribution 4.0 licence of NVIDIA's TitaNet model card requires), run by sherpa-onnx (Apache License 2.0) with ONNX Runtime (MIT licence).";
+
 /// The fixed prose of `component`.
 #[must_use]
 pub const fn optional_component_text(component: OptionalComponent) -> OptionalComponentText {
@@ -55,6 +61,14 @@ pub const fn optional_component_text(component: OptionalComponent) -> OptionalCo
             unavailable: "A managed OCR runner is offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, register a runner you have with vsift setup configure ocr-runner --executable <absolute-path>. Every other command works without it.",
             installed: "On-screen text can be read: the OCR runner, ONNX Runtime and the two text models are installed, so ocr reads a session's frames and ocr search finds the text.",
             name_in_prose: "on-screen text",
+        },
+        OptionalComponent::Speakers => OptionalComponentText {
+            purpose: "Labels who speaks when in a recording's transcript (S1, S2 and so on) so that transcript speakers can group the segments by voice and search --speaker can filter by it. sherpa-onnx's speaker-diarization tool, ONNX Runtime and two speaker models run on this machine; nothing is sent anywhere.",
+            subject: "sherpa-onnx (Apache-2.0) with ONNX Runtime (MIT), the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT) and NVIDIA's NeMo TitaNet small model (Copyright NVIDIA Corporation, Apache-2.0, attributed under CC BY 4.0) group a recording's speech by voice on this machine.",
+            terms_notice: Some(SPEAKER_MODELS_NOTICE),
+            unavailable: "A managed speaker-diarization tool and its two models are offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, give their paths to transcript speakers with --diarizer, --segmentation-model and --embedding-model. Transcripts, search and every other command work without them.",
+            installed: "Speaker labels can be made: the speaker-diarization tool, ONNX Runtime and the two speaker models are installed, so transcript speakers labels a finished transcript by voice and search --speaker filters by the label.",
+            name_in_prose: "speaker labels",
         },
     }
 }

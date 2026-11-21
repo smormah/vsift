@@ -20,7 +20,7 @@ use vsift_application::{
     install_observed_managed_plan,
 };
 use vsift_contract::{InstallSource, SavedSetupPlan};
-use vsift_domain::{FailureCode, ProgressUpdate, RuntimeDependency};
+use vsift_domain::{FailureCode, ManagedComponent, ProgressUpdate, RuntimeDependency};
 use vsift_infrastructure::{
     ActionAuthority, ExecutableResolver, ManagedArtifactError, ManagedArtifactSource,
     ManagedInstallerConfig, MediaProviderConformance, ReviewedFixtureVerifiers,
@@ -270,10 +270,16 @@ impl SmokeCompanionSource for SelectedCompanions<'_> {
             Ok(Some(model)) => Some(model),
             Ok(None) | Err(_) => managed.model().map(|model| model.path),
         };
+        let segmentation = managed.speaker_model(ManagedComponent::SpeakerSegmentationModel);
+        let embedding = managed.speaker_model(ManagedComponent::SpeakerEmbeddingModel);
         SmokeCompanions {
             media,
             whisper,
             model,
+            speaker_models: segmentation
+                .zip(embedding)
+                .map(|(segmentation, embedding)| (segmentation.path, embedding.path)),
+            diarizer: managed.speaker_tool(),
         }
     }
 }

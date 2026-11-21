@@ -885,6 +885,7 @@ async fn a_staged_model_is_smoked_with_selected_companions() -> TestResult {
         media: Some(companion_media()?),
         whisper: Some(TrustedExecutable::explicit(FIXTURE_TOOL)?),
         model: None,
+        ..SmokeCompanions::default()
     };
     let verifiers = FixedVerifiers::passing();
     let outcome = smoke_before_activation(
@@ -1304,5 +1305,198 @@ async fn an_optional_tool_that_leaves_its_temporary_files_fails_the_recheck() ->
         }
     );
     root.assert_nothing_activated()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The speaker group (W5c, ADR 0031, ADR 0032).
+
+/// The policy with the speaker tool's reviewed banner: the first words of the
+/// configuration line the fixture prints, as sherpa-onnx's tool does.
+fn speaker_policy(media_deadline_seconds: u64) -> TestResult<ReviewedCompatibilityPolicy> {
+    let mut policy = policy(media_deadline_seconds)?;
+    policy
+        .optional_banners
+        .retain(|banner| banner.component != ManagedComponent::SpeakerDiarizer);
+    policy.optional_banners.push(ReviewedBanner {
+        component: ManagedComponent::SpeakerDiarizer,
+        first_line_prefix: String::from("OfflineSpeakerDiarizationConfig("),
+    });
+    Ok(policy)
+}
+
+/// One staged raw model of the group.
+fn stage_speaker_model(
+    store: &ManagedArtifactStore,
+    component: ManagedComponent,
+    role: ManagedRuntimeRole,
+    name: &str,
+) -> TestResult<StagedManagedCandidate> {
+    let bytes = format!("fixture {name} bytes").into_bytes();
+    let staged = store.import_verified(&bytes[..], integrity_of(&bytes)?)?;
+    Ok(StagedManagedCandidate::prepare_raw_file(
+        staged,
+        component,
+        &[(role, name)],
+        name,
+    )?)
+}
+
+/// The tool staged as `diarizer-<behaviour>` and the two models.
+fn stage_speakers(
+    store: &ManagedArtifactStore,
+    behaviour: &str,
+) -> TestResult<Vec<StagedManagedCandidate>> {
+    let stem = format!("diarizer-{behaviour}");
+    let name = tool(&stem);
+    Ok(vec![
+        stage(
+            store,
+            ManagedComponent::SpeakerDiarizer,
+            &[executable(&stem)?],
+            &[(ManagedRuntimeRole::SpeakerDiarizer, &name)],
+        )?,
+        stage_speaker_model(
+            store,
+            ManagedComponent::SpeakerSegmentationModel,
+            ManagedRuntimeRole::SpeakerSegmentationModel,
+            "segmentation.onnx",
+        )?,
+        stage_speaker_model(
+            store,
+            ManagedComponent::SpeakerEmbeddingModel,
+            ManagedRuntimeRole::SpeakerEmbeddingModel,
+            "embedding.onnx",
+        )?,
+    ])
+}
+
+/// The tool hears the smoke's tone with both staged models, through the same
+/// closed argument list as a real run, and prints its configuration line
+/// first; no media or speech fixture runs, the tone is gone afterwards (the
+/// recheck would fail on a file left in the smoke directory) and nothing is
+/// activated.
+#[tokio::test]
+async fn the_speaker_group_passes_the_tools_run_with_both_staged_models() -> TestResult {
+    let root = TestRoot::new()?;
+    let store = root.store()?;
+    let candidates = stage_speakers(&store, "good")?;
+    let verifiers = FixedVerifiers::passing();
+    let outcome =
+        smoke_before_activation(&smoke(speaker_policy(30)?, verifiers.clone()), candidates).await;
+    let SmokeStageOutcome::Passed(candidates) = outcome else {
+        return Err("the good speaker fixtures did not pass".into());
+    };
+    {
+        let requests = verifiers.requests();
+        assert!(requests.media.is_empty() && requests.speech.is_empty());
+    }
+    assert_eq!(candidates.len(), 3);
+    for candidate in candidates {
+        assert_eq!(candidate.discard(), StageDisposal::Discarded);
+    }
+    root.assert_nothing_activated()?;
+    root.assert_only_marker_remains()?;
+    Ok(())
+}
+
+/// A tool that prints another first line, fails or hangs fails the group with
+/// the banner check's typed reason; every stage of the group is discarded.
+#[tokio::test]
+async fn speaker_tool_failures_are_typed_and_discard_the_whole_group() -> TestResult {
+    for (behaviour, deadline, reason) in [
+        ("badbanner", 30, Reason::BannerMismatch),
+        ("fail", 30, Reason::ProviderFailed),
+        ("hang", 2, Reason::DeadlineExceeded),
+    ] {
+        let root = TestRoot::new()?;
+        let store = root.store()?;
+        let candidates = stage_speakers(&store, behaviour)?;
+        let (failure, stages) = failed(
+            smoke_before_activation(
+                &smoke(speaker_policy(deadline)?, FixedVerifiers::passing()),
+                candidates,
+            )
+            .await,
+        )?;
+        assert_eq!(
+            failure,
+            CompatibilitySmokeFailure {
+                check: Check::Banner,
+                reason
+            },
+            "{behaviour}"
+        );
+        assert_eq!(
+            stages,
+            [
+                (ManagedComponent::SpeakerDiarizer, StageDisposal::Discarded),
+                (
+                    ManagedComponent::SpeakerSegmentationModel,
+                    StageDisposal::Discarded
+                ),
+                (
+                    ManagedComponent::SpeakerEmbeddingModel,
+                    StageDisposal::Discarded
+                ),
+            ]
+        );
+        root.assert_nothing_activated()?;
+        root.assert_only_marker_remains()?;
+    }
+    Ok(())
+}
+
+/// A staged piece of the group needs the others: from the candidates or from
+/// the selected companions. With neither, the smoke refuses before it runs
+/// anything, and a policy without the tool's banner is the review's fault.
+#[tokio::test]
+async fn a_partial_speaker_group_without_companions_is_refused() -> TestResult {
+    // The tool without its models, and a model without the tool or the other.
+    for keep in [0_usize, 1] {
+        let root = TestRoot::new()?;
+        let store = root.store()?;
+        let mut candidates = stage_speakers(&store, "good")?;
+        let kept = candidates.remove(keep);
+        for other in candidates {
+            assert_eq!(other.discard(), StageDisposal::Discarded);
+        }
+        let (failure, _) = failed(
+            smoke_before_activation(
+                &smoke(speaker_policy(30)?, FixedVerifiers::passing()),
+                vec![kept],
+            )
+            .await,
+        )?;
+        assert_eq!(
+            failure,
+            CompatibilitySmokeFailure {
+                check: Check::Layout,
+                reason: Reason::MissingExecutable,
+            },
+            "kept piece {keep}"
+        );
+        root.assert_nothing_activated()?;
+    }
+
+    let root = TestRoot::new()?;
+    let store = root.store()?;
+    let candidates = stage_speakers(&store, "good")?;
+    let mut without_banner = policy(30)?;
+    without_banner.optional_banners.clear();
+    let (failure, _) = failed(
+        smoke_before_activation(
+            &smoke(without_banner, FixedVerifiers::passing()),
+            candidates,
+        )
+        .await,
+    )?;
+    assert_eq!(
+        failure,
+        CompatibilitySmokeFailure {
+            check: Check::Layout,
+            reason: Reason::Preparation,
+        }
+    );
     Ok(())
 }

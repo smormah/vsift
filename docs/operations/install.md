@@ -476,6 +476,10 @@ and checks it before use, exactly as it does the other publishers' files.
 - **On-screen text:** the optional `ocr` group (section 5.1a) is offered on both systems and on Ubuntu: VSift's
   own OCR runner for the system, 18 MB on Windows and 25 MB on macOS, installed after the core only when you ask
   for it. The group's install smoke ran on the same hosted runners ([L-225](../planning/known-limits.md#l-225)).
+- **Speaker labels:** the optional `speakers` group (section 5.1a) is offered on both systems and on Ubuntu:
+  sherpa-onnx's speaker-diarization tool with its ONNX Runtime library and two speaker models, 72 MB on Windows and
+  67 MB on macOS in three downloads, installed after the core only when you ask for it. sherpa-onnx's Windows libraries
+  do not need the Visual C++ Redistributable ([L-225](../planning/known-limits.md#l-225)).
 
 ### 5.1a Optional components (since `0.3.0`)
 
@@ -490,8 +494,9 @@ vsift setup install --plan plan.json --accept-plan <the plan digest>
 ```
 
 `--include` is repeatable and takes the group's name below. A person at a terminal adds the same groups with the
-setup door instead, by their plain names: `vsift setup --include web-videos` or
-`vsift setup --include on-screen-text` (the door's table lists each one as added, not added or not available).
+setup door instead, by their plain names: `vsift setup --include web-videos`,
+`vsift setup --include on-screen-text` or `vsift setup --include speaker-labels` (the door's table lists each one as
+added, not added or not available).
 
 - **`online_links`** is what fetching a video from a public web page (YouTube and other sites) needs: yt-dlp and
   the Deno runtime it runs, so `ingest --url` can read a public video page, about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
@@ -509,6 +514,19 @@ setup door instead, by their plain names: `vsift setup --include web-videos` or
   VSift's own release and nothing else. The install smoke starts the runner with `describe`, which hashes the
   library and the models beside it and names the build; `vsift ocr` then uses it with no setting, after a runner
   you registered with `setup configure ocr-runner` and before one on `PATH`.
+- **`speakers`** is what labelling who speaks in a transcript needs (`vsift transcript speakers`, and
+  `search --speaker` and the labels in `transcript get` after it): **three downloads of about 67 to 75 MB** (75 MB on
+  Ubuntu 24.04 x64, 72 MB on Windows x64, 67 MB on macOS on Apple silicon; `setup plan` states the next whole
+  megabyte). It is offered on all three systems. The pieces are sherpa-onnx's speaker-diarization tool with the ONNX
+  Runtime library it loads (Apache-2.0 and MIT, two files of sherpa-onnx's own release archive), the pyannote
+  segmentation 3.0 model (MIT) and NVIDIA's NeMo TitaNet small speaker-embedding model (Apache-2.0, attributed under
+  Creative Commons Attribution 4.0 as TitaNet's model card requires; `setup plan` carries the full notice). Everything
+  runs on your machine and nothing is sent anywhere. The three files come from their publishers' releases (sherpa-onnx
+  v1.13.8 and Hugging Face) and are checked by the sizes and SHA-256 pinned in VSift; sherpa-onnx publishes no
+  checksum for the archive, so VSift's pin is the anchor ([L-217](../planning/known-limits.md#l-217)). The release
+  archives hold no licence file, so none is installed beside them ([L-226](../planning/known-limits.md#l-226)). The
+  install test starts the tool on a three-second tone with both models; `vsift transcript speakers` then uses them
+  with no setting, unless you give `--diarizer`, `--segmentation-model` or `--embedding-model`.
 - **Installed after the core.** `setup install` installs FFmpeg, whisper.cpp and the model first, then each
   optional component on its own. If an optional component cannot be installed (a proxy that blocks its download,
   say), the core stays installed, the result is `partial` (exit 0) with a warning, and its line says what failed and
@@ -675,6 +693,8 @@ deleting them left no trace; the evidence bundle, the registered tools and the s
    `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup
    remove whisper_model`, then, if you added web videos, `vsift setup remove yt_dlp` and
    `vsift setup remove js_runtime_deno`, then, if you added on-screen text, `vsift setup remove ocr_runner`,
+   if you added speaker labels, `vsift setup remove speaker_diarizer`, `vsift setup remove speaker_segmentation_model`
+   and `vsift setup remove speaker_embedding_model`,
    then `vsift setup remove --stale-stages`. Content VSift cannot
    prove is its own (a link, an unknown file) is kept and `vsift setup repair` names it; delete
    the managed folder by hand in that case ([L-090](../planning/known-limits.md#l-090)).

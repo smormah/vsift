@@ -14,6 +14,9 @@ Optional components:
   Not included (optional, about 24 MB to download): VSift's own OCR runner (MIT or Apache-2.0) with ONNX Runtime (MIT) and the PP-OCRv5 text models (Apache-2.0) reads on-screen text from a recording's frames on this machine.
   To add it: vsift setup plan --profile desktop --include ocr --json
   Next: Not included. Ask the operator first; to add it, run vsift setup plan --profile desktop --include ocr --json and review that plan instead.
+  Not included (optional, about 75 MB to download): sherpa-onnx (Apache-2.0) with ONNX Runtime (MIT), the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT) and NVIDIA's NeMo TitaNet small model (Copyright NVIDIA Corporation, Apache-2.0, attributed under CC BY 4.0) group a recording's speech by voice on this machine.
+  To add it: vsift setup plan --profile desktop --include speakers --json
+  Next: Not included. Ask the operator first; to add it, run vsift setup plan --profile desktop --include speakers --json and review that plan instead.
 Ask the operator: Before accepting this plan, tell the operator about each optional component in optional_components in one or two plain sentences (what it does, its licence, its download size, and its terms notice when it has one) and ask whether to include it. Include it only after a yes: run its add_command, review that plan and accept it instead. Never accept a plan that includes it without a yes, and never leave it unmentioned. Local investigation does not need it.
 
 ffmpeg: available, existing_executable_probe_only

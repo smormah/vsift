@@ -43,6 +43,9 @@ pub enum SetupPartName {
     /// The optional extra that reads the text shown on screen (`ocr` in
     /// `setup check` and `setup plan`).
     OnScreenText,
+    /// The optional extra that labels who speaks when (`speakers` in
+    /// `setup check` and `setup plan`).
+    SpeakerLabels,
 }
 
 /// Where one part stands after the run.
@@ -161,6 +164,9 @@ pub fn setup_next_install(part: SetupPartName) -> String {
         SetupPartName::WebVideos => return String::from("vsift setup --include web-videos"),
         SetupPartName::OnScreenText => {
             return String::from("vsift setup --include on-screen-text");
+        }
+        SetupPartName::SpeakerLabels => {
+            return String::from("vsift setup --include speaker-labels");
         }
     };
     format!("vsift setup --unattended --install {name}")
