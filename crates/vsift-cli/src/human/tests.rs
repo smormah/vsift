@@ -428,6 +428,76 @@ fn tools_found_without_a_model_is_not_ready_to_transcribe() -> TestResult {
     Ok(())
 }
 
+/// The optional rows' words on a host that is and is not offered managed
+/// installs, whatever machine runs the test (the host-dependent snapshot
+/// replaces these rows with placeholders): an extra the host cannot offer is
+/// "not available", one it offers but nothing has installed is "none added".
+#[test]
+fn every_optional_row_reads_not_available_or_none_added_by_host() -> TestResult {
+    let row_of =
+        |capability: vsift::OptionalCapability| -> Result<[String; 3], Box<dyn std::error::Error>> {
+            let diagnosis = RuntimeDiagnosis {
+                readiness: RuntimeReadiness::Degraded,
+                dependencies: RuntimeDependency::ALL
+                    .into_iter()
+                    .map(|dependency| DependencyStatus {
+                        dependency,
+                        state: DependencyState::Missing,
+                    })
+                    .collect(),
+            };
+            let optional: Vec<_> = vsift::OptionalComponent::ALL
+                .into_iter()
+                .map(|component| (component, capability.clone()))
+                .collect();
+            let rendered = setup_check(
+                &diagnosis,
+                LocalAsrSetupStatus {
+                    model: LocalAsrModelStatus::NotSelected,
+                    verification: LocalAsrCheckOutcome::NotRun(
+                        LocalAsrNotRunReason::MediaToolsUnavailable,
+                    ),
+                },
+                crate::setup::ManagedSetupFacts {
+                    availability: ManagedPlanAvailability::Qualified,
+                    by_dependency: [ManagedPlanAvailability::Qualified; 3],
+                    updates: &[],
+                    optional: &optional,
+                },
+                ExecutionProfile::Desktop,
+                &|_| DependencyLookup::FilteredPath,
+            )
+            .map_err(|_| "the setup check is too large to render")?;
+            let text = rendered.as_str().to_owned();
+            let find = |part: &str| -> Result<String, Box<dyn std::error::Error>> {
+                text.lines()
+                    .find(|line| line.trim_start().starts_with(part))
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("no {part} row in {text}").into())
+            };
+            Ok([
+                find("Web videos")?,
+                find("On-screen text")?,
+                find("Speaker labels")?,
+            ])
+        };
+    for (capability, status) in [
+        (vsift::OptionalCapability::Unavailable, "not available"),
+        (vsift::OptionalCapability::NotInstalled, "none added"),
+    ] {
+        for row in row_of(capability)? {
+            assert!(row.contains(status), "{status}: {row}");
+        }
+    }
+    let speakers = row_of(vsift::OptionalCapability::Unavailable)?;
+    assert!(
+        speakers[2].contains("sherpa-onnx") && speakers[2].contains("labelling who speaks"),
+        "{}",
+        speakers[2]
+    );
+    Ok(())
+}
+
 /// "Complete" appears exactly when video and speech both work, whatever
 /// else is in place.
 #[test]
