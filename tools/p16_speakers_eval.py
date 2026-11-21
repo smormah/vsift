@@ -476,10 +476,14 @@ SEGMENTATION = {
 
 _EMBEDDINGS = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/"
 # Digests: the release's own checksum.txt (sherpa-onnx, uploaded 2026-05-20).
+# 2026-11-21 (H10): the release tag is a rolling one, and on 2026-11-19 (07:54 UTC) the publisher re-uploaded
+# the CAM++ file under the same name and tag, so the earlier pin (29,596,978 bytes, SHA-256 357a834f...129b, the
+# bytes the evaluation measured) no longer matched and the e2e job failed closed. The pin below is the bytes now
+# served: GitHub's asset digest and the re-uploaded checksum.txt agree. The other embedding models were unchanged.
 EMBEDDINGS = {
     "campplus-en": Pin("3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx",
-                       _EMBEDDINGS + "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx", 29_596_978,
-                       "357a834f702b80161e5b981182c038e18553c1f2ca752ed6cec2052365d4129b", "checksum.txt"),
+                       _EMBEDDINGS + "3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx", 29_596_979,
+                       "98daf9bcf1c8abf3db374fec4c27a5eda7c58705bb3f180d057b085a72a88bb5", "checksum.txt"),
     "eres2net-en": Pin("3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx",
                        _EMBEDDINGS + "3dspeaker_speech_eres2net_sv_en_voxceleb_16k.onnx", 26_485_263,
                        "c59158379255ad66e161679cca6af8d52d51e389e3224ab7d7a7baae295c2db5", "checksum.txt"),

@@ -62,11 +62,19 @@ VSift ships with a managed install, as whisper.cpp's model does today.
 | Windows x64 | `...-win-x64-shared-MT-Release.tar.bz2`, 24,805,859 bytes (run, section 6) | `polyvoice-windows-x86_64.exe`, 5,895,168 bytes (run) |
 | macOS arm64 | `...-osx-arm64-shared.tar.bz2`, 20,314,448 bytes (run); `osx-x64` and `universal2` also exist | `polyvoice-macos-arm64`, 3,816,912 bytes (run); no Intel build |
 | Checksums | **No publisher checksum file and no attestation** for the engine archives: GitHub's release-asset SHA-256 only. The embedding models have the release's own `checksum.txt` (SHA-256); the segmentation model has Hugging Face's LFS SHA-256 at a pinned revision | GitHub's release-asset SHA-256 for the binaries; no attestation. Its own manifest pins every model by SHA-256 **and a minisign signature** |
-| Models | segmentation 5,992,913 bytes; TitaNet small 40,257,283; WeSpeaker ResNet34 26,534,365 (CAM++ 29,596,978; ERes2Net 26,485,263) | 8,414,314 bytes for the INT8 pair, plus about 267 KB of PLDA parameters |
+| Models | segmentation 5,992,913 bytes; TitaNet small 40,257,283; WeSpeaker ResNet34 26,534,365 (CAM++ 29,596,978 when measured, 29,596,979 since 2026-11-19, see the note below; ERes2Net 26,485,263) | 8,414,314 bytes for the INT8 pair, plus about 267 KB of PLDA parameters |
 | A managed install would hold | about 33 MB of tool and runtime plus 46 to 67 MB of models | about 14 MB |
 
 Every pin is in `tools/p16_speakers_eval.py` (`SHERPA_ARCHIVES`, `SEGMENTATION`, `EMBEDDINGS`, `POLYVOICE`,
 `TINYDIARIZE`), each by size and the digest its publisher gives. tinydiarize's model is 487,614,184 bytes.
+
+**Note of 2026-11-21 (H10).** The CAM++ results in this evaluation were measured on the earlier bytes (29,596,978 bytes,
+SHA-256 `357a834f...129b`). On 2026-11-19 sherpa-onnx's rolling `speaker-recongition-models` release re-uploaded
+`3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx` under the same name and tag (now 29,596,979 bytes, SHA-256
+`98daf9bc...88bb5`; GitHub's digest and the re-uploaded `checksum.txt` agree), so the pinned size and digest stopped
+matching and `P16 speakers e2e` failed closed until the pin was updated. The tool now pins the new bytes; the CAM++
+numbers above were not re-measured on them. TitaNet small, the model [ADR 0031](../decisions/0031-speaker-labels.md)
+chose and the only embedding model VSift installs, is unchanged (same asset date, size and digest).
 
 ## 5. How it was measured
 
