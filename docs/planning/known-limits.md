@@ -5417,7 +5417,7 @@ that week.**
 - **Evidence:** `managed_catalogue.rs` (the artifacts' `licence` and `notice_url`), `optional_component.rs` (`SPEAKER_MODELS_NOTICE`), `setup_optional_contract.rs` (the notice's words) and the evaluation's inventory (`licence_members: []`).
 - **Impact: low by the rubric** (platform/distribution): the licences are named and linked in the plan, the attribution is in the summary every offer shows and the full notice is in the plan an agent relays, all before the download, and the files are not redistributed by VSift (it fetches them from their publishers on the user's machine); an installation that is later copied elsewhere would not carry the texts.
 - **Mitigation:** the plan's notice; the artifacts' `notice_url`; this register.
-- **Next step:** republish the pieces with their licence texts and the notice in an engine release of VSift's own (the maintainer's tag and approval, as for the other engines), or teach the store to install a reviewed notice file with a group; either closes L-217's provenance gap with it.
+- **Next step:** republish the pieces with their licence texts and the notice in an engine release of VSift's own (the maintainer's tag and approval, as for the other engines), or teach the store to install a reviewed notice file with a group; either closes L-217's provenance gap with it. **The maintainer's ruling of 2026-11-21:** `0.3.0` ships with the notice shown in the plan, the guide and the install page, and the file follows after the cut ([ADR 0031](../decisions/0031-speaker-labels.md), superseding note of that date).
 - **Owner:** `0.3.0`. **Issue:** none. **Status:** open. **Review:** pending.
 
 ### L-213

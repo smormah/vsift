@@ -80,6 +80,13 @@ models in the managed install when no flag names them. The attribution notice is
 and not installed as a file beside the models ([L-226](../planning/known-limits.md#l-226)); the archive provenance gap is
 [L-217](../planning/known-limits.md#l-217).
 
+**Superseding note of 2026-11-21 (decision 1, "ships this attribution notice with the models").** The maintainer accepted, for `0.3.0`, that
+the attribution notice is shown in the plan's `terms_notice`, in the guide's page for speaker labels and in the install page, and is
+**not** written as a file beside the models: the archives hold no licence file and the group has no release of VSift's own to
+carry one. A VSift-held, digest-pinned notice file installed with the group is planned after the `0.3.0` cut (its two
+routes are in L-226's next step). Until then L-226 stays open; the wording of this section that says the install "ships" the
+notice is to be read as "shows the notice with the offer".
+
 ### A speaker record per transcript revision, derived on every read
 
 - Transcript revisions stay immutable, and the stored transcript record keeps rejecting unknown
