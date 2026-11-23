@@ -18,7 +18,10 @@ use std::{
     io::{self, BufRead as _, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError},
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -73,6 +76,12 @@ impl Launch {
     }
 }
 
+/// Counts the scratch folders this test process has made, so that no two
+/// share a name: two tests in parallel threads can read the same Windows
+/// clock tick, as `create.rs`'s tests found on a hosted run (#595). It only
+/// numbers test folders; the crate's code never reads it.
+static SCRATCH_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 /// A folder under the temporary folder, removed when it drops. It is not
 /// canonicalised: the child's working folder is compared as given.
 struct Scratch(PathBuf);
@@ -80,8 +89,9 @@ struct Scratch(PathBuf);
 impl Scratch {
     fn new() -> TestResult<Self> {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let sequence = SCRATCH_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = env::temp_dir().join(format!(
-            "vsift-windows-security-detached-{}-{stamp}",
+            "vsift-windows-security-detached-{}-{stamp}-{sequence}",
             std::process::id()
         ));
         fs::create_dir(&path)?;
