@@ -54,7 +54,7 @@ defaults:
     shell: bash
 
 env:
-  NODE_VERSION: "22.23.3"
+  NODE_VERSION: "22.23.5"
   RAPIDOCR_VERSION: "3.10.0"
   ONNXRUNTIME_VERSION: "1.31.0"
 

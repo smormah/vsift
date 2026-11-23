@@ -2173,6 +2173,10 @@ nothing but Node.js. The Dockerfile is not part of the trial freeze (the freeze 
 and `Cargo.toml`, the scenarios, the cold and hold-out scenarios, the settings and the corpus truth), so no
 `freeze write` follows. Batch records that quote `v24.21.0` record what ran then and are not edited.
 
+## Note, 2026-11-23 (the Codex image's Node.js: 24.22.3, #526)
+
+Since 2026-11-23 the image's `node-fetch` stage downloads Node.js 24.22.3 (the security release of 2026-11-10, replacing 24.22.1) by the SHA-256 that nodejs.org publishes for `node-v24.22.3-linux-x64.tar.xz` in `SHASUMS256.txt`; the publish job moves to the same version, and the tarball still bundles npm 11.19.1. Nothing else about the image changes, and the Dockerfile is still outside the trial freeze, so no `freeze write` follows. Batch records that quote `v24.22.1` record what ran then and are not edited.
+
 ## Implementation note, 2026-11-04 (the hot fix `0.2.4`: the evidence on `0.2.4-rc.1` and the maintainer's decisions of the day)
 
 This note records decisions of the maintainer, made on 2026-11-04 and relayed to the records pull request by the coordinator, about the evidence on the first candidate of the hot fix `0.2.4`, `0.2.4-rc.1` (tag `v0.2.4-rc.1` at `d44d71532967` on `release/0.2.x`, published 2026-11-04 by Release run 41822398268); the evidence and the full texts are in [`release-0.2.4.md`](../planning/release-0.2.4.md) ("The evidence on 0.2.4-rc.1") and in the `decision` fields of the ledger. It is work record only, recorded by a pull request to `release/0.2.x`: no code, tool, workflow, schema, skill, grader, scenario, setting, `freeze.json` or public claim changed, and the claims rung is still `candidate`. The answers, as quoted:

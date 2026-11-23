@@ -94,7 +94,7 @@ defaults:
     shell: bash
 
 env:
-  NODE_VERSION: "22.23.4"
+  NODE_VERSION: "22.23.5"
 
 jobs:
   tooling-tests:

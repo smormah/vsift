@@ -2262,7 +2262,7 @@ it cannot be packaged for crates.io as it is.**
 
 **The npm qualification covers the minimum runtimes, one pnpm and one Yarn version, and Yarn only through a project install.**
 
-- **What:** the Release workflow's matrix runs Node.js 22.23.4 and Bun 1.2.23 (the
+- **What:** the Release workflow's matrix runs Node.js 22.23.5 and Bun 1.2.23 (the
   minimums of ADR 0023 decision H6), the npm Node.js ships, pnpm 12.8.1 and Yarn 4.18.1.
   Newer runtimes, older pnpm majors and Yarn 1 are not run. Yarn 4 has no global install,
   so Yarn is qualified through a project install and `yarn dlx`; the launcher-level
