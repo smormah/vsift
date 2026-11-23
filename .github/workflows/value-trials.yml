@@ -81,7 +81,7 @@ defaults:
     shell: bash
 
 env:
-  NODE_VERSION: "22.23.4"
+  NODE_VERSION: "22.23.5"
   # The client of the recorded medians (method section 9). Its npm package is
   # checked against the registry's advertised integrity; once a pilot has
   # recorded that value it is pinned here and a mismatch fails the job (L-251).

@@ -45,7 +45,7 @@
 #     (docs/planning/p06-ubuntu-artifact-candidate.md);
 #   - codex-cli 0.155.0-alpha.16, the official openai/codex Linux package, by
 #     size and the SHA-256 GitHub publishes for the release asset.
-#   - Node.js 24.22.1 (the published images only), the linux-x64 tarball, by the
+#   - Node.js 24.22.3 (the published images only), the linux-x64 tarball, by the
 #     SHA-256 nodejs.org publishes in SHASUMS256.txt (the version the release
 #     workflow publishes with).
 # The model is not in the image: the operator mounts the reviewed
@@ -223,8 +223,8 @@ LABEL org.opencontainers.image.title="vsift-codex-trials-harness" \
 # P14. Node.js, for npm and for the launcher: the official linux-x64 tarball of
 # the version the release workflow publishes with, by its published SHA-256.
 FROM build-base AS node-fetch
-ARG NODE_VERSION=24.22.1
-ARG NODE_SHA256=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
+ARG NODE_VERSION=24.22.3
+ARG NODE_SHA256=4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb
 RUN curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
       --max-filesize 80000000 --output /tmp/node.tar.xz \
       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
