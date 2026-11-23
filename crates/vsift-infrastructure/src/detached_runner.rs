@@ -20,14 +20,23 @@
 //!
 //! Its standard streams are connected to nothing and its working folder is
 //! the executable's own (#469): it holds no handle on the caller's console or
-//! folder.
+//! folder. On Windows that needs more than null streams: the standard library
+//! passes a new process every inheritable handle of its caller, so a runner
+//! started with it held the caller's output pipe when the caller's parent gave
+//! it one, and that parent waited for end-of-file until the transcription ended
+//! (L-229). The runner is therefore started by `vsift-windows-security`'s
+//! `start_detached` (ADR 0026, amendment of 2026-10-27), whose inheritance list
+//! holds only the runner's own null handle; this crate stays free of `unsafe`.
 
-use std::{
-    ffi::OsString,
-    io,
-    path::Path,
-    process::{Child, Command, ExitStatus, Stdio},
-};
+use std::{ffi::OsString, io, path::Path, process::ExitStatus};
+
+/// The started runner, as each platform holds it. Both answer `try_wait`,
+/// `kill` and `wait` as `std::process::Child` does.
+#[cfg(not(windows))]
+type RunnerProcess = std::process::Child;
+/// See the other platforms' alias.
+#[cfg(windows)]
+type RunnerProcess = vsift_windows_security::DetachedProcess;
 
 /// How far a started runner is detached from its caller.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,7 +70,7 @@ impl Detachment {
 /// it is reaped by the system once its caller has exited.
 #[derive(Debug)]
 pub struct DetachedRunner {
-    child: Child,
+    child: RunnerProcess,
     detachment: Detachment,
 }
 
@@ -106,58 +115,68 @@ pub fn launch_detached(
     arguments: &[OsString],
     working_directory: &Path,
 ) -> io::Result<DetachedRunner> {
-    let mut command = Command::new(executable);
-    command
+    platform_launch(executable, arguments, working_directory)
+}
+
+#[cfg(unix)]
+fn platform_launch(
+    executable: &Path,
+    arguments: &[OsString],
+    working_directory: &Path,
+) -> io::Result<DetachedRunner> {
+    use std::{
+        os::unix::process::CommandExt,
+        process::{Command, Stdio},
+    };
+
+    let child = Command::new(executable)
         .args(arguments)
         .current_dir(working_directory)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    platform_launch(command)
-}
-
-#[cfg(unix)]
-fn platform_launch(mut command: Command) -> io::Result<DetachedRunner> {
-    use std::os::unix::process::CommandExt;
-
-    command.process_group(0);
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()?;
     Ok(DetachedRunner {
-        child: command.spawn()?,
+        child,
         detachment: Detachment::ProcessGroup,
     })
 }
 
+/// The runner starts with a hidden console and a process group of its own,
+/// and inherits only its null standard streams (`start_detached`). It first
+/// asks to leave the caller's job object and, when the job forbids that,
+/// starts inside it (L-220).
 #[cfg(windows)]
-fn platform_launch(mut command: Command) -> io::Result<DetachedRunner> {
-    use std::os::windows::process::CommandExt;
-
-    use windows::Win32::System::Threading::{
-        CREATE_BREAKAWAY_FROM_JOB, CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW,
-    };
+fn platform_launch(
+    executable: &Path,
+    arguments: &[OsString],
+    working_directory: &Path,
+) -> io::Result<DetachedRunner> {
+    use vsift_windows_security::{CallersJob, start_detached};
 
     /// `ERROR_ACCESS_DENIED`: what starting a process fails with when the
     /// caller's job object does not allow it to leave.
     const ACCESS_DENIED: i32 = 5;
 
-    let own = CREATE_NO_WINDOW.0 | CREATE_NEW_PROCESS_GROUP.0;
-    command.creation_flags(own | CREATE_BREAKAWAY_FROM_JOB.0);
-    match command.spawn() {
+    match start_detached(executable, arguments, working_directory, CallersJob::Leave) {
         Ok(child) => Ok(DetachedRunner {
             child,
             detachment: Detachment::LeftCallersJob,
         }),
-        Err(error) if error.raw_os_error() == Some(ACCESS_DENIED) => {
-            command.creation_flags(own);
-            Ok(DetachedRunner {
-                child: command.spawn()?,
-                detachment: Detachment::InCallersJob,
-            })
-        }
+        Err(error) if error.raw_os_error() == Some(ACCESS_DENIED) => Ok(DetachedRunner {
+            child: start_detached(executable, arguments, working_directory, CallersJob::Stay)?,
+            detachment: Detachment::InCallersJob,
+        }),
         Err(error) => Err(error),
     }
 }
 
 #[cfg(not(any(unix, windows)))]
-fn platform_launch(_command: Command) -> io::Result<DetachedRunner> {
+fn platform_launch(
+    _executable: &Path,
+    _arguments: &[OsString],
+    _working_directory: &Path,
+) -> io::Result<DetachedRunner> {
     Err(io::ErrorKind::Unsupported.into())
 }

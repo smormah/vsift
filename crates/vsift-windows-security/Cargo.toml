@@ -1,6 +1,6 @@
 [package]
 name = "vsift-windows-security"
-description = "The one place VSift calls Windows directly: creating a directory with its private security descriptor at creation (ADR 0026)"
+description = "The one place VSift calls Windows directly: creating a directory with its private security descriptor, and starting the background runner with only the handles it may inherit (ADR 0026)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,8 +10,8 @@ repository.workspace = true
 homepage.workspace = true
 
 # Already in the lock (fs4, process-wrap, tokio and others resolve this exact
-# version); named directly for the three functions this crate calls. No new
-# crate.
+# version); named directly for the functions this crate calls (ADR 0026 and
+# its amendment of 2026-10-27). No new crate.
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 

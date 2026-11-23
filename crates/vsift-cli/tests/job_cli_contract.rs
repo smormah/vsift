@@ -20,8 +20,11 @@ use std::{
     io,
     num::NonZeroU16,
     path::{Path, PathBuf},
-    process::Output,
-    sync::atomic::{AtomicU64, Ordering},
+    process::{Output, Stdio},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -1537,5 +1540,108 @@ fn a_queued_job_start_takes_its_turn_in_the_background() -> TestResult {
         !root.sessions().join("job-queue").exists()
             || fs::read_dir(root.sessions().join("job-queue"))?.count() == 0
     );
+    Ok(())
+}
+
+/// Runs `vsift` as [`vsift`] does but as a caller that captures its output
+/// through pipes and reads them to their end, as an AI assistant runs a
+/// command, on a thread of its own: the channel hears the output once both
+/// pipes have closed.
+fn captured(root: &OwnedRoot, arguments: &[&str]) -> Built<mpsc::Receiver<io::Result<Output>>> {
+    let base = root.path("user");
+    let child = std::process::Command::new(Command::cargo_bin("vsift")?.get_program())
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .env("PATH", "")
+        .arg("--session-root")
+        .arg(root.sessions())
+        .args(arguments)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(child.wait_with_output());
+    });
+    Ok(receiver)
+}
+
+/// L-229 (fix F8, ADR 0026 amendment of 2026-10-27): a caller that captures
+/// the output of `job start --mode queued` hears the answer within seconds
+/// while the queued job's background runner waits behind a live job, because
+/// the runner inherits none of the caller's handles. Before the fix the runner
+/// held the caller's output pipe on Windows, so the caller waited until the
+/// runner ended. The job ahead is one the test process holds as its owner, so
+/// the runner waits until it is cancelled.
+#[test]
+fn a_captured_queued_job_start_answers_while_its_runner_waits() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let session = seed_session(&root)?;
+    let store = store(&root)?;
+    let ahead = vsift_application::prepare_spec(
+        &session,
+        vsift_domain::JobMode::Queued,
+        Some(range(0, 30 * SECOND)?),
+        None,
+    )?;
+    let (owner, created) = store.open_or_create(&ahead, now()?)?;
+    assert!(created);
+    store.enqueue_job(&session, &ahead.job_id, now()?.saturating_sub(3_600))?;
+
+    let answer = captured(
+        &root,
+        &[
+            "job",
+            "start",
+            session.as_str(),
+            "--mode",
+            "queued",
+            "--json",
+        ],
+    )?;
+    let Ok(output) = answer.recv_timeout(Duration::from_secs(30)) else {
+        // The runner waits for ever behind the live job: cancel the
+        // waiting job so that the runner ends and the pipes close.
+        let listed = json(&vsift(
+            &root,
+            &["session", "status", session.as_str(), "--json"],
+        )?)?;
+        if let Some(waiting) = listed["data"]["jobs"].as_array().and_then(|jobs| {
+            jobs.iter()
+                .filter_map(|job| job["job_id"].as_str())
+                .find(|job| *job != ahead.job_id.as_str())
+        }) {
+            let _ = vsift(&root, &["job", "cancel", waiting, "--json"]);
+            let _ = settled_status(&root, waiting);
+        }
+        let _ = answer.recv_timeout(Duration::from_secs(30));
+        return Err(
+            "the captured output of `job start` stayed open while its runner waited".into(),
+        );
+    };
+    let output = output?;
+    let started = start_result(&output)?;
+    let job = started["data"]["job"]["job_id"]
+        .as_str()
+        .ok_or("no job")?
+        .to_owned();
+    assert_ne!(job, ahead.job_id.as_str());
+    let status = job_result(
+        &vsift(&root, &["job", "status", &job, "--json"])?,
+        "job.status",
+    )?;
+    assert_eq!(status["data"]["state"], "queued", "{status}");
+    assert_eq!(status["data"]["live_owner"], true, "{status}");
+    assert_eq!(status["data"]["queue_position"], 1, "{status}");
+
+    job_result(
+        &vsift(&root, &["job", "cancel", &job, "--json"])?,
+        "job.cancel",
+    )?;
+    let ended = settled_status(&root, &job)?;
+    assert_eq!(ended["data"]["state"], "cancelled", "{ended}");
+    drop(owner);
     Ok(())
 }
