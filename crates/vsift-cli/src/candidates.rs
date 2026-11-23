@@ -76,6 +76,7 @@ fn presentation(results: &CandidatesResults) -> CandidatesPresentation<'_> {
         gaps: results.gaps(),
         omission: results.omission(),
         omitted: results.omitted(),
+        time_anchors: results.session().time_anchors(),
     }
 }
 

@@ -1,0 +1,43 @@
+{
+  "command": "handoff.skeleton",
+  "coverage": null,
+  "data": {
+    "fill": [
+      "/capabilities",
+      "/claims",
+      "/citations",
+      "/gaps",
+      "/untrusted_instructions",
+      "/status",
+      "/lifecycle"
+    ],
+    "handoff": {
+      "capabilities": {
+        "image_access": "unavailable",
+        "transcript_basis": "supplied_transcript"
+      },
+      "citations": [],
+      "claims": [],
+      "gaps": [],
+      "handoff_version": "1",
+      "lifecycle": {
+        "action": "left_open"
+      },
+      "question": "What does the dialog show after Save is pressed?",
+      "session": {
+        "revision_id": "trv_0123456789abcdef0123456789abcdef",
+        "session_id": "ses_0123456789abcdef0123456789abcdef",
+        "source_id": "src_sha256_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "status": "insufficient_evidence",
+      "untrusted_instructions": []
+    },
+    "handoff_version": "1"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

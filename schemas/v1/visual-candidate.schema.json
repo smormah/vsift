@@ -23,6 +23,10 @@
     "analysis"
   ],
   "properties": {
+    "clock_time": {
+      "description": "The candidate's real-world clock times (time anchoring, 0.3.0): start and end of its span, and at, its representative frame; absent when the session has no time anchor. See time-anchor.schema.json.",
+      "$ref": "time-anchor.schema.json#/$defs/clock_time"
+    },
     "candidate_id": {
       "description": "Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.",
       "type": "string",

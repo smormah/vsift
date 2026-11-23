@@ -473,6 +473,14 @@ struct Shared {
     open_job: Option<JobId>,
     /// Every part ever published, sealed or not, with its part number.
     part_history: Vec<(u32, TranscriptRevision)>,
+    /// The run's permit takes the root's whole capacity (Fable review C-3):
+    /// a part commit that asks for a unit of its own is refused `Busy`.
+    whole_share: bool,
+    /// Part commits that asked for a unit of their own.
+    ordinary_parts: usize,
+    /// The merge rules version the open revision reports, when not this
+    /// build's: as if an earlier `VSift` had published it.
+    open_merge_rules: Option<u32>,
 }
 
 impl Shared {
@@ -819,7 +827,9 @@ impl RevisionStore for MemoryStore {
             revision: revision.clone(),
             parts: std::num::NonZeroU32::new(u32::try_from(shared.parts.len()).unwrap_or(u32::MAX))
                 .ok_or(SessionStorageError::Io)?,
-            merge_rules: vsift_domain::MERGE_RULES_VERSION,
+            merge_rules: shared
+                .open_merge_rules
+                .unwrap_or(vsift_domain::MERGE_RULES_VERSION),
             job_id,
         }))
     }
@@ -834,8 +844,15 @@ impl RevisionStore for MemoryStore {
         part: std::num::NonZeroU32,
         first: usize,
         _now: u64,
+        admission: crate::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         let mut shared = self.lock()?;
+        if matches!(admission, crate::CommitAdmission::Ordinary) {
+            shared.ordinary_parts += 1;
+            if shared.whole_share {
+                return Err(SessionStorageError::Busy);
+            }
+        }
         if shared.generation() != expected.value() {
             return Err(SessionStorageError::StateConflict);
         }
@@ -1197,6 +1214,29 @@ async fn a_run_published_as_it_goes_seals_the_revision_a_sealed_run_makes() -> T
     Ok(())
 }
 
+/// Fable review C-3: a run whose permit takes the root's whole capacity
+/// (a foreground `transcript retranscribe` or `job resume` on a default root
+/// with four or more cores) publishes its parts as it goes, because each part
+/// is committed under the run's own permit and asks for no unit of its own.
+/// Before the fix every part asked for one, was refused `Busy` by the run's
+/// own reservation, and the refusal was swallowed: the revision appeared only
+/// at the seal.
+#[tokio::test]
+async fn a_whole_share_run_publishes_its_parts_under_its_own_permit() -> TestResult {
+    let harness = Harness::publishing()?;
+    harness.store.with(|shared| shared.whole_share = true)?;
+    let outcome = harness.request(None, None).await??;
+    let parts = harness.part_history()?;
+    assert!(!parts.is_empty(), "no part was published before the seal");
+    assert_parts_grow_into(&parts, &outcome.revision)?;
+    assert_eq!(
+        harness.store.with(|shared| shared.ordinary_parts)?,
+        0,
+        "a part asked for a unit beside the run's permit"
+    );
+    Ok(())
+}
+
 /// ADR 0033, D1: a job cancelled after it published parts keeps every
 /// published segment: its revision is sealed as stopped, and the job is
 /// cancelled.
@@ -1308,6 +1348,47 @@ async fn an_interrupted_run_stays_open_and_its_resume_continues_the_revision() -
     let parts = harness.part_history()?;
     assert!(parts.len() >= published);
     assert_parts_grow_into(&parts, &outcome.revision)?;
+    Ok(())
+}
+
+/// ADR 0033: what a run seals must begin with what it published. A run
+/// resumed over parts published under other merge rules cannot know that it
+/// settles them the same way, so it publishes nothing more, and at its end it
+/// **fails loudly** (`PublishedDiffers`, an integrity failure) and seals what
+/// was published as stopped, instead of sealing a revision silently. The
+/// settled cut (L-256) relies on this net: a cut that ever settled what the
+/// seal changes would fail here, not rewrite published text.
+#[tokio::test]
+async fn a_resume_over_parts_published_under_other_merge_rules_fails_loudly() -> TestResult {
+    let harness = Harness::publishing()?;
+    harness
+        .recognizer
+        .fault_at(3, Fault::Fails(SpeechRecognitionError::Io));
+    let resolved = harness.resolve(None)?;
+    let first = harness.run(&resolved, None).await;
+    assert!(first.is_err(), "{first:?}");
+    let job = resolved.spec.job_id.clone();
+    let open = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(open.state(), vsift_domain::RevisionState::Open);
+    assert!(!open.segments().is_empty(), "nothing was published");
+
+    harness.store.with(|shared| {
+        shared.open_merge_rules = Some(vsift_domain::MERGE_RULES_VERSION + 1);
+    })?;
+    harness.recognizer.clear();
+    let resumed = harness.resolve(None)?;
+    let outcome = harness.run(&resumed, None).await;
+    assert_eq!(
+        outcome,
+        Err(JobRunError::PublishedDiffers { job: job.clone() })
+    );
+    assert_eq!(harness.record(&job)?.state, JobState::Failed);
+    let sealed = harness.newest()?.ok_or("no revision")?;
+    assert_eq!(sealed.state(), vsift_domain::RevisionState::Stopped);
+    assert_eq!(
+        sealed.segments().get(..open.segments().len()),
+        Some(open.segments())
+    );
     Ok(())
 }
 
@@ -2056,7 +2137,9 @@ impl Harness {
 #[tokio::test]
 async fn a_bounded_admission_wait_polls_until_the_capacity_frees() -> TestResult {
     let harness = Harness::new()?;
-    harness.store.with(|shared| shared.busy_admissions = 3)?;
+    // Each round asks twice: the attempt, and the one more once no queued
+    // work is found to hold the capacity (the window of ADR 0033 section 6).
+    harness.store.with(|shared| shared.busy_admissions = 6)?;
     let waits = WaitRecorder::default();
     let budget = AdmissionBudget::new(Duration::from_secs(5))?;
     let committed = harness
@@ -2076,7 +2159,7 @@ async fn a_bounded_admission_wait_polls_until_the_capacity_frees() -> TestResult
         harness
             .store
             .with(|shared| shared.admitted_weights.clone())?,
-        vec![4, 4, 4, 4]
+        vec![4; 7]
     );
     Ok(())
 }
@@ -2164,6 +2247,66 @@ async fn an_ordinary_run_says_it_waits_for_queued_work() -> TestResult {
     assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
     assert_eq!(waits.capacity.load(Ordering::SeqCst), 0);
     assert_eq!(harness.store.with(|shared| shared.demands)?, 1);
+    Ok(())
+}
+
+/// ADR 0033 section 6, the window at the first look: the capacity is found
+/// taken, and queued work gives it back before the run is told who held it
+/// (the script: the first admission is busy, no queued work is found). The run
+/// asks for the capacity once more and is admitted at once, with no wait and
+/// no retry. Before the fix it was refused and left to the retry policy's
+/// 100 ms backoff.
+#[tokio::test]
+async fn queued_work_that_yielded_before_the_first_look_admits_the_run_at_once() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| shared.busy_admissions = 1)?;
+    let waits = QueuedWaitRecorder::default();
+    let committed = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    assert_eq!(harness.timer.sleeps(), Vec::<Duration>::new());
+    assert_eq!(committed.report.admission_wait, Duration::ZERO);
+    assert_eq!(
+        harness.store.with(|shared| shared.admitted_weights.len())?,
+        2
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+/// The same window inside the wait: queued work holds when the run first
+/// asks and demands the capacity, a poll finds it taken, and queued work has
+/// given it back by the time the run is told who holds it. The run asks once
+/// more and is admitted after the one poll. Before the fix it was refused and
+/// left to the retry policy's 100 ms backoff.
+#[tokio::test]
+async fn queued_work_that_yielded_after_a_poll_admits_the_run_at_once() -> TestResult {
+    let harness = Harness::new()?;
+    harness.store.with(|shared| {
+        // The first admission and the poll's are busy, the one more is not.
+        shared.busy_admissions = 2;
+        // Queued work holds at the demand, and has gone at the look after the poll.
+        shared.queued_holds = [true, false].into();
+    })?;
+    let waits = QueuedWaitRecorder::default();
+    let committed = harness
+        .run_admitted(AdmissionWait::Immediate, &waits)
+        .await??;
+    assert_eq!(committed.revision.number(), 1);
+    assert_eq!(
+        harness.timer.sleeps(),
+        vec![vsift_domain::QUEUED_YIELD_POLL]
+    );
+    assert_eq!(
+        committed.report.admission_wait,
+        vsift_domain::QUEUED_YIELD_POLL
+    );
+    assert_eq!(
+        harness.store.with(|shared| shared.admitted_weights.len())?,
+        3
+    );
+    assert_eq!(waits.queued.load(Ordering::SeqCst), 1);
     Ok(())
 }
 
@@ -2283,7 +2426,9 @@ async fn an_immediate_admission_keeps_the_bounded_retries() -> TestResult {
 async fn busy_contention_is_retried_twice_then_left_resumable() -> TestResult {
     let harness = Harness::new()?;
     harness.store.with(|shared| {
-        shared.busy_admissions = 1;
+        // The attempt and the one more it makes (ADR 0033 section 6) are both
+        // busy, so the first attempt is refused and retried.
+        shared.busy_admissions = 2;
         shared
             .publish_faults
             .push_back(PublishFault::Refuses(SessionStorageError::Busy));
@@ -2669,7 +2814,7 @@ async fn most_chunks_unusable_end_the_job_at_the_first_failure() -> TestResult {
         })
     );
     // `job status` therefore says it failed, not that it can be resumed.
-    let resumability = super::Resumability::of(JobState::Failed, JobLiveness::Unowned, true);
+    let resumability = super::Resumability::of(JobState::Failed, JobLiveness::Unowned, true, 1);
     assert!(!resumability.resumable());
 
     // The same request, run again, starts a new epoch from nothing.
@@ -3020,6 +3165,7 @@ impl RevisionStore for SlowStore<'_> {
         part: std::num::NonZeroU32,
         first: usize,
         now: u64,
+        admission: crate::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         self.0.publish_part(
             session_id,
@@ -3030,6 +3176,7 @@ impl RevisionStore for SlowStore<'_> {
             part,
             first,
             now,
+            admission,
         )
     }
 

@@ -209,6 +209,7 @@
               "non-english-or-accented",
               "leading-silence",
               "lecture-or-meeting",
+              "two-or-three-speakers",
               "vertical-variable-frame-rate"
             ]
           }

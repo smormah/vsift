@@ -1,0 +1,463 @@
+//! `watch`, from `vsift <video>`, through the v1 contract (ADR 0037 section
+//! 9): the result validates against the published schema, the frozen example
+//! is what the code gives, the schema refuses what the action never reports
+//! (a hash on the folder, a partial run called complete, more frames than the
+//! bound of 180), and a partial run's envelope is `partial`, with coverage
+//! naming each gap (the planner's ruling on the Fable 0.3.0 review, P-2).
+
+use std::{fs, io, path::PathBuf};
+
+use jsonschema::{Retrieve, Uri};
+use serde_json::Value;
+use vsift_contract::{
+    WATCH_BEYOND_BOUND_REASON, WATCH_FRAMES_SKIPPED_REASON, WATCH_FRAMES_STOPPED_REASON,
+    WATCH_NOT_KEPT_REASON, WATCH_NOT_KEPT_WARNING, WatchCompleteness, WatchData, WatchFailureData,
+    WatchFrameData, WatchFrameGaps, WatchKeptData, WatchKeptState, WatchOutputData,
+    WatchOutputsData, WatchRangeData, watch_response,
+};
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+type Built<T> = Result<T, Box<dyn std::error::Error>>;
+
+const SCHEMA_BASE: &str = "https://vsift.dev/schemas/v1/";
+const SCHEMA: &str = "watch-data.schema.json";
+const EXAMPLE: &str = "examples/watch.json";
+const SECOND: u64 = 1_000_000;
+const VIDEO_SHA256: &str = "3f9a0c5d1e7b2a4c6f8e0d2b4a6c8e0f1a3b5c7d9e1f2a4b6c8d0e2f4a6be21c";
+const FOLDER: &str = "/home/example/videos";
+
+fn repository(relative: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(relative)
+}
+
+fn load(relative_path: &str) -> Built<Value> {
+    Ok(serde_json::from_str(&fs::read_to_string(
+        repository("schemas/v1").join(relative_path),
+    )?)?)
+}
+
+struct PublishedSchemas;
+
+impl Retrieve for PublishedSchemas {
+    fn retrieve(
+        &self,
+        uri: &Uri<String>,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let name = uri
+            .as_str()
+            .strip_prefix(SCHEMA_BASE)
+            .filter(|name| !name.contains(['/', '\\']))
+            .ok_or_else(|| format!("unpublished schema reference: {uri}"))?;
+        Ok(serde_json::from_str(&fs::read_to_string(
+            repository("schemas/v1").join(name),
+        )?)?)
+    }
+}
+
+fn validate(schema_path: &str, instance: &Value) -> TestResult {
+    let schema = load(schema_path)?;
+    jsonschema::options()
+        .with_retriever(PublishedSchemas)
+        .build(&schema)?
+        .validate(instance)
+        .map_err(|error| io::Error::other(format!("{schema_path}: {error}")))?;
+    Ok(())
+}
+
+/// Rewrites the example from `value` when `VSIFT_REGENERATE_CONTRACT_EXAMPLES`
+/// is `1`, as the other contract tests do; review the diff.
+fn regenerate(relative_path: &str, value: &Value) -> TestResult {
+    if std::env::var("VSIFT_REGENERATE_CONTRACT_EXAMPLES").is_ok_and(|setting| setting == "1") {
+        fs::write(
+            repository("schemas/v1").join(relative_path),
+            format!("{}\n", serde_json::to_string_pretty(value)?),
+        )?;
+    }
+    Ok(())
+}
+
+/// `relative` is the output's path from the video's folder; its name is the
+/// last part, as `WatchOutputData::new` gives it.
+fn file(relative: &str, sha256: Option<&str>) -> WatchOutputData {
+    WatchOutputData {
+        path: format!("{FOLDER}/{relative}"),
+        name: relative.rsplit('/').next().unwrap_or(relative).to_owned(),
+        sha256: sha256.map(str::to_owned),
+    }
+}
+
+fn frame(seconds: u64, millis: u64, suffix: &str, sha256: &str) -> WatchFrameData {
+    let hours = seconds / 3_600;
+    let minutes = seconds / 60 % 60;
+    let rest = seconds % 60;
+    WatchFrameData {
+        time_us: seconds * SECOND + millis * 1_000,
+        candidate_id: format!("vcd_7f20c4{suffix}"),
+        evidence_id: format!("evd_c19a3b{suffix}"),
+        path: format!("{FOLDER}/meeting-vsift/{hours:02}-{minutes:02}-{rest:02}.{millis:03}.png"),
+        sha256: sha256.to_owned(),
+    }
+}
+
+/// A 48-minute meeting, watched once: every output, the run's ids and every
+/// hash, with half a minute the speech tool did not transcribe.
+fn meeting() -> WatchData {
+    WatchData {
+        source_id: format!("src_sha256_{VIDEO_SHA256}"),
+        session_id: "ses_51d2a70123456789abcdef0123456789".to_owned(),
+        session_closed: true,
+        job_id: "job_0123456789abcdef0123456789abcdef".to_owned(),
+        duration_us: 2_880 * SECOND,
+        transcript_revision_id: Some("trv_8c41f00123456789abcdef0123456789".to_owned()),
+        visual_index_revision_id: Some("vix_02b7e10123456789abcdef0123456789".to_owned()),
+        outcome: WatchCompleteness::Partial,
+        not_transcribed: vec![WatchRangeData {
+            from_us: 720 * SECOND,
+            to_us: 750 * SECOND,
+        }],
+        screen_changes_beyond_bound: false,
+        frames_stopped_for_room: false,
+        frames_skipped_for_capacity: 0,
+        names_shortened: false,
+        outputs: WatchOutputsData {
+            transcript: file(
+                "meeting.txt",
+                Some("5b0e7c2f9a1d3e5b7c9f1a3d5e7b9c1f3a5d7e9b1c3f5a7d9e1b3c5f7a9d1e3b"),
+            ),
+            subtitles: Some(file(
+                "meeting.srt",
+                Some("0c2e4a6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d8f0a2c"),
+            )),
+            folder: file("meeting-vsift", None),
+            screen_changes: file(
+                "meeting-vsift/screen-changes.txt",
+                Some("e1d3c5b7a9f1e3d5c7b9a1f3e5d7c9b1a3f5e7d9c1b3a5f7e9d1c3b5a7f9e1d3"),
+            ),
+        },
+        changes_found: 2,
+        changes_listed: 2,
+        frames: vec![
+            frame(
+                72,
+                480,
+                "0123456789abcdef0123456789",
+                "9b1f2e0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            ),
+            frame(
+                295,
+                40,
+                "fedcba9876543210fedcba9876",
+                "41c0a90123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            ),
+        ],
+        kept: Some(kept(WatchKeptState::Kept, None)),
+    }
+}
+
+fn kept(state: WatchKeptState, failure_code: Option<&str>) -> WatchKeptData {
+    WatchKeptData {
+        state,
+        path: "/home/example/kept-calls/meeting".to_owned(),
+        name: "meeting".to_owned(),
+        failure_code: failure_code.map(str::to_owned),
+    }
+}
+
+fn response(data: &WatchData) -> Built<Value> {
+    Ok(serde_json::to_value(watch_response(data)?)?)
+}
+
+/// The data of a run with no gap.
+fn whole_meeting() -> WatchData {
+    let mut data = meeting();
+    data.not_transcribed.clear();
+    data.outcome = WatchCompleteness::Complete;
+    data
+}
+
+/// The completeness the shared rule gives `data`'s facts.
+fn completeness(data: &WatchData) -> WatchCompleteness {
+    WatchCompleteness::of(
+        &data.not_transcribed,
+        data.screen_changes_beyond_bound,
+        WatchFrameGaps {
+            stopped_for_room: data.frames_stopped_for_room,
+            skipped_for_capacity: data.frames_skipped_for_capacity,
+        },
+        data.kept.as_ref(),
+    )
+}
+
+/// The result of a run validates, is the frozen example, and names the
+/// command `watch` (the bare `vsift <video>` included).
+#[test]
+fn a_watch_result_is_the_published_example() -> TestResult {
+    let response = response(&meeting())?;
+    validate("operation-response.schema.json", &response)?;
+    validate(SCHEMA, &response["data"])?;
+    regenerate(EXAMPLE, &response)?;
+    assert_eq!(response, load(EXAMPLE)?);
+    assert_eq!(response["command"], "watch");
+    assert_eq!(response["status"], "partial");
+    assert_eq!(response["data"]["outcome"], "partial");
+    assert_eq!(
+        response["coverage"],
+        serde_json::json!({
+            "truncated": true,
+            "gaps": ["720000000-750000000"],
+            "reasons": ["untranscribed_range"],
+        })
+    );
+    Ok(())
+}
+
+/// A run with no gap is `complete`, with coverage that is not truncated.
+#[test]
+fn a_whole_run_is_complete() -> TestResult {
+    let data = whole_meeting();
+    assert_eq!(completeness(&data), WatchCompleteness::Complete);
+    let response = response(&data)?;
+    validate("operation-response.schema.json", &response)?;
+    validate(SCHEMA, &response["data"])?;
+    assert_eq!(response["status"], "complete");
+    assert_eq!(
+        response["coverage"],
+        serde_json::json!({"truncated": false, "gaps": [], "reasons": []})
+    );
+    Ok(())
+}
+
+/// Each partial case of the planner's ruling (and C-2's frames skipped
+/// while the computer was busy) answers
+/// `status: partial`, with its own reason, and `data.outcome` agrees: a
+/// reader that follows the exit rule alone never takes a gap for a whole run.
+#[test]
+fn every_partial_case_answers_a_partial_envelope() -> TestResult {
+    let mut beyond = whole_meeting();
+    beyond.screen_changes_beyond_bound = true;
+    let mut stopped = whole_meeting();
+    stopped.frames_stopped_for_room = true;
+    let mut skipped = whole_meeting();
+    skipped.frames_skipped_for_capacity = 3;
+    let mut not_kept = whole_meeting();
+    not_kept.session_closed = false;
+    not_kept.kept = Some(kept(WatchKeptState::NotKept, Some("STORAGE_IO")));
+    for (mut data, reason) in [
+        (meeting(), "untranscribed_range"),
+        (beyond, WATCH_BEYOND_BOUND_REASON),
+        (stopped, WATCH_FRAMES_STOPPED_REASON),
+        (skipped, WATCH_FRAMES_SKIPPED_REASON),
+        (not_kept, WATCH_NOT_KEPT_REASON),
+    ] {
+        data.outcome = completeness(&data);
+        let response = response(&data)?;
+        validate("operation-response.schema.json", &response)?;
+        validate(SCHEMA, &response["data"])?;
+        assert_eq!(response["status"], "partial", "{reason}");
+        assert_eq!(response["data"]["outcome"], "partial", "{reason}");
+        assert_eq!(response["coverage"]["truncated"], true, "{reason}");
+        assert_eq!(
+            response["coverage"]["reasons"],
+            serde_json::json!([reason]),
+            "{reason}"
+        );
+    }
+    Ok(())
+}
+
+/// More than 100 ranges not transcribed: the envelope lists the first 100
+/// and says the list was cut, as `search` does; `data` keeps them all.
+#[test]
+fn a_long_gap_list_is_cut_in_the_envelope_only() -> TestResult {
+    let mut data = meeting();
+    data.not_transcribed = (0..101)
+        .map(|index| WatchRangeData {
+            from_us: index * 2 * SECOND,
+            to_us: (index * 2 + 1) * SECOND,
+        })
+        .collect();
+    let response = response(&data)?;
+    validate("operation-response.schema.json", &response)?;
+    assert_eq!(
+        response["coverage"]["gaps"].as_array().map(Vec::len),
+        Some(100)
+    );
+    assert_eq!(
+        response["coverage"]["reasons"],
+        serde_json::json!(["untranscribed_range", "gap_list_truncated"])
+    );
+    assert_eq!(
+        response["data"]["not_transcribed"].as_array().map(Vec::len),
+        Some(101)
+    );
+    Ok(())
+}
+
+/// A video with no sound track has no subtitles and no transcript revision,
+/// and its result still validates.
+#[test]
+fn a_silent_video_has_no_subtitles_or_revision() -> TestResult {
+    let mut data = meeting();
+    data.outputs.subtitles = None;
+    data.transcript_revision_id = None;
+    data.not_transcribed.clear();
+    data.outcome = WatchCompleteness::Complete;
+    let response = response(&data)?;
+    validate(SCHEMA, &response["data"])?;
+    assert_eq!(response["data"]["outputs"]["subtitles"], Value::Null);
+    Ok(())
+}
+
+/// Without `--keep`, `kept` is null.
+#[test]
+fn without_the_option_nothing_is_kept() -> TestResult {
+    let mut data = meeting();
+    data.kept = None;
+    let response = response(&data)?;
+    validate(SCHEMA, &response["data"])?;
+    assert_eq!(response["data"]["kept"], Value::Null);
+    Ok(())
+}
+
+/// A bundle that could not be written: the envelope is `partial`, with the
+/// reason `not_kept`, and a warning gives the command that still exports the
+/// session.
+#[test]
+fn a_bundle_that_could_not_be_written_is_partial_with_a_warning() -> TestResult {
+    let mut data = meeting();
+    data.not_transcribed.clear();
+    data.session_closed = false;
+    data.kept = Some(kept(WatchKeptState::NotKept, Some("STORAGE_IO")));
+    let unmarked = response(&data)?;
+    assert!(
+        validate(SCHEMA, &unmarked["data"]).is_ok(),
+        "the example's outcome is already partial"
+    );
+    validate("operation-response.schema.json", &unmarked)?;
+    assert_eq!(unmarked["status"], "partial");
+    assert_eq!(
+        unmarked["coverage"]["reasons"],
+        serde_json::json!(["not_kept"])
+    );
+    assert_eq!(unmarked["data"]["kept"]["state"], "not_kept");
+    assert_eq!(
+        unmarked["warnings"],
+        serde_json::json!([WATCH_NOT_KEPT_WARNING])
+    );
+    // A run that kept its bundle has no warning.
+    assert_eq!(response(&meeting())?["warnings"], serde_json::json!([]));
+
+    // A failed bundle is never reported as a finished run, or a closed session.
+    let mut broken = unmarked["data"].clone();
+    broken["outcome"] = Value::from("complete");
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = unmarked["data"].clone();
+    broken["session_closed"] = Value::Bool(true);
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // The code goes with the state.
+    let mut broken = unmarked["data"].clone();
+    broken["kept"]["failure_code"] = Value::Null;
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = response(&meeting())?["data"].clone();
+    broken["kept"]["failure_code"] = Value::from("STORAGE_IO");
+    assert!(validate(SCHEMA, &broken).is_err());
+    Ok(())
+}
+
+/// A failure after the job sealed, with `--keep`, says what became of the
+/// bundle.
+#[test]
+fn a_failure_after_the_seal_says_what_became_of_the_bundle() -> TestResult {
+    const FAILURE: &str = "watch-failure-data.schema.json";
+    let written = serde_json::to_value(WatchFailureData {
+        session_id: "ses_51d2a70123456789abcdef0123456789".to_owned(),
+        session_closed: true,
+        kept: kept(WatchKeptState::Kept, None),
+    })?;
+    validate(FAILURE, &written)?;
+    let not_written = serde_json::to_value(WatchFailureData {
+        session_id: "ses_51d2a70123456789abcdef0123456789".to_owned(),
+        session_closed: false,
+        kept: kept(WatchKeptState::NotKept, Some("STORAGE_IO")),
+    })?;
+    validate(FAILURE, &not_written)?;
+    let mut broken = not_written;
+    broken["session_closed"] = Value::Bool(true);
+    assert!(
+        validate(FAILURE, &broken).is_err(),
+        "a session is never closed when its bundle failed"
+    );
+    Ok(())
+}
+
+/// The schema refuses what the action never reports.
+#[test]
+fn the_schema_refuses_what_watch_never_reports() -> TestResult {
+    let valid = response(&meeting())?["data"].clone();
+    validate(SCHEMA, &valid)?;
+
+    // The folder has no hash; a file always has one.
+    let mut broken = valid.clone();
+    broken["outputs"]["folder"]["sha256"] = Value::from(VIDEO_SHA256);
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = valid.clone();
+    broken["outputs"]["transcript"]["sha256"] = Value::Null;
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // A hash is 64 lowercase hexadecimal characters.
+    let mut broken = valid.clone();
+    broken["frames"][0]["sha256"] = Value::from(VIDEO_SHA256.to_uppercase());
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // A run with a gap, or past the four-hour bound, is never complete.
+    let mut broken = valid.clone();
+    broken["outcome"] = Value::from("complete");
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = valid.clone();
+    broken["not_transcribed"] = serde_json::json!([]);
+    broken["screen_changes_beyond_bound"] = Value::Bool(true);
+    broken["outcome"] = Value::from("complete");
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // Frames that stopped for room make the run partial.
+    let mut broken = valid.clone();
+    broken["not_transcribed"] = serde_json::json!([]);
+    broken["outcome"] = Value::from("complete");
+    validate(SCHEMA, &broken)?;
+    broken["frames_stopped_for_room"] = Value::Bool(true);
+    assert!(validate(SCHEMA, &broken).is_err());
+    broken["outcome"] = Value::from("partial");
+    validate(SCHEMA, &broken)?;
+
+    // Frames skipped while the computer was busy make the run partial
+    // (Fable review C-2), and the count is never negative.
+    let mut broken = valid.clone();
+    broken["not_transcribed"] = serde_json::json!([]);
+    broken["outcome"] = Value::from("complete");
+    broken["frames_skipped_for_capacity"] = Value::from(2);
+    assert!(validate(SCHEMA, &broken).is_err());
+    broken["outcome"] = Value::from("partial");
+    validate(SCHEMA, &broken)?;
+    broken["frames_skipped_for_capacity"] = Value::from(-1);
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // At most 180 frames (known limit L-234).
+    let mut broken = valid.clone();
+    let one = valid["frames"][0].clone();
+    broken["frames"] = Value::Array(vec![one; 181]);
+    assert!(validate(SCHEMA, &broken).is_err());
+
+    // No member is optional, and none is added.
+    let mut broken = valid.clone();
+    if let Some(members) = broken.as_object_mut() {
+        members.remove("session_closed");
+    }
+    assert!(validate(SCHEMA, &broken).is_err());
+    let mut broken = valid;
+    broken["model"] = Value::from("base.en");
+    assert!(validate(SCHEMA, &broken).is_err());
+    Ok(())
+}

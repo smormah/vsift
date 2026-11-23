@@ -7,8 +7,10 @@
 /// word. It is public API: consumers dispatch on it, and the published schemas
 /// constrain it with a pattern that every listed identifier must satisfy.
 ///
-/// Reserved operations are listed too, because a host still answers them with a
-/// schema-valid `COMMAND_NOT_IMPLEMENTED` failure that carries their identifier.
+/// Every listed operation is implemented. A reserved one, should a later
+/// release name one before it builds it, is listed too, because a host
+/// answers it with a schema-valid `COMMAND_NOT_IMPLEMENTED` failure that
+/// carries its identifier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommandName {
     /// Arguments could not be parsed into any operation.
@@ -17,15 +19,15 @@ pub enum CommandName {
     SetupCheck,
     /// `setup plan`.
     SetupPlan,
-    /// `setup install` (reserved).
+    /// `setup install`.
     SetupInstall,
-    /// `setup repair` (reserved).
+    /// `setup repair`.
     SetupRepair,
-    /// `setup list` (reserved).
+    /// `setup list`.
     SetupList,
-    /// `setup remove` (reserved).
+    /// `setup remove`.
     SetupRemove,
-    /// `setup rollback` (reserved).
+    /// `setup rollback`.
     SetupRollback,
     /// `setup configure`.
     SetupConfigure,
@@ -65,9 +67,11 @@ pub enum CommandName {
     Crop,
     /// `bundle validate`.
     BundleValidate,
-    /// `job run` (reserved).
+    /// `bundle search` (ADR 0035): one question over retained bundles.
+    BundleSearch,
+    /// `job run`.
     JobRun,
-    /// `job batch` (reserved).
+    /// `job batch`.
     JobBatch,
     /// `job status`.
     JobStatus,
@@ -78,6 +82,10 @@ pub enum CommandName {
     /// `job start` (0.3.0, ADR 0033): prepare a session as one job, in the
     /// foreground or in the background.
     JobStart,
+    /// Plain `setup`, the setup door for a person (ADR 0036, since `0.3.0`).
+    Setup,
+    /// `vsift <video>`, explicitly `vsift watch <video>` (ADR 0037).
+    Watch,
     /// `session init-workspace` (P11): create a worker workspace with an
     /// operator policy.
     SessionInitWorkspace,
@@ -88,6 +96,30 @@ pub enum CommandName {
     Ocr,
     /// `ocr search` (ADR 0030 decision 13): page the on-screen hits of one session.
     OcrSearch,
+    /// `handoff skeleton` (ADR 0038): a valid handoff that states nothing
+    /// yet, with the session's identities filled in.
+    HandoffSkeleton,
+    /// `skill install` (ADR 0038): copy the shipped skill into the folders
+    /// AI coding clients read.
+    SkillInstall,
+    /// `skill status` (ADR 0038): what is at each skill folder.
+    SkillStatus,
+    /// `skill show` (ADR 0038): print one text file of the shipped skill.
+    SkillShow,
+    /// `clocks` (ADR 0029, stage 2): find the clocks on a session's screen.
+    Clocks,
+    /// `changes` (ADR 0034): what changed on screen between two times, with
+    /// the exact frames before and after each change.
+    Changes,
+    /// `handoff finish` (0.3.0, M5b): check a draft with the session's
+    /// records and, only when it passes, make at most one write.
+    HandoffFinish,
+    /// `transcript speakers` (ADR 0031): label a transcript revision's segments by
+    /// voice with the speaker-diarization engine.
+    TranscriptSpeakers,
+    /// `transcript name-speaker` (ADR 0031): record or clear the user's verified name
+    /// for a speaker label.
+    TranscriptNameSpeaker,
 }
 
 impl CommandName {
@@ -96,7 +128,7 @@ impl CommandName {
     /// Contract tests iterate this list to prove each identifier satisfies the
     /// published schemas. An exhaustive private `ordinal` match and a
     /// compile-time assertion keep it in step with the variants.
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 49] = [
         Self::Parse,
         Self::SetupCheck,
         Self::SetupPlan,
@@ -134,6 +166,18 @@ impl CommandName {
         Self::Ocr,
         Self::OcrSearch,
         Self::JobStart,
+        Self::Setup,
+        Self::Watch,
+        Self::HandoffSkeleton,
+        Self::SkillInstall,
+        Self::SkillStatus,
+        Self::SkillShow,
+        Self::BundleSearch,
+        Self::Clocks,
+        Self::Changes,
+        Self::HandoffFinish,
+        Self::TranscriptSpeakers,
+        Self::TranscriptNameSpeaker,
     ];
 
     /// Returns the stable identifier written to the envelope's `command` field.
@@ -167,6 +211,7 @@ impl CommandName {
             Self::Audio => "audio",
             Self::Crop => "crop",
             Self::BundleValidate => "bundle.validate",
+            Self::BundleSearch => "bundle.search",
             Self::JobRun => "job.run",
             Self::JobBatch => "job.batch",
             Self::JobStatus => "job.status",
@@ -174,9 +219,20 @@ impl CommandName {
             Self::JobCancel => "job.cancel",
             Self::SessionInitWorkspace => "session.init-workspace",
             Self::HandoffCheck => "handoff.check",
+            Self::HandoffSkeleton => "handoff.skeleton",
+            Self::HandoffFinish => "handoff.finish",
+            Self::SkillInstall => "skill.install",
+            Self::SkillStatus => "skill.status",
+            Self::SkillShow => "skill.show",
+            Self::Clocks => "clocks",
+            Self::Changes => "changes",
             Self::Ocr => "ocr",
             Self::OcrSearch => "ocr.search",
             Self::JobStart => "job.start",
+            Self::Setup => "setup",
+            Self::Watch => "watch",
+            Self::TranscriptSpeakers => "transcript.speakers",
+            Self::TranscriptNameSpeaker => "transcript.name-speaker",
         }
     }
 
@@ -227,6 +283,18 @@ impl CommandName {
             Self::Ocr => 34,
             Self::OcrSearch => 35,
             Self::JobStart => 36,
+            Self::Setup => 37,
+            Self::Watch => 38,
+            Self::HandoffSkeleton => 39,
+            Self::SkillInstall => 40,
+            Self::SkillStatus => 41,
+            Self::SkillShow => 42,
+            Self::BundleSearch => 43,
+            Self::Clocks => 44,
+            Self::Changes => 45,
+            Self::HandoffFinish => 46,
+            Self::TranscriptSpeakers => 47,
+            Self::TranscriptNameSpeaker => 48,
         }
     }
 }

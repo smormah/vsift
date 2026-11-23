@@ -153,6 +153,12 @@ where
             .map_err(OutputError::Io)
     }
 
+    /// Flushes standard output, so a question is on the screen before the
+    /// answer is read.
+    pub(crate) fn flush_stdout(&mut self) -> Result<(), OutputError> {
+        self.standard_output.flush().map_err(OutputError::Io)
+    }
+
     /// Writes a human failure built by the `TerminalText` builder to
     /// stderr, best effort: a closed stderr never fails a command.
     pub(crate) fn write_rendered_stderr(&mut self, text: &RenderedText) {
@@ -168,11 +174,81 @@ where
             .and_then(|()| self.standard_error.flush());
     }
 
+    /// Draws the setup door's progress lines (ADR 0036 section 5) on
+    /// standard output in place of the `previous` lines drawn before: the
+    /// cursor goes back to the first of them, and each line is erased and
+    /// written again. Best effort. The lines are built from fixed words and
+    /// figures only.
+    pub(crate) fn write_live_block(&mut self, lines: &[String], previous: usize) {
+        let mut block = String::new();
+        if previous > 0 {
+            block.push_str("\x1b[");
+            block.push_str(&previous.to_string());
+            block.push('F');
+        }
+        for line in lines {
+            block.push_str("\x1b[2K");
+            block.push_str(&terminal_safe_text(line, MAX_DIAGNOSTIC_BYTES));
+            block.push('\n');
+        }
+        let _ignored = self
+            .standard_output
+            .write_all(block.as_bytes())
+            .and_then(|()| self.standard_output.flush());
+    }
+
+    /// Erases the `previous` progress lines before the results are written.
+    pub(crate) fn clear_live_block(&mut self, previous: usize) {
+        if previous == 0 {
+            return;
+        }
+        let _ignored = write!(self.standard_output, "\x1b[{previous}F\x1b[J")
+            .and_then(|()| self.standard_output.flush());
+    }
+
     /// Clears the live progress line before the result is written.
     pub(crate) fn clear_live_line(&mut self) {
         let _ignored = self
             .standard_error
             .write_all(b"\r\x1b[K")
+            .and_then(|()| self.standard_error.flush());
+    }
+
+    /// Draws the live view of `vsift <video>` (ADR 0037 section 9) on
+    /// standard error in place of the `previous` lines drawn before: the
+    /// cursor goes back to the first of them, each line is erased and
+    /// written again, and whatever the old view had below the new one is
+    /// erased. Best effort. The text was built by the `TerminalText`
+    /// builder, so its only escape sequences are its own status colours.
+    /// Returns how many lines are on the screen now.
+    pub(crate) fn write_error_block(&mut self, text: &RenderedText, previous: usize) -> usize {
+        let mut block = String::with_capacity(text.as_str().len() + 64);
+        if previous > 0 {
+            block.push_str("\x1b[");
+            block.push_str(&previous.to_string());
+            block.push('F');
+        }
+        let mut lines = 0_usize;
+        for line in text.as_str().split_inclusive('\n') {
+            block.push_str("\x1b[2K");
+            block.push_str(line);
+            lines += 1;
+        }
+        block.push_str("\x1b[J");
+        let _ignored = self
+            .standard_error
+            .write_all(block.as_bytes())
+            .and_then(|()| self.standard_error.flush());
+        lines
+    }
+
+    /// Erases the `previous` lines of the live view on standard error
+    /// before the result or failure is written.
+    pub(crate) fn clear_error_block(&mut self, previous: usize) {
+        if previous == 0 {
+            return;
+        }
+        let _ignored = write!(self.standard_error, "\x1b[{previous}F\x1b[J")
             .and_then(|()| self.standard_error.flush());
     }
 

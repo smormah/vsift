@@ -3,8 +3,9 @@
 use std::{error::Error, fmt, num::NonZeroU32, path::PathBuf};
 
 use vsift_domain::{
-    DurabilityRequirement, OperationId, PublicationGuarantee, SessionId, SessionLifetime,
-    SessionLifetimePolicy, SourceId, StorageGeneration, TranscriptImportError, TranscriptRevision,
+    ClockReading, DownloadLimits, DurabilityRequirement, OperationId, PublicationGuarantee,
+    SessionId, SessionLifetime, SessionLifetimePolicy, SourceFetchReason, SourceId, SourceLink,
+    SourceOrigin, StorageGeneration, TimeAnchors, TranscriptImportError, TranscriptRevision,
     TranscriptRevisionError,
 };
 
@@ -14,7 +15,7 @@ use crate::{
         SessionStorageError, SessionStore,
     },
     transcript::{
-        ImportedRevisionRequest, SourceDurationProbe, SourceProbeError, TranscriptBuildError,
+        ImportedRevisionRequest, SourceProbe, SourceProbeError, TranscriptBuildError,
         TranscriptImportRequest, build_imported_revision,
     },
 };
@@ -43,6 +44,11 @@ pub trait StagedSessionSource {
     fn source_id(&self) -> &SourceId;
     /// Bound source byte count.
     fn source_bytes(&self) -> u64;
+    /// Where the bytes were fetched from, for a source fetched from a link
+    /// (ADR 0028); `None` for a local file's copy.
+    fn origin(&self) -> Option<&SourceOrigin> {
+        None
+    }
 }
 
 /// Contained source and lifecycle operations needed to open one investigation.
@@ -84,7 +90,26 @@ pub trait ForegroundSessionPort: SessionStore {
         cancellation: &dyn StageCancellation,
     ) -> Result<Self::Snapshot, OpenSessionError>;
 
-    /// Publishes source binding and expiry in a fenced immutable generation.
+    /// Fetches one video from a direct HTTPS link into the session's source
+    /// slot, within `limits`, checking `cancellation` as the bytes arrive
+    /// (ADR 0028). The snapshot records the fetch's origin.
+    ///
+    /// # Errors
+    ///
+    /// [`OpenSessionError::SourceFetch`] with the typed reason, a storage
+    /// failure, [`OpenSessionError::SourceNoRoom`] or
+    /// [`OpenSessionError::Cancelled`]; a failed fetch leaves no file.
+    fn stage_link(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        link: &SourceLink,
+        limits: DownloadLimits,
+        cancellation: &dyn StageCancellation,
+    ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send;
+
+    /// Publishes source binding, expiry and the source's time anchors in a
+    /// fenced immutable generation.
     ///
     /// # Errors
     ///
@@ -95,11 +120,12 @@ pub trait ForegroundSessionPort: SessionStore {
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &TimeAnchors,
     ) -> Result<StorageGeneration, OpenSessionError>;
 
-    /// Publishes source binding, expiry and one transcript revision in a single
-    /// fenced generation, so a session never becomes open without the
-    /// transcript it was requested with.
+    /// Publishes source binding, expiry, the source's time anchors and one
+    /// transcript revision in a single fenced generation, so a session never
+    /// becomes open without the transcript it was requested with.
     ///
     /// # Errors
     ///
@@ -110,15 +136,31 @@ pub trait ForegroundSessionPort: SessionStore {
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &TimeAnchors,
         transcript: &TranscriptRevision,
     ) -> Result<StorageGeneration, OpenSessionError>;
+}
+
+/// Where a new session's source comes from.
+#[derive(Clone, Debug)]
+pub enum SessionSource {
+    /// A local file the caller selected, copied into the session.
+    Local(PathBuf),
+    /// A direct HTTPS link to a video file, fetched into the session within
+    /// its limits (ADR 0028).
+    Link {
+        /// The link, never printed or stored.
+        link: SourceLink,
+        /// The fetch's size and time bounds.
+        limits: DownloadLimits,
+    },
 }
 
 /// Explicit source, identity, guarantee, and clock inputs for one foreground open.
 #[derive(Clone, Debug)]
 pub struct OpenSessionRequest {
-    /// Caller-selected local media path.
-    pub source: PathBuf,
+    /// Where the source comes from: a local file or a link.
+    pub source: SessionSource,
     /// Fresh opaque session identity.
     pub session_id: SessionId,
     /// Idempotency identity for initialization.
@@ -129,8 +171,12 @@ pub struct OpenSessionRequest {
     pub activate_operation_id: OperationId,
     /// Strongest guarantee the caller requires.
     pub durability: DurabilityRequirement,
-    /// Injected wall-clock seconds for deterministic expiry decisions.
+    /// Injected wall-clock seconds for deterministic expiry decisions, and
+    /// the "now" a container tag's recording time is judged against.
     pub now_unix_seconds: u64,
+    /// The recording's start as the operator stated it
+    /// (`ingest --recorded-at`): the first rung of the time-anchor ladder.
+    pub recorded_at: Option<ClockReading>,
 }
 
 /// Opened session and the actual, bounded publication contract.
@@ -148,6 +194,11 @@ pub struct OpenSessionOutcome {
     pub publication: PublicationGuarantee,
     /// Default expiry from the initial open.
     pub lifetime: SessionLifetime,
+    /// The clock-time anchors the session was opened with, ladder first
+    /// (ADR 0029); empty when no clock time is known.
+    pub time_anchors: TimeAnchors,
+    /// Where a fetched source came from (ADR 0028); `None` for a local file.
+    pub origin: Option<SourceOrigin>,
 }
 
 /// Why the path a caller named could not be opened as a file, in the three
@@ -292,6 +343,10 @@ pub enum OpenSessionError {
     /// activated, and the unactivated registration is removed like that of any
     /// failed open.
     Cancelled,
+    /// A link given as the source could not be fetched (ADR 0028), for the
+    /// typed reason: published as `SOURCE_FETCH_FAILED`. Nothing was
+    /// activated and no partial file remains; local files are unaffected.
+    SourceFetch(SourceFetchReason),
 }
 
 impl fmt::Display for OpenSessionError {
@@ -320,6 +375,7 @@ impl fmt::Display for OpenSessionError {
             Self::TranscriptRejected(error) => error.fmt(formatter),
             Self::TranscriptInvalid(error) => error.fmt(formatter),
             Self::Cancelled => formatter.write_str("opening the session was cancelled"),
+            Self::SourceFetch(reason) => reason.fmt(formatter),
         }
     }
 }
@@ -353,19 +409,37 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
     /// engine does so at once with
     /// `FilesystemSessionStore::abandon_unpublished_open` (#277), and a caller
     /// that cannot leaves them for `session clean` after the idle interval.
-    pub async fn execute(
+    ///
+    /// `probe` reads the container's recording-time tags (time anchoring,
+    /// ADR 0029). It never decides whether the session opens: a probe that
+    /// fails, or [`crate::NoSourceProbe`] when the media tools are not set
+    /// up, leaves the session without container anchors. Only a cancelled
+    /// probe stops the open, as a cancelled copy does.
+    pub async fn execute<P>(
         &self,
         request: OpenSessionRequest,
+        probe: &P,
         cancellation: &dyn StageCancellation,
-    ) -> Result<OpenSessionOutcome, OpenSessionError> {
+    ) -> Result<OpenSessionOutcome, OpenSessionError>
+    where
+        P: SourceProbe<S::Snapshot>,
+    {
         let prepared = self.prepare(&request, cancellation).await?;
+        let clock_tags = match probe.probe_source(&prepared.snapshot).await {
+            Ok(probed) => probed.clock_tags,
+            Err(SourceProbeError::Cancelled) => return Err(OpenSessionError::Cancelled),
+            Err(_) => Vec::new(),
+        };
+        let time_anchors =
+            TimeAnchors::from_ingest(request.recorded_at, &clock_tags, request.now_unix_seconds);
         let generation = self.port.activate(
             &prepared.snapshot,
             &request.activate_operation_id,
             prepared.initialized.generation(),
             request.now_unix_seconds,
+            &time_anchors,
         )?;
-        Ok(prepared.outcome(request.session_id, generation))
+        Ok(prepared.outcome(request.session_id, generation, time_anchors))
     }
 
     /// Opens one disposable session together with a supplied transcript.
@@ -390,13 +464,19 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
         cancellation: &dyn StageCancellation,
     ) -> Result<(OpenSessionOutcome, TranscriptRevision), OpenSessionError>
     where
-        P: SourceDurationProbe<S::Snapshot>,
+        P: SourceProbe<S::Snapshot>,
     {
         let prepared = self.prepare(&request, cancellation).await?;
-        let duration = probe
-            .source_duration(&prepared.snapshot)
+        let probed = probe
+            .probe_source(&prepared.snapshot)
             .await
             .map_err(OpenSessionError::SourceProbe)?;
+        let duration = probed.duration;
+        let time_anchors = TimeAnchors::from_ingest(
+            request.recorded_at,
+            &probed.clock_tags,
+            request.now_unix_seconds,
+        );
         let revision = build_imported_revision(ImportedRevisionRequest {
             session_id: &request.session_id,
             source_id: prepared.snapshot.source_id(),
@@ -416,9 +496,13 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
             &request.activate_operation_id,
             prepared.initialized.generation(),
             request.now_unix_seconds,
+            &time_anchors,
             &revision,
         )?;
-        Ok((prepared.outcome(request.session_id, generation), revision))
+        Ok((
+            prepared.outcome(request.session_id, generation, time_anchors),
+            revision,
+        ))
     }
 
     /// Runs every step before activation: guarantee preflight, lifetime,
@@ -451,12 +535,25 @@ impl<S: ForegroundSessionPort> OpenSession<S> {
                 request.durability,
             ))
             .await?;
-        let snapshot = self.port.stage_source(
-            &request.session_id,
-            &request.stage_operation_id,
-            &request.source,
-            cancellation,
-        )?;
+        let snapshot = match &request.source {
+            SessionSource::Local(path) => self.port.stage_source(
+                &request.session_id,
+                &request.stage_operation_id,
+                path,
+                cancellation,
+            )?,
+            SessionSource::Link { link, limits } => {
+                self.port
+                    .stage_link(
+                        &request.session_id,
+                        &request.stage_operation_id,
+                        link,
+                        *limits,
+                        cancellation,
+                    )
+                    .await?
+            }
+        };
         Ok(PreparedOpen {
             _registration: registration,
             initialized,
@@ -483,7 +580,12 @@ struct PreparedOpen<R, T> {
 }
 
 impl<R, T: StagedSessionSource> PreparedOpen<R, T> {
-    fn outcome(&self, session_id: SessionId, generation: StorageGeneration) -> OpenSessionOutcome {
+    fn outcome(
+        &self,
+        session_id: SessionId,
+        generation: StorageGeneration,
+        time_anchors: TimeAnchors,
+    ) -> OpenSessionOutcome {
         OpenSessionOutcome {
             session_id,
             source_id: self.snapshot.source_id().clone(),
@@ -491,6 +593,8 @@ impl<R, T: StagedSessionSource> PreparedOpen<R, T> {
             generation,
             publication: self.publication,
             lifetime: self.lifetime,
+            time_anchors,
+            origin: self.snapshot.origin().cloned(),
         }
     }
 }
@@ -589,12 +693,25 @@ mod tests {
             Err(SessionStorageError::Io.into())
         }
 
+        fn stage_link(
+            &self,
+            _session_id: &SessionId,
+            _operation_id: &OperationId,
+            _link: &vsift_domain::SourceLink,
+            _limits: vsift_domain::DownloadLimits,
+            _cancellation: &dyn super::StageCancellation,
+        ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            ready(Err(SessionStorageError::Io.into()))
+        }
+
         fn activate(
             &self,
             _snapshot: &Self::Snapshot,
             _operation_id: &OperationId,
             _expected_generation: StorageGeneration,
             _now_unix_seconds: u64,
+            _time_anchors: &vsift_domain::TimeAnchors,
         ) -> Result<StorageGeneration, OpenSessionError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Err(SessionStorageError::Io.into())
@@ -606,6 +723,7 @@ mod tests {
             _operation_id: &OperationId,
             _expected_generation: StorageGeneration,
             _now_unix_seconds: u64,
+            _time_anchors: &vsift_domain::TimeAnchors,
             _transcript: &vsift_domain::TranscriptRevision,
         ) -> Result<StorageGeneration, OpenSessionError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
@@ -623,14 +741,16 @@ mod tests {
         let result = use_case
             .execute(
                 OpenSessionRequest {
-                    source: PathBuf::from("unused"),
+                    source: super::SessionSource::Local(PathBuf::from("unused")),
                     session_id: SessionId::parse("ses_0123456789abcdef")?,
                     initialize_operation_id: OperationId::parse("op_0123456789abcdef")?,
                     stage_operation_id: OperationId::parse("op_1111111111111111")?,
                     activate_operation_id: OperationId::parse("op_2222222222222222")?,
                     durability: DurabilityRequirement::Durable,
                     now_unix_seconds: 1_000,
+                    recorded_at: None,
                 },
+                &crate::NoSourceProbe,
                 &super::NeverCancelled,
             )
             .await;
@@ -659,15 +779,17 @@ mod transcript_open_tests {
     };
 
     use vsift_domain::{
-        CueSource, CueText, CueTiming, DurabilityRequirement, ImportedCue, MediaTime, OperationId,
-        ParsedTranscript, PublicationGuarantee, SessionId, SidecarIdentity, SourceId,
-        StorageGeneration, TranscriptFormat, TranscriptImportError, TranscriptOffset,
+        AddressCheck, AnchorSource, ClockReading, CueSource, CueText, CueTiming, DirectLinkOrigin,
+        DownloadLimits, DurabilityRequirement, HostName, ImportedCue, MediaTime, OperationId,
+        ParsedTranscript, PublicationGuarantee, SessionId, Sha256Hex, SidecarIdentity,
+        SourceFetchReason, SourceId, SourceLink, SourceOrigin, StorageGeneration, TimeAnchor,
+        TimeAnchors, TranscriptFormat, TranscriptImportError, TranscriptOffset,
         TranscriptRejection, TranscriptRevision, TranscriptWarnings,
     };
 
     use crate::{
         AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
-        SessionStorageError, SessionStore, SourceDurationProbe, SourceProbeError,
+        ProbedSource, SessionStorageError, SessionStore, SourceProbe, SourceProbeError,
         StorageCapabilities, SuppliedTranscript, TranscriptImportRequest,
     };
 
@@ -680,7 +802,7 @@ mod transcript_open_tests {
 
     const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-    struct Snapshot(SourceId);
+    struct Snapshot(SourceId, Option<SourceOrigin>);
 
     impl StagedSessionSource for Snapshot {
         fn source_id(&self) -> &SourceId {
@@ -690,12 +812,18 @@ mod transcript_open_tests {
         fn source_bytes(&self) -> u64 {
             1_024
         }
+
+        fn origin(&self) -> Option<&SourceOrigin> {
+            self.1.as_ref()
+        }
     }
 
-    /// Records which activation ran and the revision it published.
+    /// Records which activation ran, the revision it published and the time
+    /// anchors it stored.
     #[derive(Clone, Default)]
     struct RecordingPort {
         activations: Arc<Mutex<Vec<Option<TranscriptRevision>>>>,
+        anchors: Arc<Mutex<Vec<TimeAnchors>>>,
     }
 
     impl RecordingPort {
@@ -706,9 +834,19 @@ mod transcript_open_tests {
                 .unwrap_or_default()
         }
 
-        fn record(&self, revision: Option<TranscriptRevision>) {
+        fn stored_anchors(&self) -> Vec<TimeAnchors> {
+            self.anchors
+                .lock()
+                .map(|guard| guard.clone())
+                .unwrap_or_default()
+        }
+
+        fn record(&self, revision: Option<TranscriptRevision>, anchors: &TimeAnchors) {
             if let Ok(mut guard) = self.activations.lock() {
                 guard.push(revision);
+            }
+            if let Ok(mut guard) = self.anchors.lock() {
+                guard.push(anchors.clone());
             }
         }
     }
@@ -759,7 +897,32 @@ mod transcript_open_tests {
         ) -> Result<Self::Snapshot, OpenSessionError> {
             Ok(Snapshot(
                 SourceId::from_sha256(DIGEST).map_err(|_| OpenSessionError::InvalidSource)?,
+                None,
             ))
+        }
+
+        fn stage_link(
+            &self,
+            _session_id: &SessionId,
+            _operation_id: &OperationId,
+            link: &SourceLink,
+            limits: DownloadLimits,
+            _cancellation: &dyn super::StageCancellation,
+        ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send {
+            // A link whose host is `fails.example.test` fails offline; any
+            // other is fetched at the limit's size.
+            let result = if link.expose().contains("fails.example.test") {
+                Err(OpenSessionError::SourceFetch(SourceFetchReason::Offline))
+            } else {
+                origin(limits.max_bytes()).and_then(|origin| {
+                    Ok(Snapshot(
+                        SourceId::from_sha256(DIGEST)
+                            .map_err(|_| OpenSessionError::InvalidSource)?,
+                        Some(origin),
+                    ))
+                })
+            };
+            ready(result)
         }
 
         fn activate(
@@ -768,8 +931,9 @@ mod transcript_open_tests {
             _operation_id: &OperationId,
             _expected_generation: StorageGeneration,
             _now_unix_seconds: u64,
+            time_anchors: &TimeAnchors,
         ) -> Result<StorageGeneration, OpenSessionError> {
-            self.record(None);
+            self.record(None, time_anchors);
             Ok(StorageGeneration::from_value(1))
         }
 
@@ -779,33 +943,253 @@ mod transcript_open_tests {
             _operation_id: &OperationId,
             _expected_generation: StorageGeneration,
             _now_unix_seconds: u64,
+            time_anchors: &TimeAnchors,
             transcript: &TranscriptRevision,
         ) -> Result<StorageGeneration, OpenSessionError> {
-            self.record(Some(transcript.clone()));
+            self.record(Some(transcript.clone()), time_anchors);
             Ok(StorageGeneration::from_value(1))
         }
     }
 
     struct FixedDuration(Result<MediaTime, SourceProbeError>);
 
-    impl SourceDurationProbe<Snapshot> for FixedDuration {
-        fn source_duration(
+    impl SourceProbe<Snapshot> for FixedDuration {
+        fn probe_source(
             &self,
             _source: &Snapshot,
-        ) -> impl Future<Output = Result<MediaTime, SourceProbeError>> + Send {
-            ready(self.0)
+        ) -> impl Future<Output = Result<ProbedSource, SourceProbeError>> + Send {
+            ready(self.0.map(|duration| ProbedSource {
+                duration,
+                clock_tags: Vec::new(),
+            }))
         }
+    }
+
+    /// A probe that reports these recording-time tags, or this failure.
+    struct TaggedProbe(Result<Vec<TimeAnchor>, SourceProbeError>);
+
+    impl SourceProbe<Snapshot> for TaggedProbe {
+        fn probe_source(
+            &self,
+            _source: &Snapshot,
+        ) -> impl Future<Output = Result<ProbedSource, SourceProbeError>> + Send {
+            ready(self.0.clone().map(|clock_tags| ProbedSource {
+                duration: MediaTime::from_micros(12_000_000),
+                clock_tags,
+            }))
+        }
+    }
+
+    /// 2026-10-21T13:03:12Z: tags near it are plausible recording times.
+    const NOW: u64 = 1_792_587_792;
+
+    fn tag(source: AnchorSource, text: &str) -> Result<TimeAnchor, Box<dyn Error>> {
+        Ok(TimeAnchor::new(
+            source,
+            MediaTime::from_micros(0),
+            ClockReading::parse(text)?,
+        ))
+    }
+
+    /// Time anchoring (ADR 0029): a plain open stores the operator's stated
+    /// time first and the plausible container tags after it, and reports them.
+    #[tokio::test]
+    async fn a_plain_open_stores_the_anchor_ladder() -> TestResult {
+        let port = RecordingPort::default();
+        let use_case = OpenSession::new(port.clone());
+        let mut open = request()?;
+        open.now_unix_seconds = NOW;
+        open.recorded_at = Some(ClockReading::parse("2026-10-21T14:00:00+01:00")?);
+        let probe = TaggedProbe(Ok(vec![
+            tag(AnchorSource::ContainerCreationTime, "2026-10-21T13:00:01Z")?,
+            tag(AnchorSource::QuicktimeCreationDate, "1970-01-01T00:00:00Z")?,
+        ]));
+
+        let opened = use_case
+            .execute(open, &probe, &super::NeverCancelled)
+            .await?;
+
+        let sources: Vec<AnchorSource> = opened
+            .time_anchors
+            .anchors()
+            .iter()
+            .map(TimeAnchor::source)
+            .collect();
+        assert_eq!(
+            sources,
+            [AnchorSource::Operator, AnchorSource::ContainerCreationTime],
+            "the 1970 tag is not a recording time"
+        );
+        assert_eq!(port.stored_anchors(), [opened.time_anchors]);
+        Ok(())
+    }
+
+    /// A probe that fails, or no probe at all, never stops a plain open: the
+    /// session opens with the operator's anchor only, or none.
+    #[tokio::test]
+    async fn a_failed_probe_opens_the_session_without_container_anchors() -> TestResult {
+        for failure in [
+            SourceProbeError::InvalidSource,
+            SourceProbeError::Busy,
+            SourceProbeError::Deadline,
+            SourceProbeError::Io,
+        ] {
+            let port = RecordingPort::default();
+            let opened = OpenSession::new(port.clone())
+                .execute(
+                    request()?,
+                    &TaggedProbe(Err(failure)),
+                    &super::NeverCancelled,
+                )
+                .await?;
+            assert!(opened.time_anchors.is_empty(), "{failure:?}");
+            assert_eq!(port.activations(), [None]);
+        }
+        let mut stated = request()?;
+        stated.recorded_at = Some(ClockReading::parse("2026-10-21T14:00:00")?);
+        let opened = OpenSession::new(RecordingPort::default())
+            .execute(stated, &crate::NoSourceProbe, &super::NeverCancelled)
+            .await?;
+        assert_eq!(
+            opened.time_anchors.selected().map(TimeAnchor::source),
+            Some(AnchorSource::Operator)
+        );
+        Ok(())
+    }
+
+    /// Only a cancelled probe stops the open, as a cancelled copy does.
+    #[tokio::test]
+    async fn a_cancelled_probe_cancels_the_open() -> TestResult {
+        let port = RecordingPort::default();
+        let result = OpenSession::new(port.clone())
+            .execute(
+                request()?,
+                &TaggedProbe(Err(SourceProbeError::Cancelled)),
+                &super::NeverCancelled,
+            )
+            .await;
+        assert_eq!(
+            result.map(|opened| opened.generation),
+            Err(OpenSessionError::Cancelled)
+        );
+        assert_eq!(port.activations(), [] as [Option<TranscriptRevision>; 0]);
+        Ok(())
+    }
+
+    /// The origin a stand-in fetch of `bytes` records.
+    fn origin(bytes: u64) -> Result<SourceOrigin, OpenSessionError> {
+        let host =
+            HostName::parse("videos.example.test").map_err(|_| OpenSessionError::InvalidSource)?;
+        let digest = Sha256Hex::parse(DIGEST).map_err(|_| OpenSessionError::InvalidSource)?;
+        DirectLinkOrigin::new(
+            digest,
+            (host.clone(), host),
+            0,
+            AddressCheck::Direct,
+            1_000,
+            bytes,
+        )
+        .map(SourceOrigin::DirectHttps)
+        .map_err(|_| OpenSessionError::InvalidSource)
+    }
+
+    fn link_request(link: &str) -> Result<OpenSessionRequest, Box<dyn Error>> {
+        let mut request = request()?;
+        request.source = super::SessionSource::Link {
+            link: SourceLink::parse(link)?,
+            limits: DownloadLimits::new(Some(2_048), None)?,
+        };
+        Ok(request)
+    }
+
+    /// ADR 0028: a link source is fetched by the port's `stage_link`, and the
+    /// outcome carries the origin the snapshot recorded.
+    #[tokio::test]
+    async fn a_link_source_is_fetched_and_its_origin_reported() -> TestResult {
+        let port = RecordingPort::default();
+        let opened = OpenSession::new(port.clone())
+            .execute(
+                link_request("https://videos.example.test/a.mp4?token=t")?,
+                &crate::NoSourceProbe,
+                &super::NeverCancelled,
+            )
+            .await?;
+        let Some(SourceOrigin::DirectHttps(origin)) = opened.origin else {
+            return Err("no origin".into());
+        };
+        assert_eq!(origin.bytes(), 2_048, "the limits reached the port");
+        assert_eq!(port.activations(), [None]);
+        Ok(())
+    }
+
+    /// Time anchoring (ADR 0029) applies to a fetched source as to a copied one:
+    /// the operator's stated recording time is the first anchor of a link's session.
+    #[tokio::test]
+    async fn a_link_source_takes_the_operators_recording_time() -> TestResult {
+        let port = RecordingPort::default();
+        let mut open = link_request("https://videos.example.test/a.mp4")?;
+        open.recorded_at = Some(ClockReading::parse("2026-10-21T14:00:00+01:00")?);
+        let opened = OpenSession::new(port.clone())
+            .execute(open, &crate::NoSourceProbe, &super::NeverCancelled)
+            .await?;
+        assert_eq!(
+            opened.time_anchors.selected().map(TimeAnchor::source),
+            Some(AnchorSource::Operator)
+        );
+        assert_eq!(port.stored_anchors(), [opened.time_anchors]);
+        Ok(())
+    }
+
+    /// A failed fetch never activates the session and keeps its reason.
+    #[tokio::test]
+    async fn a_failed_fetch_never_activates_the_session() -> TestResult {
+        let port = RecordingPort::default();
+        let result = OpenSession::new(port.clone())
+            .execute(
+                link_request("https://fails.example.test/a.mp4")?,
+                &crate::NoSourceProbe,
+                &super::NeverCancelled,
+            )
+            .await;
+        assert_eq!(
+            result.map(|opened| opened.generation),
+            Err(OpenSessionError::SourceFetch(SourceFetchReason::Offline))
+        );
+        assert_eq!(port.activations(), [] as [Option<TranscriptRevision>; 0]);
+        Ok(())
+    }
+
+    /// The transcript path stores the probe's tags with the revision.
+    #[tokio::test]
+    async fn an_open_with_a_transcript_stores_the_probed_tags() -> TestResult {
+        let port = RecordingPort::default();
+        let mut open = request()?;
+        open.now_unix_seconds = NOW;
+        let probe = TaggedProbe(Ok(vec![tag(
+            AnchorSource::QuicktimeCreationDate,
+            "2026-10-21T14:00:00+0100",
+        )?]));
+        let (opened, _) = OpenSession::new(port.clone())
+            .execute_with_transcript(open, &f10_import(500_000)?, &probe, &super::NeverCancelled)
+            .await?;
+        assert_eq!(
+            opened.time_anchors.selected().map(TimeAnchor::source),
+            Some(AnchorSource::QuicktimeCreationDate)
+        );
+        assert_eq!(port.stored_anchors(), [opened.time_anchors]);
+        Ok(())
     }
 
     fn request() -> Result<OpenSessionRequest, Box<dyn Error>> {
         Ok(OpenSessionRequest {
-            source: PathBuf::from("unused"),
+            source: super::SessionSource::Local(PathBuf::from("unused")),
             session_id: SessionId::parse("ses_0123456789abcdef")?,
             initialize_operation_id: OperationId::parse("op_0123456789abcdef")?,
             stage_operation_id: OperationId::parse("op_1111111111111111")?,
             activate_operation_id: OperationId::parse("op_2222222222222222")?,
             durability: DurabilityRequirement::Ephemeral,
             now_unix_seconds: 1_000,
+            recorded_at: None,
         })
     }
 

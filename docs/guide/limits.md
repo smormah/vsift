@@ -2,7 +2,7 @@
 
 This page lists the limits a user is likely to meet, so you can judge what to trust. Each one links to its
 entry in the [known-limits register](../planning/known-limits.md), which is the full record and the
-authority. This page describes VSift 0.2.3 as it is, not as it will be.
+authority. This page describes VSift 0.2.4 as it is, not as it will be.
 
 The short version: **VSift is tested on synthetic videos and a synthetic voice only.** Nobody has yet run it on
 real meetings, accents or noisy rooms, so every accuracy figure below says what was measured, on what.
@@ -24,6 +24,13 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   a session keeps at most 512 stored items; one result is at most 1 MiB. Bigger asks fail with
   `RESOURCE_LIMIT`: ask for less.
 - **A supplied transcript.** SRT or WebVTT in UTF-8, at most 20,000 cues, 4,096 bytes per cue and 8 MiB.
+- **Clock times (from 0.3.0).** A result's real-world time is only as good as its source: the time you gave
+  with `--recorded-at`, the recorder's own note, or the file's creation time, which is often the time it was
+  converted. A recording that was paused or cut in the middle has clock times that are wrong after the cut:
+  `vsift clocks` can show such a gap when a clock is in view, and it changes nothing until you accept it. The
+  file's own tags are read only after `vsift setup check` (or any command that looks at the picture or sound)
+  has checked the media tools once ([how it works](evidence-and-citations.md#when-it-happened-by-the-clock)).
+  `handoff check --session` holds the clock time a citation states, not a time written in a sentence.
 
 ## The words: speech recognition
 
@@ -57,13 +64,18 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   `alignment.provider_start_us` is 0. The words are inside the segment; to place them, listen to the segment's clip
   (`vsift audio`) or read the frames around it. Such a segment also counts as transcribed over the time it claims.
   `0.2.3` says so and changes nothing in the times; word-level times are to be evaluated in R1.
-- **A recording in two languages can lose speech, or show it in the wrong language, where a chunk is heard as the other
-  language ([L-188](../planning/known-limits.md#l-188)).** The recogniser decides the language of each 30-second chunk on its
-  own. On an English briefing with answers in Russian, one chunk heard as Russian wrote nothing for about 18 seconds of
-  English, and another wrote a 25-second Russian segment over an English question. Where the chunks are cut decides which
-  stretches are affected, and `transcript get` and `search` call them transcribed: VSift does not yet flag such a chunk. If a
-  recording mixes languages, listen around each change of language (`vsift audio`) before relying on "not found", or supply a
-  transcript (`ingest --transcript`). A fix is planned for 0.3.0 (late November 2026); it is a plan, not a promise, and a fix that is not ready then waits for 1.0.
+- **A chunk heard as another language can lose speech, or show it in the wrong language, on a recording in two languages
+  and on one in one language spoken with an accent ([L-188](../planning/known-limits.md#l-188)).** The recogniser decides the
+  language of each 30-second chunk on its own. On an English briefing with answers in Russian, one chunk heard as Russian
+  wrote nothing for about 18 seconds of English, and another wrote a 25-second Russian segment over an English question. On
+  a talk in English with a Turkish accent, one chunk heard as Turkish wrote a single 30-second segment, mostly one Turkish
+  word repeated, so about 20 seconds of English has no English text (until `0.3.0` about 25: it also hid 15 words the chunk
+  before it had heard, which are now kept beside it). Where
+  the chunks are cut decides which stretches are affected, and `transcript get` and `search` call them transcribed: VSift
+  does not yet flag such a chunk (the revision's `language` is empty when its chunks disagree). If a recording mixes
+  languages or is spoken with an accent, check stretches where the text is in another language or repeats one word, listen
+  there (`vsift audio`) before relying on "not found", or supply a transcript (`ingest --transcript`). A fix is planned for
+  1.0; it is a plan, not a promise.
 - **Where two chunks meet, a word or two can still be missing or repeated (0.2.1 and later, [L-155](../planning/known-limits.md#l-155) and [L-156](../planning/known-limits.md#l-156)).** The
   recogniser works on 30-second chunks that overlap by five seconds, and VSift joins them. Before this version it could
   drop the end of a sentence at a join, with no sign (found on two real recordings; it is in `0.2.0` and `0.2.1-rc.1`).
@@ -74,7 +86,10 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   (earlier versions looked at one pair per join and wanted every word equal). It removes a repeated piece only when what else
   is kept covers its time, so a piece that runs on past the one it repeats stays, and its words appear twice; earlier versions
   dropped it, and the stretch it covered then had no segment. VSift judges by time, not by words, so it can still keep a copy
-  twice where nothing was lost.
+  twice where nothing was lost. **More can be missing where a chunk loops** ([L-201](../planning/known-limits.md#l-201)):
+  since `0.2.3` a piece that repeats the piece just before it no longer hides the next chunk's words, and since `0.3.0` nor
+  does a piece that loops on its own words (one to four words said eight times or more in a row, most of the piece; this kept
+  15 words at one join of a real talk). A loop of another kind still can.
   **The cost of the fix is mostly repeats, not holes; both are in the transcript.** The cause was worked out from the
   times in a report, not from the recogniser's own output of the recordings, and the fix has not been tried on them.
 - **Words the recogniser wrote that VSift could not place are listed, not found (0.2.1 and later, [L-158](../planning/known-limits.md#l-158) and [L-159](../planning/known-limits.md#l-159)).** When
@@ -99,6 +114,18 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   rest as not transcribed, and the silence the first run found is not listed as silence any more. The stretch is listed
   wrongly and is never reported as silence: the safe error. Transcribing the stretch again, or the whole recording, clears it.
 
+## The voices: speaker labels (`0.3.0`)
+
+- **A label is a voice, not a person, and it is provisional** ([L-207](../planning/known-limits.md#l-207)). Two
+  similar voices can share one label with nothing in the answer to show it; in the tests, two similar synthetic
+  voices were always heard as one. A name appears only when you record it ([speaker labels](speaker-labels.md)).
+- **One label per segment, or none.** A segment in which two people speak, or with little speech heard, has no
+  confident speaker, and a search by speaker does not find it.
+- **Two hours per run** ([L-205](../planning/known-limits.md#l-205)): the tool holds the whole stretch in memory
+  (about 2 GB for two hours). Label a longer recording a part at a time; labels of two parts are not linked.
+- **Measured on little real speech** ([L-206](../planning/known-limits.md#l-206)): synthetic conversations and one
+  real two-person call, whose reference was read from its transcript.
+
 ## The pictures: screen changes and frames
 
 - **Small changes are often not listed** ([L-028](../planning/known-limits.md#l-028)). The size of a change VSift
@@ -108,9 +135,13 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
 - **It looks twice a second** ([L-029](../planning/known-limits.md#l-029)). A change shorter than half a second
   can fall between looks and is not reported, and the coverage lines cannot say so. A burst of frames around a
   moment finds it if you suspect one.
+- **Searching what you kept (`vsift bundle search`, new in 0.3.0) reads only the bundles you name**, at most 64 and
+  1 GiB a call, and a hit is a lead and not a citation: to cite a moment, open the source with `ingest`. A recording you
+  processed with `vsift <video>` leaves no bundle, so it is not found unless you retained it
+  ([L-212](../planning/known-limits.md#l-212)).
 - **No real motion has been measured** ([L-030](../planning/known-limits.md#l-030)). The practice recordings
   draw no scrolling, cursor movement or loading animation, so how well VSift sees those is unknown.
-- **VSift reads text in a picture only when you ask** (`vsift ocr`, new in 0.3.0, with the optional OCR runner). It
+- **VSift reads text in a picture only when you ask** (`vsift ocr`, new in 0.3.0, with the optional OCR runner, which `vsift setup --include on-screen-text` installs: one download of 18 to 25 MB; on Windows it also needs Microsoft's Visual C++ Redistributable, which most PCs already have). It
   then reads Latin-script text off each candidate's frame and one frame every 10 seconds, and `ocr search` finds it with
   the frame, time and place on the screen, even in a recording with no speech. It reads only those frames, and no other script
   ([L-202](../planning/known-limits.md#l-202)); a text that appears and goes between them is not found. What it read
@@ -120,6 +151,47 @@ real meetings, accents or noisy rooms, so every accuracy figure below says what 
   enlarging the picture does not bring it back. Read numbers from a frame where the screen has settled, and check them
   against a neighbouring frame (`frame neighbours`) or the transcript.
 - **Candidates are places to look, not findings.**
+
+## The files `vsift <video>` writes (new in 0.3.0)
+
+- **Settled screens, and frames for at most 180 of them** ([L-234](../planning/known-limits.md#l-234)).
+  `<name>-vsift/screen-changes.txt` lists the settled screens: the first frame, each screen once motion settles, and a
+  change at least 5 s after the one listed before it, each with its reason; its header says how many changes were
+  found in all. With more than 180 listed, the frames are spread evenly over them and the others are listed with
+  `no frame (evidence room)`: a 19-minute talk lists 183 settled screens of 589 changes, so 3 have no frame. The cost: a screen shown for less than 5 s after a listed one, a dialog that flashes up 3 s after a click say, is
+  not listed unless motion settles on it, and the run closes its session, so the changes it left out are kept
+  nowhere. To see every change, keep a session of the video: `vsift ingest <video>`, then
+  `vsift candidates <session> --from 0 --to <microseconds>`, with the session id `ingest` gives; the list's header
+  writes the exact `--to` in. The changes counted are the ones `candidates` would give you, so a change its
+  per-window limit leaves out is not counted either.
+- **Screen changes in the first four hours only** ([L-235](../planning/known-limits.md#l-235)). The transcript covers
+  the whole video; the list and the finish screen say where the screen changes stop.
+- **The ids in the files name a closed session** ([L-236](../planning/known-limits.md#l-236)). They say which run made
+  the files, but the run closes its session, so no command can look them up afterwards. The SHA-256 of the video and
+  of every frame can be checked by anyone, any time, with any hashing tool.
+- **A file held open by another program on Windows is not updated** ([L-237](../planning/known-limits.md#l-237)).
+  While the run works, `<name>.txt` and `<name>.srt` are replaced by a fresh snapshot at most every 10 s; an editor
+  that locks the file keeps that from happening until it lets go. At the end VSift tries for 30 s, then stops with
+  `STORAGE_IO`, and the file keeps its last snapshot. A file that is not writable is reported the same way.
+- **`--keep` keeps the transcript and the frames, not the video or on-screen text**
+  ([L-244](../planning/known-limits.md#l-244)). `vsift <video>` does not run `ocr`, so `bundle search` finds spoken
+  words only in what it keeps, and says so for each recording. Two videos with one name cannot share a keep folder. If
+  the recording cannot be kept, your files stand and VSift leaves its session open, with its private copy of the video,
+  for about a day unused, and gives you the `session retain` command to run. Until then the transcript's header, which
+  says the session was closed, is not true.
+- **A hidden `.<name>.<random>.vsift-partial` file** can be left beside the outputs if the computer or the process
+  stops hard in the middle of an update. It is VSift's and safe to delete.
+- **Stopping and starting again.** Ctrl-C keeps the files, each saying where it stopped (`STOPPED: ...`), and keeps VSift's private
+  copy of the video; the same command continues where the run stopped, and writes again a file of that run you
+  deleted. A private copy expires after a day unused: after that the same command refuses the files, as for any file
+  in the way, and you move them away first. A run that fails after writing the files leaves them saying so (`STOPPED
+  WITH AN ERROR: ...`); they will not be finished.
+- **A run that is still working is never taken over.** The same command started while the first run of that video
+  is still writing its files (from a second terminal, or an assistant that ran it again after a timeout) is refused,
+  says another VSift run is writing them, and changes nothing. Wait for the first run to finish, or stop it and run
+  the command again to continue it, or write elsewhere with `--output <folder>`.
+- **The files take the folder's ordinary permissions**, because you write them to share. Beside the video they are as
+  exposed as the video itself; `--output <folder>` writes them elsewhere.
 
 ## Where and how it was tested
 

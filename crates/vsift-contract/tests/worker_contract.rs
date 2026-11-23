@@ -1001,3 +1001,49 @@ fn recorded_steps_and_results_read_back_exactly() -> TestResult {
     );
     Ok(())
 }
+
+fn ingest_request(recorded_at: Option<&str>) -> Value {
+    let mut target = serde_json::json!({"source": "recording.mp4", "transcript": null});
+    if let Some(text) = recorded_at {
+        target["recorded_at"] = serde_json::json!(text);
+    }
+    serde_json::json!({
+        "schema_version": "1",
+        "operation_id": "op_0123456789abcdef",
+        "durability": "ephemeral",
+        "deadline_ms": null,
+        "target": {"ingest": target},
+        "steps": [],
+    })
+}
+
+/// The maintainer's answer of 2026-10-23: `recorded_at` in worker requests
+/// comes with stage 2. A request without it keeps the digest it always had.
+#[test]
+fn recorded_at_is_taken_as_ingest_takes_it_and_only_moves_a_digest_when_given() -> TestResult {
+    let plain = ingest_request(None);
+    let stated = ingest_request(Some("2026-10-21T14:03:12+01:00"));
+    validate("job-request.schema.json", &plain)?;
+    validate("job-request.schema.json", &stated)?;
+    let plain = decode_work_request(serde_json::to_vec(&plain)?.as_slice())?;
+    let stated = decode_work_request(serde_json::to_vec(&stated)?.as_slice())?;
+    assert_ne!(plain.digest(), stated.digest());
+    let target = stated.target();
+    let vsift_contract::WorkTarget::Ingest { recorded_at, .. } = target else {
+        return Err("not an ingest".into());
+    };
+    assert_eq!(
+        recorded_at
+            .as_ref()
+            .map(vsift_contract::RecordedAtInput::reading),
+        Some(vsift_domain::ClockReading::parse(
+            "2026-10-21T14:03:12+01:00"
+        )?)
+    );
+    let refused = ingest_request(Some("yesterday"));
+    assert_eq!(
+        decode_work_request(serde_json::to_vec(&refused)?.as_slice()).err(),
+        Some(vsift_contract::RequestRejection::InvalidRecordedAt)
+    );
+    Ok(())
+}

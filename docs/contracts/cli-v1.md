@@ -5,8 +5,8 @@ Status: published v1 boundary. Every command of the namespace table below is ope
 install` since P13 PR 4, the managed lifecycle commands since PR 6), foreground `ingest`
 (including supplied-transcript import), the P05 `session` lifecycle, `transcript get`,
 `transcript retranscribe` (local speech recognition), `search` (P08 transcript search),
-`candidates` (P08 visual candidates), `frame get`, `frame neighbours`, `frame burst`, `crop`
-and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
+`candidates` (P08 visual candidates), `changes` (0.3.0, what changed on screen), `frame get`,
+`frame neighbours`, `frame burst`, `crop` and `audio` (P09 evidence navigation), `job status`, `job resume` and `job cancel` (P10
 recoverable jobs), `job run`, `job batch` and `session init-workspace` (P11 worker host),
 `bundle validate` and `handoff check` (P13 PR 5). Since P13 PR 6 no command answers
 `COMMAND_NOT_IMPLEMENTED`: the code stays in the v1 failure taxonomy (a command reserved
@@ -18,12 +18,17 @@ the contract (see "Human-readable text").
 
 ## Command namespace
 
-Top-level help (`vsift -h` and `vsift --help`) ends with a worked example, "A typical
+Help comes in three lengths, a person's first. Plain `vsift` prints a few lines on where to start
+and runs no check. `-h` gives the commands in groups, or a command's usage, key options, examples
+and guide page. `--help` gives every option, and `vsift help [<command>...]` is the same. Top-level
+`vsift --help` then ends with what an assistant without the skill reads, the worked example "A typical
 investigation": the commands a first investigation runs in order (setup check, ingest with or
 without a supplied transcript, search and transcript reads, candidates, frames, handoff check,
-close), the `--limit` and `--max-frames` ranges, a note that `--session-root` and
-`--host-isolation` are operator options an agent leaves out, and how to read a failure. It is
-help text, not a JSON contract (P14 PR 7); a test parses every command it names.
+close), citing the id behind every fact, reading small numbers, the ready-made workflows, the
+`--limit` and `--max-frames` ranges, a note that `--session-root` and `--host-isolation` are
+operator options an agent leaves out, and how to read a failure. All of it is help text, not a JSON
+contract (P14 PR 7, #454); tests parse every command it names and hold each command to its examples
+and guide page.
 
 Global output options are `--json` for one terminal JSON document and
 `--events jsonl` for a JSON Lines stream. They are mutually exclusive.
@@ -42,12 +47,13 @@ kernel attests the strict worker controls, and otherwise the command answers
 and isolation").
 
 **Interruption (P10 PR 3).** While a long command runs (`ingest`, `transcript
-retranscribe`, `candidates`, `ocr`, `frame get/neighbours/burst`, `crop`, `audio`, `job
-resume`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
+retranscribe`, `candidates`, `changes`, `ocr`, `frame get/neighbours/burst`, `crop`, `audio`,
+`job resume`, `watch`), the first `SIGINT` or `SIGTERM` (Unix) or console Ctrl-C or Ctrl-Break
 (Windows) cancels it: it stops at its next boundary (a provider process is stopped, on
 Unix with `SIGTERM` to its process group and a kill after 5 s, on Windows at once) and
 writes its one documented terminal result: `CANCELLED` (exit 6), or the `partial`
-result of `candidates`, `ocr` and the evidence commands, which commit what they finished. A
+result of `candidates`, `changes`, `ocr` and the evidence commands, which commit what they
+finished. A
 second interruption kills running providers without the graceful wait; either way the
 process exits only after every provider it started has been reaped, within the
 supervisor's 5 s + 5 s budget. An `ingest` copy is checked every 64 KiB; a
@@ -64,11 +70,12 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 
 | Command | Contract purpose | Implementation packet |
 | --- | --- | --- |
+| `setup` (plain) | The setup door for a person at a terminal: the check, one offer and one question, and an install only on a typed yes (ADR 0036). With `--unattended --install <parts>` it installs the named parts without asking and reports pass, fail or error; `--json` gives the `setup` result ([`setup.schema.json`](../../schemas/v1/setup.schema.json)). Attended, `--json` and `--events` answer `INVALID_ARGUMENT`; unattended, `--events` does | Since 0.3.0 (ADR 0036; the unattended form with the second pull request) |
 | `setup check` | Read-only dependency diagnosis | Implemented |
-| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner` since 0.3.0) | Partial P06 |
-| `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Partial P06 |
-| `setup plan` | Read-only diagnosis plus exact reviewed Ubuntu 24.04 x86-64 catalogue actions and digest; manual guidance on unaccepted targets | Partial P06 |
-| `setup install` | Apply an accepted Ubuntu 24.04 x86-64 plan: download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
+| `setup configure` | Persist an explicit user-managed executable path without running it (`ffmpeg`, `ffprobe`, `whisper`; `ocr-runner`, `yt-dlp` and `js-runtime` since 0.3.0) | Implemented in P06 (scope narrowed by ADR 0015) |
+| `setup configure-model` | Persist an explicit user-managed model file path without parsing it | Implemented in P06 (scope narrowed by ADR 0015) |
+| `setup plan` | Read-only diagnosis plus exact reviewed catalogue actions and digest (Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64, see "Catalogues per target"); manual guidance on unaccepted targets | Implemented in P06 (read-only plans); Windows and macOS catalogues since 0.3.0 (ADR 0032) |
+| `setup install` | Apply an accepted plan (Ubuntu 24.04 x86-64 or Windows x86-64): download (or import from `--artifact-dir`), verify, stage, smoke and activate each managed component | Implemented in P13 PR 4 |
 | `setup list`, `setup repair` | Read-only: the managed versions of each component and whether each verifies; a diagnosis and the plan of existing commands that fixes it | Implemented in P13 PR 6 |
 | `setup rollback`, `setup remove` | Select the previous or a named verified managed version; remove a version, a component or abandoned stages | Implemented in P13 PR 6 |
 | `ingest` | Open a disposable source-bound session; optionally import a supplied SRT/WebVTT transcript | Implemented in P05; transcript import in P07 increment 2 |
@@ -77,15 +84,26 @@ stopped between two provider calls answers `CANCELLED`, never that a tool could 
 | `transcript get` | Bounded, pageable timestamped transcript segments | Implemented in P07 increment 2 |
 | `transcript retranscribe` | New local-ASR transcript revision, whole source or one range; a recoverable job since P10 PR 2 | Implemented in P07 increment 3b |
 | `search` | Bounded, ranked literal transcript search with honest coverage | Implemented in P08 PR 1 |
+| `transcript speakers` | Speaker labels by voice (S1, S2, ...) for a transcript revision, from an external diarization engine, with honest coverage; provisional labels, segment precision | `0.3.0` (ADR 0031) |
+| `transcript name-speaker` | Record or clear the user's verified name for a speaker label, as the next speaker record | `0.3.0` (ADR 0031) |
 | `candidates` | Bounded visual-candidate retrieval with honest coverage; analyses missing windows first | Implemented in P08 PR 4 |
+| `changes` | Bounded pages of what changed on screen in a range: each change's exact before and after frames as frame evidence, and the rectangles where they differ; analyses missing windows first, as `candidates` does | 0.3.0 (ADR 0034); `--crops` cuts each change's two largest regions out of both frames |
+| `clocks` | Opt-in, bounded, resumable: finds the clocks in what `ocr` read and how each moves against the video; only `--screen-zone` and `--accept-gap`, on the user's word, change a clock time | 0.3.0 (ADR 0029, stage 2) |
 | `ocr`, `ocr search` | Opt-in, bounded, resumable reading of on-screen text off the candidates' frames and one frame a period, with the optional OCR runner; `ocr search` pages it with frame, time and region, with or without a transcript, and `search`'s first page shows it beside the transcript | 0.3.0 (ADR 0030); the runner's hosted parity run and its managed install are in progress |
 | `frame get/neighbours/burst` | Exact source frames, their neighbours and bursts, with requested and actual time, lineage and reuse | Implemented in P09 PR 3 |
 | `crop`, `audio` | Native crops of frames and crops; bounded WAV clips of the source audio | Implemented in P09 PR 4 |
 | `bundle validate` | Bounded data-only bundle validation | Implemented in P05 |
+| `bundle search` | One literal search over the transcript and on-screen text of retained bundles the caller names, with coverage for each recording | Implemented in 0.3.0 (ADR 0035) |
 | `job status/resume/cancel` | Report, continue or cancel one recoverable job by its id | Implemented in P10 PR 3 |
 | `job run` | One versioned worker request in a worker workspace, recorded under its operation id: replay, conflict, busy and continuation; two-stage shutdown | Implemented in P11 PR 3 |
 | `job batch` | A finite JSON Lines file of worker requests, at most `--concurrency` at once, each line independent; one summary and the D5 exit | Implemented in P11 PR 4 |
 | `handoff check` | Check an agent's draft report against the skill's handoff schema and rules, answering `data.valid` with typed findings that never repeat the draft | Implemented in P13 PR 5 |
+| `handoff skeleton` | Print a valid handoff that states nothing yet, with one open session's ids filled in, for an agent to fill in instead of building the JSON from a template | Implemented in 0.3.0 (ADR 0038) |
+| `handoff finish` | Check a draft with the session's records and, only when it passes and states the write, retain the session to the new directory `--retain` names or close it (`--close`): the closing steps in one call | Implemented in 0.3.0 (M5b; ADR 0023 note of 2026-11-09) |
+| `skill install` | Copy the skill this binary was built with into the folders the named AI coding clients read, never replacing anything without `--replace` | Implemented in 0.3.0 (ADR 0038) |
+| `skill status` | Report what is at each skill folder, read without following a link, and the skill's files | Implemented in 0.3.0 (ADR 0038) |
+| `skill show` | Print one text file of the embedded skill, by its manifest name | Implemented in 0.3.0 (ADR 0038) |
+| `watch` (also `vsift <video>`) | A person's action: a readable transcript, subtitles and the screen changes with their frames, written beside the video or into `--output`, never replacing a file; every output names the video's SHA-256, and the frame list every frame's | 0.3.0 (ADR 0037); first pull request: files written once at the end, ADR 0033's live line as progress |
 
 ### P05 disposable sessions and bundles
 
@@ -105,8 +123,129 @@ vsift session clean --expired --json
 `ingest` stages and hashes one local source, returning its session/source IDs,
 source bytes, committed generation, `process_crash_consistent` publication (or
 `os_crash_durable` in a durable worker workspace, P11) and an RFC 3339 expiry.
-Without `--transcript` it does not start FFmpeg, setup, transcription or indexing;
-supplied-transcript import is described in the next section. The source must be an
+Without `--transcript` it does not start setup, transcription or indexing, and it starts
+FFprobe only once, to read the source's two recording-time tags (time anchoring, below),
+and only when the media tools are set up and a recorded verification pass already covers
+them (`setup check` and every media command record one); it never starts a verification
+and never fails because of the tags (until `0.3.0` a plain ingest started no FFmpeg at
+all). Supplied-transcript import is described in the next section.
+
+**Time anchoring (`0.3.0`, [ADR 0029](../decisions/0029-time-anchoring.md)).** Every
+timestamped result can say when, by the real-world clock, its moment happened, so a
+remark can be matched with server logs. `ingest --recorded-at <TIME>` states the
+recording's start in RFC 3339: with an offset (`2026-10-21T14:03:12+01:00`, an exact
+instant and the local time), with `Z` (an instant whose local zone is not stated), or with
+no zone (`2026-10-21T14:03:12`, a local time whose zone is unknown, which names no
+instant); fractions past six digits are dropped, `-00:00` means UTC with the local offset
+unknown, and anything else is `INVALID_ARGUMENT` before anything is read. The session's
+clock times come from the first of its anchors, in this order: the operator's statement
+(`operator`, confidence `exact`), the recording app's own local-time tag
+`com.apple.quicktime.creationdate` (`quicktime_creationdate`, `high`), and the container's
+UTC `creation_time` (an MP4 movie header or Matroska's `DateUTC`;
+`container_creation_time`, `medium`: many tools write the time they encoded or remuxed
+the file, and some devices the end of the recording). A tag earlier than 1995 or more
+than a day after the ingesting host's clock is no recording's time and is dropped; a tag
+that does not parse is left out. **A file's modification time is never used**: for most
+files a person is sent it is the time of a copy, a download or an unpacking, and nothing
+in the file says which. The anchors are stored with the session when it opens (an older
+release reads such a session as damaged, as for every additive lifecycle member, known
+limit L-044) and are reported, only when there is one, as `time_anchor` in the data of
+`ingest` and `session status` (`renew`, `close` and `session list` items too):
+`consistency` (`single`; `consistent`, every two anchors that name an instant agree within
+two seconds; `conflicting`, two disagree and clock times still come from the first; a local
+time whose zone is unknown is never compared, ADR 0029 decision 9),
+`source` and `confidence` of the anchor clock times come from, `recording_start`, and
+every anchor with its `media_time_us` and reading
+([`time-anchor.schema.json`](../../schemas/v1/time-anchor.schema.json), example
+[`ingest.time-anchor.json`](../../schemas/v1/examples/ingest.time-anchor.json)). Every
+timestamped item then carries `clock_time`: a transcript segment (full, brief and
+streamed) its `start` and `end`; a visual candidate its span's `start` and `end` and its
+representative frame `at`; a frame or crop `at` the delivered frame; an audio clip its
+planned range and `at` its first decoded sample (example
+[`transcript-get.clock-time.json`](../../schemas/v1/examples/transcript-get.clock-time.json)).
+A reading is always `utc`, `local` and `utc_offset`, each a string or `null`: an instant
+with its local time and offset, an instant whose local zone is unknown, or a local time
+whose zone is unknown. A session without an anchor answers exactly as before. Clocks on the
+screen add sources to the same list (see "0.3.0 clocks on the screen"). A session's anchors
+are kept in a retained bundle's `bundle.json` when it has some, which `bundle validate` checks
+and a release before `0.3.0` refuses; a bundle of a session without them is written as before.
+A worker `ingest` target takes an optional `recorded_at`, read as `--recorded-at` is
+(`invalid_recorded_at` when it cannot be read); a request without it keeps its digest.
+
+**`ingest --url <link>` (`0.3.0`, [ADR 0028](../decisions/0028-online-sources.md), #407)** fetches one video
+from a direct `https://` link to a video file into a new session, in place of the path (exactly one of the two;
+`--url -` reads the link from standard input, so a signed link stays out of the process list and the shell
+history). It is the only command that uses the network for a video, and only for the link it is given: a link
+found in a transcript, a frame or a page is never fetched, and everything after the fetch (transcription, search,
+evidence, retention, cleanup) is the ordinary local pipeline, offline. The rules: HTTPS on port 443 only; no user
+name or password in the link; at most three redirects, each held to the same rules; every name resolved by VSift
+and connected to only when every address it resolves to is public (loopback, private, link-local, the cloud
+metadata addresses, carrier-grade NAT, documentation, multicast, reserved, IPv6 unique-local and link-local, and
+IPv4-mapped, 6to4, Teredo and NAT64 forms of those are refused), so the address checked is the address connected
+to; a host written as an address is checked too. Through a proxy named by `HTTPS_PROXY` or `ALL_PROXY` the proxy
+resolves the name, so VSift refuses only internal-looking names (one label, `localhost`, `.local`, `.localhost`,
+`.internal`, `.lan`, `.home.arpa`, `.corp`, `.intranet`) and addresses on each request the proxy carries, and the
+origin says `proxy_resolved` when any request went through it (known limit L-208). `NO_PROXY` is decided for the
+link and again for each redirect by that request's own host: one it lists goes direct, its name resolved and
+checked by VSift; any other goes through the proxy. The proxy's own name is the user's configuration and is
+resolved without the public-address check, so a proxy on a private address works; a link or redirect that would go
+direct to the proxy's own name is refused with `address_refused`. A proxy value is read as curl reads it (a URL, or
+`host:port` for an HTTP proxy); a value that is set but is not a usable `http` or `https` proxy is refused with
+`proxy_unusable` for any request that would go through it and never ignored, so a fetch never goes direct past a
+proxy the user set. `NO_PROXY` is matched by host name only: an entry is the host, a domain it is under (with or
+without a leading `.`), or `*`. One `GET` with `Accept-Encoding: identity`, a `User-Agent` of
+`VSift/<version> link-ingest` and nothing personal: no cookie, no `Authorization`, no `Referer`. Only a complete
+`200 OK` identity body is accepted; a text content type stops at once as a web page, and the first 12 bytes must be
+an MP4/MOV (`ftyp`) or Matroska/WebM file. `--max-download-bytes` (default 4 GiB, at most 20 GiB) and
+`--max-download-seconds` (default 1800, at most 14400) bound it; bytes are counted as they arrive, a declared length
+over the limit is refused before the body, and a transfer with no byte for 30 seconds stops. Free space is checked
+for a declared length before the body, and for a body without one 64 MiB at a time as it arrives, so a small video
+sent without a length needs room for itself, not for the download limit; a shortage is `STORAGE_IO` (exit 7), as for
+a copy. The body is written
+straight into the session's own private source slot, so a fetched video is a session artifact like a copied one
+(closed, expired and cleaned with the session; retained only with `session retain --include-source`); a fetch that
+fails leaves no file and no session. **The link is never stored, printed or logged**: `ingest` and `session status`
+data (and `renew`, `close` and list items) carry an `origin` (`kind` `direct_https`, `link_sha256` of the link as
+parsed, `requested_host`, `final_host`, `redirects`, `address_check` `direct` or `proxy_resolved`, `retrieved_at`
+and `bytes`; example [`ingest.url.json`](../../schemas/v1/examples/ingest.url.json)), absent for a local file. A
+link that cannot be fetched answers the new code `SOURCE_FETCH_FAILED` (exit 3) with `error.reason` (`not_https`,
+`credentials_in_link`, `port_not_allowed`, `address_refused`, `tls`, `redirect_policy`, `http_status`,
+`proxy_auth`, `proxy_unusable`, `offline`, `stalled`, `deadline`, `size`, `partial`, `compressed`, `web_page`,
+`not_a_video`, `truncated`, `strict_isolation`) and a fixed remediation that names the online step and says local
+files are not affected; it never echoes the link, the server's text or proxy credentials (example
+[`ingest-url-address-refused.json`](../../schemas/v1/examples/ingest-url-address-refused.json)).
+**A public video page (`0.3.0`, ADR 0028 sections 4.6 to 4.8, #409).** A link that answers with a web page goes
+to yt-dlp when one is set up; with none, the refusal stays `web_page`, whose remediation has `required_authority:
+"user_confirmation"` and names the optional `online_links` group (with `vsift setup plan --profile desktop
+--include online_links` as its command on Ubuntu x86-64) or, elsewhere, `vsift setup configure yt-dlp
+--executable <absolute-path>`, with no command because only the user knows the path. VSift keeps no list of sites.
+Resolution is by pair: a registered yt-dlp comes first and runs with the registered runtime or with none, never the
+managed Deno; a managed yt-dlp runs with the managed Deno only. A host written as an address, or an internal
+name, never reaches yt-dlp (`address_refused`), because yt-dlp connects with no address policy (known limit L-209).
+yt-dlp runs with an explicit argument array and an environment that holds only its private temporary folder, `HOME`
+set to the same folder, the proxy variables VSift honours, and what stops plugins and update checks. The video must
+be one finished video of at most 4 hours, offered over HTTPS as MP4 or WebM; the download limits above hold, counted
+on disk, and no growth for 30 seconds after the first byte stops it. Separate audio and video are joined by the
+verified FFmpeg as a stream copy. The `origin` has `kind` `platform_page`, `provider`, `video_id` only when the site
+reports the video public and `video_id_sha256` otherwise, `link_sha256`, `yt_dlp` and `js_runtime` (`source`
+`managed` with `catalogue_version`, or `user_managed` with `version` and `sha256`; `js_runtime` absent when none
+ran), `address_check` only as `proxy_resolved` (a proxy variable was handed to yt-dlp; its absence does not mean the
+connection was direct, because a user's yt-dlp on Windows or macOS can use a system proxy, L-209), `retrieved_at`,
+`bytes` and `joined` (`single_file` or
+`audio_video`); example [`ingest.page.json`](../../schemas/v1/examples/ingest.page.json). It never holds a title, an
+uploader, a description, an upload date, a format's URL or a header. Further `error.reason` values for a page:
+`login_required`, `age_restricted`, `bot_check`, `drm`, `region_blocked`, `private`, `removed`, `unsupported_site`,
+`extractor_broken`, `js_runtime_missing`, `network`, `playlist`, `live`, `too_long`, `not_https_format`,
+`unexpected_output`, `media_tools_missing` (separate streams and no verified FFmpeg) and `online_step_failed`.
+yt-dlp's text chooses a reason and is never echoed, stored or logged.
+**`SOURCE_FETCH_FAILED` is `retryable: false` as a code, whatever its reason:** nothing retries it automatically.
+The reasons `offline`, `stalled`, `truncated` and `deadline` describe a transfer that may succeed if the caller
+runs the command again (with a longer `--max-download-seconds` for `deadline`), as their remediations say; that
+retry is the caller's decision, not the envelope's. With
+`--host-isolation strict-linux`, which allows no network, it answers `strict_isolation` before anything is fetched,
+and a worker job request takes no link. A development build resolves no name (the P13 network guard), so it
+answers `offline` for any public name unless `VSIFT_DEV_PUBLISHER_NETWORK=allow`. `DOWNLOAD_FAILED` stays the code
+of `setup install`'s publisher downloads. The source must be an
 absolute local path to a regular file (a relative path is read from the folder the command
 was run in). **A named pipe (FIFO), a device file or a UNIX socket is refused without being opened**
 (since `0.2.2`, #264): its directory entry says what it is, and nothing opens it, because opening a pipe
@@ -225,7 +364,10 @@ that is being removed at that moment** (by `session clean`, or by a failed open
 removing its own, #277) **is not an error.** A listing does not show it this time
 if its marker is gone or, on Windows, locked or being deleted; a listing may show
 it as unavailable because it is busy; a clean does not report it at all once it
-is gone and skips it as busy while another remover holds it.
+is gone and skips it as busy while another remover holds it. On Windows a clean
+also skips as busy a session one of whose files another program (a scanner, an
+indexer) holds open without sharing deletion, and a later clean removes it; that
+item error was `STORAGE_IO` before 0.3.0 (#604).
 
 `retain` requires a new absolute output directory and never overwrites one.
 The output is owner-private and stays outside automatic cleanup. Both bundle
@@ -1247,7 +1389,10 @@ vsift job status job_0123456789abcdef0123456789abcdef --json
   the same way without saying so (L-223). The queue is kept on disk
   (`job-queue/` of the root) and survives a restart: its jobs keep their order, and `job start`
   (or `job resume`) of a waiting one starts a runner that takes its turn again; nothing runs the
-  queue on its own (L-222).
+  queue on its own (L-222). A queued job that was interrupted and is resumed waits its turn
+  again as `queued`, keeping its checkpoints (`resumable_reason` `interrupted` when no runner
+  holds it), so `job cancel` and `session close` stop it while it waits, as any queued job
+  (0.3.0, Fable review C-4). An entry whose job cannot be read for a moment keeps its place.
 
 `--mode quick|watched` overrides the choice.
 
@@ -1320,9 +1465,13 @@ at most once a second; they are advisory. Example:
 **Stopping it.** `job cancel` of the `prepare` job cancels its stream's job too: the
 runner stops its provider within about a second and seals what it published as stopped.
 **`session close` now stops the session's running jobs (changed behaviour):** it asks
-every job a process runs to cancel, waits up to 10 s for them to stop, then closes; a
-runner that has not stopped by then fails its next publication on the closed session and
-ends. Until 0.2.x a close while a transcription ran answered `BUSY`. A runner killed
+every job a process runs to cancel, waits up to 10 s for them to stop, then closes. A
+runner that has not stopped by then still holds the session (it holds it for as long as
+it lives), so the close answers `BUSY`, retryable, and closes nothing; the same command
+closes the session once the runner has ended (corrected 2026-11-11, Fable review C-6:
+this paragraph said the close went ahead and the runner failed its next publication,
+which the store does not allow). Until 0.2.x a close while a transcription ran answered
+`BUSY` at once. A close removes the session's jobs from the root's queue. A runner killed
 outright leaves the job interrupted and resumable; on Windows its providers end with it,
 on Unix a provider can outlive it until its chunk ends (L-220).
 
@@ -1583,9 +1732,9 @@ rejection and fixed remediation, never an echo of the input: `request_too_large`
 `request_too_deep`, `malformed_request`, `unsupported_schema_version`,
 `invalid_operation_id`, `invalid_session_id`, `invalid_path`,
 `invalid_transcript_offset`, `invalid_deadline`, `invalid_range`, `invalid_bundle_name`,
-`too_many_steps`, `step_order`, `no_work`, and, decided by the host,
-`path_outside_input_root`, `duplicate_operation_id` (another line of the same batch)
-and `workspace_not_durable`.
+`too_many_steps`, `step_order`, `no_work`, `invalid_recorded_at` (0.3.0), and, decided by
+the host, `path_outside_input_root`, `duplicate_operation_id` (another line of the same
+batch) and `workspace_not_durable`.
 
 **Job result** ([`job-result.schema.json`](../../schemas/v1/job-result.schema.json);
 examples [`job-run.json`](../../schemas/v1/examples/job-run.json),
@@ -1862,6 +2011,211 @@ expired session; `--limit 0`, `--limit 101`, a lone `--from` or `--to` and a mal
 `--revision` are parse errors. A stored record that fails verification is
 `INTEGRITY_FAILURE` or `UNSUPPORTED_SCHEMA`, as for every read.
 
+### 0.3.0 `bundle search`: one question over kept recordings
+
+```console
+vsift bundle search ./kept-calls --query "refund limit" --json
+vsift bundle search ./kept/call-1 ./kept/call-2 --query "E-409" --limit 50 --json
+```
+
+`bundle search <path>... --query <text> [--limit 1..100] [--cursor <token>] [--view
+full|brief]` ([ADR 0035](../decisions/0035-search-across-kept-sessions.md)) searches the newest
+transcript and on-screen text of retained bundles. A kept recording exists only as a bundle
+(`session retain`): a session in the root always expires, and nothing records where a bundle
+went. So the command reads the bundles named on its command line and **never opens the session
+root**, which means a disposable session cannot be reached. It writes nothing, runs no tool and
+keeps no index: each call reads what it needs and deleting a bundle removes it from search.
+`--events jsonl` carries only the terminal event, as for `ocr search`.
+
+**Paths.** Each `<path>` (at most 64) is a bundle, a folder holding a `bundle.json`, or a folder of
+bundles, read one level down. A link is never followed. Finding the bundles reads no manifest: at
+most 4,096 entries are looked at across the call, and more is refused, because which entries a
+listing gives first is the filesystem's choice. The bundles are ordered by folder name and, for
+two folders of one name, by their whole path, so the order of the paths changes nothing and the
+same folder named twice counts once. A path with no bundle fails the call with
+`INVALID_ARGUMENT`: a wrong folder must never read as "nobody said it". Subfolders with no
+`bundle.json`, as an interrupted `retain` leaves, and entries that could not be read, which may be
+bundles, are counted in `bundles.skipped_entries`.
+
+**What is read.** Each bundle passes `bundle validate`'s folder and manifest checks, including
+being private to the current user, then only its newest transcript, screen-text and visual
+records are read, each checked by size and SHA-256 against the manifest and decoded strictly. The
+source, frames, audio and evidence records are neither read nor hashed, so a damaged frame is
+`bundle validate`'s to find. A bundle that cannot be read does not fail the search: it is listed
+`unavailable` with `not_private`, `integrity_failure`, `unsupported_version` or `unreadable`. A
+bundle whose transcript or index alone cannot be read still gives what it can.
+
+**Bounds.** At most 64 bundles are opened and at most 1 GiB of manifests and records is read in a
+call. Bundles past the 64th are never opened. Each manifest is charged 128 KiB, and a bundle's
+records are charged what its manifest declares before any is read, so which bundles fit does not
+depend on how busy the machine is. A bundle left out is in `not_searched` (at most 64 named, all
+counted) with `bundle_limit` or `read_budget`. To search those, name them in another call. A
+Ctrl-C or `SIGTERM` is honoured between bundles and between records and ends `CANCELLED` (exit 6).
+
+**Ranking.** Literal and deterministic, with no scoring: `phrase` before `all_terms`, then by
+bundle, then by time within the bundle, a transcript segment before on-screen text at the same
+time. Matching and on-screen grouping are `search`'s and `ocr search`'s. The same bundle found
+twice (the same manifest) is searched once and counted in `duplicates`; two different bundles of
+one session or source are both searched, because they can hold different revisions.
+
+**Result.** `data` ([`bundle-search-data.schema.json`](../../schemas/v1/bundle-search-data.schema.json),
+example [`bundle-search.json`](../../schemas/v1/examples/bundle-search.json)) holds `query`, `hits`,
+`total_hits`, `next_cursor`, `bundles` (the counts), `sessions` (one entry per bundle opened, never
+cut) and `not_searched`. A hit names its `kind`, `match`, `bundle`, `manifest_sha256`, `session_id`,
+`source_id`, `evidence_id` and `time_us`, and carries `segment` (as `transcript get` returns it, or
+its brief form with `--view brief`) or `line` (as `ocr search` returns it). `bundle` is the folder's
+own name, sanitised and cut to 128 bytes; no absolute path is ever returned. A `sessions` entry gives
+the recording's `hits`, its `transcript` (`complete`, `partial`, `none` or `unavailable`, with the
+revision, basis, and how many ranges and how many microseconds have no transcript: a summary,
+because 64 sets of range lists would not fit a result) and its `screen_text` (as `search`'s member:
+`not_run`, `partial`, `complete` or `unavailable`, with the index and the coverage block). No hit
+carries `clock_time`: bundles hold no time anchors yet (known limit L-210).
+
+**A hit is a lead, not a citation.** The session that made its ids is gone, so `handoff check
+--session` cannot resolve them, even in a new session of the same video and transcript, because a
+revision's identity is derived from its session; and no frame is at hand. To look at a moment or cite it, open the
+source with `ingest` (the bundle's `source.media`, or the original, whose SHA-256 the `source_id`
+names) and cite from that new session. `vsift <video>` closes its session when it ends and leaves no
+bundle, so a recording processed that way is not found here unless it was retained separately.
+
+**Status.** As for `search`, on-screen text never changes the status or the envelope coverage,
+because a bundle cannot run `ocr` and a bundle retained without it would stay `partial` for ever. The
+status is `partial`, with a fixed warning, only for a transcript gap or a bundle not searched.
+`coverage.gaps` is empty and `coverage.reasons` holds `no_transcript`, `untranscribed_range`,
+`bundle_unavailable`, `bundle_limit` and `read_budget`. On-screen gaps are in each `sessions` entry,
+counted in `bundles.screen_text_incomplete` and stated by the human view on every result that has
+any: on-screen text was not read in full for 2 of 3 recordings, so a missing hit there means nothing. A
+`not_private` bundle adds a second fixed warning saying what to do. `lifecycle` is `retained`.
+
+**Paging.** 20 hits by default, 1 to 100 with `--limit`. `total_hits` is exact on every page, because
+every page reads every bundle. A page ends early when its hits pass 768 KiB, so a page of very long
+text fits a host's 1 MiB result; what gives way is the size of the page, never a hit, and
+`next_cursor` goes on from the last hit shown. **So a page can hold fewer hits than `--limit` with more
+to come: follow `next_cursor`, and never count hits.** A cursor is bound to the manifests of the bundles
+searched, in order, and the normalised query, and lasts 24 hours. A bundle added, removed, renamed
+or retained again rejects it with `INVALID_ARGUMENT`. Pages never repeat or skip a hit.
+
+**Failures** use existing codes: `INVALID_ARGUMENT` for a rejected query, a path with no bundle, more
+than 64 paths, more than 4,096 entries or a rejected cursor, each with a fixed remediation; `--limit 0`,
+`--limit 101` and no path are parse errors.
+
+### Speaker labels (`0.3.0`, ADR 0031)
+
+```console
+vsift transcript speakers ses_0123456789abcdef --json
+vsift transcript speakers ses_0123456789abcdef --speakers 2 --json
+vsift transcript speakers ses_0123456789abcdef --from 0 --to 3600000000 --json
+vsift transcript name-speaker ses_0123456789abcdef --label S2 --name "Alice Example" --json
+vsift transcript name-speaker ses_0123456789abcdef --label S2 --clear --json
+vsift search ses_0123456789abcdef --query "export" --speaker S2 --json
+```
+
+`transcript speakers <session> [--revision trv_...] [--from <us> --to <us>] [--speakers <1..16>]
+[--diarizer <path>] [--segmentation-model <path>] [--embedding-model <path>]` labels the segments of a
+transcript revision (the newest by default) by voice. The external engine (sherpa-onnx's
+`sherpa-onnx-offline-speaker-diarization` with the pyannote segmentation 3.0 and NeMo TitaNet small
+models) hears the session's committed audio, which VSift decodes into a 16 kHz mono WAV in the
+operation's private work folder; the engine never sees the source file, and the WAV is removed when
+the run ends. A given `--speakers` count is passed to the engine as given; without it the engine counts
+with its reviewed distance threshold (0.9). A given count is not a guarantee: the engine can still keep fewer
+voices apart (on RM11, told three, it kept two). Then the `speakers` block carries `count_shortfall`
+(`requested_speaker_count`, `found_speaker_count`, a `warning` that voices may be merged, and a `remediation`
+pointing at the automatic count); the member is absent otherwise, so an answer without a shortfall is unchanged
+([L-207](../planning/known-limits.md#l-207)). One diarization hears at most two hours (the duration cap;
+a longer source is labelled a part at a time with `--from` and `--to`, and labels of different parts are
+not linked). The engine's turns become a new immutable **speaker record** (`spk_...`) of the session;
+its labels are derived from the turns and the revision whenever it is read.
+
+**What a label is.** `S1`, `S2` and so on group segments the engine heard in one voice, numbered by when
+each voice is first heard. A label is provisional ("S2, by voice"): it is not who the person is, two
+similar voices can share one label (L-207), and a segment in which two people speak is not split. The
+precision is the segment: a segment gets the label that holds at least 70% of the speech the engine
+heard inside it, when that speech covers at least half of the segment (`speaker-labels-v1`); otherwise it
+has **no confident speaker** (`little_speech` or `mixed`). Every answer that shows labels carries this in
+`speakers.statement`.
+
+**Names.** `transcript name-speaker` records the user's verified name for a label of the revision's
+newest speaker record, or clears it with `--clear`, as the next speaker record of the same turns, so an
+earlier answer stays as it was. A name is the user's statement, kept as given (1 to 128 bytes, no control
+character) and shown as `Alice Example (S2, named by the user)`; VSift never infers a name from a voice
+or from text on the screen. The skill runs it only on the user's explicit instruction.
+
+**Where labels appear.** `transcript get` and `search` (full and brief views) carry, when the revision
+has a speaker record, a `speakers` block (record, labels with their verified names, engine and model
+digests, the count asked for, the diarized range and the coverage) and a `speaker_label` on each item
+(the label or `null`, how it reads, the verified name and the shares). Both are absent when the revision
+has none, so an answer without speaker labels is exactly what it was. They are distinct from a segment's
+`speaker`, which is a voice tag of a supplied WebVTT file. `search --speaker <label or verified name>`
+searches only the segments with that label; its cursor names the record and the label, and a segment
+with no confident speaker is never found by it (`query.speaker` echoes the filter). With `--events jsonl`
+each evidence record carries its `speaker_label` and the terminal data the `speakers` block.
+
+**Coverage.** The block's `coverage` counts and lists the segments with a label, with no confident
+speaker, and outside the diarized range. When any segment has no label, `transcript speakers` and
+`transcript name-speaker` answer `partial` with a fixed warning, and `transcript get` and `search` add
+the same warning to their own status.
+
+**Transcripts that are not sealed** (ADR 0033; [ADR 0031](../decisions/0031-speaker-labels.md) note of
+2026-11-18). Labels belong to the revision they were made on. `transcript speakers` refuses a revision that
+is still **open** (its transcription is publishing it): labels made over a growing transcript would be stale
+as it grows. The refusal comes before any tool is looked for, is `BUSY` with the session and the publishing
+job in `affected_ids`, and its remediation's command is that job's `job status`; nothing is committed. A job
+that ended without sealing its revision answers `BUSY` with `job cancel` instead, as every write does
+([`transcript-speakers.revision-open.json`](../../schemas/v1/examples/transcript-speakers.revision-open.json)):
+
+```json
+{
+  "command": "transcript.speakers",
+  "status": "failed",
+  "error": {
+    "code": "BUSY",
+    "retryable": true,
+    "retry_after_ms": null,
+    "affected_ids": ["ses_0123456789abcdef0123456789abcdef", "job_0123456789abcdef0123456789abcdef"],
+    "remediation": [
+      {
+        "summary": "This session's transcript is still growing: a transcription of it (the job in affected_ids) is publishing it, and labels made now would not cover what it has yet to publish. Nothing was committed. Run the suggested job status command, and when it reports the job ended and the transcript sealed, run the same command again.",
+        "required_authority": "none",
+        "command": { "executable": "vsift", "arguments": ["job", "status", "job_0123456789abcdef0123456789abcdef"] }
+      }
+    ]
+  }
+}
+```
+
+A **stopped** revision (its transcription was cancelled or could not finish) is labelled: the record covers
+the segments the revision holds and no other time, `speakers.revision_state` is `stopped`, and every answer
+that shows those labels carries the fixed warning that they cover only the segments it holds (the terminal
+output says the same). A **sealed** revision is labelled as before (`revision_state` `sealed`). `transcript
+get` and `search` show a speaker record only on the revision it labels: a newer revision of the session,
+open or sealed, starts without labels. `vsift <video>` (`watch`) never runs `transcript speakers`; labels
+stay opt-in.
+
+**Privacy.** The engine computes its voice embeddings in its own process memory and returns times and
+cluster numbers only. A speaker record holds turns, labels and the user's names, never audio or any
+voice-derived vector, under the session's lifetime and retention: disposable by default, kept only in a
+bundle the user makes. There is no cross-session voice database.
+
+Schemas: `speakers.schema.json` (the block, the per-segment label, the result data) and
+`transcript-speakers-data.schema.json`; the bundle's `speaker_record` artifacts are decoded strictly by
+`bundle validate` (identity, bounds, values). Examples: `transcript-speakers.json`,
+`transcript-get.speakers.json`, `search.speakers.json`, `transcript-speakers.revision-open.json`.
+
+**Rolling back.** A release before `0.3.0` does not know the `speaker_record` kind and reads a session that holds one
+as damaged (`INTEGRITY_FAILURE`): every command on that session fails, and `bundle validate` refuses a bundle made
+from it. A session that never ran `transcript speakers` is unchanged. Use the newer version, or discard the session
+([L-218](../planning/known-limits.md#l-218), an accepted residual).
+
+**Failures.** `MISSING_CAPABILITY` when the engine or a model is neither given nor installed (the
+remediation names `setup install` and the three options; transcripts and search work without them) or
+the engine fails or answers in another format; `RESOURCE_LIMIT` for a range longer than the cap (the
+remediation names `--from` and `--to`), more turns or speakers than reviewed, or an engine that ended
+abnormally; `INVALID_ARGUMENT` for a bad range, count, label or name, a revision without a transcript or
+the requested revision, a label the record does not have, and `name-speaker` or `search --speaker` on a
+revision without speaker labels (the remediation names `transcript speakers`); `INVALID_SOURCE` for a
+source with no decodable audio; `BUSY` for an open revision (above); `DEADLINE_EXCEEDED`, `CANCELLED` and `BUSY` as for a transcription;
+`INTEGRITY_FAILURE` when the source copy changed during the run. Nothing is committed on a failure.
+
 ### P08 visual candidates
 
 ```console
@@ -2125,6 +2479,90 @@ record over 48 MiB, an index over its bounds (4,096 frames, 256 lines a frame, 2
 runner that answered beyond its bounds or ended abnormally; `INTEGRITY_FAILURE` or
 `UNSUPPORTED_SCHEMA` for a stored record that fails verification or a source copy that changed
 during the call.
+
+### 0.3.0 clocks on the screen (`clocks`)
+
+```console
+vsift ocr ses_0123456789abcdef --json
+vsift clocks ses_0123456789abcdef --json
+vsift clocks ses_0123456789abcdef --max-frames 0 --screen-zone c1=-05:00 --json
+vsift clocks ses_0123456789abcdef --max-frames 0 --accept-gap g1 --json
+```
+
+`clocks <session> [--max-frames 0..200] [--runner <path>] [--threads 1..8]
+[--screen-zone <clock>=<±HH:MM>]... [--accept-gap <gap>]...` finds the clocks in the text `ocr` read
+([ADR 0029](../decisions/0029-time-anchoring.md), stage 2) and says how each moves against the
+video. It is opt-in and never runs `ocr`'s plan: before `ocr` has read the session it answers
+`partial`, state `not_run`. **Absence is never a claim:** no clock listed speaks only for the frames
+read.
+
+**What counts as a clock.** A time on a screen is usually not the present, so text alone never makes
+a clock. A line of at most 64 bytes is read by a closed grammar, with nothing repaired, and with a
+score of at least 0.80, which only trims junk: the score is uncalibrated, and wrong readings have
+scored as high as right ones. Accepted are `14:03`, `14:03:12`, `2:03 PM`, `2:03:12 pm`, an ISO date
+and time, and a date with a month name; a dated face may state its zone with `Z`, `UTC`, `GMT` or an
+offset. Refused are a line with two times, a time touching other text (`16:9`), a one-digit hour
+without AM or PM, a numeric date with slashes, which is two different days, and a zone abbreviation,
+which counts as no zone. Faces of one class in one place become a clock only with at least three
+reads and one advance, at the video's rate. A time that never moves, a countdown and a scrolling log
+are not clocks, and `refused` counts them. A seconds face with no date and no AM or PM that shows hour
+`00`, or read zero during the recording, is a `counter`: it gives no anchor, no observation and no gap.
+
+**The model.** A clock's `offset` is its reading minus the video's own time, an interval, because a
+minute face holds for 60 s. Its width is `precision_us`. A call reads the frames around a clock's first
+and last rollover, at most `--max-frames` (default 40) within 300 s, and commits them as one revision
+of the screen-text index, so it is bounded and resumable as `ocr` is: run it again to continue.
+`--max-frames 0` reads nothing and needs no runner. With reads to make and no runner the call fails
+with `MISSING_CAPABILITY`, as `ocr` does.
+
+**What it reports.** `data` ([`clocks-data.schema.json`](../../schemas/v1/clocks-data.schema.json),
+examples [`clocks.json`](../../schemas/v1/examples/clocks.json) and
+[`clocks.not-run.json`](../../schemas/v1/examples/clocks.not-run.json)) holds `state` (`not_run`,
+`partial`, `complete`), `rules_version`, the screen-text `index`, `read_now`, `stopped`,
+`reads_pending`, and:
+
+- `clocks`: each with `clock_id` (`c1` to `c8`, stable across calls; null past eight), `kind`, `format`,
+  `unit`, `reads`, `offset`, `confirmed_utc_offset`, `rate`, and the exact frames that prove each claim;
+- `excursions`: reads whose offset left a clock and returned to the same interval. The cause is not
+  known, so both `explanations` are offered, `misread` and `another_clock`. The reads leave the track,
+  and nothing about them is a gap;
+- `stopped_brackets`: rollovers whose search an excursion or a freeze ended, with `width_us`. The search
+  moves to the next rollover, so one misread costs one bracket;
+- `freezes`: a value held past its unit, so the screen stopped while the video ran. The video's time is
+  still right;
+- `jumps`: `gap` (the offset rose: time may be missing from the video, or the machine changed) and
+  `backward`. A jump within its width of a whole number of quarter hours, of at least 30 minutes, is
+  **another clock**, never a cut, because two presenters' taskbars differ so;
+- `observations`: how a clock of unknown zone compares with an anchor that names an instant, and the UTC
+  offsets it `fits`. Always `inference: true`, and **never applied**;
+- `conflicts`: `instants_disagree`, `rates_differ`, `jump_not_shared` and `backward`, reported and never
+  resolved. A difference in two clocks' offsets is not a conflict: clocks in different zones are simply
+  two clocks;
+- `time_anchor`: the session's anchors after the call.
+
+**Only a person changes a clock time.** A detected gap changes no value, because VSift cannot tell a
+cut from a change of machine: each item after it carries `clock_time.segment`, and
+`time_anchor.segments` names the jump, its uncertainty and the clock that showed it.
+`--accept-gap <gap>` applies it. `--screen-zone <clock>=<±HH:MM>` confirms a zone, as an offset and not
+an IANA name, and the clock becomes a `screen_clock_confirmed` anchor; one of no date takes the date on
+which its reading lies nearest the session's absolute anchor, so with none it is refused. Both options
+take only what the user stated, never an observation or a detected gap. A statement that cannot apply
+is `INVALID_ARGUMENT`, and nothing changes.
+
+**Anchors.** A dated clock that states its zone gives `screen_timestamp` and a dated clock with no zone
+`screen_clock`, whose clock times are local with `utc` null. Both, like `screen_clock_confirmed`, are
+`medium`, and their `media_time_us` is where the clock was best read, with `clock_id` and `precision_us`.
+The order is `operator`, `quicktime_creationdate`, `screen_clock_confirmed`, `container_creation_time`,
+`screen_timestamp`, `screen_clock`, so running `clocks` changes which anchor a session's clock times
+come from only when it had none. **A clock with no date gives no anchor** until it is confirmed: a
+time of day cannot be written as a date and time, and a date is never borrowed silently. `consistency`
+compares anchors at their own positions, through accepted gaps only, with each anchor's precision
+added to the two seconds. A local time is still never compared.
+
+**Storage.** The clocks are derived again each call from the newest index. The lifecycle record keeps
+the screen's anchors, the register of clocks (`screen_clocks`, at most 8) and the gaps
+(`clock_segments`, at most 32), each written only when present, so a session that never runs `clocks`
+is recorded as before. A release before `0.3.0` reads a session that has them as damaged (L-044).
 
 ### Views of a read (`--view`, 0.2.1)
 
@@ -2516,8 +2954,7 @@ Whisper is not needed; clips are decoded by FFmpeg.
 speech tool of their own; a coding agent cannot listen to it, and reading its bytes
 (`base64`, for example) gives the agent nothing. It reads speech through the transcript
 (`transcript get`, `search`). Two pieces of text say so, and neither is a JSON field:
-`audio --help` (the one-line summary the root help lists, and a longer paragraph in
-`--help`), and one sentence of the readable result, on the line under the clip's path:
+`audio --help` (and the assistant's part of the root `--help`), and one sentence of the readable result, on the line under the clip's path:
 "This clip is for a person or a speech tool to play; a coding agent cannot listen to it,
 so an agent reads what was said with vsift transcript get." A frame and a crop, which
 are images an agent opens, carry no such sentence. The `--json` result and the
@@ -2529,8 +2966,10 @@ A damaged or cut-short part of a source is `INVALID_SOURCE` with nothing committ
 a remediation that names `candidates` for finding undecodable parts; the decodable
 parts stay usable.
 
-Running `vsift` or `vsift setup` without a leaf command prints help and performs no
-dependency probe or mutation. `setup check` defaults to the `desktop` profile and a
+Running `vsift` without a command prints help and performs no dependency probe or
+mutation; so does `vsift setup --help`. Plain `vsift setup` is the setup door (since
+`0.3.0`, ADR 0036; see "The setup door" under "Human-readable text"): it probes like
+`setup check`, and installs nothing unless a person at a terminal types yes. `setup check` defaults to the `desktop` profile and a
 thirty-second total operation deadline (five seconds before `0.2.1`); `--profile worker` and
 `--timeout-seconds 1..60` are explicit overrides. `--ffmpeg`, `--ffprobe` and
 `--whisper` select existing absolute executables for this check only. An invalid
@@ -2756,7 +3195,7 @@ second) with `status: "timed_out"` beside `existing_executable_probe_only`. Both
 then true of the moment each was observed; the step always follows the first, because it is
 part of what acceptance compares. Sharing one deadline between the two is not done. On **Ubuntu 24.04
 x86-64** it consults the reviewed, pinned catalogue for the paired FFmpeg and
-FFprobe build, whisper.cpp CLI and multilingual `base` model. It returns only
+FFprobe build, whisper.cpp CLI and multilingual `base` model (**Windows x86-64** and **macOS arm64** have their own catalogues of the same three components: see "Catalogues per target" below). It returns only
 actions needed by the current probe and configured-model presence, with exact
 publisher URL, sizes, SHA-256, archive inventory, installed files, licence and
 notice/source links, known trust limits, private destination and permissions.
@@ -2765,8 +3204,9 @@ revision, current probe results, configured selections, all planned actions and
 the revision's reviewed compatibility policy. For the current Ubuntu revision,
 that policy fixes the exact F01 fixture identity, expected FFmpeg/FFprobe build
 identities, per-stream and generated-file limits, media and inference deadlines,
-and 16-kHz mono audio contract. The policy remains an installer safety constraint rather than a claim
-that compatibility execution has passed.
+and 16-kHz mono audio contract. The Windows revision has the same policy; the macOS revision differs only in
+the expected FFmpeg/FFprobe banners, those of VSift's own build. The policy remains an installer safety
+constraint rather than a claim that compatibility execution has passed.
 The same unchanged observations produce the same digest. Any changed catalogue
 or observed selection requires a fresh plan and acceptance. No configured paths
 are echoed in the response. The plan is **read-only**; `setup install` applies it
@@ -2791,8 +3231,8 @@ install. After a complete install `setup plan` shows every action `current`,
 `install_needed: false` and readiness no longer blocked on the managed tools, under
 the same digest.
 
-Windows x86-64, macOS ARM64, other hosts and expired or invalid catalogue
-entries return typed `unavailable_*` status, no actions or digest, and manual
+Other hosts (macOS on Intel, Linux other than Ubuntu 24.04 x86-64, Windows on Arm) and expired or invalid
+catalogue entries return typed `unavailable_*` status, no actions or digest, and manual
 BYO guidance. Missing and unhealthy tools receive
 `manual_selection_required` unless a reviewed managed action applies.
 
@@ -2864,6 +3304,181 @@ is retained as historical v1 evidence. An abbreviated current response follows.
 }
 ```
 
+### 0.3.0 `changes`: what changed on screen
+
+```console
+vsift changes ses_0123456789abcdef --from 0 --to 14000000 --json
+vsift changes ses_0123456789abcdef --from 750000000 --to 850000000 --limit 20 --json
+vsift changes ses_0123456789abcdef --from 0 --to 14000000 --events jsonl
+vsift changes ses_0123456789abcdef --from 0 --to 14000000 --crops --json
+```
+
+`changes <session> --from <us> --to <us> [--limit 1..20] [--cursor <token>] [--crops]` pages the screen
+changes of the session's video whose after frame lies in the half-open range, 10 per page by
+default ([ADR 0034](../decisions/0034-what-changed-on-screen.md)). It answers "what changed on
+the screen between these two times" in one call: each change is a moment the visual index saw
+the screen change, with the exact frame before and after it and the rectangles where those two
+frames differ. It is evidence, not interpretation. Times are position times in microseconds,
+as every other command takes them; a range that runs past the end of the video is clipped to
+it, and one that starts at or after the end is `INVALID_ARGUMENT`. `--crops` (ADR 0034 section
+4) also cuts each change's largest regions out of both frames (below).
+
+**What a change is.** The changes are read from the visual index of `candidates` (above), which
+a call without `--cursor` first extends exactly as `candidates` does (missing windows in
+ascending order, at most 30 per call, the rest `not_analyzed`); no second analysis of the video
+is made. A `visual_change` candidate is one change (`kind` `change`): before is the frame at its
+`change_window.from_us`, after is the candidate's own frame. A `motion_start` and the
+`settled_after_motion` that ends its run are one change (`kind` `motion`, `motion` `run`,
+`settled` true); a run still moving at its window's end, or whose end the window's 32-candidate
+budget dropped, is `motion` `start` with `settled` false; a `settled_after_motion` whose start
+was dropped is `motion` `end`, before being the last moving sample. `first_frame` and
+`periodic_coverage` candidates are not changes. A page never splits a pair. Both frames are
+actual decoded frames the index sampled, taken by `frame get` (the same extraction, profile
+`p09-r0-v1`, identities and reuse), so each is an ordinary `frame_evidence` record; consecutive
+changes often share a frame, which is taken and listed once.
+
+**Result.** `data` ([`changes-data.schema.json`](../../schemas/v1/changes-data.schema.json),
+examples [`changes.json`](../../schemas/v1/examples/changes.json) and
+[`changes.partial.json`](../../schemas/v1/examples/changes.partial.json)) holds `session_id`,
+the requested `range`, `index` (as `candidates` reports it), `profile`, `coverage`, `changes`,
+`frames` (each distinct `frame_evidence` record the changes cite, once, in order of first use,
+exactly as the frame commands publish it, `clock_time` included when the session has a time
+anchor), `files` (one `{evidence_id, media_type, path}` per frame, in frame order, as the frame
+commands deliver them: the absolute path of the committed session artifact, valid while the
+session exists), `partial_reason`, `next_cursor` and `resume`. Each change is a published
+`screen_change` record ([`screen-change.schema.json`](../../schemas/v1/screen-change.schema.json)):
+`change_id` (`chg_`, a digest of the session, source, stream, index profile, region profile and
+its candidates, the same on every call), `kind`, `motion` and `settled` (null for `change`),
+`candidate_ids`, `change_window` (the index's bracket: the screen changed after `from_us` and at
+or before `to_us`), `before` and `after` (`evidence_id`, the frame's actual `time_us` and, with
+an anchor, the frame record's own `clock_time`), `comparison`, `regions`, `regions_left_out`,
+`changed_area` and `no_region_at_threshold`.
+
+**Regions (profile `screen-change-regions-v1`).** The two stored PNG frames are compared pixel
+by pixel, one pair at a time, after each is checked against its SHA-256. A pixel changed when
+any of its R, G and B differs by at least 32 levels (`profile.pixel_level`); a 16x16 tile of
+displayed pixels (`profile.tile`, smaller at the right and bottom edges) changed when it holds at
+least 4 changed pixels (`profile.tile_pixels`); changed tiles at most 2 tiles apart, diagonally
+too, join one region (`profile.join_distance`). Each region is the bounding rectangle of its
+tiles, clipped to the frame, in displayed pixels: the space `crop --rect` takes. A change lists at
+most 8 regions (`profile.max_regions`), the largest by `changed_pixels` first; `regions_left_out`
+counts the rest and `changed_area` is the rectangle around every changed tile with all their
+changed pixels, so nothing is lost silently. When the index saw a change but the two frames differ
+nowhere at the threshold (a change below it, or slow drift), `regions` is empty, `changed_area`
+null and `no_region_at_threshold` true; the change is still listed. Frames of different
+displayed sizes are not compared: `comparison` is `dimensions_differ` and `regions` empty. The
+thresholds are part of the profile: changing one is a new profile, never a silent change. Codec
+noise around text can add small regions of a few pixels; they come after the real one, which is
+the largest (ADR 0034's note of 2026-11-03).
+
+**Bounds.** A page holds 1 to 20 changes, so at most 40 frames, within `frame get`'s bounds and
+its 120 s deadline for the frames of the call. Every frame is taken by one `frame get`: a
+request repeated exactly is reused and takes no evidence slot; any other takes one slot for its
+record and one for its image unless the session already holds that image. A change therefore
+takes 2 to 4 of a session's 384 evidence slots (2 when its before frame is the previous change's
+after frame), and a session holds about 95 to 190 changes with their frames. Past the indexed
+four hours there are no changes, as there are no candidates, and coverage says so. Regions are
+recomputed from the stored frames on every call and are not stored.
+
+**Continuation and resume.** Pass `next_cursor` back with the same session, range and `--limit`.
+A call with a cursor never analyses anything. The cursor is bound to the session and its expiry
+at issue, the source, stream, index profile, region profile, range, `--limit`, `--crops`, the state of every
+window the range touches and the page's last change; any other value, a forged cursor, or a
+window in the range analysed since it was issued is `INVALID_ARGUMENT`, never a silent restart.
+`resume` says where a fresh call (a new `--from`, no cursor) continues when this one cannot:
+`{"from_us", "reason"}`, with `from_us` the after time of the first change not listed, or the
+start of the first window still to analyse. `reason` is `not_analyzed` (the pages reached the
+end of the analysed part; a fresh call analyses from there), `session_evidence_budget` (the
+session has no room for the next change's frames: keep it with `session retain`, then open a
+new session with `ingest` and continue there), `deadline_exceeded` or `cancelled`. It is null
+when the range is answered to its end or when `next_cursor` continues it. A page that stopped
+on the session's room, the deadline or a cancellation lists the changes before the stop with
+their committed frames, names the stop in `partial_reason`, has no `next_cursor` and gives
+`resume`. If not even the first change's frames fit, the call is `RESOURCE_LIMIT` with
+`frame get`'s remediation; a deadline or cancellation before the first change, with nothing
+analysed, is `DEADLINE_EXCEEDED` or `CANCELLED`.
+
+**Crops (`--crops`).** Only once every listed change has its frames and regions, each listed
+change's first two regions (the largest) are cut out of its before frame and its after frame by
+`crop` itself: the same rectangle, the source's own pixels at native size, so each crop is an
+ordinary `frame_evidence` record of kind `crop` whose parent is that frame, reused on an exact
+repeat. The changes are taken in page order, and for each region the before crop, then the after
+crop. A call makes at most 16 crops; regions past that keep their rectangle and no crop. With
+`--crops`:
+
+- a listed region carries `before_crop` and `after_crop` (evidence ids), each present only when
+  that crop was made (a stop can leave a region with its before crop alone);
+- `frames` lists the crops after the page's whole frames, each distinct crop record once, in the
+  order they were first named, and `files` delivers one file per crop in the same order, so `frames` and `files` hold at most 56
+  items with `--crops` (40 without); the stream writes them as `frame_evidence` events before the
+  `screen_change` events, and `record_count` is at most 76;
+- `data.crops` is `{"limit": 16, "made", "regions_without_crop", "stop"}`: `made` counts the
+  crop ids the regions name, a crop named twice counting twice (one change's after frame is often
+  the next change's before frame, so a region's after crop can be the same record as the next
+  change's before crop), so `frames` can hold fewer crops than `made`, and the limit of 16 counts
+  those names; `regions_without_crop` counts the first-two regions without their before or after
+  crop, and `stop` is `null`, `crop_limit` (the regions had named 16 and more remained: a published
+  bound, no warning), or `session_evidence_budget`, `deadline_exceeded` or `cancelled` (cropping
+  stopped early, with the fixed warning `Cropping stopped before every listed change's largest
+  regions were cropped ...`: run the same call again, which reuses the frames and crops already
+  made, or after `session_evidence_budget` crop in a new session).
+
+A crop stop never makes the result `partial`: the status, the envelope `coverage`,
+`partial_reason`, `resume` and `next_cursor` stay about the listing, which is whole. Cropping
+never changes which changes a page lists. A crop takes one evidence slot for its record and one
+for its image unless it repeats an earlier one, so `--crops` adds up to 32 slots a call; with
+crops on every page a session holds about 50 to 110 changes. The second region is often a few
+pixels of codec noise, and its crop then shows almost nothing. Without `--crops` no crop is
+made and neither `crops` nor any crop member is present: the answer is byte for byte the one
+without the option. The cursor is bound to `--crops`, so pass it again with `--cursor`.
+Example [`changes.crops.json`](../../schemas/v1/examples/changes.crops.json).
+
+**Coverage.** `coverage` is the index's for the range, the same shape and rules as `candidates`
+(`searched_range`, `analyzed`, `gaps` with `reason` and `dropped_candidates`, and
+`ranges_truncated`); the changes a window's budget dropped are never listed, and its
+`candidate_budget_exhausted` gap counts them. The envelope `coverage` is filled as for
+`candidates`, with the part of the range a stopped page left unlisted (from `resume.from_us` to
+the end of the searched range) added to its `gaps` and the stop's identifier after the gap
+reasons. A result with any gap or a stop has status `partial` and exits 0, with the fixed
+warning `Part of the requested range has no screen changes listed because ...` for gaps and
+`The page stopped before its last change ...` for a stop.
+
+**What it never claims.** What a change means: no "dialog", "typed" or "scrolled"; regions are
+rectangles of pixels that differ, never interface elements, windows or text. That nothing else
+changed: differences under the thresholds are not reported, and a cursor or one character is
+often below the index's own 128x72 grid and never becomes a change. That nothing changed
+between samples: the index samples at 2 Hz, so something that came and went within half a
+second may be missing. When exactly it changed: only after `change_window.from_us` and at or
+before `change_window.to_us`.
+
+**Citing.** Cite a change by its before and after `evidence_id`s, which `handoff check` knows,
+never by its `change_id`, which it does not (ADR 0034 section 10). The help, the guide and the
+readable view say so.
+
+**Evidence stream.** `changes --events jsonl` writes the page's frames as `frame_evidence`
+evidence events (key `evidence_id`, in order of first use), then one `screen_change` evidence
+event per change (key `change_id`, in time order), then one terminal event whose data
+([`changes-stream-data.schema.json`](../../schemas/v1/changes-stream-data.schema.json), example
+[`changes.events.jsonl`](../../schemas/v1/examples/changes.events.jsonl)) is the page without its
+`changes` and `frames`, plus `record_count` (the number of evidence events), with the same
+`status`, warnings and envelope `coverage` as `--json`. `screen_change` is a new value of an
+evidence event's `record_type` (additive). Stream rules are those of `transcript get` (above).
+
+**Failures** use existing codes only. `INVALID_ARGUMENT` for an empty or reversed range, a range
+starting at or after the video's end, a rejected cursor (remediation: pass back only the
+`next_cursor` of the previous page with the same session, `--from`, `--to` and `--limit`, or run
+`changes` without `--cursor`), a cursor for a session with no visual index yet (remediation: run
+`changes` without `--cursor` first), a video with no video stream and a closed or expired
+session; `--limit 0`, `--limit 21` and a missing `--from` or `--to` are parse errors.
+`MISSING_CAPABILITY` when FFmpeg or FFprobe is missing to analyse a window (the `candidates`
+remediation) or to take a frame (the `frame get` remediation). `RESOURCE_LIMIT` when not even the
+first change's frames fit the session (`frame get`'s remediation: retain the session, open a new
+one with `ingest`) or a stored frame is over the decoder's 16,000,000 pixels or 64 MiB.
+`INTEGRITY_FAILURE` when a stored frame no longer matches its digest or does not decode. `BUSY`
+(with the remediation and `retry_after_ms` 2000 of the evidence commands), `DEADLINE_EXCEEDED`
+and `CANCELLED` as for `candidates` and `frame get`, and `INVALID_SOURCE` or `UNSUPPORTED_SCHEMA`
+as they do.
+
 ### P13 `handoff check`
 
 `vsift handoff check [--file <absolute-path>] [--session <session>]` checks an agent's
@@ -2907,7 +3522,33 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   is written. A session that is closed, expired or not found is a gap in
   `data.session.gap` (`session_closed`, `session_expired`, `session_not_found`), not a
   failure; the draft is still checked. A committed record that fails its integrity
-  check is `INTEGRITY_FAILURE`.
+  check is `INTEGRITY_FAILURE`. `data.session.resolved` says that the session was read,
+  whatever the findings; the findings carry the verdict.
+- **A citation's `clock_time` (0.3.0, [ADR 0029](../decisions/0029-time-anchoring.md),
+  decisions 23 to 27).** Any citation may state the `clock_time` VSift returned for the
+  item: `source` and `confidence`, any `clock_id` and `segment`, and its readings (`start`
+  and `end` for a transcript segment, `at` for a frame or crop, either or both for audio).
+  A reading holds `utc`, `local` or both, in VSift's exact form (the schema pins six
+  fraction digits, `Z` on `utc` and none on `local`), and `utc_offset` only beside both.
+  Without `--session` only the schema applies. With it, and an identity that resolved,
+  the stated value is compared as exact text with what VSift returns for that item now,
+  from the session's anchors now; `identities_checked` does not count it.
+  - `source`, `confidence`, `clock_id` and `segment` are compared whole, null being the
+    same as absent, so leaving out a `segment` VSift gives is refused. Each `utc`, `local`
+    and `utc_offset` is compared only where it is stated.
+  - **`clock_time_differs`:** a stated value is not VSift's, or the session has no anchor.
+  - **`clock_time_not_an_instant`:** VSift's reading has `utc` null, and the draft states
+    `utc` or `utc_offset`.
+  - **`clock_time_may_be_stale`:** a stated value differs and the session's clock record
+    has changed around the item: the selected anchor is `screen_clock_confirmed`, an
+    accepted gap lies between the anchor and the item, or, for `segment`, the session has
+    any gap. The check cannot tell a report that went stale from one that was wrong, and
+    says neither. It is an error like the others: read the item again and cite what VSift
+    returns now.
+
+  A time in a claim's `statement` or the Markdown is not read
+  ([L-245](../planning/known-limits.md#l-245)). A `handoff check` before `0.3.0` refuses a
+  citation that has the member, as it does `category`.
 - **Result.** Whenever the draft was read, the result is `complete` and the process
   exits 0 (decision H1), with `data` per `schemas/v1/handoff-check-data.schema.json`:
   `valid` (true exactly when `errors` is empty), `handoff_version` (`"1"`), `errors`,
@@ -2928,6 +3569,147 @@ first publication (decision H4; ADR 0008 note of 2026-09-30).
   so the command and the grader cannot disagree. Its schema validator implements
   exactly the JSON Schema features the handoff schema uses and refuses any other at
   compile time; a differential test holds it to a general validator.
+
+### 0.3.0 `handoff finish`
+
+`vsift handoff finish <session> [--retain <new-directory> [--include-source] | --close] [--file
+<absolute-path>]` folds the skill's closing steps into one call (M5b, [ADR
+0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md) note of 2026-11-09,
+[ADR 0013](../decisions/0013-retained-bundle-publication.md) note of 2026-11-09). In the recorded
+agent trials, `handoff check`, `session retain` and `bundle validate` (or `session close`) took three
+to four round trips with no decision between them. Additive: a new command identifier,
+`handoff.finish`, and a new data schema; `handoff check` is unchanged and stays read only.
+
+- **Input.** The draft exactly as for `handoff check`: standard input (the skill's quoted heredoc or
+  single-quoted here-string, now naming `handoff finish <session>`) or `--file`, at most 128 KiB of
+  strict UTF-8; a larger draft, bytes that are not UTF-8 or an unusable `--file` are
+  `INVALID_ARGUMENT` (exit 2) and nothing is checked or written. `--retain` with `--close`, or
+  `--include-source` without `--retain`, is refused by the parser (`INVALID_ARGUMENT`, exit 2).
+- **In order.** (1) The `handoff check` of the draft, with the session's committed records always
+  resolved (as `--session` does; read only, never renewed). (2) With a write requested, the draft's
+  `lifecycle.action` must state it: `retained` for `--retain`, `closed` for `--close`. Without a write
+  nothing is compared. (3) Only when the draft has no error and (2) holds, at most one write, through
+  the same engine call as the standalone command: `--retain` exactly as `session retain --output`
+  (a new owner-private directory, manifest last, revalidated before success: that revalidation is
+  `bundle validate`'s check), `--close` exactly as `session close`.
+- **Result.** `complete` (exit 0) with `data` per `schemas/v1/handoff-finish-data.schema.json`:
+  `finished`, `stopped_at`, `requested` (`check`, `retain`, `close`), `check` (the `handoff.check`
+  data, `session` never null), `lifecycle` (`stated` and `requested`, closed words only, and
+  `agrees`), `retain` (`session retain`'s data, or null), `bundle_validated` (true exactly when it
+  retained) and `close` (`session close`'s data, or null). The envelope's `lifecycle` is `retained`
+  after a retention and the session's after a close. The frozen example is
+  `schemas/v1/examples/handoff-finish.json`.
+- **A stop before any write is an answer, not a failure** (decision H1): `stopped_at` `draft` (the
+  check found errors) or `lifecycle` (the action disagrees) is `complete`, exit 0, `finished` false,
+  and nothing is written: no bundle directory exists afterwards and the session is not closed.
+  **Scripts test `data.finished`, not the exit status, before relying on a write.** The human output's
+  first line says so plainly ("Not retained: the draft did not pass (3 problem(s)) ...").
+- **A write that fails is the standalone write's failure.** After a passing draft, `--retain` to a
+  folder that exists answers `INVALID_ARGUMENT` (exit 2) as `session retain` does, an open revision
+  `BUSY`, a disk `STORAGE_IO` (exit 7); with a write requested, a session that is not found, closed
+  or expired answers exactly as `session retain` or `session close` would on it. No new failure code.
+  An interrupted retention leaves what `session retain` leaves (ADR 0013).
+- **Without a write** the command is `handoff check --session`: a session that is not found, closed
+  or expired is `check.session.gap`, not a failure, and `finished` is the draft's verdict.
+- **One write per call** ([L-253](../planning/known-limits.md#l-253)): retaining and then closing
+  takes `handoff finish --retain`, then `session close`.
+- **The skill** classes it `free`; `--retain` is `explicit` exactly as `session retain` is, and only
+  to the new directory the user named. Its REPORT state shows the POSIX form; `commands.md` shows both
+  forms. A run that opened no session keeps `handoff check`.
+- **Tests.** `handoff_finish_contract` (the frozen example; every published shape validates; forged
+  shapes are refused), the `finish` unit tests of `vsift-contract` (the lifecycle rule; a draft with
+  errors stops first; only closed words are published), the human renderer's tests (the first line of
+  each stop) and `handoff_finish_cli_contract` through the binary (without a write it answers as
+  `handoff check --session` for an open, missing, closed and expired session; a retention in one call
+  that `bundle validate` agrees with; a `draft` or `lifecycle` stop writes nothing; a failed retention
+  and a write on an unavailable session answer as the standalone write; a close; conflicting flags).
+
+### 0.3.0 `handoff skeleton`
+
+`vsift handoff skeleton <session> --question <text>` prints a handoff that is valid but states
+nothing yet, written by VSift from the session's records ([ADR
+0038](../decisions/0038-ai-integration-without-mcp.md) section 1). It exists because an agent that
+built the handoff JSON from a text template, and filled the template in with a case-insensitive
+search and replace, corrupted the JSON without any error: the replace also rewrote member names
+that spelled the placeholder. The skeleton removes the template. Additive: a new command identifier,
+`handoff.skeleton`, that the schemas' pattern already admits.
+
+- **Input.** An open session and the user's question in the agent's own words. The question must
+  pass the handoff schema's rule for `question` (1 to 500 characters of plain text on one line, no
+  link, local path or hidden character); otherwise the result is `INVALID_ARGUMENT` (exit 2) with
+  fixed-prose remediation. A session that is closed, expired or unknown fails as a transcript read
+  of it does; nothing is written.
+- **Result.** `complete`, with `data` per `schemas/v1/handoff-skeleton-data.schema.json`:
+  `handoff_version` (`"1"`), `handoff` and `fill`. `handoff` is a complete handoff v1 that validates
+  against `skills/vsift/handoff.schema.json` and passes `handoff check`, also with `--session`
+  naming the same session: `status` `insufficient_evidence`, the `question` as given,
+  `capabilities.image_access` `unavailable` (the agent changes it only after its own image check)
+  and `capabilities.transcript_basis` from the session's newest transcript revision
+  (`supplied_transcript`, `local_asr`, `mixed`, or `none` without one), `session` with `session_id`,
+  `source_id` and, when there is a transcript, `revision_id`, empty `claims`, `citations`, `gaps`
+  and `untrusted_instructions`, and `lifecycle.action` `left_open`. The revision is the one a plain
+  `transcript get` reads: while a background transcription runs, its open revision (ADR 0033), so
+  the skeleton names the revision the agent's reads cite. `fill` lists, as RFC 6901
+  pointers into `handoff`, the members only the agent can supply. The frozen example is
+  `schemas/v1/examples/handoff-skeleton.json`.
+- **Read only.** The session is not renewed and nothing is written. Without `--json` the command
+  prints the ready fenced `vsift-handoff` block and the members left to fill in.
+- **The skill** classes it `free` (`skills/vsift/references/commands.md`) and its handoff page says
+  to write the JSON whole or start from the skeleton, never by search-and-replace on a template.
+  `vsift --help` names it in the typical investigation's step 6, for an agent with no skill.
+- **Tests.** `handoff_contract` (the frozen example; the skeleton validates against the skill's
+  handoff schema and passes the check), the `skeleton` unit tests of `vsift-contract` (every
+  transcript basis; a refused question is the caller's error) and `handoff_cli_contract` through the
+  binary (a seeded session's skeleton passes `handoff check --session` unfilled and leaves the
+  session's status unchanged; a refused question; a closed or unknown session; the human block) and
+  `growing_read_cli_contract` (while a job publishes an open revision, the skeleton names the revision
+  `transcript get` cites, and a handoff citing that read passes `handoff check --session`, also after
+  the next part).
+
+### 0.3.0 `skill install`, `skill status` and `skill show`
+
+The `skill` namespace ([ADR 0038](../decisions/0038-ai-integration-without-mcp.md) section 3) puts the
+agent skill where AI coding clients look for it, in one command. Additive: three command identifiers
+(`skill.install`, `skill.status`, `skill.show`) the schemas' pattern already admits; no new failure code.
+The skill is embedded in the binary at build time (`vsift_contract::SKILL_FILES`, held equal to
+`skills/vsift/` by a test), so what is installed is what this release was built and tested with.
+
+- **`vsift skill install --client <client> [--client ...] [--project <folder>] [--replace]`.** `<client>`
+  is `claude-code` (`.claude/skills/vsift/`) or `codex`, `copilot`, `cursor`, `gemini-cli`, `opencode`,
+  `goose` or `amp` (`.agents/skills/vsift/`), below the home folder (`USERPROFILE` on Windows, `HOME`
+  elsewhere) or below `--project`, which is canonicalised and must already be a folder (otherwise
+  `INVALID_ARGUMENT`). Each folder is written once, in the order `.claude`, `.agents`. Per folder:
+  nothing there is `installed` (staged in a fresh `.vsift-skill-stage-*` folder beside it, every file
+  read back and compared, then renamed into place); this release's skill byte for byte is `unchanged`;
+  a different `vsift` skill (its `SKILL.md` front matter names `vsift`) or a link is `refused` without
+  `--replace` and `replaced` with it, as a swap: the old folder or link is renamed aside under a
+  `.vsift-skill-old-*` name, the staged folder renamed into place, and only then the old one removed (a
+  link only as a link); if the second rename fails the old one is renamed back. A file or a folder that is
+  not a `vsift` skill is always `refused` (`not_vsift`), as is a place whose `.claude`, `.agents` or
+  `skills` folder is a link or not a folder (`parent_not_folder`). No step follows a symbolic link or a
+  junction. `data` per `schemas/v1/skill-install-data.schema.json`: `scope` (`user` or `project`),
+  `skill_digest` (SHA-256 over the skill's files) and one entry per folder with its `layout`, its `path`
+  relative to the base, the `clients` that read it, `outcome`, `replaced` and `refusal`. **Any refusal
+  makes the result `failed` with `INVALID_ARGUMENT`** (exit 2; the planner's D3, as ADR 0037 refuses an
+  existing output), the data kept as the failure's data and a remediation naming `--replace`; other
+  folders of the same call keep their outcome. A disk failure is `STORAGE_IO`, a written file that does
+  not read back `INTEGRITY_FAILURE`; the failed folder holds what it held. No result names an absolute
+  path. The frozen example is `schemas/v1/examples/skill-install.json`.
+- **`vsift skill status [--project <folder>]`**, read only: per folder its `state` (`absent`, `current`,
+  `different`, `link`, `not_vsift`, `parent_not_folder`), and `files`, the skill's file names. Schema
+  `skill-status-data.schema.json`, example `skill-status.json`.
+- **`vsift skill show <entry>`** prints one text file of the embedded skill (`entry` and `text`; schema
+  `skill-show-data.schema.json`, example `skill-show.json`). `<entry>` is a manifest name as `skill status`
+  lists it; a path, a folder, a name with `..` or the PNG is `INVALID_ARGUMENT`, and nothing on the disk is
+  read. Without `--json` it prints the text.
+- **The skill** classes `skill install` `never` and `skill status` and `skill show` `free`.
+- **Tests.** The domain catalogue and install decision (`agent_skill` tests), the use case over a fake
+  (`vsift-application`), the filesystem folders (`skill_folders` tests: create, different, foreign,
+  swap, a folder that appeared, a link and a linked parent on Unix, a parent that is a file, the project
+  folder), the embedded skill equal to the folder and `show` refusing paths (`vsift-contract` unit
+  tests), the frozen examples (`skill_contract`), and through the binary with a temporary home
+  (`skill_cli_contract`: two clients sharing a folder, unchanged, refused and replaced, a foreign folder,
+  `--project`, `show` refusing `../`, an absolute path and the image, the human text).
 
 ### P13 `setup install`
 
@@ -2981,6 +3763,9 @@ between components), `reason`, `failure_code` and, for a smoke, `smoke_check`
 (`layout`, `banner`, `media_fixture`, `speech_fixture`, `recheck`); `stage` says what
 cleanup did with its private stage (`discarded`, or `retained` with
 `retention_reason` `ownership_unproved`, `unexpected_content` or `storage_failure`).
+A component whose download finished before a cancellation reached the installation is
+`failed` with reason `cancelled` (step null, its stage `discarded`), never `blocked`;
+`blocked` follows only a failure that is not a cancellation.
 A failed transaction is a failure result whose `error` carries the first failure's
 code and a fixed-prose remediation, with the same `data` beside it, so a caller always
 sees what is installed. Human mode lists the components on stdout and the error on
@@ -3023,6 +3808,24 @@ the system proxy settings and send only the neutral user agent `VSift/0.1 manage
 setup`. With `--events jsonl`, `progress` events come before the terminal event:
 `fetching_artifact` (bytes of the artifact being downloaded or imported, with its
 reviewed total) and `installing_components` (components of the plan finished).
+Since `0.3.0` video and speech download side by side (ADR 0036 section 4), so the
+`fetching_artifact` events of two artifacts can alternate; each event's `total` is
+the reviewed size of the artifact it counts.
+
+**Video and speech are independent parts** (since `0.3.0`, ADR 0036 section 4). The
+media tools are one part; the whisper.cpp program and its model the other. Their
+downloads and verifications run at the same time, one download per part at a time,
+under the one install guard; activation stays one atomic step per component, video
+first. A failure stops only its own part: a speech failure leaves video activated, and
+a video failure no longer stops speech's download. When no working video tools are
+selected once speech is downloaded, speech cannot be tested (its smoke decodes with
+video tools): its components are reported `blocked` (unchanged meaning: not activated
+because another component did not install), and its verified download is kept in the
+managed root. The next install verifies the kept file again by its reviewed size and
+SHA-256 before using it, discards it only if it no longer matches, and then tests and
+activates speech without downloading it again; a kept download whose bytes the plan no
+longer installs is removed by that install. The command's failure code stays that of
+the first failed core component in plan order.
 
 **Lookup** of every tool since P13 PR 4: a per-call path (`setup check --ffmpeg`
 etc.), then the configured path, then the managed version `setup install` selected,
@@ -3097,9 +3900,49 @@ crash-consistent (one rename per selection, removals and sweeps a rerun finishes
 ### Optional components and archive formats (0.3.0, ADR 0032)
 
 [ADR 0032](../decisions/0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md) adds **optional
-components**: named groups of managed components that a plan installs only when asked. The one this release has is
-`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only); `ocr` and `speakers`
-come with their stories.
+components**: named groups of managed components that a plan installs only when asked. This release has three:
+`online_links` (yt-dlp and the Deno runtime it needs, offered on Ubuntu 24.04 x86-64 only), `ocr` (VSift's OCR
+runner with its ONNX Runtime library, the two text models and their licence files, one component, `ocr_runner`,
+offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64) and `speakers` (sherpa-onnx's speaker-diarization
+tool with its ONNX Runtime library, the pyannote segmentation 3.0 model and the `NeMo` `TitaNet` small model, three
+components, offered on the same three systems).
+
+**Each extra, its names (the planner's ruling on the Fable 0.3.0 review, P-3).** An extra has a person-facing
+name on the setup door ([ADR 0036](../decisions/0036-the-setup-door.md)) and the catalogue's name everywhere else,
+and its main managed component has a name of its own. The names are deliberate and stay as they are; this table is
+the one place that relates them, and the 1.0 freeze statement points here. Public video pages are the first extra;
+on-screen text (`ocr`) is the second and speaker labels (`speakers`) the third, and a story's group adds its rows.
+
+| Where | JSON identifier | On the command line |
+| --- | --- | --- |
+| The setup door: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `web_videos` | `--include web-videos` |
+| The catalogue's group: `setup plan`, `setup install`, `setup check` (`optional_components[].name`), `setup list`, `setup remove`, `setup rollback`, and the `web_page` remediation of `ingest --url` | `online_links` | `--include online_links` |
+| The managed yt-dlp inside that group (plan actions, the group's `installs`, `components[].component`), and a yt-dlp the user registered | `yt_dlp` (beside `js_runtime_deno`, or the registered `js_runtime`) | `setup configure yt-dlp` (`yt_dlp` is a hidden spelling) |
+| The setup door for on-screen text: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `on_screen_text` | `--include on-screen-text` |
+| The catalogue's group for on-screen text: `setup plan`, `setup install`, `setup check` (`optional_components[].name`) | `ocr` | `--include ocr` |
+| The managed OCR runner inside that group (plan actions `install-ocr_runner`, the group's `installs`, `components[].component`, `setup list`, `setup remove`, `setup rollback`), and the runner the user registered | `ocr_runner` | `setup configure ocr-runner` |
+| The setup door for speaker labels: plain `vsift setup` and `vsift setup --unattended`, and the `setup` result's `parts[].part` | `speaker_labels` | `--include speaker-labels` |
+| The catalogue's group for speaker labels: `setup plan`, `setup install`, `setup check` (`optional_components[].name`) | `speakers` | `--include speakers` |
+| The three managed components inside that group (plan actions `install-speaker_diarizer` and so on, the group's `installs`, `components[].component`, `setup list`, `setup remove`, `setup rollback`) | `speaker_diarizer`, `speaker_segmentation_model`, `speaker_embedding_model` | `transcript speakers --diarizer`, `--segmentation-model`, `--embedding-model` for a tool or model of the user's own |
+
+A reader that maps the `setup` result's `web_videos` to `setup check`'s `optional_components` takes the rows above:
+`web_videos` is the group `online_links`, which installs `yt_dlp` and `js_runtime_deno`, and `on_screen_text` is the
+group `ocr`, which installs `ocr_runner`. The `ocr` group's one component is a whole archive of VSift's engine
+release: the runner (the only executable), the ONNX Runtime library, the two models and the licence files, installed
+flat beside the runner, which finds them there. `vsift ocr` uses the runner given with `--runner`, then the one
+registered with `setup configure ocr-runner`, then the managed one, then one on `PATH`; `setup check`'s `ocr` row
+reads the managed group only. `ocr_runner` and the `ocr` and `on_screen_text` names are additive (ADR 0032
+decision G); a reader skips a value it does not know.
+
+The `speakers` group is three components, because three publishers supply it: `speaker_diarizer` (the tool and the
+ONNX Runtime library beside it, two files of sherpa-onnx's own release archive; the tool is the only executable),
+`speaker_segmentation_model` and `speaker_embedding_model` (one raw model file each). They install as one part: a
+failure of any leaves none of them active and the core and the other groups untouched. The plan's `speakers` entry
+carries `terms_notice`, the attribution notice `TitaNet`'s licences require ([ADR 0031](../decisions/0031-speaker-labels.md)
+decision 2); no licence file is installed beside the pieces ([L-226](../planning/known-limits.md#l-226)).
+`vsift transcript speakers` takes each piece from its flag when given, otherwise from the managed install, and the
+tool, last, from the filtered `PATH`; the models are never looked up there. `speaker_labels`, `speakers` and the
+three component names are additive (ADR 0032 decision G).
 
 - **`setup plan --include <name>`** (repeatable; an older release answers it as an unknown argument) adds the
   group's actions to the plan. The plan's additive `optional_components` array lists every optional component of
@@ -3125,12 +3968,34 @@ come with their stories.
 - **`setup check`** carries the additive `optional_components` array: every optional component of the release
   with `name`, `status` (`installed` with `components` and their versions, `not_installed` when it is offered here
   and not every part is installed, `unavailable`), `next_step` and `add_command` (on the desktop profile, when not
-  installed). It never changes `status`, the local-video readiness.
-- **Catalogues per target (ADR 0032):** Windows x86-64 has a catalogue (FFmpeg and FFprobe, and the model) beside
-  Ubuntu 24.04 x86-64's; a target's catalogue may offer only some core components. A dependency whose component
-  it does not offer is `manual_selection_required` in the plan, and its `setup check` remediation's
-  `managed_install` is `unavailable_target` while the other dependencies' say `catalogue_accepted`; the model is
-  planned only where a whisper.cpp can smoke it.
+  installed). It never changes `status`, the local-video readiness. Each entry of `components` has `component`,
+  `version` and, since 0.3.0 (ADR 0028 section 4.6), `source`: `managed` (installed from the reviewed catalogue;
+  `version` is its catalogue version key) or `user_managed` (a yt-dlp or JavaScript runtime the user registered with
+  `setup configure yt-dlp` or `js-runtime`; `component` is then `yt_dlp` or `js_runtime`, `version` is the first line
+  of the file's own version output and `sha256` is the file's digest). A registered yt-dlp is used instead of a
+  managed one and is what the check reports; a file that cannot be identified (it does not start, fails, times out
+  or prints no version line) makes the group `not_installed` with a `next_step` that gives the reason in words and
+  no `add_command`. A user-managed tool is not pinned or reviewed, and the check never echoes anything it printed
+  but the version line. The registered files are identified within what is left of the deadline all tool checks
+  share (30 seconds, up to 60 with `--timeout-seconds`), after the other tools; with nothing left a file is not
+  started and the reason is `deadline`. A registered JavaScript runtime with no registered yt-dlp is listed apart, in
+  `unused_components`, with a sentence in `next_step`: it runs only with a yt-dlp the user registered.
+- **`setup configure yt-dlp|js-runtime --executable <path>`** (since 0.3.0) records the user's yt-dlp and the
+  JavaScript runtime it runs (Deno only in 0.3.0) in a file of their own each, apart from the other selections, so
+  an earlier release's configuration is untouched. `yt_dlp` is accepted as a hidden spelling, because `--include online_links` and the JSON results use the underscore; `js_runtime` is not accepted. Like every
+  `setup configure`, it validates only that the path is an absolute regular file and runs nothing; the response
+  names the dependency (`yt_dlp` or `js_runtime`) and what to do next. On Windows and macOS, where no managed yt-dlp
+  is offered, this is the way to use public video pages. `ingest --url` of a page uses it (a later pull request).
+- **Catalogues per target (ADR 0032):** Windows x86-64 (revision `windows-x86_64-2026-11-20-r4`) and macOS arm64
+  (`macos-arm64-2026-11-20-r1`) each have a catalogue of FFmpeg and FFprobe, whisper.cpp and the model beside
+  Ubuntu 24.04 x86-64's, so on all three every core dependency's `managed_install` is `catalogue_accepted`. The
+  `target` is `windows_x86_64` or `macos_arm64`. On Windows and macOS, whisper.cpp, and on macOS FFmpeg, come from
+  VSift's own engine releases: their actions' `publisher` is `VSift engine release`, `source_url` is a
+  `github.com/smormah/vsift/releases/download/...` address and `source_code_url` the release page. Neither
+  catalogue offers an optional component yet. A target's catalogue may still offer only some core components: a
+  dependency whose component it does not offer is `manual_selection_required` in the plan, and its `setup check`
+  remediation's `managed_install` is `unavailable_target` while the other dependencies' say `catalogue_accepted`;
+  the model is planned only where a whisper.cpp can smoke it.
 - **Archive formats:** a plan action's `format` gains `zip` (read by the bounded zip reader: stored or deflated
   entries, no Zip64, no links, no comments) and `tar_bz2` (one bzip2 stream).
 - **Values that may grow (D3, the maintainer's decision of 2026-10-21).** The catalogue-content fields may gain
@@ -3142,6 +4007,175 @@ come with their stories.
   optional component names none of them. Every other v1 rule is unchanged (no member is removed or reinterpreted,
   and a published failure code stays).
 
+### `watch`: `vsift <video>` (0.3.0, ADR 0037, first pull request)
+
+```console
+vsift ./meeting.mp4
+vsift watch ./meeting.mp4 --output ./notes
+vsift ./meeting.mp4 --json
+vsift ./meeting.mp4 --keep ./kept-calls
+```
+
+**One action for a person with a recording
+([ADR 0037](../decisions/0037-vsift-video-the-action.md)).** `vsift watch <video> [--output
+<folder>]` writes a readable transcript, subtitles and the screen changes of a local video, beside it
+or into `--output`. `vsift <video>` is the same command and the form people are shown. It is a front
+over the engine's own operations (`ingest`, the `prepare` job of ADR 0033 in the watched mode, run in
+this process, the transcript read, `candidates` and `frame get`), with no pipeline of its own. It is
+for a person or a script; the skill classes it **never**, because it writes into the person's own
+folder, and an assistant uses the session commands.
+
+**The bare-argument rule (ADR 0037 section 2).** Before the parser runs, VSift looks at the first
+argument that is not a global option (`--json`, `--events <format>`, `--session-root <path>`,
+`--host-isolation <value>`, as `--name value` or `--name=value`; the value-taking set is read from the
+parser's own definition):
+
+1. a command name (any top-level command, `watch` and `setup` included) is parsed as before: a command
+   name always wins, so a file named `setup` is watched with `vsift watch setup` or `vsift ./setup`;
+2. an argument that starts with `-` is parsed as before;
+3. an argument that names something that exists (by `symlink_metadata`, so a link is not followed
+   here: a file, a folder or a link) is parsed as if `watch` stood before it, so `ingest`'s own
+   refusals answer a folder (`SOURCE_IS_FOLDER`) or a link (`SOURCE_IS_LINK`), never "unknown
+   command";
+4. an argument that does not exist but looks like a path, with a separator (`/`, and `\` on Windows) or
+   a last dot and one to five ASCII letters or digits (`meetng.mp4`), is parsed as `watch` too, so the
+   answer is `ingest`'s "not found" (`STORAGE_IO`). **Text that holds a control or hidden character
+   never looks like a path** and stays the parser's to reject, inert (SEC-T02);
+5. anything else is parsed as before: `vsift serach` stays an unknown command (`INVALID_ARGUMENT`,
+   command `parse`).
+
+The rule only inserts the word: it never reorders, rewrites or echoes an argument, and a rejected line
+is still reported as command `parse`.
+
+**What it does, in order.** It refuses a source that is not a regular file with `ingest`'s own answer
+before anything else. It then checks, without running any tool, that video tools and speech
+recognition are configured (`MISSING_CAPABILITY` and the existing remediation otherwise); derives the
+output names; claims every one of them by exclusive creation; ingests the video into a new session;
+records the session's `prepare` job in the watched mode and runs it in this process, with ADR 0033's
+live line on a terminal; reads the sealed transcript and the screen changes; writes the files and the
+frames; and closes the session. A refusal before the job leaves nothing beside the video, and a failure
+after it releases every name it claimed, never a file it did not create.
+
+**The outputs.** For `meeting.mp4`, the stem is `meeting` (the name without its last extension):
+
+| Output | What it holds |
+| --- | --- |
+| `meeting.txt` | A header (the video's name, VSift's version, the UTC time to the minute, "local speech recognition", a line saying it is a machine transcription to check against the recording, the video's full SHA-256, and the transcript revision and session ids with a note that the run closed the session), then one line per segment, `[HH:MM:SS] text`. A part that was not transcribed appears in time order as `[HH:MM:SS-HH:MM:SS] (not transcribed: <reason>)`; a video with no sound track says so in place of the lines. |
+| `meeting.srt` | SubRip subtitles, one cue per segment, no header and no ids. A cue's text is one line, never holding a blank line or the `-->` arrow. Not written for a video with no sound track. |
+| `meeting-vsift/` | One PNG per written frame, named by its time (`00-01-12.480.png`), and `screen-changes.txt`: a header (the video's SHA-256, the visual index revision and session ids), then every screen change with its time, frame file (or `no frame (evidence room)` when the frame bound or the session's evidence room left it without one), candidate id, frame evidence id and the frame's SHA-256. |
+
+- **Text is written in display form**, hidden and control characters made visible, as the readable
+  views show it: transcript text and the video's name are untrusted.
+- **Frames:** at most 180 (L-234), and never more than the session has room for: each frame is a `frame
+  get`, which takes two of the session's 384 evidence slots, and the room is measured before the first
+  frame. Above that, the frames written are spread evenly over the video and the list marks the rest.
+  Should the session still refuse a frame for room, the frames stop there, every change stays listed, and the
+  run ends `partial` with `frames_stopped_for_room` (it never fails for lack of room). **A frame refused
+  because other work held the machine's capacity** (another VSift command on the same root, or the session for
+  longer than a commit waits) **is skipped** and the next one taken: the run ends `partial`, with
+  `frames_skipped_for_capacity` counting the changes left without a frame; any other frame failure still fails the
+  run (0.3.0, Fable review C-2; ADR 0037, note of 2026-11-11). Each frame is copied from the session's content-addressed artifact and checked
+  against its SHA-256 (`INTEGRITY_FAILURE` if it differs; nothing is kept). The list holds the changes
+  `candidates` returns, so a change its per-window budget left out is not listed.
+- **Four hours:** screen changes are found in the first four hours only (L-235); the list and the
+  result say so.
+- **Ids and hashes.** The hashes outlive the session: anyone can check the video's SHA-256 and each
+  frame's with any hashing tool. The `trv_`, `vix_`, `vcd_` and `evd_` ids name items of the session the
+  run closes: they say which run made the files, and cannot be looked up afterwards (L-236).
+- **Names.** A name that would exceed the system's component length is shortened at a character
+  boundary (then a player no longer pairs the subtitles with the video, and the finish screen says so);
+  on Windows trailing dots and spaces are trimmed. A video name that is not Unicode text, or that has
+  nothing before its extension, is refused before any work.
+- **Permissions.** The outputs take the folder's ordinary permissions, unlike a retained bundle (ADR
+  0013): a person writes them to share. Beside the video they are as exposed as the video itself.
+
+**Never overwriting.** Each output is claimed by exclusive creation before any work; if a name is taken
+nothing is written or copied. **`--output <folder>`** is an existing folder or a new one whose parent
+exists (created, never with its parents), refused when it lies inside the session root or the managed
+root, which VSift cleans automatically. A new folder is judged before it is created, and a root that does not exist
+yet is judged by its configured path, so a refusal leaves no folder behind (since 0.3.0, H3). Refusals reuse existing failure codes; each carries one fixed
+remediation that names the kind of output, never a file name (L-071):
+
+| Refusal | Code | Remediation (summary) |
+| --- | --- | --- |
+| The transcript, subtitles or screen-change folder name is taken | `INVALID_ARGUMENT` | `The transcript file (.txt)` (or `subtitles file (.srt)`, `screen-change folder (-vsift)`) `VSift would write beside the video already exists, and VSift never replaces` it. `Move it away, or write elsewhere with --output <folder>.` |
+| Another VSift run of the same video is writing these files right now (its job is owned by a live process; since 0.3.0, H3) | `INVALID_ARGUMENT` | `Another VSift run is writing these files right now, and VSift never takes over a run that is still working; nothing was changed. Wait for it to finish, or stop it and run the same command again to continue it, or write elsewhere with --output <folder>.` |
+| The folder refuses a write | `STORAGE_IO` | `VSift could not write its files into the folder (...). Choose a folder you can write to with --output <folder>.` |
+| `--output` inside VSift's own folders | `INVALID_ARGUMENT` | `--output names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.` |
+| `--output` not usable as a folder | `INVALID_ARGUMENT` | `--output takes a folder: an existing one, or a new one whose parent folder exists.` |
+| The video's name is not Unicode, or has nothing before its extension | `INVALID_ARGUMENT` | `... so VSift cannot name its files after it. Rename the video, then run it again.` |
+| `--keep`: the name is taken in that folder | `INVALID_ARGUMENT` | `A recording of this name is already kept in that folder, and VSift never replaces it. Keep this one in another folder with --keep <folder>, or rename the video.` |
+| `--keep` not usable as a folder, or not on a local drive | `INVALID_ARGUMENT` | `--keep takes a folder on a local drive: an existing one, or a new one whose parent folder exists.` |
+| `--keep` inside VSift's own folders | `INVALID_ARGUMENT` | `--keep names a folder inside VSift's own folders, which VSift cleans automatically. Choose another folder.` |
+| `--keep`: the video's name cannot name a kept recording's folder | `INVALID_ARGUMENT` | `... (a Windows device name). Rename the video, then run it again.` |
+| `--keep`: the folder refuses a private folder | `STORAGE_IO` | `VSift could not write a private folder into that folder (...). Choose a folder you can write to with --keep <folder>.` |
+| A copied frame differs from its SHA-256 | `INTEGRITY_FAILURE` | `... so the run kept nothing. Run it again; if it happens again, report it.` |
+
+Every other failure is the underlying command's, with its code and remediation (`ingest`'s source
+refusals, `MISSING_CAPABILITY`, the `prepare` job's, `frame get`'s). No new failure code is introduced.
+
+**Interruption, and run again (ADR 0037 sections 7 and 8, notes of 2026-10-29 and 2026-11-10).** Ctrl-C
+leaves the job interrupted (`CANCELLED`, exit 6): the files keep their last update, marked `STOPPED`, and
+the session is kept. The same command, while the session is kept, finds that job by the names its own
+record claimed, takes the files over and continues it; an output of that run that has since been deleted
+is claimed again and written whole. **Only a job no process owns is continued.** While another VSift
+process runs the job (a second terminal, or an assistant's call repeated after a timeout), the same
+command is refused with the `INVALID_ARGUMENT` row above and touches nothing: not that run's files, its
+session or its job. The job store's ownership decides, also when the job is owned again between the
+look and the resume.
+
+**`--keep <folder>`: keep the recording for later search (ADR 0037, amendment of 2026-10-30).** A run whose job seals
+writes one retained bundle (ADR 0013) to `<folder>/<name>`, after the outputs and before its session closes, so `vsift
+bundle search <folder>` finds it. `<name>` is the stem, each `:` made `-`. The folder is an existing one or a new one whose
+parent exists, and the same folder takes every recording; the bundle is owner-private, and the video is not copied in. On-screen
+text is not read, because the action does not run `ocr`: `bundle search` says so per recording. The name is checked before any
+work and not held during the run; nothing is ever replaced (L-244).
+
+- **A bundle that cannot be written.** The outputs stand and the session is left open: `kept.state` is `not_kept` with
+  `kept.failure_code`, `session_closed` is false, `outcome` is `partial`, and a fixed warning gives the `session retain`
+  command. The envelope's status is `partial` (exit 0), with the coverage reason `not_kept`, as for every partial of
+  `watch` (below).
+- **A job that did not seal keeps nothing.** A run stopped by Ctrl-C, or failed before the seal, writes no bundle.
+- **A failure after the seal** (a final write refused, a frame that failed) still writes the bundle, because it does not
+  need the outputs, and the session closes only once the bundle is committed. The failure keeps its own code and
+  remediation, the remediation's last words say what became of the bundle, and `data` holds `session_id`,
+  `session_closed` and `kept` ([`watch-failure-data.schema.json`](../../schemas/v1/watch-failure-data.schema.json)).
+  This is the only failure of `watch` that carries `data`; every other failed `watch` has `data` null.
+- **Run again.** The option is not recorded in the job: the run that finishes does what its own command line says, so
+  adding, dropping or changing `--keep` on a rerun continues the job and keeps as that line says.
+
+**The answer** ([`watch-data.schema.json`](../../schemas/v1/watch-data.schema.json), example
+[`watch.json`](../../schemas/v1/examples/watch.json)): command `watch` (also for `vsift <video>`),
+status `complete`, or `partial` when the run left a gap (exit 0 either way), and `data` with `source_id`, `session_id`, `session_closed`, `job_id`,
+`duration_us`, `transcript_revision_id` (`null` with no sound track), `visual_index_revision_id`
+(`null` with no picture), `outcome` (`complete`, or `partial` when `not_transcribed` holds a range,
+`screen_changes_beyond_bound` or `frames_stopped_for_room` is true, `frames_skipped_for_capacity` is above 0, or `kept.state` is `not_kept`), `not_transcribed` (half-open
+ranges in time order), `screen_changes_beyond_bound`, `frames_stopped_for_room`, `frames_skipped_for_capacity` (an integer), `names_shortened`, `outputs` (`transcript`, `subtitles`, `folder` and
+`screen_changes`, each with its absolute `path`, its `name` in display form and its `sha256`, `null`
+only for the folder), `changes_found` (every screen change the visual stream found), `changes_listed`
+(the settled screens `screen-changes.txt` lists, each with its reason: the first frame, each screen once
+motion settles, and a change at least 5 s after the one listed before it), and `frames` (each with
+`time_us`, `candidate_id`, `evidence_id`, `path` and `sha256`, at most 180, for listed changes only), and `kept` (`null`
+without `--keep`; otherwise `state`, `path`, `name` and `failure_code`). With `--events jsonl` the stream carries the
+`prepare` job's progress events, then the terminal event with the same data.
+
+**A partial run answers `status: partial` (the planner's ruling on the Fable 0.3.0 review, P-2; amending ADR 0037's
+implementation note of 2026-10-28 before `watch` first shipped).** As for every other reader of the contract, the
+envelope's `coverage` is `truncated` whenever `data.outcome` is `partial`, so a reader that follows the exit rule
+alone never takes a gap for a whole result: `gaps` lists the ranges not transcribed as `<from_us>-<to_us>` (the first
+100; `data.not_transcribed` holds them all) and `reasons` names each kind of gap, in this order: `untranscribed_range`
+(and `gap_list_truncated` past 100 ranges), `screen_changes_beyond_bound`, `frames_stopped_for_room`,
+`frames_skipped_for_capacity` and `not_kept`. A
+complete run has `coverage` `{"truncated": false, "gaps": [], "reasons": []}`. The exit status is 0 either way
+("complete or supported partial"), and the readable view is unchanged.
+
+**The readable view** writes ADR 0033's live line on standard error while it works (terminal only),
+then on standard output the finish screen: `Done: HH:MM:SS of video`, one line per output, a line per
+range not transcribed, a line when screen changes stop at four hours or the names were shortened, with
+`--keep` a line for the kept recording or the words of a failed one with the `session retain` command, that
+each file names the video's SHA-256, and last `More: vsift watch --help`. Like all readable text it is
+unstable and not for parsing.
+
 ## Output protocol
 
 Human output (without `--json` or `--events`) is readable terminal text on stdout.
@@ -3150,9 +4184,9 @@ any release, and it is not part of v1. Agents and scripts use `--json` (the agen
 skill requires it) or `--events jsonl`. In `--json` mode stdout contains
 exactly one complete v1 result plus a newline. In `--events jsonl` mode each stdout
 line is one bounded v1 event and exactly one terminal event ends the stream; for
-`transcript get`, `search`, `candidates`, the frame commands, `crop` and `audio` evidence
-events precede it (see "Evidence stream", "P08 transcript search", "P08 visual
-candidates", "P09 frames" and "P09 crops and audio clips" above);
+`transcript get`, `search`, `candidates`, `changes`, the frame commands, `crop` and `audio`
+evidence events precede it (see "Evidence stream", "P08 transcript search", "P08 visual
+candidates", "P09 frames", "P09 crops and audio clips" and "0.3.0 `changes`" above);
 `transcript retranscribe` and `job resume` write `progress` events before it, each as
 it happens (P11 PR 1); every other command writes the terminal event alone. The
 terminal event's `sequence` is always the number of events before it. stderr is
@@ -3211,8 +4245,10 @@ for parsing, above). Every human result and failure is written through one build
 PR 2a rendered `setup check`, `setup plan`, `setup configure`, `setup configure-model`,
 `ingest`, `session list/status/renew/close/retain/clean/init-workspace`, `transcript
 get`, `transcript retranscribe`, `search`, `bundle validate`, every failure and
-rejected command lines. PR 2b renders `candidates` (the index, the analysed ranges and
-typed gaps, then each candidate's time, span, reasons and change), `frame
+rejected command lines; `bundle search` (0.3.0) renders its hits, then every recording's coverage. PR 2b renders `candidates` (the index, the analysed ranges and
+typed gaps, then each candidate's time, span, reasons and change), `changes` (0.3.0: the
+same index and coverage, then one line per change with its time, kind and regions as `x,y
+wxh`, its before and after frames with their files, and how to cite it), `frame
 get/neighbours/burst` and `crop` (the request, the burst plan or the neighbours' stops,
 each selection's requested and actual time, then each item with its image facts and
 file), `audio` (the same for the clip), `job status` and `job cancel` (the job's state,
@@ -3238,15 +4274,83 @@ tool that is not simply missing, and last the line `Next: ...` with the one step
 - **Statuses:** `ready`, `not set up` (not found), `not working` (found, failed its probe), `no answer` (found,
   and no answer in time or not tried before the deadline), `model missing`, `model unreadable`, `unknown model`,
   `test failed`, `waiting for video`; an optional component is `added`, `none added` or `not available`.
-- **The step** is `vsift setup plan` where managed installation offers the missing part; otherwise the one
-  `setup configure` or `setup configure-model` command that registers it, with a link to the installation guide on
-  the line above; after a timeout, `vsift setup check`; when everything works, `vsift ingest ./your-video.mp4`.
+- **The step** is `vsift setup`, the setup door, whenever the setup is not complete, with a link to the
+  installation guide on the line above where VSift cannot install the missing part here; after a timeout,
+  `vsift setup check`; when everything works, `vsift ingest ./your-video.mp4`. With `--profile worker` the step is
+  the concrete one: `vsift setup plan` where managed installation offers the missing part, otherwise the one
+  `setup configure` or `setup configure-model` command. On a complete setup an extra that can be added here is
+  named: `Optional extras: web videos. Add one with: vsift setup --include web-videos`; with more than one it
+  lists them all (`web videos, on-screen text, speaker labels`) and gives each one's flag (`Add one with: vsift setup
+  --include web-videos, --include on-screen-text, or --include speaker-labels`).
 - **Left out of the readable view, and kept in the JSON:** advice written for an assistant (who knows the path,
   the per-call options, folder-search advice), where each tool was found (`lookup`), the profile, the version
   line of each tool and the local-ASR lines. The only provenance the view mentions is a path the person gave
   that was not found.
-- It is ASCII only. The ticks and colour of the first-run design come with the setup door (`vsift setup`, ADR 0036),
-  which knows whether a terminal is there. Like all readable text it is unstable and not for parsing.
+- It is ASCII only. The ticks and colour of the first-run design are the setup door's, which knows whether a
+  terminal is there. Like all readable text it is unstable and not for parsing.
+
+**The setup door, plain `vsift setup` (since `0.3.0`, ADR 0036).** A conversation with a person, not a result:
+it has no JSON form, and with `--json` or `--events` it answers `INVALID_ARGUMENT` under the operation identifier
+`setup`, before it probes anything, with a remediation that names `setup check --json` and the plan route. A
+person is there when standard input and standard output are both terminals. Then it shows the heading `VSift
+<version> setup` and `setup check`'s table, verdict and details (one renderer), and:
+
+- when the setup is complete: the verdict `Setup complete: video and speech both work.`, the extras line and `Try it: vsift ./your-video.mp4`;
+- after a timeout: `Next: vsift setup check`, where `--timeout-seconds` allows more time;
+- where something core is missing and the reviewed catalogue has it: the plan `setup plan --profile desktop`
+  builds (with any `--include web-videos`), shown as one offer (each piece with its publisher, size and licence,
+  the total, that each download is checked against a fixed fingerprint and installed for the user only, and that
+  `vsift setup plan` shows the exact addresses), then one question, `Install <parts> now? [y/N]`. Only `y` or
+  `yes`, in any case, is yes; Enter, any other answer, a closed input, Ctrl-C or ten minutes without an answer is
+  no, and nothing is installed. On yes it installs through `setup install`'s transaction, accepting the plan it
+  showed by that plan's own digest, then prints one line per piece and the table again, ending with the one step;
+- where VSift cannot install a missing part here: `VSift can't install <part> on this computer yet.`, the
+  installation guide, and the one `setup configure` or `setup configure-model` command.
+
+Without a terminal it never asks or waits: it writes the table and verdict, says nobody is here to answer, names
+`vsift setup --unattended --install <the missing parts>`, and exits with `setup check`'s status. While it installs,
+a terminal that takes symbols and colour shows one line per piece (FFmpeg, whisper.cpp, speech model, and any
+extra), each with a bar, the megabytes so far of its reviewed size and a stage word (waiting, downloading,
+checking, testing, ready, already there, waiting for video, or the failure in plain words), redrawn on standard
+output at most four times a second and cleared before the results; otherwise the count of pieces done is a live
+line on standard error. Symbols (`✓`, `✗`, `–`) and colour appear only when standard output is a
+terminal, `NO_COLOR` is not set, `TERM` is not `dumb` and, on Windows, the console accepts virtual terminal
+sequences; the words are the same either way. Its exit status is `setup check`'s for where the setup ends, or that
+of the install's failure code when a piece failed. The skill classes it as never: an assistant uses `setup check`,
+`setup plan` and the user's own `setup install`.
+
+**The unattended setup door (since `0.3.0`, ADR 0036 section 6).** `vsift setup --unattended --install
+video,speech [--include web-videos|on-screen-text|speaker-labels] [--accept-plan <digest>] [--json]` runs once and asks nothing. Naming the
+parts is the acceptance (the maintainer's decision of 2026-10-27, superseding that part of ADR 0023 for this form
+only): it installs the plan it builds for the named parts (`setup plan`'s plan limited to them; a plan of both
+parts is exactly `setup plan`'s, digest included), and every artifact stays pinned by URL, size and SHA-256 in the
+reviewed catalogue and verified before use. `--accept-plan` is the stricter form: the plan must have exactly that
+digest, or nothing is installed. `--unattended` needs `--install`, and `--install` and `--accept-plan` need
+`--unattended` (a parse failure otherwise). It reports one of three outcomes:
+
+- **pass** (exit 0): every named part works after the run, also when nothing needed installing;
+- **fail** (a `failed` envelope, exiting with its code's class): the install ran and a named part does not work;
+  each part's entry says what to do next;
+- **error** (the failure code's exit status, the ordinary failure envelope under `setup`): it could not start: a
+  named part VSift cannot install on this computer (`MISSING_CAPABILITY`, with the do-it-yourself step), an
+  included extra it cannot add here (`MISSING_CAPABILITY`, naming the extra it refuses), checks that ran out of time (`DEADLINE_EXCEEDED`), a
+  busy install (`BUSY`), or an `--accept-plan` digest that is not the plan's (`INVALID_ARGUMENT`, the stale-plan
+  remediation). Each is refused before anything is installed.
+
+With `--json` the result is the `setup` command's
+([`setup.schema.json`](../../schemas/v1/setup.schema.json), examples
+[`setup.pass.json`](../../schemas/v1/examples/setup.pass.json) and
+[`setup.fail.json`](../../schemas/v1/examples/setup.fail.json)): `outcome` (`pass`, `fail`), `parts` (video,
+speech, then each included extra: `part`, `requested`, `status` one of `ready`, `not_set_up`, `added`,
+`not_added`, `not_available_here`, and a fixed-prose `next_step` or `null`), and `install`, the `setup.install`
+data of the install it ran, or `null` when nothing needed installing. A pass is a `complete` envelope (exit 0). A fail is a `failed`
+envelope whose `error.code` is the install's own failure code (for example `DOWNLOAD_FAILED`, exit 7), or
+`MISSING_CAPABILITY` (exit 2) when the install gave none, with one fixed remediation (`The install ran, but a part you
+named does not work yet. ...`); its `data` is still this result, beside the error, so `outcome`, `parts` and `install`
+read as before (the planner's ruling on the Fable 0.3.0 review, P-2, amending ADR 0036 before the command first
+shipped: every non-zero exit carries an error of its class). An error, which could not start, has `data` null. `--events` is refused (`INVALID_ARGUMENT`); a script that
+wants progress events uses `setup install --events jsonl`. Without `--json` it writes the heading, one plain line
+per piece as it finishes, the table and verdict, `Result: pass` or `Result: fail`, and each part's next step.
 
 
 **Worker hosts.** In human mode `job run` prints its job result (status, attempt,
@@ -3432,11 +4536,19 @@ against `operation-response.schema.json`; evidence events validate against
 | 0 | complete or supported partial/degraded result | none |
 | 1 | unexpected internal failure | `INTERNAL` |
 | 2 | usage, unsupported schema, missing capability, unavailable isolation, or an operation id reused for another request | `INVALID_ARGUMENT`, `UNSUPPORTED_SCHEMA`, `MISSING_CAPABILITY`, `ISOLATION_UNAVAILABLE`, `COMMAND_NOT_IMPLEMENTED`, `IDEMPOTENCY_CONFLICT` |
-| 3 | invalid or unsupported source | `INVALID_SOURCE` |
+| 3 | invalid or unsupported source, or a video link that could not be fetched (`0.3.0`) | `INVALID_SOURCE`, `SOURCE_FETCH_FAILED` |
 | 4 | retryable condition | `BUSY` |
 | 5 | deadline or resource limit | `DEADLINE_EXCEEDED`, `RESOURCE_LIMIT` |
 | 6 | cancellation | `CANCELLED` |
 | 7 | storage, output I/O or integrity failure, or a managed download that did not complete | `STORAGE_IO`, `INTEGRITY_FAILURE`, `DOWNLOAD_FAILED` |
+
+**Every envelope keeps this rule:** exit 0 answers `complete` or `partial`, and every other exit answers `failed`
+or `cancelled` with an `error.code` of that exit's class. `watch` and the unattended `setup` were aligned with it in
+0.3.0, before either first shipped (the planner's ruling on the Fable 0.3.0 review, P-2): a partial `watch` is
+`partial`, and a fail of `setup --unattended` is `failed` with its code. A contract test lists every published example
+envelope, current and frozen, with its exit status and holds each to the rule, so a later command cannot add an
+answer that breaks it unnoticed. `setup check` answers with its own result, not an envelope, and exits 2 when
+`blocked`.
 
 `vsift` itself never exits with 126 or 127. When it is installed through npm (P13 PR 9,
 [`install.md`](../operations/install.md)), the launcher that starts it exits with 127
@@ -3519,7 +4631,9 @@ every request that resolves to one frame names one item. Source and operation id
 They cannot contain paths, options, whitespace, or control characters.
 
 All public media positions are non-negative source-timeline microseconds. Ranges are
-half-open `[from, to)` and require `from < to`. Provider stream time bases are
+half-open `[from, to)` and require `from < to`. A real-world clock time (`clock_time`,
+`time_anchor`, since `0.3.0`) is never a media position: it is derived from the session's
+time anchor and stated with its source and confidence (see `ingest` above). Provider stream time bases are
 normalized with checked rational arithmetic. Frame results keep requested and actual
 times separate and expose their signed delta.
 
@@ -3585,8 +4699,11 @@ contract says it is written only when it has something to say** (it is then opti
 the schema, and absent otherwise, so a response with nothing to say is exactly what it was
 before); a reader written against an older copy of the schema ignores it. The optional
 members so far are `local_asr.unusable_chunks` and the `untranscribed_ranges` of a
-retranscription (0.2.1, #353), and `local_asr.unplaced_ranges` (the second candidate of
-0.2.1, #359); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
+retranscription (0.2.1, #353), `local_asr.unplaced_ranges` (the second candidate of
+0.2.1, #359), and, in `0.3.0`, `time_anchor` (ingest and session data) and `clock_time`
+(every timestamped item), present only when the session has a time anchor (ADR 0029); the `origin` of ingest and session data and `error.reason`
+(present for `SOURCE_FETCH_FAILED`, ADR 0028; the code `SOURCE_FETCH_FAILED` itself is
+added to the v1 code list, which a reader that predates it treats as an unknown failure); in the stored record, `carried_untranscribed` (#353) and `unplaced_ranges`
 (#359), which an older release reads as damage. A member added after the published
 `0.1.0` to an answer that release already wrote (`transcript_coverage` of `transcript
 get`) is a declared property but not `required`: `published_compatibility` holds the
@@ -3604,9 +4721,9 @@ producer emits it every time, and a test pins that.
 | C-05 | bounded/sanitized output and broken stdout/stderr behavior |
 | C-06 | strict bounded JSON decoding and schema/identifier rejection, including the P11 job request (`vsift-contract` `request` tests, `worker_contract`, fuzz targets `job_request` and `job_batch_line`), the recorded steps and results of a request record (`recorded_steps_and_results_read_back_exactly`, fuzz target `request_record`) and `handoff check` (P13 PR 5: the `handoff` unit tests, `handoff_contract`, `handoff_differential` against `jsonschema`, `handoff_cli_contract` through the binary, fuzz target `handoff_check`) |
 | C-07 | checked time/range/crop invariants and property tests |
-| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`) |
+| C-08 | schema examples and old-reader/additive-v1 compatibility, including the `setup check` `local_asr` object (`setup_local_asr_contract`, `engine_setup_local_asr`), a segment's `display_text` and `display_label` (`vsift-contract` `text` tests, `display_text_makes_hidden_characters_visible_and_keeps_text_raw`, and SEC-T02's `sec_t02_adversarial_evidence` through the binary), the failure remediation of an `ingest` path that names no file, a folder or a file that may not be read (`storage_contract`, `source_path_cli_contract`, #369) and the P11 event kinds (`worker_events_contract`: a reader that knows only `evidence` and `terminal` skips `progress`, `lifecycle` and `result` and still sees a contiguous sequence), the `0.2.1` views and coverage of a read (the brief answers are a projection of the full ones and match their frozen examples: `transcript_contract`, `local_asr_contract`, `search_contract`, `candidates_contract`; a complete read and a stream are what `0.1.0` published but for `transcript_coverage`: `a_complete_read_is_what_was_published_but_for_the_new_member`, `a_stream_is_what_was_published_but_for_the_new_terminal_member`; the brief view is refused for a stream before anything is read or analysed, through the binary: `transcript_cli_contract`, `search_cli_contract`, `candidates_cli_contract`; a read over a gap is `partial` as a search is: `a_read_over_a_gap_is_partial_and_names_the_gap`, `a_read_and_a_search_agree_on_every_range`, `a_read_over_a_gap_is_partial_as_a_search_over_it_is`); the `0.3.0` on-screen text (`screen_text_contract`: the `ocr` results and a search's `screen_text` member against their schemas and frozen examples, older pages without the member still valid; `ocr_cli_contract` through the binary; `screen_text_index_store` for the stored record and retained bundles); and `setup check`'s `managed_updates` (`0.2.3`: always present, empty when nothing is superseded, valid without it: `setup_managed_update_contract`; through the binary on every platform: `setup_check_names_a_superseded_managed_whisper_and_the_step`; on real bytes: `p13_managed_upgrade_real`); and time anchoring (`0.3.0`, ADR 0029: the domain's `time_anchor` tests, the stored form `filesystem_session_store::time_anchors` and `time_anchor_store`, the contract's `clock` tests, `anchored_results_match_their_examples`, `candidates_carry_the_clock_times_of_their_span_and_frame`, `a_frame_carries_the_clock_time_of_the_delivered_frame`, through the binary `time_anchor_cli_contract`, and on real tags written by the pinned FFmpeg the opt-in `time_anchor_real_tags` in `P07 local ASR`); and `ingest --url` (`0.3.0`, ADR 0028: the examples and every reason, `link_contract`; through the binary with no network, `link_ingest_cli_contract`; the fetch against a local HTTPS server, `link_transfer`; the address policy, `link_acquisition` unit tests) |
 | C-09 | legal job and cancellation terminal transitions (`vsift-domain` `job` tests over the whole state graph; `job` use-case tests of cancellation serialized with the commit); the public job commands, `--operation-id` and interruptions through the binary (`job_cli_contract`, `interrupt_cli_contract`, the job examples in `local_asr_contract`); `job run` through the binary: results and events against their schemas, replay, conflict, busy, refusals, sentinels and shutdown (`job_run_cli_contract`), and the request path through the engine (`engine_worker`); `job batch` through the binary: events, summary, limits, O-02, O-03, X-08 and O-04 (`job_batch_cli_contract`), and the batch through the engine (`engine_batch`, opt-in `engine_batch_tools`) |
-| C-10 | unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
+| C-10 | speaker labels (`0.3.0`: `speakers_contract` for the results, blocks, labels, filter and examples; the domain's and application's `speakers` tests for the labelling rule, names, coverage and the cap; `speaker_record` for the strict record; `sherpa_diarizer` for the engine's output and the WAV), unknown confidence, speaker metadata, time normalization, requested/actual timing, imported-transcript offset conversion, local-ASR provenance and carried segments (`local_asr_contract`, `local_asr_store`), and that an id of a superseded revision still resolves in a read, a handoff check and a retained bundle (`superseded_ids_cli_contract`) |
 
 These tests establish the public boundary only. Provider execution, filesystem
 durability, media correctness, concurrency, and load guarantees belong to later

@@ -1,0 +1,49 @@
+Screen changes of session ses_0123456789abcdef0123456789abcdef
+Index: vix_5278827a5eb80d85a88983f2e69a5cba (revision 1, r0-visual-v1, video length 00:00:14.000000)
+Range: 00:00:00.000000 to 00:00:14.000000 (--from 0 --to 14000000)
+Searched: 00:00:00.000000 to 00:00:14.000000 (--from 0 --to 14000000)
+Analysed:
+  00:00:00.000000 to 00:00:14.000000 (--from 0 --to 14000000)
+Regions: screen-change-regions-v1 (a pixel differs when a colour moves 32 levels or more; a 16x16 tile differs with 4 such pixels)
+Changes on this page: 2
+
+00:00:07.000000  change  regions 0,64 1440x772
+  Changed after 00:00:06.500000 and at or before 00:00:07.000000
+  Before: evd_7a5a35385615baa32671b075aa98a79c at 00:00:06.500000
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-a68ff83ab0ab68846d3ed628d83b416f59ddbedef5180762ecffe845d95e4e20.png
+  After: evd_e76b0ba2cfed51de1754ec765cde09d0 at 00:00:07.000000
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-ec355f93e399d5da23913c01dcefac7cf80ec3aa9f2b324b67e1711a7cfa6a81.png
+  Crop of the before frame, 0,64 1440x772: evd_bc829a65688ace18d1b0d713a1861188
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-95cfc82a8dba76c77eac93d016c4355f0191e81c3f8f8dee2b0df27b8b016b01.png
+  Crop of the after frame, 0,64 1440x772: evd_dbe264833866a2eafba1bddf68bdf6bf
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-62e6b1b98e3476fcfabd921172b77f3666e876bdba064f692f029878098656a1.png
+
+00:00:10.000000  change  regions 1008,384 400x48; 224,608 32x16
+  Changed after 00:00:09.500000 and at or before 00:00:10.000000
+  Before: evd_803980fbf0baa735c3289faad5a28bdf at 00:00:09.500000
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-e116ab9c11a5fdbea1abc05a2748034f4d34cee7b92ef3aa5dead97468f88f76.png
+  After: evd_aa215186ae35ab01bd72d555ab931075 at 00:00:10.000000
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-85365076b85a44af6ffec5a63b5f95b0d673197ce2b716915986144438e1453d.png
+  Crop of the before frame, 1008,384 400x48: evd_a5e4c1f5ef500a0506b770b7cc77cd7c
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-e5ec4b682f10495c542855ceace53f963f520e88b6dee2aead742a99a39a2e28.png
+  Crop of the after frame, 1008,384 400x48: evd_8370236d1664a331e5d5b643c5a7c7ae
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-4b13771ad30b834515342b9b0d34c61a4e4d3c9a36913452bb001d515ec864d5.png
+  Crop of the before frame, 224,608 32x16: evd_719c0fbd741ac47ce27ab49047e0a7d0
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-47ea4361b576be3e1d62771ec761923c580c2fe28d5e6be629b3b65c8ba999ca.png
+  Crop of the after frame, 224,608 32x16: evd_4c79177b1a9ca90633f9a5299d7055f2
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-7e522c1ab4f8b06209d7756d26c3b2010e29ff514ac7e7c5045ce1e4a4a5622d.png
+
+Cite a change by its before and after evidence ids (evd_...), never by its change id: those frames are what a reader checks.
+Crops: 6 made, at most 16 a call; 0 of the two largest regions of each change without a crop
+
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z

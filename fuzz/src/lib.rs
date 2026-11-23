@@ -30,17 +30,17 @@ use vsift_contract::{
     decode_strict_json, decode_work_request, validate_steps,
 };
 use vsift_domain::{
-    ArtifactId, CropRect, CursorToken, EvidenceId, FrameDimensions, JobId, LanguageTag,
-    ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES, MAX_RECORD_ITEMS,
-    MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
-    MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES,
-    MAX_WINDOW_CANDIDATES, ManagedVersionKey, MediaStreamKind, MediaTime, OperationId,
-    OperationKey, PlannedChunk, SearchMatch, SearchQuery, SessionId, Sha256Hex, SourceId,
-    SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat, TranscriptRevisionId,
-    TranscriptSegmentId, VISUAL_FRAME_BYTES, VisualCandidate, VisualCandidateId,
-    VisualChangePolicy, VisualHash, VisualIndexId, VisualIndexWindow, VisualSample, VisualWindow,
-    VisualWindowOutcome, analyse_window, is_canonical_managed_key, normalise_search_text,
-    validate_chunk_output,
+    AnchorSource, ArtifactId, CropRect, CursorToken, DownloadLimits, EvidenceId, FrameDimensions,
+    JobId, LanguageTag, ListingTail, MAX_CUE_TEXT_BYTES, MAX_LISTED_FRAMES, MAX_MANAGED_KEY_BYTES,
+    MAX_RECORD_ITEMS, MAX_RECORD_SELECTIONS, MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES,
+    MAX_SCREEN_TEXT_LINES, MAX_SCREEN_TEXT_LINES_PER_FRAME, MAX_SEARCH_QUERY_BYTES,
+    MAX_SEARCH_TERMS, MAX_TRANSCRIPT_CUES, MAX_WINDOW_CANDIDATES, ManagedVersionKey,
+    MediaStreamKind, MediaTime, OperationId, OperationKey, PlannedChunk, SearchMatch, SearchQuery,
+    SessionId, Sha256Hex, SourceId, SourceSegmentId, SpeakerLabel, TimeRange, TranscriptFormat,
+    TranscriptRevisionId, TranscriptSegmentId, VISUAL_FRAME_BYTES, VisualCandidate,
+    VisualCandidateId, VisualChangePolicy, VisualHash, VisualIndexId, VisualIndexWindow,
+    VisualSample, VisualWindow, VisualWindowOutcome, analyse_window, is_canonical_managed_key,
+    normalise_search_text, validate_chunk_output,
 };
 use vsift_infrastructure::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, BatchFileError, BatchLine as FileLine,
@@ -50,16 +50,17 @@ use vsift_infrastructure::{
     MAX_TAR_STREAM_BYTES, MAX_XZ_ARCHIVE_BYTES, MountDevice, NetworkInterfaces, SourceContainer,
     VisualSamplingWindow, WhisperOutputLimits, classify_mountinfo, classify_os_release,
     classify_root_mount, decode_chunk_checkpoint, decode_evidence_record, decode_job_record,
-    decode_request_record, decode_screen_text_index_record, decode_transcript_parts,
-    decode_transcript_record, decode_visual_index_record, encode_chunk_checkpoint,
-    encode_evidence_record, encode_job_record, encode_request_record,
+    decode_png_pixels, decode_request_record, decode_screen_text_index_record,
+    decode_transcript_parts, decode_transcript_record, decode_visual_index_record,
+    encode_chunk_checkpoint, encode_evidence_record, encode_job_record, encode_request_record,
     encode_screen_text_index_record, encode_transcript_part, encode_transcript_record,
     encode_visual_index_record, inspect_bzip2_tar_inventory, inspect_gzip_tar_inventory,
     inspect_tar_inventory, inspect_xz_tar_inventory, inspect_zip_inventory,
-    inspect_zip_selected_files, parse_ashowinfo_start, parse_cgroup_limit, parse_cpu_max,
-    parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo, parse_net_dev,
-    parse_png_sequence, parse_proc_cgroup, parse_runner_description, parse_runner_output,
-    parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    inspect_zip_selected_files, is_safe_format_id, parse_ashowinfo_start, parse_cgroup_limit,
+    parse_cpu_max, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
+    parse_net_dev, parse_png_sequence, parse_proc_cgroup, parse_runner_description,
+    parse_runner_output, parse_supplied_transcript, parse_visual_samples, parse_whisper_full_json,
+    parse_ytdlp_info,
 };
 #[cfg(unix)]
 use vsift_infrastructure::{BundleSourcePolicy, FilesystemSessionStore};
@@ -124,6 +125,8 @@ pub enum Target {
     TranscriptPart,
     /// `FFprobe` metadata through `parse_ffprobe_metadata`, for both containers.
     FfprobeMetadata,
+    /// yt-dlp's metadata through `parse_ytdlp_info`.
+    YtdlpInfoJson,
     /// The `transcript get --cursor` continuation token through `CursorToken::parse`.
     TranscriptCursor,
     /// One visual window's `FFmpeg` output through `parse_visual_samples`, then
@@ -137,6 +140,10 @@ pub enum Target {
     /// against segment text. The input is the query, a line feed, and the
     /// segment text.
     SearchQuery,
+    /// Lines of on-screen text through `read_clock_face`, then the faces, one a
+    /// frame in one place, through the clock model and its rollover search
+    /// (ADR 0029). The input is the lines.
+    ClockFace,
     /// `showinfo` and `ashowinfo` diagnostics through the single-frame and
     /// first-audio-sample parsers (`parse_frame_showinfo`,
     /// `parse_ashowinfo_start`). The input is the diagnostics.
@@ -147,6 +154,10 @@ pub enum Target {
     /// An extraction run's standard output through `parse_png_sequence`. See
     /// [`png_sequence_input`] for the input layout.
     PngSequence,
+    /// One stored evidence PNG through `decode_png_pixels`, which `changes`
+    /// compares two frames with (ADR 0034). See [`png_pixels_input`] for the
+    /// input layout.
+    PngPixels,
     /// The stored evidence record through `decode_evidence_record`, as a
     /// session read and `bundle validate` read it (P09 PR 2).
     EvidenceRecord,
@@ -242,19 +253,22 @@ pub enum Target {
 
 impl Target {
     /// Every target, in the order CI runs them.
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 39] = [
         Self::TranscriptSrt,
         Self::TranscriptWebVtt,
         Self::WhisperFullJson,
         Self::TranscriptRecord,
         Self::FfprobeMetadata,
+        Self::YtdlpInfoJson,
         Self::TranscriptCursor,
         Self::VisualSamples,
         Self::VisualIndexRecord,
         Self::SearchQuery,
+        Self::ClockFace,
         Self::FrameShowinfo,
         Self::FrameListing,
         Self::PngSequence,
+        Self::PngPixels,
         Self::EvidenceRecord,
         Self::CropRect,
         Self::Mountinfo,
@@ -290,13 +304,16 @@ impl Target {
             Self::WhisperFullJson => "whisper_full_json",
             Self::TranscriptRecord => "transcript_record",
             Self::FfprobeMetadata => "ffprobe_metadata",
+            Self::YtdlpInfoJson => "ytdlp_info_json",
             Self::TranscriptCursor => "transcript_cursor",
             Self::VisualSamples => "visual_samples",
             Self::VisualIndexRecord => "visual_index_record",
             Self::SearchQuery => "search_query",
+            Self::ClockFace => "clock_face",
             Self::FrameShowinfo => "frame_showinfo",
             Self::FrameListing => "frame_listing",
             Self::PngSequence => "png_sequence",
+            Self::PngPixels => "png_pixels",
             Self::EvidenceRecord => "evidence_record",
             Self::CropRect => "crop_rect",
             Self::Mountinfo => "mountinfo",
@@ -336,13 +353,16 @@ impl Target {
             Self::WhisperFullJson => check_whisper_full_json(data),
             Self::TranscriptRecord => check_transcript_record(data),
             Self::FfprobeMetadata => check_ffprobe_metadata(data),
+            Self::YtdlpInfoJson => check_ytdlp_info(data),
             Self::TranscriptCursor => check_transcript_cursor(data),
             Self::VisualSamples => check_visual_samples(data),
             Self::VisualIndexRecord => check_visual_index_record(data),
             Self::SearchQuery => check_search_query(data),
+            Self::ClockFace => check_clock_face(data),
             Self::FrameShowinfo => check_frame_showinfo(data),
             Self::FrameListing => check_frame_listing(data),
             Self::PngSequence => check_png_sequence(data),
+            Self::PngPixels => check_png_pixels(data),
             Self::EvidenceRecord => check_evidence_record(data),
             Self::CropRect => check_crop_rect(data),
             Self::Mountinfo => check_mountinfo(data),
@@ -405,6 +425,14 @@ pub enum Violation {
     DuplicateStreamIndex,
     /// A video stream lacks dimensions or another stream has them.
     DimensionsMismatch,
+    /// A clock face or the clock model broke its own bounds (ADR 0029).
+    ClockModelInvalid,
+    /// Accepted metadata reports more recording-time tags than the probe
+    /// names, one twice, the operator's source, or one away from the start.
+    ClockTagsInvalid,
+    /// Accepted yt-dlp metadata has no id, the wrong number of formats, or a
+    /// format id that could leave the output folder or change a selection.
+    YtdlpInfoInvalid,
     /// An accepted cursor did not decode to itself after encoding.
     CursorRoundTripChanged,
     /// Accepted visual samples do not match the decoded frames: another
@@ -435,6 +463,9 @@ pub enum Violation {
     /// Accepted PNG images are not exactly the input, split into the
     /// expected number of images of the expected size.
     PngSequenceMismatch,
+    /// Decoded pixels are not exactly three bytes per pixel, differ between
+    /// two decodes of one input, or came from an image the PNG walker refuses.
+    PngPixelsMismatch,
     /// An accepted evidence record could not be encoded again.
     EvidenceRecordNotReencodable,
     /// An accepted evidence record changed in a round trip, or holds more
@@ -525,6 +556,9 @@ impl fmt::Display for Violation {
             Self::ZeroDuration => "accepted metadata has a zero duration",
             Self::DuplicateStreamIndex => "accepted metadata repeats a stream index",
             Self::DimensionsMismatch => "stream dimensions do not match the stream kind",
+            Self::ClockModelInvalid => "a clock face or the clock model broke its own bounds",
+            Self::ClockTagsInvalid => "accepted metadata reports impossible recording-time tags",
+            Self::YtdlpInfoInvalid => "accepted yt-dlp metadata broke its own rules",
             Self::CursorRoundTripChanged => "an accepted cursor changed in a round trip",
             Self::VisualSamplesMismatch => "accepted visual samples do not match the frames",
             Self::VisualAnalysisInvalid => "the window analysis of accepted samples is invalid",
@@ -542,6 +576,7 @@ impl fmt::Display for Violation {
             }
             Self::ListingOutOfBounds => "an accepted frame listing is out of bounds",
             Self::PngSequenceMismatch => "accepted PNG images do not match the output",
+            Self::PngPixelsMismatch => "decoded pixels do not match the accepted image",
             Self::EvidenceRecordNotReencodable => {
                 "an accepted evidence record could not be encoded again"
             }
@@ -750,6 +785,24 @@ fn check_transcript_part(data: &[u8]) -> Result<(), Violation> {
     }
 }
 
+/// An accepted video names one format or a pair, each with an id that can
+/// neither leave the output folder nor change phase 2's selection.
+fn check_ytdlp_info(data: &[u8]) -> Result<(), Violation> {
+    let Ok(video) = parse_ytdlp_info(data, DownloadLimits::DEFAULT) else {
+        return Ok(());
+    };
+    if !matches!(video.formats.len(), 1 | 2)
+        || video.video_id.is_empty()
+        || !video
+            .formats
+            .iter()
+            .all(|format| is_safe_format_id(&format.format_id))
+    {
+        return Err(Violation::YtdlpInfoInvalid);
+    }
+    Ok(())
+}
+
 fn check_ffprobe_metadata(data: &[u8]) -> Result<(), Violation> {
     for container in [SourceContainer::IsoMedia, SourceContainer::Matroska] {
         let Ok(description) = parse_ffprobe_metadata(data, container) else {
@@ -766,6 +819,19 @@ fn check_ffprobe_metadata(data: &[u8]) -> Result<(), Violation> {
             if (stream.kind == MediaStreamKind::Video) != stream.encoded_dimensions.is_some() {
                 return Err(Violation::DimensionsMismatch);
             }
+        }
+        // Time anchoring (ADR 0029): at most the two named tags, never the
+        // operator's source, each at the start of the timeline.
+        if description.clock_tags.len() > 2
+            || description.clock_tags.iter().any(|tag| {
+                tag.source() == AnchorSource::Operator || tag.media_time().as_micros() != 0
+            })
+            || description
+                .clock_tags
+                .windows(2)
+                .any(|pair| pair[0].source() == pair[1].source())
+        {
+            return Err(Violation::ClockTagsInvalid);
         }
     }
     Ok(())
@@ -945,6 +1011,64 @@ fn checked_words(text: &str) -> Result<Vec<String>, Violation> {
         return Err(Violation::SearchNormalisationNotIdempotent);
     }
     Ok(words)
+}
+
+fn check_clock_face(data: &[u8]) -> Result<(), Violation> {
+    const SECONDS_PER_DAY: u32 = 86_400;
+    let Ok(input) = std::str::from_utf8(data) else {
+        return Ok(());
+    };
+    let Ok(dimensions) = vsift_domain::FrameDimensions::new(1920, 1080) else {
+        return Err(Violation::HarnessSetup);
+    };
+    let Ok(region) = vsift_domain::TextRegion::new(1800, 1040, 60, 14, dimensions) else {
+        return Err(Violation::HarnessSetup);
+    };
+    let mut reads = Vec::new();
+    for (at, line) in input.lines().take(4_096).enumerate() {
+        let Ok(face) = vsift_domain::read_clock_face(line) else {
+            continue;
+        };
+        if face.second_of_day() >= SECONDS_PER_DAY {
+            return Err(Violation::ClockModelInvalid);
+        }
+        if face.wraps() != face.reading().is_none() {
+            return Err(Violation::ClockModelInvalid);
+        }
+        let (Ok(pts), Ok(step)) = (i64::try_from(at), u64::try_from(at)) else {
+            return Ok(());
+        };
+        reads.push(vsift_domain::ClockRead {
+            time: MediaTime::from_micros(step * 10_000_000),
+            pts,
+            region,
+            face,
+        });
+    }
+    let held = reads.len();
+    let analysis = vsift_domain::analyse_reads(
+        reads,
+        vsift_domain::ClockRefusals::default(),
+        MediaTime::from_micros(14_400_000_000),
+    );
+    let tracked: usize = analysis
+        .clocks
+        .iter()
+        .map(vsift_domain::ScreenClock::read_count)
+        .sum();
+    if tracked > held {
+        return Err(Violation::ClockModelInvalid);
+    }
+    for clock in &analysis.clocks {
+        if clock
+            .tightest_offset()
+            .is_some_and(|offset| offset.width() <= 0)
+        {
+            return Err(Violation::ClockModelInvalid);
+        }
+    }
+    let _ = analysis.next_reads();
+    Ok(())
 }
 
 fn check_search_query(data: &[u8]) -> Result<(), Violation> {
@@ -1289,6 +1413,39 @@ fn check_png_sequence(data: &[u8]) -> Result<(), Violation> {
     Ok(())
 }
 
+/// Builds a [`Target::PngPixels`] input: the expected width and height as
+/// big-endian 16-bit integers, then one PNG.
+#[must_use]
+pub fn png_pixels_input(width: u16, height: u16, png: &[u8]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(png.len().saturating_add(4));
+    data.extend_from_slice(&width.to_be_bytes());
+    data.extend_from_slice(&height.to_be_bytes());
+    data.extend_from_slice(png);
+    data
+}
+
+fn check_png_pixels(data: &[u8]) -> Result<(), Violation> {
+    let [width_high, width_low, height_high, height_low, png @ ..] = data else {
+        return Ok(());
+    };
+    let width = u16::from_be_bytes([*width_high, *width_low]);
+    let height = u16::from_be_bytes([*height_high, *height_low]);
+    let Ok(dimensions) = FrameDimensions::new(u32::from(width), u32::from(height)) else {
+        return Ok(());
+    };
+    let Ok(pixels) = decode_png_pixels(png, dimensions) else {
+        return Ok(());
+    };
+    let expected = usize::from(width) * usize::from(height) * 3;
+    if pixels.len() != expected
+        || decode_png_pixels(png, dimensions).ok().as_ref() != Some(&pixels)
+        || parse_png_sequence(png, 1, dimensions).is_err()
+    {
+        return Err(Violation::PngPixelsMismatch);
+    }
+    Ok(())
+}
+
 /// The session every fuzzed job record and checkpoint belongs to: that of
 /// the committed example records the seeds copy.
 pub const JOB_FUZZ_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
@@ -1331,7 +1488,9 @@ fn paths_reparse(target: &WorkTarget) -> bool {
     let reparses =
         |path: &RelativeInputPath| RelativeInputPath::parse(path.as_str()).as_ref() == Ok(path);
     match target {
-        WorkTarget::Ingest { source, transcript } => {
+        WorkTarget::Ingest {
+            source, transcript, ..
+        } => {
             reparses(source)
                 && transcript
                     .as_ref()

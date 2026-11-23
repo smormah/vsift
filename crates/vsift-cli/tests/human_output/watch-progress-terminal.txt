@@ -1,0 +1,27 @@
+== before the job: the private copy ==
+Copying meeting.mp4 into a private session
+
+== screen changes before an estimate, speech not started ==
+VSift  meeting.mp4  (48:00)
+
+  Screen changes   █░░░░░░░░░░░░░░░   5:00 of 48:00   working out how long
+  Speech           ░░░░░░░░░░░░░░░░   <ESC>[2m– waiting<ESC>[0m
+
+== screen changes with an estimate, speech before one ==
+VSift  meeting.mp4  (48:00)
+
+  Screen changes   ██████░░░░░░░░░░   20:00 of 48:00   about 2 min left
+  Speech           ░░░░░░░░░░░░░░░░   0:30 of 48:00   working out how long
+
+== screen changes done, speech with an estimate ==
+VSift  meeting.mp4  (48:00)
+
+  Screen changes   ████████████████   <ESC>[32m✓ done<ESC>[0m
+  Speech           ████░░░░░░░░░░░░   12:30 of 48:00   about 9 min left
+
+== both done ==
+VSift  meeting.mp4  (48:00)
+
+  Screen changes   ████████████████   <ESC>[32m✓ done<ESC>[0m
+  Speech           ████████████████   <ESC>[32m✓ done<ESC>[0m
+

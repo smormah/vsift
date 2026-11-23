@@ -193,17 +193,38 @@ fn adjust_for_host(blocked: &mut Value) -> Result<(), Box<dyn std::error::Error>
         != vsift_domain::ManagedTarget::Ubuntu2404X86_64
     {
         // Nor is the optional online-links component offered there.
-        blocked["optional_components"] = serde_json::json!([{
-            "name": "online_links",
-            "status": "unavailable",
-            "components": [],
-            "next_step": vsift_contract::optional_check_step(
-                vsift_application::OptionalComponent::OnlineLinks,
-                &vsift_application::OptionalCapability::Unavailable,
-                vsift_application::SetupProfile::Desktop,
-            ),
-            "add_command": null,
-        }]);
+        let unavailable = |component: vsift_application::OptionalComponent| {
+            serde_json::json!({
+                "name": component.identifier(),
+                "status": "unavailable",
+                "components": [],
+                "next_step": vsift_contract::optional_check_step(
+                    component,
+                    &vsift_application::OptionalCapability::Unavailable,
+                    vsift_application::SetupProfile::Desktop,
+                ),
+                "add_command": null,
+            })
+        };
+        // The optional OCR runner and the speaker group are offered on every
+        // system with a catalogue (Ubuntu, Windows and macOS), so their frozen
+        // entries stand there; a host with no catalogue has neither group.
+        let mut groups = vec![unavailable(
+            vsift_application::OptionalComponent::OnlineLinks,
+        )];
+        for (name, group) in [
+            ("ocr", vsift_application::OptionalComponent::Ocr),
+            ("speakers", vsift_application::OptionalComponent::Speakers),
+        ] {
+            match blocked["optional_components"]
+                .as_array()
+                .and_then(|groups| groups.iter().find(|group| group["name"] == name))
+            {
+                Some(frozen) if host.is_some() => groups.push(frozen.clone()),
+                _ => groups.push(unavailable(group)),
+            }
+        }
+        blocked["optional_components"] = Value::Array(groups);
     }
     Ok(())
 }
@@ -263,11 +284,10 @@ fn emitted_json_matches_frozen_examples() -> Result<(), Box<dyn std::error::Erro
         "executable_probe_and_reviewed_catalogue"
     );
     assert_eq!(plan_value["data"]["readiness"], "blocked");
-    // Ubuntu's catalogue installs all three core components; Windows's
-    // (ADR 0032) FFmpeg alone here, as no whisper.cpp could smoke the model.
+    // Every catalogue (ADR 0032: Ubuntu 24.04 x86-64, Windows x86-64 and
+    // macOS arm64) installs all three core components.
     let expected_actions = match plan_value["data"]["target"].as_str() {
-        Some("ubuntu_24_04_x86_64") => Some(3),
-        Some("windows_x86_64") => Some(1),
+        Some("ubuntu_24_04_x86_64" | "windows_x86_64" | "macos_arm64") => Some(3),
         _ => None,
     };
     if let Some(expected_actions) = expected_actions {

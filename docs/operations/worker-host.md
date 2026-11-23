@@ -293,7 +293,9 @@ SHA-256 of it), never from the delivery, so every redelivery carries the same id
   lasts while the session exists, or while the table is not full, and not for the retention:
   a duplicate delivered later runs again, and the same id with another request is accepted
   (the P14 soak met both, #286). **Acknowledge a message before the session can be
-  cleaned**, and do not rely on a replay or an `IDEMPOTENCY_CONFLICT` for an old id.
+  cleaned**, and do not rely on a replay or an `IDEMPOTENCY_CONFLICT` for an old id. A
+  supervisor that may redeliver late keeps its own ledger of the idempotency keys it has
+  acknowledged, which sticky routing needs as well.
 
 ## 6. Restart and recovery
 
@@ -328,7 +330,8 @@ request replays that job's commit.
   registered but never published: `session list` shows it as `initializing`, with no
   folder or with a folder that holds no first generation. A request whose open merely
   failed (a busy root, a source that is refused, a copy that does not fit) removes its own
-  registration at once, unless the root stays busy for five seconds, so a kill is what
+  registration at once, unless the root, or on Windows another program holding one of
+  its files, stays in the way for five seconds of waiting (#604), so a kill is what
   leaves one. `session status`, `renew` and `close` of
   such an id answer `STORAGE_IO` or `INVALID_ARGUMENT` (the codes the lookup always gave)
   with a remediation that says no published session has this id and that it is not a

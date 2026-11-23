@@ -82,6 +82,11 @@ pub struct MediaDescription {
     pub origin_micros: i64,
     /// Every selected and unselected stream in original order.
     pub streams: Vec<MediaStream>,
+    /// The container's recording-time tags that parsed, each as an anchor at
+    /// the start of the timeline (time anchoring, ADR 0029). Not yet judged
+    /// for plausibility: that needs the ingesting host's clock
+    /// ([`crate::TimeAnchors::from_ingest`]).
+    pub clock_tags: Vec<crate::TimeAnchor>,
 }
 
 /// Explicit source stream selection for one operation.
@@ -238,6 +243,7 @@ mod tests {
             duration: MediaTime::from_micros(1_000_000),
             origin_micros: 0,
             streams,
+            clock_tags: Vec::new(),
         }
     }
 

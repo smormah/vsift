@@ -726,7 +726,7 @@ impl Engine {
 
     /// Resolves `FFmpeg` and `FFprobe` for local ASR: a configured selection
     /// first, then the filtered `PATH`.
-    fn local_asr_media_tools(&self) -> Result<MediaProviderConformance, EngineError> {
+    pub(crate) fn local_asr_media_tools(&self) -> Result<MediaProviderConformance, EngineError> {
         self.media_tools().map_err(|error| match error {
             EngineError::MediaToolUnavailable(dependency) => {
                 EngineError::LocalAsrToolUnavailable(dependency)
@@ -992,6 +992,8 @@ pub(crate) const fn snapshot_storage_error(error: &SourceError) -> SessionStorag
         | SourceError::ChangedDuringStage
         | SourceError::Cancelled
         | SourceError::Path(_)
+        | SourceError::Fetch(_)
+        | SourceError::NoRoom
         | SourceError::Io(_) => SessionStorageError::Io,
     }
 }

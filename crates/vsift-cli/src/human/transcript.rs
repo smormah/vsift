@@ -1,12 +1,13 @@
 //! `transcript get`, `transcript retranscribe` and `search`.
 
 use super::{
-    push_outcome,
+    clock, push_outcome,
     text::{Placement, RenderedText, TerminalText, TooLarge},
-    time::{push_range, push_span},
+    time::{push_clock, push_range, push_span},
     view::{
-        Envelope, Markup, OcrSearch, Retranscription, Search, SearchScreenText, Since,
-        TranscriptCoverage, TranscriptPage, TranscriptRevision, TranscriptSegment,
+        BundleSearch, BundleSearchCounts, Envelope, Markup, OcrSearch, Retranscription, Search,
+        SearchScreenText, Since, Speakers, SpeakersResult, TranscriptCoverage, TranscriptPage,
+        TranscriptRevision, TranscriptSegment,
     },
 };
 
@@ -32,6 +33,9 @@ pub(super) fn page(envelope: &Envelope<TranscriptPage>) -> Result<RenderedText, 
     // for a range that is wholly transcribed.
     if let Some(coverage) = &page.transcript_coverage {
         push_coverage_ranges(&mut text, coverage, READ_NOT_TRANSCRIBED);
+    }
+    if let Some(speakers) = &page.speakers {
+        push_speakers(&mut text, speakers);
     }
     text.push_fixed("Segments on this page: ")
         .push_unsigned(count(page.items.len()))
@@ -152,6 +156,9 @@ pub(super) fn search(envelope: &Envelope<Search>) -> Result<RenderedText, TooLar
     }
     text.end_line();
     push_coverage_ranges(&mut text, coverage, SEARCH_NOT_TRANSCRIBED);
+    if let Some(speakers) = &data.speakers {
+        push_speakers(&mut text, speakers);
+    }
     text.push_fixed("Hits on this page: ")
         .push_unsigned(count(data.hits.len()))
         .end_line();
@@ -200,6 +207,116 @@ pub(super) fn ocr_search(envelope: &Envelope<OcrSearch>) -> Result<RenderedText,
     push_next_page(&mut text, data.next_cursor.as_deref());
     push_outcome(&mut text, envelope);
     text.finish()
+}
+
+/// `bundle search`: one page of hits across retained bundles, then what each
+/// recording could give. A hit is a lead, and the page says so; the on-screen
+/// gaps are stated on every result that has any, because they do not reach the
+/// status (ADR 0035).
+pub(super) fn bundle_search(envelope: &Envelope<BundleSearch>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Kept recordings searched: ")
+        .push_unsigned(data.bundles.searched)
+        .end_line();
+    // The terms are the caller's own text; only their number is shown.
+    text.push_fixed("Query terms: ")
+        .push_unsigned(count(data.query.terms.len()))
+        .end_line();
+    text.push_fixed("Hits: ")
+        .push_unsigned(count(data.hits.len()))
+        .push_fixed(" of ")
+        .push_unsigned(data.total_hits)
+        .end_line();
+    if !data.hits.is_empty() {
+        text.push_fixed(UNTRUSTED_EVIDENCE).end_line();
+    }
+    for hit in &data.hits {
+        text.blank_line();
+        text.push_value(&hit.bundle)
+            .push_fixed("  ")
+            .push_value(&hit.evidence_id)
+            .push_fixed("  ");
+        push_clock(&mut text, hit.time_us);
+        text.push_fixed("  ")
+            .push_value(&hit.kind)
+            .push_fixed("  match: ")
+            .push_value(&hit.tier)
+            .push_fixed("  session: ")
+            .push_value(&hit.session_id)
+            .end_line();
+        if let Some(quoted) = hit.segment.as_ref().or(hit.line.as_ref()) {
+            text.push_untrusted(&quoted.display_text, Placement::Quoted);
+        }
+    }
+    text.blank_line();
+    text.push_fixed("Recordings:").end_line();
+    for session in &data.sessions {
+        text.push_fixed("  ").push_value(&session.bundle);
+        if let (Some(transcript), Some(screen_text)) = (&session.transcript, &session.screen_text) {
+            text.push_fixed(": hits ")
+                .push_unsigned(session.hits)
+                .push_fixed(", transcript ")
+                .push_value(&transcript.state)
+                .push_fixed(", on-screen text ")
+                .push_value(&screen_text.state);
+        } else {
+            text.push_fixed(": ").push_value(&session.state);
+            if let Some(reason) = &session.reason {
+                text.push_fixed(" (").push_value(reason).push_fixed(")");
+            }
+        }
+        text.end_line();
+    }
+    for bundle in &data.not_searched {
+        text.push_fixed("  ")
+            .push_value(&bundle.bundle)
+            .push_fixed(": not searched (")
+            .push_value(&bundle.reason)
+            .push_fixed(")")
+            .end_line();
+    }
+    push_bundle_notes(&mut text, &data.bundles);
+    text.push_fixed(
+        "A hit is a lead, not a citation: to look at a moment or cite it, open the source with \
+         vsift ingest and cite from that session.",
+    )
+    .end_line();
+    push_next_page(&mut text, data.next_cursor.as_deref());
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes what the counts of a `bundle search` add to its list.
+fn push_bundle_notes(text: &mut TerminalText, counts: &BundleSearchCounts) {
+    if counts.screen_text_incomplete > 0 {
+        text.push_fixed("On-screen text was not read in full for ")
+            .push_unsigned(counts.screen_text_incomplete)
+            .push_fixed(" of ")
+            .push_unsigned(counts.searched)
+            .push_fixed(" recordings, so a missing hit there means nothing.")
+            .end_line();
+    }
+    if counts.not_searched > 0 {
+        text.push_fixed("Bundles not searched: ")
+            .push_unsigned(counts.not_searched)
+            .end_line();
+    }
+    if counts.unavailable > 0 {
+        text.push_fixed("Bundles that could not be read: ")
+            .push_unsigned(counts.unavailable)
+            .end_line();
+    }
+    if counts.duplicates > 0 {
+        text.push_fixed("The same bundle found again, searched once: ")
+            .push_unsigned(counts.duplicates)
+            .end_line();
+    }
+    if counts.skipped_entries > 0 {
+        text.push_fixed("Folders with no bundle.json, or that could not be read, left out: ")
+            .push_unsigned(counts.skipped_entries)
+            .end_line();
+    }
 }
 
 /// Writes the on-screen text part of a search: how much was read, then each
@@ -425,6 +542,7 @@ fn push_segments<'segment>(
         }
         text.end_line();
         push_segment_details(text, segment);
+        clock::push_segment_clock(text, segment.clock_time.as_ref());
         text.push_untrusted(&segment.display_text, Placement::Quoted);
     }
     text.blank_line();
@@ -466,6 +584,84 @@ fn push_segment_details(text: &mut TerminalText, segment: &TranscriptSegment) {
             .push_untrusted(&speaker.display_label, Placement::Inline)
             .end_line();
     }
+    if let Some(label) = &segment.speaker_label {
+        text.push_fixed("  Speaker label (provisional): ")
+            .push_untrusted(&label.display, Placement::Inline)
+            .end_line();
+    }
+}
+
+/// `transcript speakers` and `transcript name-speaker`: the record's labels.
+pub(super) fn speakers(envelope: &Envelope<SpeakersResult>) -> Result<RenderedText, TooLarge> {
+    let data = &envelope.data;
+    let mut text = TerminalText::result();
+    text.push_fixed("Speaker labels of session ")
+        .push_value(&data.session_id)
+        .end_line();
+    push_speakers(&mut text, &data.speakers);
+    text.push_fixed("Read the labelled segments: vsift transcript get ")
+        .push_value(&data.session_id)
+        .push_fixed(" --from <us> --to <us>")
+        .end_line();
+    push_outcome(&mut text, envelope);
+    text.finish()
+}
+
+/// Writes a speaker record's labels and coverage, with what a label is.
+fn push_speakers(text: &mut TerminalText, speakers: &Speakers) {
+    text.push_fixed("Speaker labels: record ")
+        .push_value(&speakers.record_id)
+        .push_fixed(", precision ")
+        .push_value(&speakers.precision)
+        .push_fixed(", heard ");
+    push_range(text, speakers.diarized_range);
+    match speakers.given_speaker_count {
+        Some(count) => {
+            text.push_fixed(", speakers given: ")
+                .push_unsigned(u64::from(count));
+        }
+        None => {
+            text.push_fixed(", speakers counted by the engine");
+        }
+    }
+    text.end_line();
+    if let Some(shortfall) = &speakers.count_shortfall {
+        text.push_fixed("  Warning: ")
+            .push_value(&shortfall.warning)
+            .end_line();
+        text.push_fixed("  ")
+            .push_value(&shortfall.remediation)
+            .end_line();
+    }
+    for label in &speakers.labels {
+        text.push_fixed("  ")
+            .push_untrusted(&label.display, Placement::Inline)
+            .push_fixed(": ")
+            .push_unsigned(label.labelled_segments)
+            .push_fixed(" segments, ")
+            .push_unsigned(label.speech_us / 1_000_000)
+            .push_fixed(" s of speech")
+            .end_line();
+    }
+    let coverage = &speakers.coverage;
+    text.push_fixed("  Segments labelled: ")
+        .push_unsigned(coverage.labelled_segments)
+        .push_fixed(", no confident speaker: ")
+        .push_unsigned(coverage.no_confident_speaker_segments)
+        .push_fixed(", not heard by the engine: ")
+        .push_unsigned(coverage.not_diarized_segments)
+        .end_line();
+    if speakers.revision_state == "stopped" {
+        // ADR 0031 note of 2026-11-18: never imply labels for time the revision does
+        // not transcribe.
+        text.push_fixed(
+            "  The labelled revision stopped early: these labels cover only its own segments, not the time it did not transcribe.",
+        )
+        .end_line();
+    }
+    text.push_fixed("  ")
+        .push_value(&speakers.statement)
+        .end_line();
 }
 
 /// How many stretches of unplaced words a revision's text lists, as many as a

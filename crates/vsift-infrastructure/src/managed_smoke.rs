@@ -25,6 +25,12 @@
 //!    one-file yt-dlp unpacks itself there and must remove what it unpacked,
 //!    or the recheck fails). Each run is bounded by the policy's stream limit
 //!    and media deadline.
+//!    The speaker-diarization tool of the optional `speakers` group has no
+//!    banner of its own to read (it prints usage on standard error), so its
+//!    banner check is a run: the tool hears a three-second tone from the smoke
+//!    directory with both staged models and must exit successfully and print
+//!    its configuration line first, which proves the tool starts, finds ONNX
+//!    Runtime beside itself and parses both model paths.
 //! 3. **Media fixture.** The existing [`FixtureMediaToolVerifier`] runs the
 //!    reviewed F01 checks through the staged `FFmpeg` and `FFprobe`, within the
 //!    media deadline; it already bounds the generated audio by the policy.
@@ -44,7 +50,8 @@
 //! candidate belongs to [`vsift_application::smoke_before_activation`].
 
 use std::{
-    io::{self, Read},
+    ffi::OsString,
+    io::{self, Read, Write},
     num::{NonZeroU16, NonZeroUsize},
     path::{Path, PathBuf},
     time::Duration,
@@ -58,14 +65,14 @@ use vsift_application::{
     LocalAsrVerificationFailure, LocalAsrVerifier, MediaToolFailure, MediaToolVerification,
     MediaToolVerifier, RecognizerIdentity, ReviewedCompatibilityPolicy, SpeechRecognitionError,
 };
-use vsift_domain::{ManagedComponent, SharedLibraryName};
+use vsift_domain::{ManagedComponent, SharedLibraryName, SpeakerCount};
 
 use crate::{
     ExecutableResolutionError, FixtureAsrVerifier, FixtureMediaToolVerifier, HostIsolation,
     ManagedRuntimeRole, MediaProviderConformance, ProcessCancellation, ProcessError,
-    ProcessRequest, ProcessSupervisor, ProcessWorkingDirectory, StagedManagedCandidate,
-    SupervisorPolicy, TerminationReason, TrustedExecutable, WhisperCli, WhisperOutputLimits,
-    managed_artifact_store::RuntimeFault, run_within_budget,
+    ProcessRequest, ProcessSupervisor, ProcessWorkingDirectory, SherpaOnnxDiarizer,
+    StagedManagedCandidate, SupervisorPolicy, TerminationReason, TrustedExecutable, WhisperCli,
+    WhisperOutputLimits, managed_artifact_store::RuntimeFault, run_within_budget,
 };
 
 /// Bytes read from an executable to identify its format and machine.
@@ -88,6 +95,10 @@ pub struct SmokeCompanions {
     pub whisper: Option<TrustedExecutable>,
     /// Selected model file, when it is not staged.
     pub model: Option<PathBuf>,
+    /// Selected speaker-diarization tool, when it is not staged.
+    pub diarizer: Option<TrustedExecutable>,
+    /// Selected segmentation and embedding models, when they are not staged.
+    pub speaker_models: Option<(PathBuf, PathBuf)>,
 }
 
 /// Everything the media fixture check needs.
@@ -217,7 +228,7 @@ impl<V: SmokeFixtureVerifiers> CompatibilitySmoke<StagedManagedCandidate>
 /// One executable the banner step runs, and what it must print.
 struct BannerProbe {
     executable: TrustedExecutable,
-    arguments: &'static [&'static str],
+    arguments: Vec<OsString>,
     expected_prefix: Option<String>,
     environment: BannerEnvironment,
 }
@@ -243,7 +254,7 @@ type OptionalBanner = (
 );
 
 /// The optional components' banner runs (ADR 0028 section 4, ADR 0032).
-const OPTIONAL_BANNERS: [OptionalBanner; 2] = [
+const OPTIONAL_BANNERS: [OptionalBanner; 3] = [
     (
         ManagedComponent::JsRuntimeDeno,
         ManagedRuntimeRole::Deno,
@@ -256,6 +267,16 @@ const OPTIONAL_BANNERS: [OptionalBanner; 2] = [
         &["--ignore-config", "--no-plugin-dirs", "--version"],
         &[("YTDLP_NO_PLUGINS", "1")],
     ),
+    // The runner has no version flag: `describe` hashes its runtime library
+    // and models beside it, names the build in one JSON line and reads no
+    // environment, so a library, model or layout that does not load shows
+    // here, before the version is published.
+    (
+        ManagedComponent::OcrRunner,
+        ManagedRuntimeRole::OcrRunner,
+        &["describe"],
+        &[],
+    ),
 ];
 
 /// What the resolved candidates and companions ask the smoke to run.
@@ -264,6 +285,51 @@ struct SmokePlan {
     media: Option<MediaProviderConformance>,
     media_fixture: bool,
     speech: Option<(TrustedExecutable, PathBuf)>,
+    speakers: Option<SpeakerProbe>,
+}
+
+/// The diarization tool and the two models its banner run loads.
+struct SpeakerProbe {
+    diarizer: TrustedExecutable,
+    segmentation: PathBuf,
+    embedding: PathBuf,
+    expected_prefix: String,
+}
+
+/// The tone the diarization tool hears: 16 kHz mono 16-bit PCM, three seconds.
+const SPEAKER_FIXTURE_SECONDS: u32 = 3;
+const SPEAKER_FIXTURE_RATE: u32 = 16_000;
+/// The tone's file in the private smoke directory; removed after the run.
+const SPEAKER_FIXTURE_FILE: &str = "speaker-fixture.wav";
+
+/// A three-second triangle tone (36 samples a period, about 444 Hz, at under a
+/// third of full scale) as a canonical 44-byte-header WAV file. It holds no
+/// speech: the check is that the tool starts and loads its models, which the
+/// evaluation's own flat-folder run did on the same kind of file on all three
+/// systems (ADR 0031).
+fn speaker_tone_wave() -> Vec<u8> {
+    let samples = SPEAKER_FIXTURE_RATE * SPEAKER_FIXTURE_SECONDS;
+    let data_bytes = samples * 2;
+    let mut bytes = Vec::with_capacity(usize::try_from(data_bytes).unwrap_or(0) + 44);
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&(36 + data_bytes).to_le_bytes());
+    bytes.extend_from_slice(b"WAVEfmt ");
+    bytes.extend_from_slice(&16_u32.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&1_u16.to_le_bytes());
+    bytes.extend_from_slice(&SPEAKER_FIXTURE_RATE.to_le_bytes());
+    bytes.extend_from_slice(&(SPEAKER_FIXTURE_RATE * 2).to_le_bytes());
+    bytes.extend_from_slice(&2_u16.to_le_bytes());
+    bytes.extend_from_slice(&16_u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_bytes.to_le_bytes());
+    for index in 0..samples {
+        let phase = i32::try_from(index % 36).unwrap_or(0);
+        let ramp = if phase < 18 { phase } else { 36 - phase };
+        let sample = i16::try_from((ramp - 9) * 1_000).unwrap_or(0);
+        bytes.extend_from_slice(&sample.to_le_bytes());
+    }
+    bytes
 }
 
 const fn failure(check: Check, reason: Reason) -> CompatibilitySmokeFailure {
@@ -329,13 +395,13 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
             let ffprobe = staged_executable(candidate, ManagedRuntimeRole::Ffprobe)?;
             banners.push(BannerProbe {
                 executable: ffmpeg.clone(),
-                arguments: &["-version"],
+                arguments: vec![OsString::from("-version")],
                 expected_prefix: Some(self.policy.expected_ffmpeg_version.clone()),
                 environment: BannerEnvironment::Empty,
             });
             banners.push(BannerProbe {
                 executable: ffprobe.clone(),
-                arguments: &["-version"],
+                arguments: vec![OsString::from("-version")],
                 expected_prefix: Some(self.policy.expected_ffprobe_version.clone()),
                 environment: BannerEnvironment::Empty,
             });
@@ -356,7 +422,7 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
                 let whisper = staged_executable(candidate, ManagedRuntimeRole::WhisperCli)?;
                 banners.push(BannerProbe {
                     executable: whisper.clone(),
-                    arguments: &["--help"],
+                    arguments: vec![OsString::from("--help")],
                     expected_prefix: None,
                     environment: BannerEnvironment::Empty,
                 });
@@ -368,7 +434,7 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
                     .ok_or(failure(Check::Layout, Reason::MissingExecutable))?
             };
             let model = if let Some(candidate) = model_candidate {
-                staged_model(candidate)?
+                staged_model(candidate, ManagedRuntimeRole::SpeechModel)?
             } else {
                 self.companions
                     .model
@@ -393,19 +459,75 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
                     .ok_or(failure(Check::Layout, Reason::Preparation))?;
                 banners.push(BannerProbe {
                     executable,
-                    arguments,
+                    arguments: arguments.iter().map(OsString::from).collect(),
                     expected_prefix: Some(prefix.to_owned()),
                     environment: BannerEnvironment::Optional(variables),
                 });
             }
         }
 
+        let speakers = self.resolve_speakers(candidates)?;
+
         Ok(SmokePlan {
             banners,
             media,
             media_fixture: media_candidate.is_some(),
             speech,
+            speakers,
         })
+    }
+
+    /// The speaker-diarization run, when any of the group's three components
+    /// is staged: each one that is not comes from the companions (selected
+    /// earlier), and one that is in neither makes the smoke refuse.
+    fn resolve_speakers(
+        &self,
+        candidates: &[StagedManagedCandidate],
+    ) -> Result<Option<SpeakerProbe>, CompatibilitySmokeFailure> {
+        let staged = |component| {
+            candidates
+                .iter()
+                .find(|candidate| candidate.component() == component)
+        };
+        let tool = staged(ManagedComponent::SpeakerDiarizer);
+        let segmentation = staged(ManagedComponent::SpeakerSegmentationModel);
+        let embedding = staged(ManagedComponent::SpeakerEmbeddingModel);
+        if tool.is_none() && segmentation.is_none() && embedding.is_none() {
+            return Ok(None);
+        }
+        let missing = || failure(Check::Layout, Reason::MissingExecutable);
+        let companion_models = self.companions.speaker_models.clone();
+        let diarizer = match tool {
+            Some(candidate) => staged_executable(candidate, ManagedRuntimeRole::SpeakerDiarizer)?,
+            None => self.companions.diarizer.clone().ok_or_else(missing)?,
+        };
+        let segmentation = match segmentation {
+            Some(candidate) => {
+                staged_model(candidate, ManagedRuntimeRole::SpeakerSegmentationModel)?
+            }
+            None => companion_models
+                .clone()
+                .map(|(segmentation, _)| segmentation)
+                .ok_or_else(missing)?,
+        };
+        let embedding = match embedding {
+            Some(candidate) => staged_model(candidate, ManagedRuntimeRole::SpeakerEmbeddingModel)?,
+            None => companion_models
+                .map(|(_, embedding)| embedding)
+                .ok_or_else(missing)?,
+        };
+        let expected_prefix = self
+            .policy
+            .optional_banner(ManagedComponent::SpeakerDiarizer)
+            .filter(|prefix| !prefix.is_empty())
+            .ok_or(failure(Check::Layout, Reason::Preparation))?
+            .to_owned();
+        Ok(Some(SpeakerProbe {
+            diarizer,
+            segmentation,
+            embedding,
+            expected_prefix,
+        }))
     }
 
     async fn run_checks(
@@ -415,6 +537,11 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
     ) -> Result<(), CompatibilitySmokeFailure> {
         for probe in &plan.banners {
             self.banner(probe, smoke_path)
+                .await
+                .map_err(|reason| failure(Check::Banner, reason))?;
+        }
+        if let Some(probe) = &plan.speakers {
+            self.speaker_banner(probe, smoke_path)
                 .await
                 .map_err(|reason| failure(Check::Banner, reason))?;
         }
@@ -447,7 +574,7 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
             Duration::from_secs(self.policy.media_deadline_seconds),
         )
         .map_err(|_| Reason::Preparation)?
-        .with_arguments(probe.arguments.iter().copied());
+        .with_arguments(probe.arguments.iter().cloned());
         let request = match probe.environment {
             BannerEnvironment::Empty => request,
             BannerEnvironment::Optional(variables) => {
@@ -487,6 +614,48 @@ impl<V: SmokeFixtureVerifiers> StagedCompatibilitySmoke<V> {
             return Err(Reason::BannerMismatch);
         }
         Ok(())
+    }
+
+    /// The diarization tool's banner run: it hears the tone with both models,
+    /// through the same closed argument list as a real run, and must exit
+    /// successfully and print its configuration line first. The tone is
+    /// removed afterwards, whatever the outcome, so the smoke directory ends
+    /// empty.
+    async fn speaker_banner(&self, probe: &SpeakerProbe, smoke_path: &Path) -> Result<(), Reason> {
+        let wave = smoke_path.join(SPEAKER_FIXTURE_FILE);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&wave)
+            .and_then(|mut file| file.write_all(&speaker_tone_wave()))
+            .map_err(|_| Reason::Preparation)?;
+        let outcome = self.speaker_run(probe, &wave, smoke_path).await;
+        let removed = std::fs::remove_file(&wave);
+        outcome?;
+        removed.map_err(|_| Reason::UnexpectedExtraFile)
+    }
+
+    async fn speaker_run(
+        &self,
+        probe: &SpeakerProbe,
+        wave: &Path,
+        smoke_path: &Path,
+    ) -> Result<(), Reason> {
+        let diarizer = SherpaOnnxDiarizer::new(
+            probe.diarizer.clone(),
+            &probe.segmentation,
+            &probe.embedding,
+            smoke_threads(),
+            self.host_isolation,
+        )
+        .map_err(|_| Reason::MissingExecutable)?;
+        let banner = BannerProbe {
+            executable: probe.diarizer.clone(),
+            arguments: diarizer.argv(wave, SpeakerCount::Automatic),
+            expected_prefix: Some(probe.expected_prefix.clone()),
+            environment: BannerEnvironment::Optional(&[]),
+        };
+        self.banner(&banner, smoke_path).await
     }
 
     async fn media_fixture(
@@ -580,11 +749,14 @@ fn staged_executable(
     })
 }
 
-/// The staged model's explicit path, after a full recheck of its bytes.
-fn staged_model(candidate: &StagedManagedCandidate) -> Result<PathBuf, CompatibilitySmokeFailure> {
+/// The staged model's explicit path for `role`, after a full recheck of its bytes.
+fn staged_model(
+    candidate: &StagedManagedCandidate,
+    role: ManagedRuntimeRole,
+) -> Result<PathBuf, CompatibilitySmokeFailure> {
     let layout = |reason| failure(Check::Layout, reason);
     let name = candidate
-        .role_file(ManagedRuntimeRole::SpeechModel)
+        .role_file(role)
         .ok_or(layout(Reason::MissingExecutable))?;
     candidate
         .open_role_file(name)
@@ -862,8 +1034,42 @@ mod tests {
 
     use super::{
         Container, ExecutableFormat, classify_executable_header, first_line, media_reason,
-        missing_shared_library, speech_reason,
+        missing_shared_library, speaker_tone_wave, speech_reason,
     };
+
+    /// The diarization smoke's tone is a canonical 44-byte-header WAV of three
+    /// seconds of 16 kHz mono 16-bit samples that is not silence, so what the
+    /// tool hears is what its argument list says.
+    #[test]
+    fn the_speaker_tone_is_a_canonical_three_second_wave_file() {
+        let wave = speaker_tone_wave();
+        let data = 16_000_usize * 3 * 2;
+        assert_eq!(wave.len(), 44 + data);
+        assert_eq!(wave.get(0..4), Some(b"RIFF".as_slice()));
+        assert_eq!(
+            wave.get(4..8),
+            Some(
+                u32::try_from(36 + data)
+                    .unwrap_or(0)
+                    .to_le_bytes()
+                    .as_slice()
+            )
+        );
+        assert_eq!(wave.get(8..16), Some(b"WAVEfmt ".as_slice()));
+        // PCM, one channel, 16 kHz, 32,000 bytes a second, 2-byte frames, 16 bits.
+        assert_eq!(wave.get(20..22), Some(1_u16.to_le_bytes().as_slice()));
+        assert_eq!(wave.get(22..24), Some(1_u16.to_le_bytes().as_slice()));
+        assert_eq!(wave.get(24..28), Some(16_000_u32.to_le_bytes().as_slice()));
+        assert_eq!(wave.get(28..32), Some(32_000_u32.to_le_bytes().as_slice()));
+        assert_eq!(wave.get(32..34), Some(2_u16.to_le_bytes().as_slice()));
+        assert_eq!(wave.get(34..36), Some(16_u16.to_le_bytes().as_slice()));
+        assert_eq!(wave.get(36..40), Some(b"data".as_slice()));
+        assert_eq!(
+            wave.get(40..44),
+            Some(u32::try_from(data).unwrap_or(0).to_le_bytes().as_slice())
+        );
+        assert!(wave.iter().skip(44).any(|byte| *byte != 0));
+    }
 
     fn named(standard_error: &str) -> Option<String> {
         missing_shared_library(standard_error.as_bytes()).map(|name| name.as_str().to_owned())

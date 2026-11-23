@@ -390,9 +390,15 @@ impl Harness {
     }
 
     fn open_in(root: OwnedRoot) -> Built<Self> {
+        Self::open_with(root, &[])
+    }
+
+    fn open_with(root: OwnedRoot, options: &[&str]) -> Built<Self> {
         let source = root.path("stand-in.mp4");
         fs::write(&source, b"\0\0\0\x18ftypisomframe-cli-contract")?;
-        let opened = json(&vsift(&root, &["ingest", text(&source)?, "--json"])?)?;
+        let mut arguments = vec!["ingest", text(&source)?, "--json"];
+        arguments.extend_from_slice(options);
+        let opened = json(&vsift(&root, &arguments)?)?;
         let session = opened["data"]["session_id"]
             .as_str()
             .ok_or("no session")?
@@ -1222,6 +1228,113 @@ async fn identical_crop_and_audio_requests_are_reused() -> TestResult {
 
 /// Crop parents and rectangles are checked against the session's records
 /// before any provider runs.
+/// `handoff check --session` works out a frame's, a crop's and a clip's clock
+/// time as their own results do, so a copy passes and a changed one does not
+/// (ADR 0029 decisions 23 and 24).
+#[tokio::test]
+async fn a_cited_clock_time_is_held_for_each_kind_of_evidence() -> TestResult {
+    let harness = Harness::open_with(
+        OwnedRoot::new()?,
+        &["--recorded-at", "2026-10-21T14:00:00+01:00"],
+    )?;
+    harness.trust_tools()?;
+    let frame = harness.seeded_frame(1_025_000).await?;
+    harness.seed(&frame, 0)?;
+    let parent = frame.record.items().first().ok_or("no frame")?;
+    let crop = harness.seeded_crop(parent, (8, 4, 20, 10)).await?;
+    harness.seed(&crop, 0)?;
+    let audio = harness.seeded_audio().await?;
+    harness.seed(&audio, 0)?;
+
+    let session = harness.session.as_str();
+    let mut frame_arguments = frame_get(session, "1025000", &[]);
+    frame_arguments.push("--json");
+    let frame_item = json(&harness.run(&frame_arguments)?)?["data"]["items"][0].clone();
+    let crop_item = json(&harness.run(&[
+        "crop",
+        session,
+        parent.id().as_str(),
+        "--rect",
+        "8,4,20,10",
+        "--json",
+    ])?)?["data"]["items"][0]
+        .clone();
+    let audio_item = json(
+        &harness.run(&["audio", session, "--from", "0", "--to", "1000000", "--json"])?,
+    )?["data"]["items"][0]
+        .clone();
+    assert_eq!(
+        frame_item["clock_time"]["at"]["utc_offset"], "+01:00",
+        "{frame_item}"
+    );
+    assert_eq!(
+        crop_item["clock_time"]["at"],
+        frame_item["clock_time"]["at"]
+    );
+    assert!(
+        audio_item["clock_time"]["start"].is_object(),
+        "{audio_item}"
+    );
+    assert!(audio_item["clock_time"]["at"].is_object(), "{audio_item}");
+
+    let mut handoff = serde_json::json!({
+        "handoff_version": "1", "status": "insufficient_evidence",
+        "question": "What does the recording show at the time of the log line?",
+        "capabilities": {"image_access": "unavailable"},
+        "claims": [],
+        "citations": [
+            {"id": "e1", "type": "frame", "evidence_id": frame_item["evidence_id"],
+             "pixels_inspected": false, "clock_time": frame_item["clock_time"]},
+            {"id": "e2", "type": "crop", "evidence_id": crop_item["evidence_id"],
+             "pixels_inspected": false, "clock_time": crop_item["clock_time"]},
+            {"id": "e3", "type": "audio", "evidence_id": audio_item["evidence_id"],
+             "clock_time": audio_item["clock_time"]}
+        ],
+        "gaps": [],
+        "untrusted_instructions": [],
+        "lifecycle": {"action": "left_open"}
+    });
+    let path = harness.root.path("report.md");
+    let checked = |handoff: &Value| -> Built<Value> {
+        fs::write(&path, format!("```vsift-handoff\n{handoff}\n```\n"))?;
+        let output = harness.run(&[
+            "handoff",
+            "check",
+            "--file",
+            text(&path)?,
+            "--session",
+            session,
+            "--json",
+        ])?;
+        Ok(json(&output)?["data"].clone())
+    };
+    let data = checked(&handoff)?;
+    assert_eq!(data["valid"], true, "{data}");
+    assert_eq!(data["session"]["identities_checked"], 3);
+
+    handoff["citations"][0]["clock_time"]["at"]["utc"] = Value::from("2001-01-01T00:00:00.000000Z");
+    handoff["citations"][1]["clock_time"]["at"]["local"] =
+        Value::from("2001-01-01T00:00:00.000000");
+    handoff["citations"][2]["clock_time"]["end"]["utc_offset"] = Value::from("+02:00");
+    let data = checked(&handoff)?;
+    let pointers: Vec<&Value> = data["errors"]
+        .as_array()
+        .ok_or("no errors")?
+        .iter()
+        .inspect(|error| assert_eq!(error["rule"], "clock_time_differs"))
+        .map(|error| &error["pointer"])
+        .collect();
+    assert_eq!(
+        pointers,
+        [
+            "/citations/0/clock_time/at/utc",
+            "/citations/1/clock_time/at/local",
+            "/citations/2/clock_time/end/utc_offset"
+        ]
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn crops_outside_their_parent_or_of_a_clip_are_invalid_arguments() -> TestResult {
     let harness = Harness::open()?;

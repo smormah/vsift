@@ -6,7 +6,9 @@ use std::future::Future;
 
 use vsift_domain::{DependencyStatus, RuntimeCapability, RuntimeDependency, RuntimeReadiness};
 
+mod agent_skill;
 mod asr;
+mod bundle_search;
 mod clock;
 mod evidence;
 mod identifiers;
@@ -15,16 +17,23 @@ mod job;
 mod local_asr_setup;
 mod managed_lifecycle;
 mod provisioning;
+mod screen_change;
 mod screen_text;
 mod screen_text_search;
 mod search;
 mod session;
 mod since;
+mod speakers;
 mod storage;
 mod transcript;
 mod verification;
 mod visual;
+mod watch;
 
+pub use agent_skill::{
+    SkillFolderError, SkillFolderOutcome, SkillFolders, SkillInstallOutcome, install_skill,
+    skill_folder_states,
+};
 pub use asr::{
     AsrCancellation, AsrFailure, AsrFailureReason, AsrRevisionRequest, AsrRunFailure, AsrStage,
     AsrTranscription, CheckpointScope, CheckpointUse, ChunkGate, ChunkSeed, NoObserver, NoProgress,
@@ -33,6 +42,14 @@ pub use asr::{
     TranscribeRangeRequest, UnusableChunk, UnusableChunks, build_asr_revision,
     build_open_asr_revision, build_stopped_asr_revision, retranscription_range, transcribe_range,
     transcribe_range_checkpointed,
+};
+pub use bundle_search::{
+    BUNDLE_SEARCH_READ_BUDGET, BundleHit, BundleHitEvidence, BundleIdentity, BundleNotSearched,
+    BundleNotSearchedReason, BundleScreenText, BundleScreenTextHit, BundleSearchCounts,
+    BundleSearchError, BundleSearchInput, BundleSearchOutcome, BundleSessionCoverage,
+    BundleSessionEntry, BundleTranscript, BundleUnreadable, FoundBundle, FoundBundles,
+    MAX_BUNDLE_MANIFEST_BYTES, MAX_BUNDLE_SEARCH_ENTRIES, MAX_BUNDLE_SEARCH_PATHS,
+    MAX_BUNDLES_PER_SEARCH, OpenedBundle, search_bundles,
 };
 pub use clock::{Clock, ClockError, StoppedStopwatch, Stopwatch};
 pub use evidence::{
@@ -47,14 +64,15 @@ pub use evidence::{
 pub use identifiers::{IdentifierGenerationError, IdentifierSource};
 pub use install::{
     ActivationFailure, ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
-    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedComponentInstaller,
-    ManagedInstallReport, OptionalGroupOutcome, StageFailure, install_managed_components,
-    install_managed_plan,
+    DownloadFailureReason, DownloadKeeping, InstallFailureReason, InstallObserver, InstallStep,
+    ManagedComponentInstaller, ManagedInstallReport, NoInstallObserver, OptionalGroupOutcome,
+    PieceProgress, PieceStage, StageFailure, install_managed_components, install_managed_plan,
+    install_observed_managed_plan,
 };
 pub use job::{
     CancelOutcome, CancelRequest, CheckpointRead, CheckpointStoreError, ChunkCheckpoints,
-    CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness, JobOwner,
-    JobProgressLog, JobRecord, JobReport, JobRequest, JobRunError, JobSpec, JobStore,
+    CommitAdmission, CommitGuard, CommitLedger, JobChange, JobCommit, JobKeyError, JobLiveness,
+    JobOwner, JobProgressLog, JobRecord, JobReport, JobRequest, JobRunError, JobSpec, JobStore,
     JobStoreError, JobView, LIVE_JOB_RETRY_AFTER, MAX_JOB_OPERATION_IDS, MAX_RECORDED_FAILURES,
     MAX_SESSION_JOBS, NoCheckpoints, OperationLookup, PrepareError, PrepareOutcome,
     PrepareProgress, PrepareStreams, Publication, PublishedOpenRevision, PublishingStopped,
@@ -75,12 +93,17 @@ pub use screen_text::{
     screen_text_index_id, screen_text_line_id, verify_screen_text_identities,
 };
 pub use screen_text_search::{
-    ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_query_digest,
+    ScreenTextPage, ScreenTextPageRequest, page_screen_text, screen_text_plan_coverage,
+    screen_text_query_digest,
 };
-pub use search::{SearchPage, SearchPageRequest, page_search, search_query_digest};
+pub use search::{
+    SearchPage, SearchPageRequest, SpeakerFilter, page_search, page_search_by_speaker,
+    search_query_digest,
+};
 pub use session::{
     ForegroundSessionPort, NeverCancelled, OpenSession, OpenSessionError, OpenSessionOutcome,
-    OpenSessionRequest, SourcePathFault, SpecialFileKind, StageCancellation, StagedSessionSource,
+    OpenSessionRequest, SessionSource, SourcePathFault, SpecialFileKind, StageCancellation,
+    StagedSessionSource,
 };
 pub use since::{
     SincePage, page_since, since_digest, since_revision, since_token, since_watermark,
@@ -103,15 +126,30 @@ pub use local_asr_setup::{
 pub use provisioning::{
     AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmoke, CompatibilitySmokeCheck,
     CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, CompatibilitySmokeVerdict,
-    ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction, ManagedSetupPlan,
-    ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
+    CorePart, CorePartSet, ManagedPlanAvailability, ManagedPlanObservation, ManagedSetupAction,
+    ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
     OptionalComponentDisposition, OptionalComponentPlan, OptionalComponentSet, PlanAcceptanceError,
     PlannedSupply, ReviewedArchiveLimits, ReviewedArchiveLink, ReviewedArchiveSelection,
     ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile, ReviewedRuntimeCopy,
     SetupDependencyDisposition, SetupModelDisposition, SetupProfile, SetupSelectionState,
     SmokeStageOutcome, StageDisposal, StageRetentionReason, StagedManagedComponent,
-    SupersededManagedVersion, SupersessionReason, plan_managed_setup, plan_managed_setup_including,
+    SupersededManagedVersion, SupersessionReason, UserSuppliedKind, UserSuppliedTool,
+    plan_managed_setup, plan_managed_setup_including, plan_managed_setup_of_parts,
     smoke_before_activation,
+};
+pub use screen_change::{
+    CROPPED_REGIONS_PER_CHANGE, ComparedChange, ComparedPage, CropStop, CropSummary,
+    DEFAULT_SCREEN_CHANGE_PAGE, FrameRefusal as ScreenChangeFrameRefusal, MAX_CROPS_PER_CALL,
+    MAX_SCREEN_CHANGE_PAGE, PageContinuation, RegionCrops, ScreenChangeCrops, ScreenChangeFrames,
+    ScreenChangePage, ScreenChangePageRequest, ScreenChangeQueryError, ScreenChangeResume,
+    ScreenChangeResumeReason, ScreenChangeStop, TakenFrame, compare_screen_changes,
+    crop_screen_changes, dropped_changes, first_unanalysed, page_continuation, page_screen_changes,
+    screen_change_id, screen_change_page_limit,
+};
+pub use speakers::{
+    DiarizationRequest, DiarizationRunError, LabelSpeakersRequest, MAX_DIARIZATION_MICROS,
+    MIN_DIARIZATION_MICROS, SpeakerDiarizer, SpeakerLabelError, diarization_range, label_speakers,
+    name_speaker, speaker_record_id,
 };
 pub use storage::{
     AuthorizedSessionGenerationPublication, AuthorizedSessionStorageInitialization,
@@ -120,10 +158,10 @@ pub use storage::{
     StorageCapabilities,
 };
 pub use transcript::{
-    ImportedRevisionRequest, SourceDurationProbe, SourceProbeError, SuppliedTranscript,
-    SuppliedTranscriptError, TranscriptBuildError, TranscriptImportRequest, TranscriptPage,
-    TranscriptPageRequest, TranscriptQueryError, build_imported_revision, page_transcript,
-    transcript_query_digest, transcript_segment_id, whole_file_source_segment,
+    ImportedRevisionRequest, NoSourceProbe, ProbedSource, SourceProbe, SourceProbeError,
+    SuppliedTranscript, SuppliedTranscriptError, TranscriptBuildError, TranscriptImportRequest,
+    TranscriptPage, TranscriptPageRequest, TranscriptQueryError, build_imported_revision,
+    page_transcript, transcript_query_digest, transcript_segment_id, whole_file_source_segment,
 };
 pub use verification::{
     CachedMediaToolVerification, LocalAsrVerification, LocalAsrVerificationFailure,
@@ -140,6 +178,15 @@ pub use visual::{
     extend_visual_index_within, indexes_any_of, merge_visual_extension, missing_windows,
     page_candidates, verify_visual_index_identities, visual_candidate_id, visual_coverage_gaps,
     visual_index_id,
+};
+pub use watch::{
+    ClaimedOutputs, EarlierWatch, FinalisedOutputs, FrameRefusal, OpenedWatchSession, PrepareStop,
+    PreparedRun, PreparedTranscript, PublishedPart, SNAPSHOT_INTERVAL_SECONDS, ScreenChange,
+    ScreenChangeEntry, ScreenChangeSummary, ScreenChanges, SessionFrame, SnapshotState,
+    TranscriptEntry, TranscriptLine, UnfinishedWatch, WatchClaimLog, WatchDocuments, WatchError,
+    WatchFile, WatchFrame, WatchKept, WatchOutcome, WatchOutputError, WatchOutputKind,
+    WatchOutputs, WatchProgress, WatchProvenance, WatchSnapshot, WatchSteps, WrittenFrame,
+    run_watch,
 };
 
 /// Port used to inspect one specialist runtime dependency.

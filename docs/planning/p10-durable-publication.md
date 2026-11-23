@@ -214,6 +214,51 @@ acceptance job passed).
 | B, OS crash | **320 kills** in 4 shards of 80 (317 inside an operation), 324 recovered, `e2fsck`-clean and verified boots; **8,557 acknowledgements, 517 of them worker requests**: 0 lost, 0 damaged, 0 failed operations; each final boot verified 219 to 279 sessions and 119 to 139 request records (47 to 52 min a shard) |
 | C, write errors | 60 rounds, all injected: **180 injected failures, 180 `STORAGE_IO`**, 0 acknowledged after the swap; the first failure of a round hit a worker request 34 times, a retranscription 22, evidence 2, an ingest and a renewal once each; 1,370 acknowledgements (38 requests) carried through every later round; `e2fsck` clean throughout |
 
+## Layer A's time and its timeout (2026-11-04)
+
+The weekly run's positive layer A is the evidence behind RQ-11, and a run that times
+out proves nothing either way. Its time was measured from the artifacts and logs of
+the four runs after the workload grew:
+
+| Run | Date | Commit | Workload | Replay | Replay points | Acknowledgements | Seconds a point | Job |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [40051754548](https://github.com/smormah/vsift/actions/runs/40051754548) (dispatch) | 24 Oct | `09e40398` | 70 s | 2,167 s | 11,084 | 400 | 0.196 | 37 min |
+| [40158656928](https://github.com/smormah/vsift/actions/runs/40158656928) (schedule) | 25 Oct | `b4172359` | 71 s | 3,043 s | 11,066 | 400 | 0.275 | 52 min |
+| [40570106193](https://github.com/smormah/vsift/actions/runs/40570106193) (dispatch) | 27 Oct | `f099ed5f` | 81 s | 6,175 s | 14,076 | 518 | 0.439 | 104 min |
+| [41269014851](https://github.com/smormah/vsift/actions/runs/41269014851) (schedule) | 1 Nov | `95168155` | 80 s | 6,007 s | 14,092 | 518 | 0.426 | 101 min |
+
+- **Where the time goes:** the replay is about 99% of the job (the workload 80 s, setup
+  and upload about 10 s). The replay applies the log incrementally; each point copies the
+  3 GiB sparse image, mounts it, verifies the acknowledgements, probes with new commits and
+  runs `e2fsck -fn`. The cost is linear in the number of points.
+- **Why it doubled between 25 and 27 October:** two causes. The revision-publishing
+  operations of the crash campaign's workload (#513) raised the acknowledgements from 400 to
+  518 and the replay points by 27%. The rest is the hosted runner: its cost per point rose from
+  0.275 to 0.439 s with the same workflow, the same runner image version
+  (`20261021.618`) and the same operations, and it stayed at 0.426 s on 1 November
+  after the kernel moved from 6.17 to 7.0 (both Azure), so it is not one slow run. The
+  runner alone moved by 40% between the two runs of 24 and 25 October, on the same
+  workload.
+- **The margin:** the job's timeout was 150 minutes, so a run used 67 to 69% of it. It is now
+  **240 minutes** (2.3 times the 101 to 104 minutes), and the replay step has its own
+  **225** so that a replay that has outgrown the job ends inside it and the next
+  step still runs. That step writes the minutes used, and the percentage of 240, to the
+  step summary of each layer A job and emits a workflow `::warning::` above **60%
+  (144 minutes)**, which is 1.4 times today's time. A replay that does not pass is
+  reported with its elapsed time and a statement that a run stopped by its timeout proves
+  nothing (`tools/p10-crash-campaign/scripts/layer-a-margin.sh`).
+- **The negative control** is unchanged: the 80 operations, the `campaign` build, the
+  flag that removes the synchronisation, and the check that it lost at least one
+  acknowledgement.
+- **When to shard layer A** (as layer B is sharded), instead of raising the timeout again:
+  the warning fires in two runs, or the replay points pass about 25,000. A shard
+  would take a range of the log's points; the acceptance would then sum the shards, so
+  that every flush is still replayed exactly once and the lost acknowledgements are still
+  zero across all of them. The harness has no range today, only a stride. Trimming the
+  workload or checking every n-th point is not an option: each point is a distinct
+  moment of power loss.
+- **Proof:** the next scheduled run, Sunday 8 November 2026 at 03:17 UTC on `main`.
+
 ## What this does not cover (residuals)
 
 - **Storage that ignores flushes.** The campaign proves VSift issues the right flushes

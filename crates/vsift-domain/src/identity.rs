@@ -113,9 +113,19 @@ opaque_identifier!(
     "Opaque identity for one immutable revision of a session's visual-candidate index (P08)."
 );
 opaque_identifier!(
+    SpeakerRecordId,
+    "spk_",
+    "Opaque identity for one immutable speaker record: the speaker labels of one transcript revision (ADR 0031)."
+);
+opaque_identifier!(
     VisualCandidateId,
     "vcd_",
     "Opaque identity for one visual candidate: a sampled screen state at a source time (P08)."
+);
+opaque_identifier!(
+    ScreenChangeId,
+    "chg_",
+    "Opaque identity for one change of screen between two exact frames (ADR 0034)."
 );
 opaque_identifier!(
     ScreenTextIndexId,

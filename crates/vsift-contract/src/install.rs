@@ -300,6 +300,14 @@ pub fn optional_install_failure_summary(
             "the download did not complete",
             "Check the network or proxy, then",
         ),
+        // ONNX Runtime's Windows library imports the Visual C++ runtime
+        // (MSVCP140, VCRUNTIME140; measured in `P13 managed smoke` run
+        // 44832924154, L-225), so on Windows a failed OCR smoke most likely
+        // means that runtime is missing.
+        InstallFailureReason::Smoke(_) if group == OptionalComponent::Ocr && cfg!(windows) => (
+            "it did not pass its compatibility check on this machine (on Windows it needs Microsoft's Visual C++ Redistributable for x64, which may be missing)",
+            "Install the Visual C++ Redistributable from https://aka.ms/vs/17/release/vc_redist.x64.exe, then",
+        ),
         InstallFailureReason::Smoke(_) => (
             "it did not pass its compatibility check on this machine",
             "If a retry fails the same way, report it; meanwhile",
@@ -340,7 +348,7 @@ pub const MANAGED_INSTALL_BUSY_REMEDIATION: &str = "Another setup install, setup
 pub const MANAGED_STORAGE_REMEDIATION: &str = "VSift could not create or write its private managed folder, so nothing was installed. Free disk space or fix the folder's permissions and run the same setup install again; or install FFmpeg, FFprobe and the whisper.cpp CLI yourself, register each with setup configure ffmpeg|ffprobe|whisper --executable <absolute-path> and the model with setup configure-model --file <absolute-path>, then run setup check.";
 
 /// Remediation when this host has no managed installation to accept.
-pub const MANAGED_UNAVAILABLE_REMEDIATION: &str = "Managed installation is not available on this host (it is qualified on Ubuntu 24.04 x86-64 only), so there is no plan to accept. Install FFmpeg, FFprobe and the whisper.cpp CLI yourself, register each with setup configure ffmpeg|ffprobe|whisper --executable <absolute-path> and the model with setup configure-model --file <absolute-path>, then run setup check.";
+pub const MANAGED_UNAVAILABLE_REMEDIATION: &str = "Managed installation is not available on this host (it is offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64), so there is no plan to accept. Install FFmpeg, FFprobe and the whisper.cpp CLI yourself, register each with setup configure ffmpeg|ffprobe|whisper --executable <absolute-path> and the model with setup configure-model --file <absolute-path>, then run setup check.";
 
 /// Remediation when the saved plan or its digest no longer describes the
 /// current plan.

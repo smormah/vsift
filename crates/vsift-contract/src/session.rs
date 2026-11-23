@@ -14,7 +14,7 @@ use vsift_domain::{
     TranscriptRevision,
 };
 
-use crate::TranscriptRevisionData;
+use crate::{OriginData, TimeAnchorData, TranscriptRevisionData};
 
 /// Publicly reported lifecycle state of one session.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -65,8 +65,9 @@ impl SessionState {
 
 /// Data of a successful `ingest` result: the newly opened disposable session.
 ///
-/// `transcript` is present only when a supplied transcript was imported, so
-/// the result of a plain ingest is unchanged.
+/// `transcript` is present only when a supplied transcript was imported, and
+/// `time_anchor` only when the session has a clock-time anchor, so the result
+/// of a plain ingest without either is unchanged.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct OpenData {
     session_id: String,
@@ -77,6 +78,12 @@ pub struct OpenData {
     expires_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     transcript: Option<TranscriptRevisionData>,
+    /// The session's clock-time anchors (ADR 0029); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    time_anchor: Option<TimeAnchorData>,
+    /// Where a fetched source came from (ADR 0028); absent for a local file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    origin: Option<OriginData>,
 }
 
 impl OpenData {
@@ -91,6 +98,8 @@ impl OpenData {
             publication: opened.publication.identifier(),
             expires_at,
             transcript: None,
+            time_anchor: TimeAnchorData::new(&opened.time_anchors),
+            origin: opened.origin.as_ref().and_then(OriginData::new),
         }
     }
 
@@ -126,6 +135,12 @@ pub struct StatusData {
     pub generation: u64,
     /// RFC 3339 expiry, formatted by the host.
     pub expires_at: String,
+    /// The session's clock-time anchors (ADR 0029); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_anchor: Option<TimeAnchorData>,
+    /// Where a fetched source came from (ADR 0028); absent for a local file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin: Option<OriginData>,
 }
 
 /// One page of `session list` results.
@@ -326,6 +341,8 @@ mod tests {
             generation: StorageGeneration::from_value(1),
             publication: PublicationGuarantee::ProcessCrashConsistent,
             lifetime: SessionLifetime::open(1_000)?,
+            time_anchors: vsift_domain::TimeAnchors::none(),
+            origin: None,
         };
 
         let value =
@@ -392,6 +409,8 @@ mod tests {
             artifact_bytes: 0,
             generation: 2,
             expires_at: String::from("2026-09-24T00:00:00Z"),
+            time_anchor: None,
+            origin: None,
         };
 
         let indexed = serde_json::to_value(ListedSession::indexed(&session, status))?;

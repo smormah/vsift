@@ -67,17 +67,29 @@ pub enum OptionalComponent {
     /// a public platform page, with the managed JavaScript runtime it runs a
     /// page's player code with. Offered on Ubuntu 24.04 x86-64 only.
     OnlineLinks,
+    /// On-screen text (ADR 0030, ADR 0032): `VSift`'s own OCR runner with its
+    /// ONNX Runtime library, the two `PP-OCRv5` models and their licence
+    /// files, one archive of `VSift`'s engine release. Offered on every
+    /// target with a catalogue.
+    Ocr,
+    /// Speaker labels (ADR 0031, ADR 0032): sherpa-onnx's diarization tool
+    /// with its ONNX Runtime library, the pyannote segmentation 3.0 model and
+    /// the `NeMo` `TitaNet` small embedding model, each from its publisher's
+    /// own release. Offered on every target with a catalogue.
+    Speakers,
 }
 
 impl OptionalComponent {
     /// Every optional component, in plan order.
-    pub const ALL: [Self; 1] = [Self::OnlineLinks];
+    pub const ALL: [Self; 3] = [Self::OnlineLinks, Self::Ocr, Self::Speakers];
 
     /// The name `setup plan --include` takes and the plan shows.
     #[must_use]
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::OnlineLinks => "online_links",
+            Self::Ocr => "ocr",
+            Self::Speakers => "speakers",
         }
     }
 
@@ -95,6 +107,12 @@ impl OptionalComponent {
     pub const fn components(self) -> &'static [ManagedComponent] {
         match self {
             Self::OnlineLinks => &[ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp],
+            Self::Ocr => &[ManagedComponent::OcrRunner],
+            Self::Speakers => &[
+                ManagedComponent::SpeakerDiarizer,
+                ManagedComponent::SpeakerSegmentationModel,
+                ManagedComponent::SpeakerEmbeddingModel,
+            ],
         }
     }
 
@@ -110,6 +128,8 @@ impl OptionalComponent {
     const fn bit(self) -> u8 {
         match self {
             Self::OnlineLinks => 1,
+            Self::Ocr => 2,
+            Self::Speakers => 4,
         }
     }
 }
@@ -145,6 +165,91 @@ impl OptionalComponentSet {
         OptionalComponent::ALL
             .into_iter()
             .filter(move |component| self.contains(*component))
+    }
+}
+
+/// A core part of the setup, as a person names it (ADR 0036 section 4):
+/// each managed core component belongs to one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CorePart {
+    /// The media tools, `FFmpeg` with `FFprobe`.
+    Video,
+    /// The whisper.cpp program and its model.
+    Speech,
+}
+
+impl CorePart {
+    /// Both parts, video first: the order a plan installs them.
+    pub const ALL: [Self; 2] = [Self::Video, Self::Speech];
+
+    /// The part a core component belongs to; `None` for an optional one.
+    #[must_use]
+    pub const fn of(component: ManagedComponent) -> Option<Self> {
+        match component {
+            ManagedComponent::MediaTools => Some(Self::Video),
+            ManagedComponent::WhisperCli | ManagedComponent::WhisperModel => Some(Self::Speech),
+            ManagedComponent::JsRuntimeDeno
+            | ManagedComponent::YtDlp
+            | ManagedComponent::OcrRunner
+            | ManagedComponent::SpeakerDiarizer
+            | ManagedComponent::SpeakerSegmentationModel
+            | ManagedComponent::SpeakerEmbeddingModel => None,
+        }
+    }
+
+    /// Stable machine-readable identifier: `video` or `speech`.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::Video => "video",
+            Self::Speech => "speech",
+        }
+    }
+
+    const fn bit(self) -> u8 {
+        match self {
+            Self::Video => 1,
+            Self::Speech => 2,
+        }
+    }
+}
+
+/// The core parts a plan may install (ADR 0036 section 6): both, unless an
+/// unattended setup names fewer. A plan of both is the plan `setup plan`
+/// builds, with the same intent and digest as before parts existed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CorePartSet(u8);
+
+impl CorePartSet {
+    /// Both parts.
+    pub const ALL: Self = Self(3);
+
+    /// No part.
+    pub const EMPTY: Self = Self(0);
+
+    /// This set with `part` added.
+    #[must_use]
+    pub const fn with(self, part: CorePart) -> Self {
+        Self(self.0 | part.bit())
+    }
+
+    /// Whether `part` is in the set.
+    #[must_use]
+    pub const fn contains(self, part: CorePart) -> bool {
+        self.0 & part.bit() != 0
+    }
+
+    /// The parts, video first.
+    pub fn iter(self) -> impl Iterator<Item = CorePart> {
+        CorePart::ALL
+            .into_iter()
+            .filter(move |part| self.contains(*part))
+    }
+}
+
+impl Default for CorePartSet {
+    fn default() -> Self {
+        Self::ALL
     }
 }
 
@@ -298,9 +403,12 @@ pub struct AcceptedManagedCatalogue {
     pub stop_new_plans_date: String,
     /// Complete core component set in stable component order.
     pub artifacts: Vec<AcceptedManagedArtifact>,
-    /// The optional components' artifacts, in install order
-    /// ([`ManagedComponent::JsRuntimeDeno`], then [`ManagedComponent::YtDlp`]),
-    /// or none on a catalogue that offers none. Never planned unless the user
+    /// The optional components' artifacts, in group order
+    /// ([`ManagedComponent::JsRuntimeDeno`], then [`ManagedComponent::YtDlp`]
+    /// for online links; [`ManagedComponent::OcrRunner`] for `ocr`; the
+    /// diarizer, then the segmentation model, then the embedding model for
+    /// `speakers`), or none
+    /// on a catalogue that offers none. Never planned unless the user
     /// includes them.
     pub optional_artifacts: Vec<AcceptedManagedArtifact>,
     /// Compatibility checks that must pass before publication.
@@ -517,10 +625,34 @@ pub enum OptionalCapability {
     /// Every managed component of it is installed, selected and verified,
     /// at these versions, in install order.
     Installed(Vec<(ManagedComponent, String)>),
+    /// The user supplied the tool and registered it with `setup configure`
+    /// (ADR 0028 section 4.6), and it answered. It is used instead of a
+    /// managed one, and reported with the lower trust of a file nobody here
+    /// reviewed.
+    UserSupplied(Vec<UserSuppliedTool>),
+    /// The user registered a tool and it could not be used.
+    UserSuppliedUnusable {
+        /// Which tool.
+        tool: UserSuppliedKind,
+        /// Why, as a fixed identifier (never the tool's own text).
+        reason: &'static str,
+    },
     /// It is offered on this host and not every part of it is installed.
     NotInstalled,
     /// No managed version of it is offered on this host.
     Unavailable,
+    /// `base` is the state of the component, and the user also registered a
+    /// JavaScript runtime without registering a yt-dlp. The runtime follows
+    /// yt-dlp's source (a managed yt-dlp runs with the managed Deno only, a
+    /// user's with the user's runtime), so it is not used, and the check
+    /// says so (ADR 0028 section 4.6, ruling of 2026-10-31).
+    WithUnusedRuntime {
+        /// The state without the unused runtime.
+        base: Box<Self>,
+        /// What identifying the unused runtime found: its facts, or the
+        /// fixed reason it could not be used.
+        runtime: Result<UserSuppliedTool, &'static str>,
+    },
 }
 
 impl OptionalCapability {
@@ -528,11 +660,68 @@ impl OptionalCapability {
     #[must_use]
     pub const fn identifier(&self) -> &'static str {
         match self {
-            Self::Installed(_) => "installed",
-            Self::NotInstalled => "not_installed",
+            Self::Installed(_) | Self::UserSupplied(_) => "installed",
+            Self::NotInstalled | Self::UserSuppliedUnusable { .. } => "not_installed",
             Self::Unavailable => "unavailable",
+            Self::WithUnusedRuntime { base, .. } => base.identifier(),
         }
     }
+
+    /// The state apart from an unused runtime the user registered: what
+    /// decides whether the component can be offered or is used.
+    #[must_use]
+    pub fn base(&self) -> &Self {
+        match self {
+            Self::WithUnusedRuntime { base, .. } => base.base(),
+            other => other,
+        }
+    }
+
+    /// Whether the component can be used now, managed or user-supplied.
+    #[must_use]
+    pub fn is_usable(&self) -> bool {
+        matches!(self.base(), Self::Installed(_) | Self::UserSupplied(_))
+    }
+}
+
+/// A tool of an optional component that the user supplied.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UserSuppliedKind {
+    /// The user's yt-dlp.
+    YtDlp,
+    /// The user's JavaScript runtime for it (Deno only in `0.3.0`).
+    JsRuntime,
+}
+
+impl UserSuppliedKind {
+    /// Stable public identifier, as `setup configure` reports it.
+    #[must_use]
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::YtDlp => "yt_dlp",
+            Self::JsRuntime => "js_runtime",
+        }
+    }
+
+    /// How `setup configure` spells it on the command line.
+    #[must_use]
+    pub const fn setup_name(self) -> &'static str {
+        match self {
+            Self::YtDlp => "yt-dlp",
+            Self::JsRuntime => "js-runtime",
+        }
+    }
+}
+
+/// What `setup check` identified of one tool the user supplied.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserSuppliedTool {
+    /// Which tool.
+    pub kind: UserSuppliedKind,
+    /// The first line of its version output.
+    pub version_line: String,
+    /// The SHA-256 of the file as identified.
+    pub sha256: String,
 }
 
 /// What a plan does about one optional component.
@@ -1039,6 +1228,37 @@ pub fn plan_managed_setup_including(
     now_unix_seconds: u64,
     catalogue: Option<AcceptedManagedCatalogue>,
 ) -> ManagedSetupPlan {
+    plan_managed_setup_of_parts(
+        profile,
+        diagnosis,
+        target,
+        selection_state,
+        CorePartSet::ALL,
+        include,
+        now_unix_seconds,
+        catalogue,
+    )
+}
+
+/// [`plan_managed_setup_including`] limited to the core `parts` (ADR 0036
+/// section 6): a part left out is offered nothing, so its tools are
+/// planned as for a host with no catalogue for them. A plan of
+/// [`CorePartSet::ALL`] is exactly the plan `setup plan` builds.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the inputs of one plan, each a distinct observation or choice"
+)]
+#[must_use]
+pub fn plan_managed_setup_of_parts(
+    profile: SetupProfile,
+    diagnosis: RuntimeDiagnosis,
+    target: ManagedTarget,
+    selection_state: SetupSelectionState,
+    parts: CorePartSet,
+    include: OptionalComponentSet,
+    now_unix_seconds: u64,
+    catalogue: Option<AcceptedManagedCatalogue>,
+) -> ManagedSetupPlan {
     let applicable = catalogue.filter(|entry| entry.target == target);
     let (availability, catalogue) = match applicable {
         Some(entry) if !catalogue_is_complete(&entry) => {
@@ -1073,6 +1293,9 @@ pub fn plan_managed_setup_including(
         whisper: whisper_offered,
         model: model_offered,
     } = CoreOffer::of(catalogue.as_ref().filter(|_| qualified), &diagnosis);
+    let media_offered = media_offered && parts.contains(CorePart::Video);
+    let whisper_offered = whisper_offered && parts.contains(CorePart::Speech);
+    let model_offered = model_offered && parts.contains(CorePart::Speech);
 
     let dependencies = diagnosis
         .dependencies
@@ -1106,12 +1329,15 @@ pub fn plan_managed_setup_including(
     };
 
     let wanted = |component: ManagedComponent| match component {
-        ManagedComponent::MediaTools => media_missing,
-        ManagedComponent::WhisperCli => whisper_missing,
+        ManagedComponent::MediaTools => media_missing && media_offered,
+        ManagedComponent::WhisperCli => whisper_missing && whisper_offered,
         ManagedComponent::WhisperModel => selection_state.model.is_none() && model_offered,
         // The core list holds no optional component (the catalogue check
         // refuses one); optional ones are planned below.
-        ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp => false,
+        optional => {
+            debug_assert!(optional.is_optional());
+            false
+        }
     };
     let actions = core_actions(catalogue.as_ref().filter(|_| qualified), wanted);
 
@@ -1273,10 +1499,12 @@ fn catalogue_is_complete(entry: &AcceptedManagedCatalogue) -> bool {
                     .iter()
                     .all(|earlier| earlier.component != artifact.component)
                 && artifact_is_complete(artifact)
-                && entry
-                    .compatibility
-                    .optional_banner(artifact.component)
-                    .is_some_and(|banner| !banner.is_empty())
+                // A model is data and prints nothing: only a program has a banner.
+                && (artifact.component.is_model()
+                    || entry
+                        .compatibility
+                        .optional_banner(artifact.component)
+                        .is_some_and(|banner| !banner.is_empty()))
         });
     // The core components a target's catalogue offers, in plan order, each
     // once: all three, or fewer while a target's reviewed build of one is

@@ -89,12 +89,25 @@ jobs:
     name: Layer A (${{ matrix.mode }})
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 150
+    # The positive run replays every flush of its log (14,000 points since the
+    # revision-publishing operations, 0.3.0) and took 101 to 104 minutes in the
+    # runs of 27 October and 1 November: about 99% replay, at 0.43 s a point,
+    # and a hosted runner's per-point cost has moved by 60% between runs. 240
+    # minutes is 2.3 times that, and the replay step's own 225 ends a stuck
+    # replay inside the job so the margin step below still runs. The margin
+    # step warns above 60% (144 minutes). Keep the 240 and the 225 in step with
+    # the numbers in the margin step; the reasoning and the point at which to
+    # shard layer A are in docs/planning/p10-durable-publication.md ("Layer
+    # A's time"). The negative control is far inside the limit.
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
         mode: [positive, negative]
     steps:
+      - name: Record the start time
+        run: echo "LAYER_A_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -105,6 +118,10 @@ jobs:
           path: bin
 
       - name: Replay every flush
+        id: replay
+        # Below the job's 240 so that a replay that has outgrown the job ends
+        # here, and the margin and the evidence steps below still run.
+        timeout-minutes: 225
         shell: bash
         env:
           MODE: ${{ matrix.mode }}
@@ -118,6 +135,19 @@ jobs:
           sudo tools/p10-crash-campaign/scripts/layer-a.sh "$PWD/$binary" /dev/shm/vsift-a \
             "$OPERATIONS" 20260927 "$MODE" "$PWD/out"
           cat out/result.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report the time used against the timeout
+        if: always()
+        shell: bash
+        env:
+          MODE: ${{ matrix.mode }}
+          REPLAY_OUTCOME: ${{ steps.replay.outcome }}
+        run: |
+          # 240 is this job's timeout-minutes. The script's workflow commands
+          # (the "::" lines) go to the log; the rest goes to the summary too.
+          report=$(tools/p10-crash-campaign/scripts/layer-a-margin.sh "$MODE" "$LAYER_A_STARTED" "$REPLAY_OUTCOME" 240)
+          echo "$report"
+          { echo "$report" | grep -v '^::' || true; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the evidence
         if: always()

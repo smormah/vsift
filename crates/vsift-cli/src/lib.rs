@@ -6,10 +6,16 @@ mod batch;
 #[cfg(test)]
 mod build_identity;
 mod candidates;
+mod changes;
+mod clocks;
 mod command;
 mod config;
+mod door;
 mod evidence;
+#[cfg(test)]
+mod exit_rule;
 mod handoff;
+mod help_text;
 mod human;
 mod job;
 mod json_input;
@@ -17,59 +23,67 @@ mod live_line;
 mod ocr;
 mod output;
 mod parse_failure;
+mod piece_lines;
 mod progress;
 mod read_view;
 mod search;
 mod session;
 mod setup;
 mod signal;
+mod skill;
 #[cfg(test)]
 mod skill_contract;
+mod watch;
+mod watch_lines;
 mod worker;
 
 use std::{ffi::OsString, io, io::Write, path::PathBuf, process::ExitCode, time::Duration};
 
-use clap::{CommandFactory, Parser, error::ErrorKind};
+use clap::{FromArgMatches, error::ErrorKind};
 use command::{
     BundleCommand, Cli, Command, EventFormat, ExecutionProfile, HandoffCommand, JobArguments,
-    JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand,
-    TranscriptCommand,
+    JobCommand, OcrArguments, OcrCommand, OptionalComponentArgument, SetupCommand, SetupDependency,
+    SkillCommand, TranscriptCommand,
 };
 use config::{ConfigLayer, EffectiveConfig, HostPolicy};
 use human::HumanDetail;
 use output::{JsonLines, OutputError, OutputMode, OutputWriter, ProcessExit};
 use vsift::{
-    ADMISSION_RETRY_AFTER, Cancellation, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine, EngineConfig,
-    EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode, HostIsolation,
-    IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError, OptionalComponentSet,
-    PendingTranscription, PlanAcceptanceError, ProgressObserver, ScreenTextStop, SessionRootError,
-    SessionRootLocation, SetupCheckRequest, SetupPlanRequest, SourcePathFault,
-    TranscriptSourceError, UserConfigurationLocation, attest_host_isolation,
+    ADMISSION_RETRY_AFTER, Cancellation, CorePartSet, DEFAULT_LOCAL_ASR_CHECK_BUDGET, Engine,
+    EngineConfig, EngineError, EnginePorts, EvaluatedSetupPlan, ExecutableSelections, FailureCode,
+    HostIsolation, IsolationProfile, ManagedRootLocation, OcrError, OpenSessionError,
+    OptionalComponentSet, PendingTranscription, PlanAcceptanceError, ProgressObserver,
+    ScreenTextStop, SessionRootError, SessionRootLocation, SetupCheckRequest, SetupPlanRequest,
+    SourceFetchReason, SourcePathFault, TranscriptSourceError, UserConfigurationLocation,
+    attest_host_isolation,
 };
 use vsift_contract::{
     ADMISSION_BUSY_REMEDIATION, ADMISSION_CAPACITY_REMEDIATION, ARTIFACT_DIRECTORY_REMEDIATION,
-    CANDIDATE_CURSOR_REMEDIATION, CommandName, ConfiguredModelResponse,
-    ConfiguredSelectionResponse, DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream,
-    IDEMPOTENCY_CONFLICT_REMEDIATION, ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION,
-    JOB_CANCELLED_REMEDIATION, JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION,
-    JOB_SESSION_NOT_OPEN_REMEDIATION, LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION,
-    MANAGED_INSTALL_BUSY_REMEDIATION, MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
-    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION, NO_TRANSCRIPT_REMEDIATION,
-    NO_VIDEO_STREAM_REMEDIATION, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
-    OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OperationResponse,
-    REVISION_LEFT_OPEN_REMEDIATION, SESSION_NOT_PUBLISHED_REMEDIATION,
-    SESSION_ROOT_NAME_REMEDIATION, SESSION_ROOT_OWN_ACCESS_REMEDIATION,
-    SOURCE_ACCESS_DENIED_REMEDIATION, SOURCE_COPY_TOO_SLOW_REMEDIATION,
-    SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION, SOURCE_IS_FOLDER_REMEDIATION,
-    SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION, SOURCE_NOT_FOUND_REMEDIATION,
-    SOURCE_SPECIAL_FILE_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
+    CANDIDATE_CURSOR_REMEDIATION, CLOCK_RULES_REMEDIATION, CommandName, ConfiguredModelResponse,
+    ConfiguredSelectionResponse, DIARIZATION_RANGE_REMEDIATION, DIARIZER_REMEDIATION,
+    DURABILITY_UNAVAILABLE_REMEDIATION, EvidenceStream, IDEMPOTENCY_CONFLICT_REMEDIATION,
+    ISOLATION_UNAVAILABLE_REMEDIATION, JOB_BUSY_REMEDIATION, JOB_CANCELLED_REMEDIATION,
+    JOB_INTERRUPTED_REMEDIATION, JOB_NOT_RESUMABLE_REMEDIATION, JOB_SESSION_NOT_OPEN_REMEDIATION,
+    LOCAL_ASR_MODEL_REMEDIATION, LOCAL_ASR_TOOLS_REMEDIATION, MANAGED_INSTALL_BUSY_REMEDIATION,
+    MANAGED_STORAGE_REMEDIATION, MANAGED_UNAVAILABLE_REMEDIATION,
+    MEDIA_TOOLS_FOR_TRANSCRIPT_REMEDIATION, NO_AUDIO_STREAM_REMEDIATION,
+    NO_SPEAKER_RECORD_REMEDIATION, NO_TRANSCRIPT_REMEDIATION, NO_VIDEO_STREAM_REMEDIATION,
+    OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION, OCR_RUNNER_REMEDIATION,
+    OCR_SEARCH_CURSOR_REMEDIATION, OperationResponse, REVISION_LEFT_OPEN_REMEDIATION,
+    SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
+    SESSION_ROOT_OWN_ACCESS_REMEDIATION, SOURCE_ACCESS_DENIED_REMEDIATION,
+    SOURCE_COPY_TOO_SLOW_REMEDIATION, SOURCE_COPY_WOULD_BE_TOO_SLOW_REMEDIATION,
+    SOURCE_IS_FOLDER_REMEDIATION, SOURCE_IS_LINK_REMEDIATION, SOURCE_NO_ROOM_REMEDIATION,
+    SOURCE_NOT_FOUND_REMEDIATION, SOURCE_SPECIAL_FILE_REMEDIATION,
+    SPEAKERS_REVISION_OPEN_REMEDIATION, STALE_PLAN_REMEDIATION, SUPERSEDED_REMEDIATION,
     TRANSCRIPT_INTERRUPTED_REMEDIATION, TRANSCRIPT_QUEUED_REMEDIATION,
     TRANSCRIPT_RUNNING_REMEDIATION, TRANSCRIPTION_RUNNING_REMEDIATION, TerminalEventResponse,
     UNKNOWN_JOB_REMEDIATION, UNKNOWN_REVISION_REMEDIATION, UNOWNED_SESSION_ROOT_REMEDIATION,
     UNPINNED_MODEL_REMEDIATION, VISUAL_TOOLS_REMEDIATION, WORKSPACE_NOT_DURABLE_REMEDIATION,
-    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, local_asr_failure_summary,
-    local_asr_verification_summary, managed_lifecycle_remediation, media_tool_verification_summary,
-    non_private_folder_summary, search_query_rejection_summary, transcript_rejection_summary,
+    WORKSPACE_POLICY_MISMATCH_REMEDIATION, WORKSPACE_ROOT_REMEDIATION, bundle_search_remediation,
+    local_asr_failure_summary, local_asr_verification_summary, managed_lifecycle_remediation,
+    media_tool_verification_summary, non_private_folder_summary, search_query_rejection_summary,
+    source_fetch_command, source_fetch_remediation, transcript_rejection_summary,
 };
 
 /// Parses the process arguments, executes one command, and returns its documented exit status.
@@ -106,13 +120,19 @@ enum Interruption {
 const fn is_long_running(command: &Command) -> bool {
     match command {
         Command::Ingest(_)
+        | Command::Watch(_)
         | Command::Candidates(_)
+        | Command::Changes(_)
         | Command::Ocr(_)
+        | Command::Clocks(_)
         | Command::Frame(_)
         | Command::Crop(_)
         | Command::Audio(_) => true,
         Command::Transcript(arguments) => {
-            matches!(arguments.command, TranscriptCommand::Retranscribe(_))
+            matches!(
+                arguments.command,
+                TranscriptCommand::Retranscribe(_) | TranscriptCommand::Speakers(_)
+            )
         }
         Command::Job(arguments) => {
             matches!(
@@ -126,9 +146,9 @@ const fn is_long_running(command: &Command) -> bool {
         // `setup install` downloads, verifies and smokes for minutes; an
         // interruption cancels it and discards the stage in progress.
         Command::Setup(arguments) => matches!(arguments.command, Some(SetupCommand::Install(_))),
-        Command::Session(_) | Command::Search(_) | Command::Bundle(_) | Command::Handoff(_) => {
-            false
-        }
+        // One search reads up to 1 GiB of bundles.
+        Command::Bundle(arguments) => matches!(arguments.command, BundleCommand::Search(_)),
+        Command::Session(_) | Command::Search(_) | Command::Handoff(_) | Command::Skill(_) => false,
     }
 }
 
@@ -158,19 +178,22 @@ fn compose_engine(
     )
 }
 
-/// The public operation a parsed command performs; `None` for bare `setup`,
-/// which only prints help.
-const fn operation_name(command: &Command) -> Option<CommandName> {
-    Some(match command {
+/// The public operation a parsed command performs; plain `setup` is the
+/// setup door (ADR 0036).
+const fn operation_name(command: &Command) -> CommandName {
+    match command {
         Command::Setup(arguments) => match &arguments.command {
             Some(setup) => setup.operation_name(),
-            None => return None,
+            None => CommandName::Setup,
         },
         Command::Ingest(_) => CommandName::Ingest,
+        Command::Watch(_) => CommandName::Watch,
         Command::Session(arguments) => arguments.command.operation_name(),
         Command::Transcript(arguments) => arguments.command.operation_name(),
         Command::Search(_) => CommandName::Search,
         Command::Candidates(_) => CommandName::Candidates,
+        Command::Changes(_) => CommandName::Changes,
+        Command::Clocks(_) => CommandName::Clocks,
         Command::Ocr(arguments) => match arguments.command {
             Some(OcrCommand::Search(_)) => CommandName::OcrSearch,
             None => CommandName::Ocr,
@@ -181,7 +204,8 @@ const fn operation_name(command: &Command) -> Option<CommandName> {
         Command::Bundle(arguments) => arguments.command.operation_name(),
         Command::Job(arguments) => arguments.command.operation_name(),
         Command::Handoff(arguments) => arguments.command.operation_name(),
-    })
+        Command::Skill(arguments) => arguments.command.operation_name(),
+    }
 }
 
 /// Runs one command line. The dispatch below holds the state of every
@@ -228,10 +252,15 @@ where
     StandardOutput: Write,
     StandardError: Write,
 {
-    let arguments: Vec<OsString> = arguments.into_iter().map(Into::into).collect();
+    // `vsift <video>` is `vsift watch <video>` (ADR 0037 section 2).
+    let arguments: Vec<OsString> =
+        watch::route_bare_video(arguments.into_iter().map(Into::into).collect());
     let requested_mode = detect_requested_mode(&arguments);
     let mut writer = OutputWriter::new(standard_output, standard_error);
-    let cli = match Cli::try_parse_from(&arguments) {
+    let parsed = command::parser(std::io::IsTerminal::is_terminal(&io::stdout()))
+        .try_get_matches_from(&arguments)
+        .and_then(|matches| Cli::from_arg_matches(&matches));
+    let cli = match parsed {
         Ok(cli) => cli,
         Err(error)
             if matches!(
@@ -269,25 +298,20 @@ where
     };
 
     let Some(command) = cli.command else {
-        return write_root_help(&mut writer);
+        return write_help_or_version(&mut writer, help_text::BARE_HELP);
     };
     // A strict boundary is attested before anything else runs: a host that
     // cannot provide it stops here with `ISOLATION_UNAVAILABLE` (exit 2).
-    let isolation = match operation_name(&command) {
-        Some(operation) => {
-            match attest_host_isolation(IsolationProfile::from(cli.host_isolation)) {
-                Ok(isolation) => isolation,
-                Err(error) => {
-                    return write_command_failure(
-                        &mut writer,
-                        mode,
-                        operation,
-                        CommandFailure::from(error),
-                    );
-                }
-            }
+    let isolation = match attest_host_isolation(IsolationProfile::from(cli.host_isolation)) {
+        Ok(isolation) => isolation,
+        Err(error) => {
+            return write_command_failure(
+                &mut writer,
+                mode,
+                operation_name(&command),
+                CommandFailure::from(error),
+            );
         }
-        None => HostIsolation::ProcessOnly,
     };
     // A background runner of `job start` is started with the same operator
     // options (ADR 0033).
@@ -392,11 +416,20 @@ where
                 )
             }
             Some(SetupCommand::Configure(arguments)) => {
-                let result = match arguments.dependency.runtime_dependency() {
-                    Some(dependency) => engine
+                let result = match (
+                    arguments.dependency.runtime_dependency(),
+                    arguments.dependency,
+                ) {
+                    (Some(dependency), _) => engine
                         .configure_executable(dependency, &arguments.executable)
                         .map(|()| ConfiguredSelectionResponse::new(dependency)),
-                    None => engine
+                    (None, SetupDependency::YtDlp) => engine
+                        .configure_yt_dlp(&arguments.executable)
+                        .map(|()| ConfiguredSelectionResponse::yt_dlp()),
+                    (None, SetupDependency::JsRuntime) => engine
+                        .configure_js_runtime(&arguments.executable)
+                        .map(|()| ConfiguredSelectionResponse::js_runtime()),
+                    (None, _) => engine
                         .configure_ocr_runner(&arguments.executable)
                         .map(|()| ConfiguredSelectionResponse::ocr_runner()),
                 }
@@ -423,6 +456,7 @@ where
                 let result = current_setup_plan(
                     &engine,
                     arguments.profile,
+                    CorePartSet::ALL,
                     OptionalComponentArgument::set(&arguments.include),
                 )
                 .await
@@ -460,11 +494,120 @@ where
                 let result = setup::remove(&engine, arguments);
                 write_result_with_failure_data(&mut writer, mode, CommandName::SetupRemove, result)
             }
-            None => write_setup_help(&mut writer),
+            // The unattended door answers in text or JSON, never events.
+            None if arguments.unattended && mode == OutputMode::JsonLines => write_command_failure(
+                &mut writer,
+                mode,
+                CommandName::Setup,
+                CommandFailure::with_remediation(
+                    FailureCode::InvalidArgument,
+                    SETUP_DOOR_NO_EVENTS.to_owned(),
+                ),
+            ),
+            None if arguments.unattended => {
+                let core_parts = arguments
+                    .install
+                    .iter()
+                    .fold(CorePartSet::EMPTY, |set, part| match part {
+                        command::DoorPart::Video => set.with(vsift::CorePart::Video),
+                        command::DoorPart::Speech => set.with(vsift::CorePart::Speech),
+                    });
+                let include = door::DoorOptions {
+                    include: arguments.include,
+                }
+                .include_set();
+                let steps = door::EngineSteps { engine: &engine };
+                Box::pin(door::unattended::run(
+                    door::unattended::UnattendedRun {
+                        steps: &steps,
+                        parts: core_parts,
+                        include,
+                        accept_plan: arguments.accept_plan,
+                        version: env!("CARGO_PKG_VERSION"),
+                        cancellation: &cancellation,
+                        mode,
+                        trap_interruptions: interruption == Interruption::Trapped,
+                    },
+                    &mut writer,
+                ))
+                .await
+            }
+            // The attended door talks to a person; a caller that asked for
+            // JSON or events gets a typed refusal, never a question.
+            None if mode != OutputMode::Human => write_command_failure(
+                &mut writer,
+                mode,
+                CommandName::Setup,
+                CommandFailure::with_remediation(
+                    FailureCode::InvalidArgument,
+                    SETUP_DOOR_NEEDS_A_PERSON.to_owned(),
+                ),
+            ),
+            None => {
+                let options = door::DoorOptions {
+                    include: arguments.include,
+                };
+                let steps = door::EngineSteps { engine: &engine };
+                match interruption {
+                    Interruption::Trapped => {
+                        Box::pin(door::run(
+                            door::DoorRun {
+                                console: &mut door::SystemConsole,
+                                steps: &steps,
+                                options,
+                                version: env!("CARGO_PKG_VERSION"),
+                                cancellation: &cancellation,
+                                trap_interruptions: true,
+                            },
+                            &mut writer,
+                        ))
+                        .await
+                    }
+                    // In-process tests never read the test runner's own
+                    // terminal: nobody is there to answer.
+                    #[cfg(test)]
+                    Interruption::Default => {
+                        Box::pin(door::run(
+                            door::DoorRun {
+                                console: &mut door::Nobody,
+                                steps: &steps,
+                                options,
+                                version: env!("CARGO_PKG_VERSION"),
+                                cancellation: &cancellation,
+                                trap_interruptions: false,
+                            },
+                            &mut writer,
+                        ))
+                        .await
+                    }
+                }
+            }
         },
         Command::Ingest(arguments) => {
             let result = session::ingest(&engine, arguments, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Ingest, result)
+        }
+        Command::Watch(arguments) if mode == OutputMode::JsonLines => {
+            progress::stream_with_progress(&mut writer, CommandName::Watch, |observer| {
+                Box::pin(watch::watch(&engine, &arguments, &cancellation, observer))
+            })
+            .await
+        }
+        Command::Watch(arguments) => {
+            // ADR 0037 section 9: the bars in readable text, and only in the
+            // real process, whose standard error is the person's.
+            let display = if mode == OutputMode::Human && interruption == Interruption::Trapped {
+                watch_lines::TerminalFacts::of_process().display()
+            } else {
+                watch_lines::WatchDisplay::Hidden
+            };
+            let board = watch::progress_board(&arguments);
+            let result =
+                watch_lines::with_watch_progress(&mut writer, display, board, |observer| {
+                    Box::pin(watch::watch(&engine, &arguments, &cancellation, observer))
+                })
+                .await;
+            write_session_result(&mut writer, mode, CommandName::Watch, result)
         }
         Command::Transcript(arguments) => {
             let operation = arguments.command.operation_name();
@@ -501,6 +644,15 @@ where
                     .await;
                     write_session_result(&mut writer, mode, operation, result)
                 }
+                TranscriptCommand::Speakers(arguments) => {
+                    let result =
+                        session::transcript_speakers(&engine, arguments, &cancellation).await;
+                    write_session_result(&mut writer, mode, operation, result)
+                }
+                TranscriptCommand::NameSpeaker(arguments) => {
+                    let result = session::transcript_name_speaker(&engine, arguments);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
             }
         }
         Command::Session(arguments) => {
@@ -513,6 +665,11 @@ where
             match arguments.command {
                 BundleCommand::Validate(arguments) => {
                     let result = session::validate_bundle(&engine, &arguments.directory);
+                    write_session_result(&mut writer, mode, operation, result)
+                }
+                BundleCommand::Search(arguments) => {
+                    let view = read_view::presented_view(mode, arguments.view);
+                    let result = search::bundles(&engine, arguments, view, &cancellation);
                     write_session_result(&mut writer, mode, operation, result)
                 }
             }
@@ -535,12 +692,24 @@ where
             let result = candidates::candidates(&engine, arguments, view, &cancellation).await;
             write_session_result(&mut writer, mode, CommandName::Candidates, result)
         }
+        Command::Changes(arguments) if mode == OutputMode::JsonLines => {
+            let result = changes::changes_stream(&engine, arguments, &cancellation).await;
+            write_evidence_stream(&mut writer, CommandName::Changes, result)
+        }
+        Command::Changes(arguments) => {
+            let result = changes::changes(&engine, arguments, &cancellation).await;
+            write_session_result(&mut writer, mode, CommandName::Changes, result)
+        }
         Command::Ocr(OcrArguments {
             command: Some(OcrCommand::Search(arguments)),
             ..
         }) => {
             let result = ocr::search(&engine, arguments);
             write_session_result(&mut writer, mode, CommandName::OcrSearch, result)
+        }
+        Command::Clocks(arguments) => {
+            let result = clocks::clocks(&engine, arguments, &cancellation).await;
+            write_session_result(&mut writer, mode, CommandName::Clocks, result)
         }
         Command::Ocr(arguments) => {
             let result = ocr::ocr(&engine, arguments, &cancellation).await;
@@ -578,8 +747,30 @@ where
                 HandoffCommand::Check(arguments) => {
                     handoff::check(&engine, &arguments, io::stdin().lock())
                 }
+                HandoffCommand::Skeleton(arguments) => handoff::skeleton(&engine, &arguments),
+                HandoffCommand::Finish(arguments) => {
+                    handoff::finish(&engine, &arguments, io::stdin().lock())
+                }
             };
             write_session_result(&mut writer, mode, operation, result)
+        }
+        Command::Skill(arguments) => {
+            let operation = arguments.command.operation_name();
+            match arguments.command {
+                SkillCommand::Install(arguments) => {
+                    let result = skill::install(&engine, &arguments);
+                    write_result_with_failure_data(&mut writer, mode, operation, result)
+                }
+                SkillCommand::Status(arguments) => write_session_result(
+                    &mut writer,
+                    mode,
+                    operation,
+                    skill::status(&engine, &arguments),
+                ),
+                SkillCommand::Show(arguments) => {
+                    write_session_result(&mut writer, mode, operation, skill::show(&arguments))
+                }
+            }
         }
         Command::Job(arguments) => {
             let operation = arguments.command.operation_name();
@@ -640,11 +831,20 @@ where
     }
 }
 
+/// The remediation of plain `vsift setup` with `--json` or `--events`.
+const SETUP_DOOR_NEEDS_A_PERSON: &str = "vsift setup is for a person at a terminal; use setup \
+    check --json to read the setup, or setup --unattended --install <parts> --json to install.";
+
+/// The remediation of `vsift setup --unattended` with `--events`.
+const SETUP_DOOR_NO_EVENTS: &str = "vsift setup --unattended reports one result and no events; \
+    use --json for the result, or setup install --events jsonl for an install's progress events.";
+
 /// Resolves the effective probe deadline for `profile`, then asks the engine
 /// for the current plan.
-async fn current_setup_plan(
+pub(crate) async fn current_setup_plan(
     engine: &Engine,
     profile: ExecutionProfile,
+    parts: CorePartSet,
     include: OptionalComponentSet,
 ) -> Result<EvaluatedSetupPlan, CommandFailure> {
     let config = EffectiveConfig::resolve(
@@ -661,6 +861,7 @@ async fn current_setup_plan(
         .plan_setup(SetupPlanRequest {
             profile: config.profile.into(),
             include,
+            parts,
             probe_timeout: config.probe_timeout,
         })
         .await?)
@@ -687,6 +888,12 @@ pub(crate) struct CommandFailure {
     /// What the command did before it failed, in its published JSON form,
     /// written as the failure's `data` (`setup install`: every component).
     data: Option<Box<serde_json::Value>>,
+    /// The typed reason of a code that has reasons, written as
+    /// `error.reason` (`SOURCE_FETCH_FAILED`, ADR 0028).
+    reason: Option<&'static str>,
+    /// The remediation is the user's to approve (`required_authority`):
+    /// adding the optional online component (ADR 0028 section 4.7).
+    needs_confirmation: bool,
 }
 
 impl CommandFailure {
@@ -699,12 +906,23 @@ impl CommandFailure {
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
             data: None,
+            reason: None,
+            needs_confirmation: false,
         }
     }
 
     /// Also reports `data`, in its published JSON form, beside the error.
     pub(crate) fn with_data(mut self, data: serde_json::Value) -> Self {
         self.data = Some(Box::new(data));
+        self
+    }
+
+    /// Adds fixed words after the remediation it already has.
+    pub(crate) fn with_added_remediation(mut self, words: &str) -> Self {
+        self.remediation = Some(match self.remediation.take() {
+            Some(remediation) => format!("{remediation} {words}"),
+            None => words.to_owned(),
+        });
         self
     }
 
@@ -730,6 +948,8 @@ impl CommandFailure {
             affected_ids: Vec::new(),
             suggested_command,
             data: None,
+            reason: None,
+            needs_confirmation: false,
         }
     }
 
@@ -768,6 +988,8 @@ impl From<FailureCode> for CommandFailure {
             affected_ids: Vec::new(),
             suggested_command: Vec::new(),
             data: None,
+            reason: None,
+            needs_confirmation: false,
         }
     }
 }
@@ -793,7 +1015,21 @@ impl From<EngineError> for CommandFailure {
                     .search_query_rejection()
                     .map(search_query_rejection_summary)
             })
-            .or_else(|| local_asr_remediation(&error));
+            .or_else(|| match &error {
+                EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => {
+                    Some(source_fetch_remediation(*reason).to_owned())
+                }
+                _ => None,
+            })
+            .or_else(|| local_asr_remediation(&error))
+            .or_else(|| match &error {
+                EngineError::Watch(failure) => Some(watch::remediation(*failure)),
+                _ => None,
+            });
+        let fetch_reason = match &error {
+            EngineError::OpenSession(OpenSessionError::SourceFetch(reason)) => Some(*reason),
+            _ => None,
+        };
         // The session first, then the job: the order an agent resolves them.
         let affected_ids = error
             .affected_session()
@@ -809,8 +1045,10 @@ impl From<EngineError> for CommandFailure {
                     job.as_str().to_owned(),
                 ]
             }
-            // #370: follow the transcription, then ask again.
-            EngineError::TranscriptionRunning { job, .. } => {
+            // #370: follow the transcription, then ask again; ADR 0031 note of
+            // 2026-11-18: follow the job until the revision to label is sealed.
+            EngineError::TranscriptionRunning { job, .. }
+            | EngineError::SpeakersRevisionOpen { job, .. } => {
                 vec![
                     "job".to_owned(),
                     "status".to_owned(),
@@ -844,7 +1082,12 @@ impl From<EngineError> for CommandFailure {
                 .iter()
                 .map(|argument| (*argument).to_owned())
                 .collect(),
-            _ => Vec::new(),
+            _ => fetch_reason
+                .and_then(source_fetch_command)
+                .unwrap_or_default()
+                .iter()
+                .map(|argument| (*argument).to_owned())
+                .collect(),
         };
         Self {
             code: error.failure_code(),
@@ -853,6 +1096,8 @@ impl From<EngineError> for CommandFailure {
             affected_ids,
             suggested_command,
             data: None,
+            reason: fetch_reason.map(SourceFetchReason::identifier),
+            needs_confirmation: fetch_reason == Some(SourceFetchReason::WebPage),
         }
     }
 }
@@ -884,8 +1129,14 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
             .to_owned(),
         ),
         EngineError::TranscriptRevisionNotFound => Some(UNKNOWN_REVISION_REMEDIATION.to_owned()),
+        EngineError::DiarizerUnavailable => Some(DIARIZER_REMEDIATION.to_owned()),
+        EngineError::SpeakerRecordNotFound => Some(NO_SPEAKER_RECORD_REMEDIATION.to_owned()),
+        EngineError::SpeakerLabels(vsift::SpeakerLabelError::RangeTooLong { .. }) => {
+            Some(DIARIZATION_RANGE_REMEDIATION.to_owned())
+        }
         EngineError::VisualToolUnavailable(_) => Some(VISUAL_TOOLS_REMEDIATION.to_owned()),
         EngineError::NoVideoStream => Some(NO_VIDEO_STREAM_REMEDIATION.to_owned()),
+        EngineError::Clocks(_) => Some(CLOCK_RULES_REMEDIATION.to_owned()),
         EngineError::Ocr(OcrError::RunnerUnavailable) => Some(OCR_RUNNER_REMEDIATION.to_owned()),
         EngineError::Ocr(OcrError::Cursor(_)) => Some(OCR_SEARCH_CURSOR_REMEDIATION.to_owned()),
         EngineError::Ocr(OcrError::Failed(_) | OcrError::Stopped(ScreenTextStop::Engine(_))) => {
@@ -894,12 +1145,17 @@ fn local_asr_remediation(error: &EngineError) -> Option<String> {
         EngineError::Ocr(
             OcrError::BudgetExhausted | OcrError::Stopped(ScreenTextStop::IndexFull),
         ) => Some(OCR_INDEX_FULL_REMEDIATION.to_owned()),
+        EngineError::BundleSearch(error) => bundle_search_remediation(*error).map(str::to_owned),
         EngineError::CandidateCursorWithoutIndex => Some(CANDIDATE_CURSOR_REMEDIATION.to_owned()),
         EngineError::JobBusy { .. } => Some(JOB_BUSY_REMEDIATION.to_owned()),
         EngineError::TranscriptionRunning { .. } => {
             Some(TRANSCRIPTION_RUNNING_REMEDIATION.to_owned())
         }
         EngineError::RevisionLeftOpen { .. } => Some(REVISION_LEFT_OPEN_REMEDIATION.to_owned()),
+        EngineError::SpeakersRevisionOpen { .. }
+        | EngineError::SpeakerLabels(vsift::SpeakerLabelError::Record(
+            vsift::DiarizationError::RevisionOpen,
+        )) => Some(SPEAKERS_REVISION_OPEN_REMEDIATION.to_owned()),
         EngineError::IdempotencyConflict { .. } => {
             Some(IDEMPOTENCY_CONFLICT_REMEDIATION.to_owned())
         }
@@ -1193,37 +1449,6 @@ where
     }
 }
 
-fn write_root_help<StandardOutput, StandardError>(
-    writer: &mut OutputWriter<StandardOutput, StandardError>,
-) -> ProcessExit
-where
-    StandardOutput: Write,
-    StandardError: Write,
-{
-    let mut help = Cli::command().render_long_help().to_string();
-    help.push('\n');
-    write_help_or_version(writer, &help)
-}
-
-fn write_setup_help<StandardOutput, StandardError>(
-    writer: &mut OutputWriter<StandardOutput, StandardError>,
-) -> ProcessExit
-where
-    StandardOutput: Write,
-    StandardError: Write,
-{
-    let mut root = Cli::command();
-    let help = root.find_subcommand_mut("setup").map_or_else(
-        || String::from("VSift setup help is unavailable.\n"),
-        |setup| {
-            let mut rendered = setup.render_long_help().to_string();
-            rendered.push('\n');
-            rendered
-        },
-    );
-    write_help_or_version(writer, &help)
-}
-
 /// Writes a failure that may carry a typed remediation.
 fn write_command_failure<StandardOutput, StandardError>(
     writer: &mut OutputWriter<StandardOutput, StandardError>,
@@ -1308,6 +1533,12 @@ fn failure_response(
     }
     if let Some(data) = failure.data {
         response = response.with_failure_value(*data);
+    }
+    if let Some(reason) = failure.reason {
+        response = response.with_error_reason(reason);
+    }
+    if failure.needs_confirmation {
+        response = response.requiring_user_confirmation();
     }
     response
 }
@@ -1779,9 +2010,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn root_and_setup_without_subcommands_show_help_without_side_effects()
+    async fn root_and_setup_help_show_help_without_side_effects()
     -> Result<(), Box<dyn std::error::Error>> {
-        for arguments in [vec!["vsift"], vec!["vsift", "setup"]] {
+        for (arguments, expected) in [
+            (vec!["vsift"], "New here?"),
+            (vec!["vsift", "setup", "--help"], "Usage:"),
+        ] {
             let mut stdout = Vec::new();
             let mut stderr = Vec::new();
             let exit = execute_with(
@@ -1794,7 +2028,7 @@ mod tests {
             .await;
 
             assert_eq!(exit, ProcessExit::Success);
-            assert!(String::from_utf8(stdout)?.contains("Usage:"));
+            assert!(String::from_utf8(stdout)?.contains(expected));
             assert_eq!(stderr, [] as [u8; 0]);
         }
         Ok(())
@@ -1853,6 +2087,61 @@ mod tests {
         assert_eq!(value["command"], "setup.install");
         assert_eq!(value["error"]["code"], "STORAGE_IO");
         assert_eq!(stderr, [] as [u8; 0]);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod web_page_failure {
+    use vsift::{EngineError, OpenSessionError, SourceFetchReason};
+    use vsift_contract::CommandName;
+
+    use super::{CommandFailure, failure_response};
+
+    fn answer(reason: SourceFetchReason) -> Result<serde_json::Value, serde_json::Error> {
+        let failure = CommandFailure::from(EngineError::OpenSession(
+            OpenSessionError::SourceFetch(reason),
+        ));
+        serde_json::to_value(failure_response(CommandName::Ingest, failure))
+    }
+
+    /// Adding the optional component is the user's decision (ADR 0028
+    /// section 4.7), wherever the remediation sends them.
+    #[test]
+    fn a_web_page_asks_the_user_and_no_other_reason_does() -> Result<(), serde_json::Error> {
+        let refused = answer(SourceFetchReason::WebPage)?;
+        let remediation = &refused["error"]["remediation"][0];
+        assert_eq!(refused["error"]["reason"], "web_page");
+        assert_eq!(remediation["required_authority"], "user_confirmation");
+        if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            assert_eq!(
+                remediation["command"]["arguments"],
+                serde_json::json!([
+                    "setup",
+                    "plan",
+                    "--profile",
+                    "desktop",
+                    "--include",
+                    "online_links"
+                ])
+            );
+        } else {
+            assert!(remediation["command"].is_null());
+            assert!(
+                remediation["summary"]
+                    .as_str()
+                    .is_some_and(|summary| summary.contains("setup configure yt-dlp"))
+            );
+        }
+        for reason in SourceFetchReason::ALL {
+            if reason != SourceFetchReason::WebPage {
+                let refused = answer(reason)?;
+                assert_eq!(
+                    refused["error"]["remediation"][0]["required_authority"], "none",
+                    "{reason:?}"
+                );
+            }
+        }
         Ok(())
     }
 }

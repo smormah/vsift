@@ -18,8 +18,8 @@ pub enum SessionPhase {
 pub const MAX_TRANSCRIPT_PARTS: usize = 64;
 
 /// Artifact kinds a session publishes: P04 media evidence, P07 transcript
-/// records, P08 visual-index records, P09 evidence clips and records, and
-/// on-screen text index records (ADR 0030).
+/// records, P08 visual-index records, P09 evidence clips and records,
+/// on-screen text index records (ADR 0030) and speaker records (ADR 0031).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionArtifactKind {
     /// A source-grounded extracted frame encoded as PNG.
@@ -46,6 +46,9 @@ pub enum SessionArtifactKind {
     /// generation that seals the revision retires its parts; a sealed session
     /// holds none.
     TranscriptPart,
+    /// One immutable speaker record: the speaker labels of one transcript revision,
+    /// stored as versioned JSON (ADR 0031). It holds turns and names, never audio.
+    SpeakerRecord,
 }
 
 impl SessionArtifactKind {
@@ -61,6 +64,7 @@ impl SessionArtifactKind {
             Self::EvidenceRecord => "evidence_record",
             Self::ScreenTextIndexRecord => "screen_text_index_record",
             Self::TranscriptPart => "transcript_part",
+            Self::SpeakerRecord => "speaker_record",
         }
     }
 
@@ -75,7 +79,8 @@ impl SessionArtifactKind {
             | Self::VisualIndexRecord
             | Self::EvidenceRecord
             | Self::ScreenTextIndexRecord
-            | Self::TranscriptPart => "json",
+            | Self::TranscriptPart
+            | Self::SpeakerRecord => "json",
         }
     }
 }

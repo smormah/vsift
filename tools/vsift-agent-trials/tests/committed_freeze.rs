@@ -60,8 +60,97 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
-/// The freeze of 2026-10-27 is the **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut**. The
-/// progress story's fifth pull request changed the skill again (`references/resume.md` starts each of several
+/// **#500's freeze (speaker labels): 0.3.0 development freeze, written at #500's merge rebase onto `main` at
+/// `25ab0407` (2026-11-18):** `references/commands.md` gains the rows `transcript speakers` (free) and `transcript
+/// name-speaker` (explicit), so only the `skill` component moved, `14b6ddd6...` (M5b's) to `5ee66624...`, and this
+/// digest `71858de9...` (M5b's) to the value below; the other six components are `main`'s. `freeze write` at
+/// `c177ef92a86d31fd5dcca9306df4f5cf9f00e55f`. No batch runs for it: the cut's batches measure the shipped skill.
+///
+/// The freeze before it, M5b's, is told in `docs/agents/trials.md`; before that,
+/// **M5a's freeze: 0.3.0 development freeze, rewritten at the rebase onto S1 (2026-11-15):** the lighter skill moves only
+/// the `skill` component, `SKILL.md` and its references, to `ec08dba7...`; on S1's `main` the other six components are
+/// S1's, so this digest `efd8633d...` (S1's) becomes the value below. `freeze write` at `4266488507b8c2d0011ae74f538a485183d6baff`.
+///
+/// The freeze before it, **S1's freeze: 0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut** (2026-11-15): the trial
+/// scenarios follow `job start`. A new expectation, `commands_any_of`, lets A-08 and H-02 accept `job.start` or
+/// `transcript.retranscribe` for the whole-video transcription, and A-09-f05-supplied and H-01 forbid `job.start` as
+/// well as `transcript.retranscribe`. Three components moved: `grader` `55793d82...` to `68293b63...`, `scenarios`
+/// `916c8c22...` to `32f6860a...` and `holdout` `1963f6e4...` to `f4d526ea...` (the hold-outs' expectations only, their
+/// prompts unchanged), and this digest `615b93bf...` (M1's) to the value below; the other four components are
+/// unchanged. `freeze write` at `c2906341d8ff89384ac11de55cf9e2eb6c9e67fa`. M5a's and M5b's pull requests write it
+/// again when they are rebased onto this one.
+///
+/// The freeze before it, **M1's freeze: 0.3.0 draft freeze, rewritten at the merge rebase; the final freeze is recorded at the 0.3.0 cut**
+/// (2026-11-07): the value measurement's harness adds `src/value/`, `src/timing.rs` and hooks in `run.rs`,
+/// `cold.rs`, `leak_check.rs` and the rest of the crate's `src`, so only the `grader` component moved,
+/// `efe6fd2d...` to `55793d82...`, and this digest `f4f4740b...` (W1's draft freeze, `changes` classed `free`) to
+/// the value below; the other six components are unchanged. No skill, scenario or settings file of the P14 trials
+/// changed.
+///
+/// The freeze before W1's: **0.3.0 development freeze, written at W4c Part 2's merge rebase (#409); the final freeze is recorded at the 0.3.0
+/// cut** (2026-11-02): the skill gains the step for a video on a web page, the grader the consent rules and the plan
+/// grant, and the scenarios C-05 to C-08 and A-11, so four components moved: `skill` `6065ffdb...` to `e7269b80...`,
+/// `grader` `76d1243c...` to `efe6fd2d...`, `cold` `853d8da3...` to `31204791...` and `scenarios` `3a77c3d3...` to
+/// `916c8c22...`, and this digest `5d7d254b...` to the value below; the other three components are unchanged.
+///
+/// The freeze before it, W10's, is told in `docs/agents/trials.md`, and before that:
+/// **0.3.0 development freeze, rewritten at W6c's merge rebase; W10 writes it again when it merges second; the final
+/// freeze is recorded at the 0.3.0 cut** (#454, 2026-11-01): `SKILL.md` gains the small-number advice, so the `skill` component moved
+/// `80c3933f...` to `930fabf1...` and this digest `ba60a2fb...` to the value below; the other six components are
+/// unchanged.
+///
+/// The freeze before it: **0.3.0 draft freeze, rewritten for W3's draft; written again at its merge rebase** (ADR 0029, stage 2,
+/// 2026-10-30): `references/commands.md` classes `clocks` `explicit`, so the `skill` component moved `7bbc0f98...`
+/// to `80c3933f...` and this digest `cdfb205e...` to the value below; the other six components are unchanged.
+///
+/// The freeze before it: **0.3.0 development freeze, rewritten at W2's merge rebase** (ADR 0035, 2026-10-30): `references/commands.md`
+/// classes `bundle search` `free`, so the `skill` component moved `6a3104bd...` to `7bbc0f98...` and this digest
+/// `78a332a2...` to the value below; the other six components are unchanged.
+///
+/// The freeze before it: **0.3.0 development freeze, written on the head of W9's last pull request** (ADR 0038 slice 5, 2026-10-29): the
+/// skill allows `ingest --url` in `references/commands.md`, the cold scenarios gain `C-04-f05-bug-report`, and the
+/// campaign plan runs it in batch 3 with the summary reporting it apart from the 80% target, so three components moved:
+/// `skill` `2807b370...` to `6a3104bd...`, `cold` `b288c18b...` to `853d8da3...` and `grader` `9ecd1121...` to
+/// `da1b01be...`, and this digest `fa13eeba...` to the value below; the other four components are unchanged. The two
+/// draft freezes below merged with #548 and #549 without being rewritten at a merge rebase; this freeze, written on
+/// `main` after both, covers them.
+///
+/// The draft freeze before it (W9, ADR 0038 section 2, the read-through workflows, 2026-10-29,
+/// stacked on slice 2's draft): the skill gains `workflows/meeting-notes.md`, `workflows/workshop-spec.md`, the
+/// `read_through` profile in `references/budgets.md`, `read_through` and `transcript_pages` in the handoff schema and a
+/// meeting-notes example, so the `skill` component moved `924d6ebe...` to `2807b370...` and this digest `5d0b187a...`
+/// to the value below; the other six components are unchanged.
+///
+/// The draft freeze before it, also rewritten at the merge rebase (W9, ADR 0038 slice 2, 2026-10-29): the skill gains the four
+/// cue-word workflows (`workflows/`), two example handoffs, the optional `claims[].category` and `claims[].priority`,
+/// `ingest --recorded-at` in `references/commands.md` and the log-file rule of `references/safety.md`, so the `skill`
+/// component moved `60c086a7...` to `924d6ebe...` and this digest `12a93ac3...` to the value below; the other six
+/// components are unchanged.
+///
+/// The freeze before it, a **0.3.0 development freeze, written at the merge rebase** (W9, ADR 0038 slice 3, 2026-10-29): `references/commands.md`
+/// classes `vsift skill install` as never and `vsift skill status` and `vsift skill show` as free, so the `skill`
+/// component moved `5739c914...` to `60c086a7...` and this digest `928f9d7b...` to the value below; the other six
+/// components are unchanged.
+///
+/// The freeze before it, also written at the merge rebase (W9, ADR 0038 slice 1, 2026-10-29): `references/commands.md`
+/// classes `vsift handoff skeleton` as free and `references/handoff.md` says to start the JSON from it, so the `skill`
+/// component moved `0c25b263...` to `5739c914...` and this digest `f6835cb5...` to the value below; the other six
+/// components are unchanged.
+///
+/// The draft freeze before it, also rewritten at the merge rebase (W6g, ADR 0037, 2026-10-28): `references/commands.md` classes
+/// `vsift watch` as never, so the `skill` component moved `07ba130f...` to `0c25b263...` and this digest `c4a241e3...`
+/// to the value below; the other six components are unchanged.
+///
+/// The freeze before it, also a **0.3.0 development freeze; the final freeze is recorded at the 0.3.0 cut.** The online links pull request
+/// (ADR 0028, 2026-10-28) adds the failure code `SOURCE_FETCH_FAILED` to the handoff's `gaps[].code` list
+/// (`skills/vsift/handoff.schema.json` and `references/handoff.md`), so the `skill` component moved `ec575190...` to
+/// `07ba130f...` and this digest `70f3e04e...` to the value below; the other six components are unchanged. It was
+/// written on the `main` the pull request was rebased onto to merge. The freeze before it, also of 2026-10-27: the
+/// setup door's first pull request
+/// (ADR 0036, 2026-10-27) classes plain `vsift setup` as never in `references/commands.md`, so the `skill` component
+/// moved `abbc2e96...` to `ec575190...` and this digest `6b2744db...` to the value below; the other six components are
+/// unchanged. It was written on the `main` the pull request was rebased onto to merge. The freeze before it, also of
+/// 2026-10-27: the progress story's fifth pull request changed the skill again (`references/resume.md` starts each of several
 /// recordings, or one with no rush, with `--mode queued` and reports a waiting job's `queue_position`;
 /// `references/commands.md` allows the form), so the `skill` component moved `bef93e2b...` to `abbc2e96...` and this
 /// digest `2cda9657...` to the value below; the other six components are unchanged. It was written on the `main`
@@ -117,7 +206,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "6b2744db1c764ed45f4d13169b0d9304716bc81b9b589ac4a0fa026855dff3fe";
+const CUT_FREEZE_SHA256: &str = "4f009d5ffb738b631d8dca7237ef1bfb36247b70428a532db408491cab9bbec2";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {

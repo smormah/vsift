@@ -10,7 +10,9 @@
 //! else in the presentation.
 
 use serde::Serialize;
-use vsift_application::{OptionalCapability, OptionalComponent, SetupProfile};
+use vsift_application::{
+    OptionalCapability, OptionalComponent, SetupProfile, UserSuppliedKind, UserSuppliedTool,
+};
 
 /// The fixed prose of one optional component.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34,6 +36,12 @@ pub struct OptionalComponentText {
 /// The notice every offer of online links carries.
 pub const SITE_TERMS_NOTICE: &str = "Downloading from a site is subject to that site's terms, which are yours to follow. VSift does not get round sign-in, DRM, age, region or bot checks.";
 
+/// The attribution notice every offer of speaker labels carries (ADR 0031,
+/// "The managed install and its notice"): it covers both of `TitaNet`'s licence
+/// statements and the engine and runtime the models run with. The plan carries
+/// it, so whoever accepts the plan has read it before the models are fetched.
+pub const SPEAKER_MODELS_NOTICE: &str = "Speaker diarization uses the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT licence; ONNX export by the sherpa-onnx project) and NVIDIA's NeMo TitaNet small speaker-embedding model (Copyright NVIDIA Corporation; distributed under the NeMo Toolkit's Apache License 2.0, and attributed here as the Creative Commons Attribution 4.0 licence of NVIDIA's TitaNet model card requires), run by sherpa-onnx (Apache License 2.0) with ONNX Runtime (MIT licence).";
+
 /// The fixed prose of `component`.
 #[must_use]
 pub const fn optional_component_text(component: OptionalComponent) -> OptionalComponentText {
@@ -42,9 +50,25 @@ pub const fn optional_component_text(component: OptionalComponent) -> OptionalCo
             purpose: "Fetches a video from a public web page (YouTube and other sites) when you give VSift a link with ingest --url, using yt-dlp and the JavaScript runtime it needs. Direct HTTPS video links work without it.",
             subject: "yt-dlp (GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from YouTube and other sites when you give VSift a link. Downloading is subject to each site's terms.",
             terms_notice: Some(SITE_TERMS_NOTICE),
-            unavailable: "A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only. Direct HTTPS video links (ingest --url) work without it, as does every local file.",
+            unavailable: "A managed yt-dlp is offered on Ubuntu 24.04 x86-64 only; elsewhere, register a yt-dlp you supply with vsift setup configure yt-dlp --executable <absolute-path>. Direct HTTPS video links (ingest --url) work without it, as does every local file.",
             installed: "Online links can be fetched with ingest --url: yt-dlp and its JavaScript runtime are installed. Sites change and can break extraction; a newer reviewed yt-dlp comes with a VSift release, and managed_updates names it when one is known.",
             name_in_prose: "online links",
+        },
+        OptionalComponent::Ocr => OptionalComponentText {
+            purpose: "Reads the text shown on screen in a recording (a terminal, a slide, an error dialog) so that ocr can list it and ocr search can find it. The OCR runner, ONNX Runtime and the two text models run on this machine; nothing is sent anywhere.",
+            subject: "VSift's own OCR runner (MIT or Apache-2.0) with ONNX Runtime (MIT) and the PP-OCRv5 text models (Apache-2.0) reads on-screen text from a recording's frames on this machine.",
+            terms_notice: None,
+            unavailable: "A managed OCR runner is offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, register a runner you have with vsift setup configure ocr-runner --executable <absolute-path>. Every other command works without it.",
+            installed: "On-screen text can be read: the OCR runner, ONNX Runtime and the two text models are installed, so ocr reads a session's frames and ocr search finds the text.",
+            name_in_prose: "on-screen text",
+        },
+        OptionalComponent::Speakers => OptionalComponentText {
+            purpose: "Labels who speaks when in a recording's transcript (S1, S2 and so on) so that transcript speakers can group the segments by voice and search --speaker can filter by it. sherpa-onnx's speaker-diarization tool, ONNX Runtime and two speaker models run on this machine; nothing is sent anywhere.",
+            subject: "sherpa-onnx (Apache-2.0) with ONNX Runtime (MIT), the pyannote segmentation 3.0 model (Copyright (c) 2022 CNRS, MIT) and NVIDIA's NeMo TitaNet small model (Copyright NVIDIA Corporation, Apache-2.0, attributed under CC BY 4.0) group a recording's speech by voice on this machine.",
+            terms_notice: Some(SPEAKER_MODELS_NOTICE),
+            unavailable: "A managed speaker-diarization tool and its two models are offered on Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64; elsewhere, give their paths to transcript speakers with --diarizer, --segmentation-model and --embedding-model. Transcripts, search and every other command work without them.",
+            installed: "Speaker labels can be made: the speaker-diarization tool, ONNX Runtime and the two speaker models are installed, so transcript speakers labels a finished transcript by voice and search --speaker filters by the label.",
+            name_in_prose: "speaker labels",
         },
     }
 }
@@ -73,6 +97,11 @@ pub(crate) struct OptionalCheckResponse {
     name: &'static str,
     status: &'static str,
     components: Vec<OptionalCheckComponentResponse>,
+    /// A JavaScript runtime the user registered that is not used because no
+    /// yt-dlp of theirs is registered (the runtime follows yt-dlp's source).
+    /// Absent when there is none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    unused_components: Vec<OptionalCheckComponentResponse>,
     next_step: String,
     add_command: Option<SuggestedVsiftCommand>,
 }
@@ -81,6 +110,13 @@ pub(crate) struct OptionalCheckResponse {
 struct OptionalCheckComponentResponse {
     component: &'static str,
     version: String,
+    /// `managed` (`VSift` installed and reviewed it) or `user_managed` (the
+    /// user supplied it; keeping it current is theirs).
+    source: &'static str,
+    /// The SHA-256 of a user-supplied file; absent for a managed one, whose
+    /// digest is pinned by the catalogue.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha256: Option<String>,
 }
 
 /// A `vsift` command as an executable and an argument array.
@@ -88,6 +124,36 @@ struct OptionalCheckComponentResponse {
 struct SuggestedVsiftCommand {
     executable: &'static str,
     arguments: Vec<&'static str>,
+}
+
+/// What `setup check` says of tools the user supplied: they are used instead
+/// of a managed one, nothing here reviewed them, and keeping them current is
+/// the user's job (ADR 0028 section 4.6).
+fn user_supplied_step(tools: &[UserSuppliedTool]) -> String {
+    let runtime = tools
+        .iter()
+        .any(|tool| tool.kind == UserSuppliedKind::JsRuntime);
+    let mut step = String::from(
+        "Online links use the yt-dlp you supplied, not a reviewed one: keeping it current is up to you, and sites change.",
+    );
+    if !runtime {
+        step.push_str(" No JavaScript runtime is registered, so YouTube may refuse; register Deno with vsift setup configure js-runtime --executable <absolute-path>.");
+    }
+    step
+}
+
+/// Words for a fixed unusable-tool reason identifier.
+fn unusable_reason_words(reason: &str) -> &'static str {
+    match reason {
+        "unreadable" => "the file could not be read",
+        "could_not_start" => "it could not be started",
+        "failed" => "it reported a failure",
+        "deadline" => "it did not answer in time",
+        "output_over_bound" => "it printed too much",
+        "unexpected_output" => "it did not print the version line expected of it",
+        "cancelled" => "the check was cancelled",
+        _ => "it could not be checked",
+    }
 }
 
 /// The `next_step` of one `setup check` optional component, for the
@@ -102,6 +168,28 @@ pub fn optional_check_step(
 }
 
 impl OptionalCheckResponse {
+    /// Lists a registered JavaScript runtime that is not used and says why.
+    fn note_unused_runtime(&mut self, runtime: &Result<UserSuppliedTool, &'static str>) {
+        let note = match runtime {
+            Ok(tool) => {
+                self.unused_components.push(OptionalCheckComponentResponse {
+                    component: tool.kind.identifier(),
+                    version: tool.version_line.clone(),
+                    source: "user_managed",
+                    sha256: Some(tool.sha256.clone()),
+                });
+                String::from(
+                    "The JavaScript runtime you registered is not used: it runs only with a yt-dlp you registered, and none is. Register one with vsift setup configure yt-dlp --executable <absolute-path>.",
+                )
+            }
+            Err(reason) => format!(
+                "The JavaScript runtime you registered is not used (it runs only with a yt-dlp you registered, and none is) and could not be used either ({}). Only Deno is accepted in 0.3.0.",
+                unusable_reason_words(reason)
+            ),
+        };
+        self.next_step = format!("{} {note}", self.next_step);
+    }
+
     pub(crate) fn new(
         component: OptionalComponent,
         capability: &OptionalCapability,
@@ -116,9 +204,34 @@ impl OptionalCheckResponse {
                     .map(|(component, version)| OptionalCheckComponentResponse {
                         component: component.identifier(),
                         version: version.clone(),
+                        source: "managed",
+                        sha256: None,
                     })
                     .collect(),
                 String::from(text.installed),
+                None,
+            ),
+            OptionalCapability::UserSupplied(tools) => (
+                tools
+                    .iter()
+                    .map(|tool| OptionalCheckComponentResponse {
+                        component: tool.kind.identifier(),
+                        version: tool.version_line.clone(),
+                        source: "user_managed",
+                        sha256: Some(tool.sha256.clone()),
+                    })
+                    .collect(),
+                user_supplied_step(tools),
+                None,
+            ),
+            OptionalCapability::UserSuppliedUnusable { tool, reason } => (
+                Vec::new(),
+                format!(
+                    "The {} you registered could not be used ({}). Local investigation does not need it. Register a working one with vsift setup configure {} --executable <absolute-path>.",
+                    tool.setup_name(),
+                    unusable_reason_words(reason),
+                    tool.setup_name(),
+                ),
                 None,
             ),
             OptionalCapability::NotInstalled if profile == SetupProfile::Worker => (
@@ -142,13 +255,22 @@ impl OptionalCheckResponse {
                 }),
             ),
             OptionalCapability::Unavailable => (Vec::new(), String::from(text.unavailable), None),
+            OptionalCapability::WithUnusedRuntime { base, .. } => {
+                let inner = Self::new(component, base, profile);
+                (inner.components, inner.next_step, inner.add_command)
+            }
         };
-        Self {
+        let mut response = Self {
             name,
             status: capability.identifier(),
             components,
+            unused_components: Vec::new(),
             next_step,
             add_command,
+        };
+        if let OptionalCapability::WithUnusedRuntime { runtime, .. } = capability {
+            response.note_unused_runtime(runtime);
         }
+        response
     }
 }

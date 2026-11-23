@@ -22,16 +22,83 @@ use crate::{
     StagedManagedCandidate, StagedManagedPayload,
 };
 
-/// Revision `r4` (2026-10-21) adds the optional online-video components
-/// (#409); the core pins are those of `r3`.
-const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-10-21-r4";
-/// The Windows x86-64 catalogue (ADR 0032), first revision: `FFmpeg` and the
-/// model; whisper.cpp joins with `VSift`'s own build.
-const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-10-21-r1";
-const WINDOWS_FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0.zip";
-const STOP_NEW_PLANS_AT: u64 = 1_848_700_800;
-const STOP_NEW_PLANS_DATE: &str = "2028-08-01T00:00:00Z";
-const FFMPEG_URL: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0.tar.xz";
+/// Revision `r4` (2026-10-21) added the optional online-video components
+/// (#409); `r5` (2026-11-04) re-pins `FFmpeg` to the month-end build of
+/// 2026-10-31 (`n9.0.2-39`, the `0.2.4` hot fix); `r6` (2026-11-09) points the
+/// `FFmpeg` pin at the repository's new owner (see [`FFMPEG_BUILDS_PUBLISHER`]);
+/// `r7` (2026-11-20) adds the optional `ocr` group (W5b); `r8` (2026-11-21)
+/// adds the optional `speakers` group (W5c).
+const CATALOGUE_REVISION: &str = "ubuntu-24.04-x86_64-2026-11-21-r8";
+/// The Windows x86-64 catalogue (ADR 0032). `r2` (2026-11-04) re-pins
+/// `FFmpeg` to the same month-end build as Ubuntu; `r3` (2026-11-09) points it
+/// at the repository's new owner, like Ubuntu's `r6`; `r4` (2026-11-20) adds
+/// whisper.cpp, `VSift`'s own build (decision D2), so the catalogue is complete;
+/// `r5` (2026-11-20) adds the optional `ocr` group (W5b); `r6` (2026-11-21) adds
+/// the optional `speakers` group (W5c).
+const WINDOWS_CATALOGUE_REVISION: &str = "windows-x86_64-2026-11-21-r6";
+/// The macOS arm64 catalogue (ADR 0032). `r1` (2026-11-20) is the first
+/// revision: `FFmpeg` and whisper.cpp from `VSift`'s own engine releases, and
+/// the same model; `r2` (2026-11-20) adds the optional `ocr` group (W5b); `r3`
+/// (2026-11-21) adds the optional `speakers` group (W5c).
+const MACOS_CATALOGUE_REVISION: &str = "macos-arm64-2026-11-21-r3";
+/// The publisher record of every engine `VSift` builds and publishes itself
+/// (`engines.yml`, ADR 0032 decision D): each archive is built twice and
+/// compared, attested, and pinned here from its release's `.inventory.json`.
+const VSIFT_ENGINE_PUBLISHER: &str = "VSift engine release";
+/// Where `engines.yml` publishes: `<this>/<tag>/<stem>.tar.gz`.
+#[cfg(test)]
+const VSIFT_ENGINE_RELEASES: &str = "https://github.com/smormah/vsift/releases/download";
+const WINDOWS_WHISPER_URL: &str = "https://github.com/smormah/vsift/releases/download/whisper-cli-windows-v1.9.5-r1/whisper-cli-windows-1.9.5-r1-windows-x64.tar.gz";
+const MACOS_WHISPER_URL: &str = "https://github.com/smormah/vsift/releases/download/whisper-cli-macos-v1.9.5-r1/whisper-cli-macos-1.9.5-r1-macos-arm64.tar.gz";
+const OCR_LINUX_URL: &str = "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-linux-x64.tar.gz";
+const OCR_WINDOWS_URL: &str = "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-windows-x64.tar.gz";
+const OCR_MACOS_URL: &str = "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-macos-arm64.tar.gz";
+/// sherpa-onnx v1.13.8's prebuilt shared archives (ADR 0031, ADR 0032), one per
+/// target, as the publisher's release serves them. Their only digest is
+/// GitHub's own asset digest (L-217).
+const SHERPA_LINUX_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2";
+const SHERPA_WINDOWS_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2";
+const SHERPA_MACOS_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2";
+/// The pyannote segmentation 3.0 model, ONNX export by the sherpa-onnx
+/// project, at the Hugging Face revision `9403a690` (ADR 0031). The SHA-256 is
+/// Hugging Face's own LFS digest of the file.
+const SPEAKER_SEGMENTATION_URL: &str = "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.onnx";
+const SPEAKER_SEGMENTATION_BYTES: u64 = 5_992_913;
+const SPEAKER_SEGMENTATION_SHA256: &str =
+    "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079";
+/// The `NeMo` `TitaNet` small speaker-embedding model, as sherpa-onnx's
+/// `speaker-recongition-models` release serves it (the tag is the publisher's
+/// spelling). The SHA-256 is the release's own `checksum.txt` entry.
+const SPEAKER_EMBEDDING_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx";
+const SPEAKER_EMBEDDING_BYTES: u64 = 40_257_283;
+const SPEAKER_EMBEDDING_SHA256: &str =
+    "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e";
+/// The reviewed prefix of the first line the diarization tool prints when it
+/// runs on the install smoke's tone: the configuration it loaded, which it
+/// prints only after it has parsed both model paths.
+const EXPECTED_DIARIZER_FIRST_LINE: &str = "OfflineSpeakerDiarizationConfig(";
+const MACOS_FFMPEG_URL: &str = "https://github.com/smormah/vsift/releases/download/ffmpeg-macos-v9.0.2.39-r1/ffmpeg-macos-9.0.2.39-r1-macos-arm64.tar.gz";
+/// The first-line prefixes of `VSift`'s macOS `FFmpeg` build: the same
+/// upstream commit as the other pins, with `VSift`'s revision as its extra
+/// version (`docs/operations/engines.md`).
+const EXPECTED_MACOS_FFMPEG_VERSION: &str = "ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1";
+const EXPECTED_MACOS_FFPROBE_VERSION: &str = "ffprobe version n9.0.2-39-g7adfbe40dc-vsift-r1";
+/// The reviewed `FFmpeg` publisher: the maintainer of the `FFmpeg-Builds`
+/// repository, whose month-end builds both `FFmpeg` pins come from.
+///
+/// On 2026-11-07 that repository was transferred from the user account `BtbN`
+/// to the organisation `FFmpeg-Builds`: the repository id (292087234), its
+/// creation date, the tag commit `5031c6f1` and both assets' sizes and SHA-256
+/// digests are unchanged, so it is the same publisher and the same bytes. The
+/// pins moved to the new address and nothing else changed;
+/// `reviewed_redirect` still refuses the old address's redirect, on purpose
+/// (ADR 0032, note of 2026-11-09). The display name keeps the old account name
+/// so a reader of a plan can still recognise the publisher.
+const FFMPEG_BUILDS_PUBLISHER: &str = "FFmpeg-Builds (BtbN)";
+const WINDOWS_FFMPEG_URL: &str = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0.zip";
+const STOP_NEW_PLANS_AT: u64 = 1_853_971_200;
+const STOP_NEW_PLANS_DATE: &str = "2028-10-01T00:00:00Z";
+const FFMPEG_URL: &str = "https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0.tar.xz";
 const WHISPER_URL: &str =
     "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz";
 const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/80da2d8bfee42b0e836fc3a9890373e5defc00a6/ggml-base.bin";
@@ -49,8 +116,8 @@ const MODEL_Q5_1_SHA256: &str = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23
 const COMPATIBILITY_FIXTURE_BYTES: u64 = 76_500;
 const COMPATIBILITY_FIXTURE_SHA256: &str =
     "65cec002d7dd8747e8ceb76f25270d35f38bfe354292e3c07bfa6169e2445070";
-const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.1-11-ge47273f4d9-20260831";
-const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.1-11-ge47273f4d9-20260831";
+const EXPECTED_FFMPEG_VERSION: &str = "ffmpeg version n9.0.2-39-g7adfbe40dc-20261031";
+const EXPECTED_FFPROBE_VERSION: &str = "ffprobe version n9.0.2-39-g7adfbe40dc-20261031";
 /// yt-dlp's stable `2026.08.19` one-file Linux executable (maintainer,
 /// 2026-10-21). Its SHA-256 is GitHub's asset digest and is listed in the
 /// release's `SHA2-256SUMS`, whose signature the hosted review
@@ -77,16 +144,34 @@ const DENO_SHA256: &str = "ce6a052beb97c2b92de67077e3f3924ba7c9661ede0d8dc2f66a1
 /// The reviewed prefix of the first line `deno --version` prints; the rest
 /// names the release channel and target.
 const EXPECTED_DENO_VERSION: &str = "deno 2.9.7 ";
+/// The reviewed prefix of the one line `vsift-ocr-runner describe` prints:
+/// the protocol `VSift` speaks, runner 0.1.0 and `ONNX` Runtime 1.31.0. The
+/// runner names the library by its digest (`KNOWN_RUNTIMES`), so a library
+/// of any other build prints `sha256-...` and fails this check; what follows
+/// (the library's and the two models' SHA-256) is pinned by the archive's
+/// per-file digests, not repeated here.
+const EXPECTED_OCR_RUNNER_DESCRIPTION: &str = "{\"record\":\"describe\",\"protocol\":1,\"runner_version\":\"0.1.0\",\"runtime_version\":\"1.31.0\"";
 
 /// Every reviewed publisher route of every catalogue, with the origin its
 /// redirects are held to: the only URLs a managed download ever starts from.
-const REVIEWED_ROUTES: [(&str, PublisherOrigin); 6] = [
+const REVIEWED_ROUTES: [(&str, PublisherOrigin); 17] = [
     (FFMPEG_URL, PublisherOrigin::GitHubRelease),
     (WHISPER_URL, PublisherOrigin::GitHubRelease),
     (MODEL_URL, PublisherOrigin::HuggingFaceModel),
     (DENO_URL, PublisherOrigin::GitHubRelease),
     (YT_DLP_URL, PublisherOrigin::GitHubRelease),
     (WINDOWS_FFMPEG_URL, PublisherOrigin::GitHubRelease),
+    (WINDOWS_WHISPER_URL, PublisherOrigin::GitHubRelease),
+    (MACOS_FFMPEG_URL, PublisherOrigin::GitHubRelease),
+    (MACOS_WHISPER_URL, PublisherOrigin::GitHubRelease),
+    (OCR_LINUX_URL, PublisherOrigin::GitHubRelease),
+    (OCR_WINDOWS_URL, PublisherOrigin::GitHubRelease),
+    (OCR_MACOS_URL, PublisherOrigin::GitHubRelease),
+    (SHERPA_LINUX_URL, PublisherOrigin::GitHubRelease),
+    (SHERPA_WINDOWS_URL, PublisherOrigin::GitHubRelease),
+    (SHERPA_MACOS_URL, PublisherOrigin::GitHubRelease),
+    (SPEAKER_SEGMENTATION_URL, PublisherOrigin::HuggingFaceModel),
+    (SPEAKER_EMBEDDING_URL, PublisherOrigin::GitHubRelease),
 ];
 
 /// Reviewed source data is internally inconsistent and must not produce a plan.
@@ -173,8 +258,7 @@ fn trim_os_release_value(value: &str) -> &str {
 }
 
 /// The accepted catalogue of `target`, or `None` for a target that has none
-/// (ADR 0032: Ubuntu 24.04 x86-64 and Windows x86-64 today; macOS arm64 once
-/// its engines are published and pinned).
+/// (ADR 0032: Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64).
 ///
 /// # Errors
 ///
@@ -185,7 +269,8 @@ pub fn accepted_catalogue(
     match target {
         ManagedTarget::Ubuntu2404X86_64 => accepted_ubuntu_catalogue().map(Some),
         ManagedTarget::WindowsX86_64 => accepted_windows_catalogue().map(Some),
-        ManagedTarget::MacOsArm64 | ManagedTarget::Unsupported => Ok(None),
+        ManagedTarget::MacOsArm64 => accepted_macos_catalogue().map(Some),
+        ManagedTarget::Unsupported => Ok(None),
     }
 }
 
@@ -200,28 +285,86 @@ pub fn accepted_host_catalogue() -> Result<Option<AcceptedManagedCatalogue>, Man
 }
 
 /// The accepted Windows x86-64 catalogue (ADR 0032): `FFmpeg` and `FFprobe`
-/// from the same `BtbN` month-end release as the Ubuntu pin, as its LGPL zip,
-/// and the same model. whisper.cpp is not offered yet: upstream's Windows build
-/// needs the Visual C++ runtime (D2), and `VSift`'s own build joins this
-/// catalogue once it is published and pinned; until then the plan leaves
-/// whisper.cpp to the user and plans the model only beside a working one.
+/// from the same `FFmpeg-Builds` month-end release as the Ubuntu pin, as its
+/// LGPL zip; whisper.cpp v1.9.5 as `VSift`'s own build, because upstream's
+/// Windows build needs the Visual C++ runtime (decision D2); and the same model.
+///
+/// The catalogue lists no superseded versions: no earlier release installed
+/// anything on Windows. Its optional groups are `ocr` (the runner's own
+/// release) and `speakers` (sherpa-onnx's tool and two models).
 ///
 /// # Errors
 ///
 /// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
 pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
-    let artifacts = vec![windows_ffmpeg_artifact()?, model_artifact()?];
-    for artifact in &artifacts {
+    target_catalogue(
+        WINDOWS_CATALOGUE_REVISION,
+        ManagedTarget::WindowsX86_64,
+        vec![
+            windows_ffmpeg_artifact()?,
+            engine_artifact(&WINDOWS_WHISPER)?,
+            model_artifact()?,
+        ],
+        vec![
+            engine_artifact(&WINDOWS_OCR)?,
+            sherpa_artifact(&WINDOWS_SHERPA)?,
+            speaker_segmentation_artifact()?,
+            speaker_embedding_artifact()?,
+        ],
+        compatibility_policy()?,
+    )
+}
+
+/// The accepted macOS arm64 catalogue (ADR 0032): `FFmpeg` and `FFprobe` and
+/// whisper.cpp v1.9.5, each `VSift`'s own build (decision D1 for `FFmpeg`: no
+/// publisher offers an LGPL static macOS build), and the same model.
+///
+/// Its compatibility policy is the shared one with the banner of `VSift`'s
+/// `FFmpeg` build ([`macos_compatibility_policy`]). Like Windows it lists no
+/// superseded versions; its optional groups are `ocr` and `speakers`.
+///
+/// # Errors
+///
+/// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
+pub fn accepted_macos_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
+    target_catalogue(
+        MACOS_CATALOGUE_REVISION,
+        ManagedTarget::MacOsArm64,
+        vec![
+            engine_artifact(&MACOS_FFMPEG)?,
+            engine_artifact(&MACOS_WHISPER)?,
+            model_artifact()?,
+        ],
+        vec![
+            engine_artifact(&MACOS_OCR)?,
+            sherpa_artifact(&MACOS_SHERPA)?,
+            speaker_segmentation_artifact()?,
+            speaker_embedding_artifact()?,
+        ],
+        macos_compatibility_policy()?,
+    )
+}
+
+/// A catalogue of core artifacts and the optional groups' artifacts, each
+/// layout checked, under the shared stop-new-plans boundary.
+fn target_catalogue(
+    revision: &str,
+    target: ManagedTarget,
+    artifacts: Vec<AcceptedManagedArtifact>,
+    optional_artifacts: Vec<AcceptedManagedArtifact>,
+    compatibility: ReviewedCompatibilityPolicy,
+) -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
+    for artifact in artifacts.iter().chain(&optional_artifacts) {
         validate_layout(artifact)?;
     }
     Ok(AcceptedManagedCatalogue {
-        revision: String::from(WINDOWS_CATALOGUE_REVISION),
-        target: ManagedTarget::WindowsX86_64,
+        revision: String::from(revision),
+        target,
         stop_new_plans_at: STOP_NEW_PLANS_AT,
         stop_new_plans_date: String::from(STOP_NEW_PLANS_DATE),
         artifacts,
-        optional_artifacts: Vec::new(),
-        compatibility: compatibility_policy()?,
+        optional_artifacts,
+        compatibility,
         superseded: Vec::new(),
     })
 }
@@ -229,14 +372,16 @@ pub fn accepted_windows_catalogue() -> Result<AcceptedManagedCatalogue, ManagedC
 /// Every artifact the compiled catalogues of all targets accept: the only
 /// actions that ever receive publisher authority.
 fn every_accepted_artifact() -> Result<Vec<AcceptedManagedArtifact>, ManagedCatalogueError> {
-    let ubuntu = accepted_ubuntu_catalogue()?;
-    let windows = accepted_windows_catalogue()?;
-    Ok(ubuntu
-        .artifacts
-        .into_iter()
-        .chain(ubuntu.optional_artifacts)
-        .chain(windows.artifacts)
-        .collect())
+    let mut artifacts = Vec::new();
+    for catalogue in [
+        accepted_ubuntu_catalogue()?,
+        accepted_windows_catalogue()?,
+        accepted_macos_catalogue()?,
+    ] {
+        artifacts.extend(catalogue.artifacts);
+        artifacts.extend(catalogue.optional_artifacts);
+    }
+    Ok(artifacts)
 }
 
 /// Returns the complete accepted catalogue for Ubuntu 24.04 x86-64.
@@ -246,7 +391,14 @@ fn every_accepted_artifact() -> Result<Vec<AcceptedManagedArtifact>, ManagedCata
 /// Fails closed if any literal reviewed digest or publisher URL becomes invalid.
 pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCatalogueError> {
     let artifacts = vec![ffmpeg_artifact()?, whisper_artifact()?, model_artifact()?];
-    let optional_artifacts = vec![deno_artifact()?, yt_dlp_artifact()?];
+    let optional_artifacts = vec![
+        deno_artifact()?,
+        yt_dlp_artifact()?,
+        engine_artifact(&LINUX_OCR)?,
+        sherpa_artifact(&LINUX_SHERPA)?,
+        speaker_segmentation_artifact()?,
+        speaker_embedding_artifact()?,
+    ];
     for artifact in artifacts.iter().chain(&optional_artifacts) {
         validate_layout(artifact)?;
     }
@@ -269,14 +421,27 @@ pub fn accepted_ubuntu_catalogue() -> Result<AcceptedManagedCatalogue, ManagedCa
 /// version it replaces here, with `SecurityFixes` when the new pin carries
 /// fixes for security defects of the old one, and keeps the earlier entries:
 /// a machine can skip releases. whisper.cpp v1.9.2 lacks v1.9.3 to v1.9.5's
-/// memory-safety fixes and the fix of CVE-2026-110810 (L-137). `FFmpeg` and
-/// the model have not been re-pinned yet, so they have no entry.
+/// memory-safety fixes and the fix of CVE-2026-110810 (L-137); the `FFmpeg`
+/// of `0.2.3` and earlier lacks the 2026-10-31 build's (L-132). The model has
+/// not been re-pinned, so it has no entry. The Windows catalogue lists none:
+/// no released version installs `FFmpeg` on Windows yet.
 fn superseded_versions() -> Vec<SupersededManagedVersion> {
-    vec![SupersededManagedVersion {
-        component: ManagedComponent::WhisperCli,
-        version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
-        reason: SupersessionReason::SecurityFixes,
-    }]
+    vec![
+        SupersededManagedVersion {
+            component: ManagedComponent::WhisperCli,
+            version: String::from("whisper.cpp-v1.9.2-ubuntu-x64"),
+            reason: SupersessionReason::SecurityFixes,
+        },
+        // The FFmpeg of `0.2.3` and earlier. The 2026-10-31 build is 112
+        // commits later on `release/9.0`, among them memory-safety fixes in
+        // code VSift runs (the VP8, VP9, H.264, Opus and AAC decoders, the
+        // `mov` keys atom, a Matroska duration overflow).
+        SupersededManagedVersion {
+            component: ManagedComponent::MediaTools,
+            version: String::from("n9.0.1-11-ge47273f4d9-20260831"),
+            reason: SupersessionReason::SecurityFixes,
+        },
+    ]
 }
 
 /// Returns the reviewed compatibility policy that any selected provider set must meet.
@@ -367,14 +532,34 @@ pub fn whisper_model_profile(bytes: u64, sha256: [u8; 32]) -> AsrModelProfile {
         .map_or(AsrModelProfile::Unreviewed, |model| model.profile.profile())
 }
 
+/// The policy of the Ubuntu and Windows catalogues, whose `FFmpeg` pins are
+/// the same `FFmpeg-Builds` release and print the same banner.
 fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
+    compatibility_policy_for(EXPECTED_FFMPEG_VERSION, EXPECTED_FFPROBE_VERSION)
+}
+
+/// The macOS catalogue's policy: the shared fixture, limits, deadlines and
+/// audio contract, with the banner of `VSift`'s own `FFmpeg` build. Only the
+/// managed smoke checks the banner, against the catalogue being installed;
+/// bring-your-own verification keeps [`reviewed_compatibility_policy`].
+fn macos_compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
+    compatibility_policy_for(
+        EXPECTED_MACOS_FFMPEG_VERSION,
+        EXPECTED_MACOS_FFPROBE_VERSION,
+    )
+}
+
+fn compatibility_policy_for(
+    ffmpeg_banner: &str,
+    ffprobe_banner: &str,
+) -> Result<ReviewedCompatibilityPolicy, ManagedCatalogueError> {
     Ok(ReviewedCompatibilityPolicy {
         fixture: ArtifactIntegrity::from_sha256_hex(
             COMPATIBILITY_FIXTURE_BYTES,
             COMPATIBILITY_FIXTURE_SHA256,
         )?,
-        expected_ffmpeg_version: String::from(EXPECTED_FFMPEG_VERSION),
-        expected_ffprobe_version: String::from(EXPECTED_FFPROBE_VERSION),
+        expected_ffmpeg_version: String::from(ffmpeg_banner),
+        expected_ffprobe_version: String::from(ffprobe_banner),
         stream_limit_bytes: 64 * 1024,
         audio_file_limit_bytes: 256 * 1024,
         transcript_file_limit_bytes: 64 * 1024,
@@ -390,6 +575,17 @@ fn compatibility_policy() -> Result<ReviewedCompatibilityPolicy, ManagedCatalogu
             ReviewedBanner {
                 component: ManagedComponent::YtDlp,
                 first_line_prefix: String::from(EXPECTED_YT_DLP_VERSION),
+            },
+            ReviewedBanner {
+                component: ManagedComponent::OcrRunner,
+                first_line_prefix: String::from(EXPECTED_OCR_RUNNER_DESCRIPTION),
+            },
+            // The models are data and print nothing: only the tool has a
+            // banner, the first line of its run on the smoke's tone with
+            // both models staged (`managed_smoke`).
+            ReviewedBanner {
+                component: ManagedComponent::SpeakerDiarizer,
+                first_line_prefix: String::from(EXPECTED_DIARIZER_FIRST_LINE),
             },
         ],
     })
@@ -672,7 +868,10 @@ impl ReviewedUbuntuAction {
     /// The candidate names the reviewed smoke roles of its component: the
     /// media-tools archive supplies `ffmpeg` and `ffprobe`, the whisper.cpp
     /// archive `whisper-cli`, the model artifact its one model file, the
-    /// runtime zip `deno` and the yt-dlp artifact `yt-dlp`.
+    /// runtime zip `deno`, the yt-dlp artifact `yt-dlp`, the OCR archive
+    /// `vsift-ocr-runner` (the runtime library and models stay beside it),
+    /// sherpa-onnx's archive its diarization tool (ONNX Runtime stays beside
+    /// it), and each speaker model artifact its one model file.
     ///
     /// # Errors
     ///
@@ -698,6 +897,16 @@ impl ReviewedUbuntuAction {
                 .unwrap_or_default(),
             ManagedComponent::JsRuntimeDeno => named(ManagedRuntimeRole::Deno).collect(),
             ManagedComponent::YtDlp => named(ManagedRuntimeRole::YtDlp).collect(),
+            ManagedComponent::OcrRunner => named(ManagedRuntimeRole::OcrRunner).collect(),
+            ManagedComponent::SpeakerDiarizer => {
+                named(ManagedRuntimeRole::SpeakerDiarizer).collect()
+            }
+            ManagedComponent::SpeakerSegmentationModel => model
+                .map(|name| vec![(ManagedRuntimeRole::SpeakerSegmentationModel, name)])
+                .unwrap_or_default(),
+            ManagedComponent::SpeakerEmbeddingModel => model
+                .map(|name| vec![(ManagedRuntimeRole::SpeakerEmbeddingModel, name)])
+                .unwrap_or_default(),
         };
         let roles: Vec<(ManagedRuntimeRole, &str)> = owned
             .iter()
@@ -729,9 +938,10 @@ impl ReviewedUbuntuAction {
 }
 
 /// The file name a managed runtime gives an executable role on this host:
-/// the reviewed name (`ffmpeg`, `ffprobe`, `whisper-cli`, `deno`, `yt-dlp`)
-/// with the platform's executable suffix, which is empty on the one managed
-/// target. `None` for the model, whose name is its catalogue file's.
+/// the reviewed name (`ffmpeg`, `ffprobe`, `whisper-cli`, `deno`, `yt-dlp`,
+/// `vsift-ocr-runner`)
+/// with the platform's executable suffix (`.exe` on Windows, empty on Ubuntu
+/// and macOS). `None` for the model, whose name is its catalogue file's.
 #[must_use]
 pub fn managed_executable_name(role: ManagedRuntimeRole) -> Option<String> {
     let base = match role {
@@ -740,7 +950,11 @@ pub fn managed_executable_name(role: ManagedRuntimeRole) -> Option<String> {
         ManagedRuntimeRole::WhisperCli => "whisper-cli",
         ManagedRuntimeRole::Deno => "deno",
         ManagedRuntimeRole::YtDlp => "yt-dlp",
-        ManagedRuntimeRole::SpeechModel => return None,
+        ManagedRuntimeRole::OcrRunner => "vsift-ocr-runner",
+        ManagedRuntimeRole::SpeakerDiarizer => "sherpa-onnx-offline-speaker-diarization",
+        ManagedRuntimeRole::SpeechModel
+        | ManagedRuntimeRole::SpeakerSegmentationModel
+        | ManagedRuntimeRole::SpeakerEmbeddingModel => return None,
     };
     Some(format!("{base}{}", std::env::consts::EXE_SUFFIX))
 }
@@ -852,48 +1066,48 @@ fn archive_path(path: &str) -> bool {
 
 fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(
-        113_372_924,
-        "204fc02692b11249c3e688ad18538ce2939129a1fc6abc32a6b2638a024496cf",
+        136_027_168,
+        "6046d6731b26f58887e953561551d254a6eec9fbca4100dfeab56e19af8328d5",
     )?;
     validate_source(FFMPEG_URL, PublisherOrigin::GitHubRelease, integrity)?;
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
-        version: String::from("n9.0.1-11-ge47273f4d9-20260831"),
-        publisher: String::from("BtbN FFmpeg Builds"),
+        version: String::from("n9.0.2-39-g7adfbe40dc-20261031"),
+        publisher: String::from(FFMPEG_BUILDS_PUBLISHER),
         source_url: String::from(FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::TarXz,
         archive_limits: Some(ReviewedArchiveLimits {
-            max_stream_bytes: 400_000_000,
+            max_stream_bytes: 450_000_000,
             entries: 73,
-            expanded_bytes: 370_667_773,
+            expanded_bytes: 444_067_173,
         }),
         selected_files: vec![
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/LICENSE.txt",
+                "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0/LICENSE.txt",
                 "LICENSE.txt",
                 7_651,
                 "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768",
             )?,
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffmpeg",
+                "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0/bin/ffmpeg",
                 "ffmpeg",
-                116_038_416,
-                "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+                140_488_520,
+                "d372f20463a8ffb9eef1675242cdbf9aae19b647503b073fc9b5b1f42b91c94a",
             )?,
             selection(
-                "ffmpeg-n9.0.1-11-ge47273f4d9-linux64-lgpl-9.0/bin/ffprobe",
+                "ffmpeg-n9.0.2-39-g7adfbe40dc-linux64-lgpl-9.0/bin/ffprobe",
                 "ffprobe",
-                115_829_520,
-                "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+                140_259_080,
+                "9a7f735d3df4f56dd8406cd7a03a227686bec55b1edc496c25bd8b1867e44498",
             )?,
         ],
         archive_links: Vec::new(),
         runtime_copies: Vec::new(),
         licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
-        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.1/COPYING.LGPLv3"),
+        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.2/COPYING.LGPLv3"),
         source_code_url: String::from(
-            "https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a",
+            "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
         ),
         trust_limit: String::from(
             "Third-party static build: the archive LGPLv3 notice and hosted F01 media operations were checked; a complete compiled-component source/licence inventory and legal clearance are not claimed.",
@@ -907,14 +1121,14 @@ fn ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
             )?,
             file(
                 "ffmpeg",
-                116_038_416,
-                "ed57193f048a65bfb0aa3c360639d7f7109ca014405201e3ea478c9ca4ea20fc",
+                140_488_520,
+                "d372f20463a8ffb9eef1675242cdbf9aae19b647503b073fc9b5b1f42b91c94a",
                 true,
             )?,
             file(
                 "ffprobe",
-                115_829_520,
-                "0e3357bef1737ec02ae600e7f6e4e409966d8d0647521ca523c622be574137b7",
+                140_259_080,
+                "9a7f735d3df4f56dd8406cd7a03a227686bec55b1edc496c25bd8b1867e44498",
                 true,
             )?,
         ],
@@ -1122,15 +1336,15 @@ fn whisper_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> 
 /// zip using only what the managed zip reader accepts.
 fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
     let integrity = integrity(
-        147_007_942,
-        "2484854ad6988d34560f4e6ea7a6ecb9dde0af7c229d2591815d056b04ec4f56",
+        168_715_328,
+        "9d37c564e0d01c18cde184a079fa6ef04d7d2783ada41da81d04165cc8f1a650",
     )?;
     validate_source(
         WINDOWS_FFMPEG_URL,
         PublisherOrigin::GitHubRelease,
         integrity,
     )?;
-    let root = "ffmpeg-n9.0.1-11-ge47273f4d9-win64-lgpl-9.0";
+    let root = "ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-9.0";
     let pins = [
         (
             "LICENSE.txt",
@@ -1142,29 +1356,29 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
         (
             "bin/ffmpeg.exe",
             "ffmpeg.exe",
-            114_400_768,
-            "63a0b3c76a245bc0d986853612d9ec43a2a2d1f1c7a3fa40ee459c248075b3a6",
+            132_190_720,
+            "d03c858a130cae1382902925d9f46eb15d7de42e025d34cc29b7ddca6cfb4c62",
             true,
         ),
         (
             "bin/ffprobe.exe",
             "ffprobe.exe",
-            114_198_528,
-            "1ce64d9fdbfce857de2dd1f157c37eaa61c7501a356273dbcbe8b1674aef5879",
+            131_990_016,
+            "61d1eef897bfa42306ac4ab36afc6adce23cccce577bda88b84c06d44e1b9183",
             true,
         ),
     ];
     Ok(AcceptedManagedArtifact {
         component: ManagedComponent::MediaTools,
-        version: String::from("n9.0.1-11-ge47273f4d9-20260831-win64"),
-        publisher: String::from("BtbN FFmpeg Builds"),
+        version: String::from("n9.0.2-39-g7adfbe40dc-20261031-win64"),
+        publisher: String::from(FFMPEG_BUILDS_PUBLISHER),
         source_url: String::from(WINDOWS_FFMPEG_URL),
         integrity,
         format: ManagedArtifactFormat::Zip,
         archive_limits: Some(ReviewedArchiveLimits {
-            max_stream_bytes: 358_125_718,
+            max_stream_bytes: 411_498_134,
             entries: 48,
-            expanded_bytes: 358_125_718,
+            expanded_bytes: 411_498_134,
         }),
         selected_files: pins
             .iter()
@@ -1175,9 +1389,9 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
         archive_links: Vec::new(),
         runtime_copies: Vec::new(),
         licence: String::from("LGPL version 3 archive notice (publisher-labelled static build)"),
-        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.1/COPYING.LGPLv3"),
+        notice_url: String::from("https://github.com/FFmpeg/FFmpeg/blob/n9.0.2/COPYING.LGPLv3"),
         source_code_url: String::from(
-            "https://github.com/BtbN/FFmpeg-Builds/tree/8267213e26c1031621e6e1210fe3aa4867214f6a",
+            "https://github.com/FFmpeg-Builds/FFmpeg-Builds/tree/5031c6f1082414e53688d39e521849905071070d",
         ),
         trust_limit: String::from(
             "Third-party static build of the same source as the Ubuntu pin: the archive's LGPLv3 notice, its inventory and imports were read on a hosted Windows runner; a complete compiled-component source and licence inventory and legal clearance are not claimed.",
@@ -1185,6 +1399,675 @@ fn windows_ffmpeg_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogue
         files: pins
             .iter()
             .map(|(_, name, bytes, sha256, executable)| file(name, *bytes, sha256, *executable))
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
+/// One archive of `VSift`'s engine release workflow, as its published
+/// `.inventory.json` describes it (ADR 0032 decision D).
+///
+/// Every engine archive has the same shape: a gzip tar whose one root folder
+/// is the archive stem `<engine>-<version>-<target>`, holding only regular
+/// files. So one table per archive is the whole review, and a new engine (the
+/// OCR runner, W5b) is one more table. The pins are copied from the
+/// inventory, never from a local download: `entries` counts the root folder,
+/// `expanded_bytes` the files, and `tar_stream_bytes` the whole tar stream
+/// with its record padding, which is the reviewed stream cap.
+struct EngineRelease {
+    component: ManagedComponent,
+    /// The managed version key: the upstream version, `VSift`'s revision and the target.
+    version: &'static str,
+    /// The release tag, `<engine>-v<version>`.
+    tag: &'static str,
+    /// The archive stem and its root folder.
+    stem: &'static str,
+    /// `<VSIFT_ENGINE_RELEASES>/<tag>/<stem>.tar.gz`, one of [`REVIEWED_ROUTES`].
+    url: &'static str,
+    archive_bytes: u64,
+    archive_sha256: &'static str,
+    entries: usize,
+    expanded_bytes: u64,
+    tar_stream_bytes: u64,
+    /// Path under the root, bytes, SHA-256, executable. The runtime name is
+    /// the path's last part.
+    files: &'static [(&'static str, u64, &'static str, bool)],
+    licence: &'static str,
+    notice_url: &'static str,
+    trust_limit: &'static str,
+}
+
+/// whisper.cpp v1.9.5 for Windows x86-64, `VSift`'s build (decision D2):
+/// static C runtime, AVX2, FMA and F16C, no `OpenMP`, one executable that
+/// imports only system DLLs. P07 local ASR ran its speech clips on the
+/// published archive before this pin (run 44733161663). Inventory SHA-256
+/// `91b11f3b9cd354ce32526dcd3a5443979fc7955d359047433b294faa499b0f27`,
+/// publish run 44299218614.
+const WINDOWS_WHISPER: EngineRelease = EngineRelease {
+    component: ManagedComponent::WhisperCli,
+    version: "whisper.cpp-v1.9.5-vsift-r1-windows-x64",
+    tag: "whisper-cli-windows-v1.9.5-r1",
+    stem: "whisper-cli-windows-1.9.5-r1-windows-x64",
+    url: WINDOWS_WHISPER_URL,
+    archive_bytes: 860_865,
+    archive_sha256: "1b52871d69438a6d3c612bd020f865540d0021ab58aefcf1dd7c395e78d4501f",
+    entries: 3,
+    expanded_bytes: 2_148_427,
+    tar_stream_bytes: 2_160_640,
+    files: &[
+        (
+            "LICENSE",
+            1_099,
+            "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285",
+            false,
+        ),
+        (
+            "whisper-cli.exe",
+            2_147_328,
+            "5e69216878a5f0ea533e067146d3bbd85183b0eb6198ab40dd89d57dc55454ec",
+            true,
+        ),
+    ],
+    licence: "MIT",
+    notice_url: "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE",
+    trust_limit: "VSift's own build of whisper.cpp v1.9.5 (static runtime, no OpenMP), built twice and compared byte for byte, attested, and checked by P07 on hosted Windows. It needs a CPU with AVX2, FMA and F16C (L-216); arbitrary Windows hosts remain unqualified.",
+};
+
+/// whisper.cpp v1.9.5 for macOS arm64, `VSift`'s build: static, with
+/// Accelerate and Metal (its shaders embedded), one executable that links
+/// only system libraries. `VSift` runs it with `-ng`, so recognition stays on
+/// the CPU whether or not the Mac has Metal. Inventory SHA-256
+/// `c8938490876857da881829c1992abaad483bafc9bec5c229747dd8c3304e367b`,
+/// publish run 44303732626.
+const MACOS_WHISPER: EngineRelease = EngineRelease {
+    component: ManagedComponent::WhisperCli,
+    version: "whisper.cpp-v1.9.5-vsift-r1-macos-arm64",
+    tag: "whisper-cli-macos-v1.9.5-r1",
+    stem: "whisper-cli-macos-1.9.5-r1-macos-arm64",
+    url: MACOS_WHISPER_URL,
+    archive_bytes: 2_093_165,
+    archive_sha256: "999cc618b47f28b88f182a693947b23da7c705a01b3c0cc8e7880ac1b8ca8367",
+    entries: 3,
+    expanded_bytes: 8_025_022,
+    tar_stream_bytes: 8_028_160,
+    files: &[
+        (
+            "LICENSE",
+            1_078,
+            "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+            false,
+        ),
+        (
+            "whisper-cli",
+            8_023_944,
+            "39abe0df7b80c16e20b6ea722fcb32500730e004c90fb7458c49ac92dc164601",
+            true,
+        ),
+    ],
+    licence: "MIT",
+    notice_url: "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE",
+    trust_limit: "VSift's own build of whisper.cpp v1.9.5, built twice and compared byte for byte and attested; recognition runs on the CPU (-ng). Checked on hosted macOS arm64 runners only; other Macs remain unqualified.",
+};
+
+/// `FFmpeg` and `FFprobe` for macOS arm64, `VSift`'s LGPL static build of the
+/// same upstream commit as the other pins (`7adfbe40dc`, decision D1), with
+/// `VideoToolbox`, `AudioToolbox` and zlib only. Its corresponding source is
+/// published in the same release. Inventory SHA-256
+/// `977c93ac3736e59c1cfa8de2ed0ffcb02459dfd229c8959f997f373af81663ce`,
+/// publish run 44380924394.
+const MACOS_FFMPEG: EngineRelease = EngineRelease {
+    component: ManagedComponent::MediaTools,
+    version: "n9.0.2-39-g7adfbe40dc-vsift-r1-macos-arm64",
+    tag: "ffmpeg-macos-v9.0.2.39-r1",
+    stem: "ffmpeg-macos-9.0.2.39-r1-macos-arm64",
+    url: MACOS_FFMPEG_URL,
+    archive_bytes: 20_546_705,
+    archive_sha256: "6d44a5a18ab3e253975874627763dc6ac110f57eda87a72d75c0f3e7f4b7fe01",
+    entries: 6,
+    expanded_bytes: 43_342_607,
+    tar_stream_bytes: 43_356_160,
+    files: &[
+        (
+            "COPYING.LGPLv2.1",
+            26_517,
+            "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30",
+            false,
+        ),
+        (
+            "LICENSE.md",
+            4_346,
+            "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af",
+            false,
+        ),
+        (
+            "bin/ffmpeg",
+            21_743_608,
+            "f1caaadcf9d4f53d988b59a7feefac8cf6ad32dfa0f1d09f958d4573d98759ea",
+            true,
+        ),
+        (
+            "bin/ffprobe",
+            21_568_136,
+            "24893fd88308056ec17174055e4bb69e6327fd49fb3ec5d154b4be7313b01b5e",
+            true,
+        ),
+    ],
+    licence: "LGPL-2.1-or-later (configured without GPL or nonfree parts)",
+    notice_url: "https://github.com/FFmpeg/FFmpeg/blob/7adfbe40dcde598f93a6963d2f7b22cd75202ccc/COPYING.LGPLv2.1",
+    trust_limit: "VSift's own static build, built twice and compared byte for byte and attested, with its corresponding source in the same release. It has no dav1d, so AV1 has no software decoder (L-216). Checked on hosted macOS arm64 runners only; legal clearance is not claimed.",
+};
+
+/// The OCR runner for Ubuntu 24.04 x86-64 (ADR 0030, ADR 0032): `VSift`'s runner, ONNX
+/// Runtime 1.31.0 (from Microsoft's `NuGet` package, H9), the two `PP-OCRv5` models
+/// and every licence file, one archive. The files install flat beside the
+/// runner, which finds them there (`Layout::beside`). Inventory SHA-256
+/// `edafc56b4a8d5c1fd36f78cb4475e2c4a2bb230baea9387aaf36ffb2ec1a6ad6`,
+/// publish run 44380930959.
+const LINUX_OCR: EngineRelease = EngineRelease {
+    component: ManagedComponent::OcrRunner,
+    version: "ocr-runner-0.1.0-r1-linux-x64",
+    tag: "ocr-runner-v0.1.0-r1",
+    stem: "ocr-runner-0.1.0-r1-linux-x64",
+    url: OCR_LINUX_URL,
+    archive_bytes: 23_268_888,
+    archive_sha256: "b9e562b8a91c55e80ef778670f8aa3d4a44b47891a3b8feace8bf1b67028488d",
+    entries: 13,
+    expanded_bytes: 43_064_458,
+    tar_stream_bytes: 43_079_680,
+    files: &[
+        (
+            "LICENSES/models-NOTICE.txt",
+            489,
+            "8d8a53d6cbc9f5f81084f71127c3f6b399d37e7945543ef260301bb52f551745",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-LICENSE",
+            1_094,
+            "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-ThirdPartyNotices.txt",
+            344_457,
+            "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-APACHE",
+            11_349,
+            "00527a09828e8be699061d136072a9069b3d7195c322e638429201bc371958d1",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-MIT",
+            1_076,
+            "e99e3e22f819c1e93603b993a69395256324f33163ece870b21b0367c5a68648",
+            false,
+        ),
+        (
+            "models/ch_PP-OCRv5_det_mobile.onnx",
+            4_819_576,
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+            false,
+        ),
+        (
+            "models/latin_PP-OCRv5_rec_mobile.onnx",
+            7_904_513,
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+            false,
+        ),
+        (
+            "onnxruntime/libonnxruntime.so.1.31.0",
+            29_345_384,
+            "469849977cb60744ea160927e1a3a0643fd4c55c0aff743251c6d293402e334e",
+            false,
+        ),
+        (
+            "vsift-ocr-runner",
+            636_520,
+            "1fb40dd61f02c2918a6d1bb2c9f5178c874063eb1c7f4693e06d1ad048ab113a",
+            true,
+        ),
+    ],
+    licence: "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0",
+    notice_url: "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+    trust_limit: "VSift's own build of the OCR runner with Microsoft's ONNX Runtime 1.31.0 and the two PP-OCRv5 models (Apache-2.0, as converted by RapidOCR), built twice and compared byte for byte and attested. The runner reads untrusted pixels and runs only under VSift's supervisor. Checked on hosted Ubuntu 24.04 x86-64 runners only (parity against the reference pipeline on synthetic screens; real recordings agree with it less closely, L-204).",
+};
+
+/// The OCR runner for Windows x86-64 (ADR 0030, ADR 0032): `VSift`'s runner, ONNX
+/// Runtime 1.31.0 (from Microsoft's `NuGet` package, H9), the two `PP-OCRv5` models
+/// and every licence file, one archive. The files install flat beside the
+/// runner, which finds them there (`Layout::beside`). Inventory SHA-256
+/// `056f5e6686278df49446b924176d67be7e81cecb5464f5f5b33e54ab435a97f5`,
+/// publish run 44380930959.
+const WINDOWS_OCR: EngineRelease = EngineRelease {
+    component: ManagedComponent::OcrRunner,
+    version: "ocr-runner-0.1.0-r1-windows-x64",
+    tag: "ocr-runner-v0.1.0-r1",
+    stem: "ocr-runner-0.1.0-r1-windows-x64",
+    url: OCR_WINDOWS_URL,
+    archive_bytes: 18_437_413,
+    archive_sha256: "df0d5b7a39a6afec67e4afbd700ef84073a66c9f9fea443360d842c898c4a6e2",
+    entries: 13,
+    expanded_bytes: 30_930_162,
+    tar_stream_bytes: 30_945_280,
+    files: &[
+        (
+            "LICENSES/models-NOTICE.txt",
+            489,
+            "8d8a53d6cbc9f5f81084f71127c3f6b399d37e7945543ef260301bb52f551745",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-LICENSE",
+            1_094,
+            "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-ThirdPartyNotices.txt",
+            344_457,
+            "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-APACHE",
+            11_349,
+            "00527a09828e8be699061d136072a9069b3d7195c322e638429201bc371958d1",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-MIT",
+            1_076,
+            "e99e3e22f819c1e93603b993a69395256324f33163ece870b21b0367c5a68648",
+            false,
+        ),
+        (
+            "models/ch_PP-OCRv5_det_mobile.onnx",
+            4_819_576,
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+            false,
+        ),
+        (
+            "models/latin_PP-OCRv5_rec_mobile.onnx",
+            7_904_513,
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+            false,
+        ),
+        (
+            "onnxruntime/onnxruntime.dll",
+            17_253_176,
+            "0c42dc4e278f0968fdf9ebf1b1e54a74c657a9942e70803e453c91993451cf4c",
+            false,
+        ),
+        (
+            "vsift-ocr-runner.exe",
+            594_432,
+            "a2acb40a8607a8950ee9ba15a70017be1d72c909fc6bf5ac6c6e948bb311443a",
+            true,
+        ),
+    ],
+    licence: "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0",
+    notice_url: "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+    trust_limit: "VSift's own build of the OCR runner with Microsoft's ONNX Runtime 1.31.0 and the two PP-OCRv5 models (Apache-2.0, as converted by RapidOCR), built twice and compared byte for byte and attested. The runner reads untrusted pixels and runs only under VSift's supervisor. Checked on hosted Windows runners only (parity against the reference pipeline on synthetic screens; real recordings agree with it less closely, L-204).",
+};
+
+/// The OCR runner for macOS arm64 (ADR 0030, ADR 0032): `VSift`'s runner, ONNX
+/// Runtime 1.31.0 (from Microsoft's `NuGet` package, H9), the two `PP-OCRv5` models
+/// and every licence file, one archive. The files install flat beside the
+/// runner, which finds them there (`Layout::beside`). Inventory SHA-256
+/// `ac702514cae258d2eeba7dd7ef6e72cc390929e5b87d04c0abb0fc2ae843aeb9`,
+/// publish run 44380930959.
+const MACOS_OCR: EngineRelease = EngineRelease {
+    component: ManagedComponent::OcrRunner,
+    version: "ocr-runner-0.1.0-r1-macos-arm64",
+    tag: "ocr-runner-v0.1.0-r1",
+    stem: "ocr-runner-0.1.0-r1-macos-arm64",
+    url: OCR_MACOS_URL,
+    archive_bytes: 24_661_466,
+    archive_sha256: "32d0b09e84e1f77208983d753c300568a11f86fffb4c28f195bc8ff101e3c273",
+    entries: 13,
+    expanded_bytes: 58_525_994,
+    tar_stream_bytes: 58_542_080,
+    files: &[
+        (
+            "LICENSES/models-NOTICE.txt",
+            489,
+            "8d8a53d6cbc9f5f81084f71127c3f6b399d37e7945543ef260301bb52f551745",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-LICENSE",
+            1_094,
+            "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674",
+            false,
+        ),
+        (
+            "LICENSES/onnxruntime-ThirdPartyNotices.txt",
+            344_457,
+            "c53a76501ef60db6f865f20599f220761201ac4057683acefdab37d861b86622",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-APACHE",
+            11_349,
+            "00527a09828e8be699061d136072a9069b3d7195c322e638429201bc371958d1",
+            false,
+        ),
+        (
+            "LICENSES/vsift-ocr-runner-LICENSE-MIT",
+            1_076,
+            "e99e3e22f819c1e93603b993a69395256324f33163ece870b21b0367c5a68648",
+            false,
+        ),
+        (
+            "models/ch_PP-OCRv5_det_mobile.onnx",
+            4_819_576,
+            "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
+            false,
+        ),
+        (
+            "models/latin_PP-OCRv5_rec_mobile.onnx",
+            7_904_513,
+            "b20bd37c168a570f583afbc8cd7925603890efbcdc000a59e22c269d160b5f5a",
+            false,
+        ),
+        (
+            "onnxruntime/libonnxruntime.1.31.0.dylib",
+            44_830_288,
+            "83973572676032b4ba9418afed0b51f45599d35bb4e4628ca8ae1954c8362e31",
+            false,
+        ),
+        (
+            "vsift-ocr-runner",
+            613_152,
+            "ea05bf85ff4fecd375ebcfe495b46f8a1b582621e5792f480ba999928100aab6",
+            true,
+        ),
+    ],
+    licence: "Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0",
+    notice_url: "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+    trust_limit: "VSift's own build of the OCR runner with ONNX Runtime 1.31.0 from Microsoft's NuGet package and the two PP-OCRv5 models (Apache-2.0, as converted by RapidOCR), built twice and compared byte for byte and attested. The runner reads untrusted pixels and runs only under VSift's supervisor. Checked on hosted macOS arm64 runners only (parity against the reference pipeline on synthetic screens; real recordings agree with it less closely, L-204).",
+};
+
+/// One sherpa-onnx v1.13.8 prebuilt shared archive (ADR 0031, ADR 0032): the
+/// publisher's own `.tar.bz2` of a target, from which the managed install
+/// takes two files, the diarization tool and ONNX Runtime, and installs them
+/// flat beside each other (the loader finds the library there on every system).
+///
+/// The pins come from the `flat-folder` job of `P16 speakers evaluation` (run
+/// 39621390749, `docs/planning/speaker-labels-evaluation.md` section 10.1),
+/// which listed every archive member and ran the tool from such a folder;
+/// the archive's size and SHA-256 are GitHub's release-asset digest, the only
+/// one the publisher has (L-217). `entries` is the most the archive may hold
+/// (its members and the folders they sit in), `expanded_bytes` their sizes, and
+/// `tar_stream_bytes` the cap on the decompressed tar stream (the members'
+/// records and padding with a small margin). The hosted `P13 managed smoke`
+/// jobs read all three from the archive itself and print them.
+struct SherpaRelease {
+    /// The managed version key: the publisher's version and the target.
+    version: &'static str,
+    url: &'static str,
+    archive_bytes: u64,
+    archive_sha256: &'static str,
+    /// The archive's one root folder.
+    root: &'static str,
+    entries: usize,
+    expanded_bytes: u64,
+    tar_stream_bytes: u64,
+    /// Path under the root, bytes, SHA-256, of the diarization tool; the
+    /// installed name is the path's last part.
+    tool: (&'static str, u64, &'static str),
+    /// The same for ONNX Runtime's library, which the tool names and loads
+    /// from beside itself.
+    runtime: (&'static str, u64, &'static str),
+}
+
+const LINUX_SHERPA: SherpaRelease = SherpaRelease {
+    version: "sherpa-onnx-1.13.8-linux-x64",
+    url: SHERPA_LINUX_URL,
+    archive_bytes: 28_156_791,
+    archive_sha256: "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4",
+    root: "sherpa-onnx-v1.13.8-linux-x64-shared",
+    entries: 50,
+    expanded_bytes: 86_050_728,
+    tar_stream_bytes: 86_400_000,
+    tool: (
+        "bin/sherpa-onnx-offline-speaker-diarization",
+        497_136,
+        "fbb2a4d5db13cac4824f3a70e5a5d8f6f7765e39fa5aadbaed53885426a3ede1",
+    ),
+    runtime: (
+        "lib/libonnxruntime.so",
+        27_026_609,
+        "4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e",
+    ),
+};
+
+const WINDOWS_SHERPA: SherpaRelease = SherpaRelease {
+    version: "sherpa-onnx-1.13.8-windows-x64",
+    url: SHERPA_WINDOWS_URL,
+    archive_bytes: 24_805_859,
+    archive_sha256: "6dffdc715a4465b989446a6105265d2cb345e7101591a17d35534b6758f6e8df",
+    root: "sherpa-onnx-v1.13.8-win-x64-shared-MT-Release",
+    entries: 38,
+    expanded_bytes: 67_766_399,
+    tar_stream_bytes: 68_100_000,
+    tool: (
+        "bin/sherpa-onnx-offline-speaker-diarization.exe",
+        651_264,
+        "053eb31b597d5b257759eaf4088948a0bb5988943ce518365c6558485feba72e",
+    ),
+    runtime: (
+        "bin/onnxruntime.dll",
+        17_799_168,
+        "7f66f939a881baf4f46a2216496798edf4a1429878b646d12674aa62f27d8a25",
+    ),
+};
+
+const MACOS_SHERPA: SherpaRelease = SherpaRelease {
+    version: "sherpa-onnx-1.13.8-macos-arm64",
+    url: SHERPA_MACOS_URL,
+    archive_bytes: 20_314_448,
+    archive_sha256: "b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56",
+    root: "sherpa-onnx-v1.13.8-osx-arm64-shared",
+    entries: 42,
+    expanded_bytes: 66_830_207,
+    tar_stream_bytes: 67_200_000,
+    tool: (
+        "bin/sherpa-onnx-offline-speaker-diarization",
+        405_440,
+        "e1170a93308867d8e343ac22a00b46b1d8e786c763c32a17caff07cf934ff66f",
+    ),
+    runtime: (
+        "lib/libonnxruntime.dylib",
+        28_775_120,
+        "3567d114f7299d559993e536d605a6f46d7bc9d2542004accc80ee9bf5457f0b",
+    ),
+};
+
+/// The publisher record of sherpa-onnx's own releases: the engine archives
+/// and the `TitaNet` model. One record, one repository (`k2-fsa/sherpa-onnx`).
+const SHERPA_PUBLISHER: &str = "k2-fsa sherpa-onnx";
+
+/// The `speakers` group's tool: the two files of sherpa-onnx's archive.
+fn sherpa_artifact(
+    release: &SherpaRelease,
+) -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+    let integrity = integrity(release.archive_bytes, release.archive_sha256)?;
+    validate_source(release.url, PublisherOrigin::GitHubRelease, integrity)?;
+    let runtime_name = |path: &'static str| path.rsplit('/').next().unwrap_or(path);
+    let members = [(release.tool, true), (release.runtime, false)];
+    Ok(AcceptedManagedArtifact {
+        component: ManagedComponent::SpeakerDiarizer,
+        version: String::from(release.version),
+        publisher: String::from(SHERPA_PUBLISHER),
+        source_url: String::from(release.url),
+        integrity,
+        format: ManagedArtifactFormat::TarBz2,
+        archive_limits: Some(ReviewedArchiveLimits {
+            max_stream_bytes: release.tar_stream_bytes,
+            entries: release.entries,
+            expanded_bytes: release.expanded_bytes,
+        }),
+        selected_files: members
+            .iter()
+            .map(|((path, bytes, sha256), _)| {
+                selection(
+                    &format!("{}/{path}", release.root),
+                    runtime_name(path),
+                    *bytes,
+                    sha256,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from(
+            "Apache-2.0 (sherpa-onnx); MIT (the ONNX Runtime library its archive bundles)",
+        ),
+        notice_url: String::from("https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/LICENSE"),
+        source_code_url: String::from("https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8"),
+        trust_limit: String::from(
+            "Publisher release archive with no publisher signature or checksum file: GitHub's asset digest is the only anchor (L-217). The archive holds no licence file, so none is installed beside the tool (L-226). Started once on a tone from a flat folder on hosted Ubuntu 24.04, Windows and macOS runners (P16 speakers evaluation run 39621390749); speech quality is ADR 0031's evaluation, not a claim about this archive.",
+        ),
+        files: members
+            .iter()
+            .map(|((path, bytes, sha256), executable)| {
+                file(runtime_name(path), *bytes, sha256, *executable)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    })
+}
+
+/// The `speakers` group's segmentation model: pyannote 3.0, one raw file at a
+/// pinned Hugging Face revision. The URL's file is `model.onnx`; it installs
+/// under a name that says which model it is.
+fn speaker_segmentation_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+    let integrity = integrity(SPEAKER_SEGMENTATION_BYTES, SPEAKER_SEGMENTATION_SHA256)?;
+    validate_source(
+        SPEAKER_SEGMENTATION_URL,
+        PublisherOrigin::HuggingFaceModel,
+        integrity,
+    )?;
+    Ok(AcceptedManagedArtifact {
+        component: ManagedComponent::SpeakerSegmentationModel,
+        version: String::from("pyannote-segmentation-3.0-9403a690"),
+        publisher: String::from("csukuangfj sherpa-onnx pyannote segmentation (Hugging Face)"),
+        source_url: String::from(SPEAKER_SEGMENTATION_URL),
+        integrity,
+        format: ManagedArtifactFormat::RawFile,
+        archive_limits: None,
+        selected_files: Vec::new(),
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from(
+            "MIT (pyannote segmentation 3.0, Copyright (c) 2022 CNRS; ONNX export by the sherpa-onnx project)",
+        ),
+        notice_url: String::from(
+            "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/blob/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/LICENSE",
+        ),
+        source_code_url: String::from(
+            "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/tree/9403a6902bb58e3d5ae8c7e77c3422de279db2e0",
+        ),
+        trust_limit: String::from(
+            "Pinned file at one immutable Hugging Face revision, anchored by Hugging Face's own LFS SHA-256. It loaded in the diarization tool on hosted runners (P16 speakers evaluation run 39621390749); the repository carries the licence text but VSift installs none beside the model (L-226).",
+        ),
+        files: vec![file(
+            "pyannote-segmentation-3.0.onnx",
+            SPEAKER_SEGMENTATION_BYTES,
+            SPEAKER_SEGMENTATION_SHA256,
+            false,
+        )?],
+    })
+}
+
+/// The `speakers` group's embedding model: `NeMo` `TitaNet` small, one raw
+/// file of sherpa-onnx's model release.
+fn speaker_embedding_artifact() -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+    let integrity = integrity(SPEAKER_EMBEDDING_BYTES, SPEAKER_EMBEDDING_SHA256)?;
+    validate_source(
+        SPEAKER_EMBEDDING_URL,
+        PublisherOrigin::GitHubRelease,
+        integrity,
+    )?;
+    Ok(AcceptedManagedArtifact {
+        component: ManagedComponent::SpeakerEmbeddingModel,
+        version: String::from("nemo-en-titanet-small"),
+        publisher: String::from(SHERPA_PUBLISHER),
+        source_url: String::from(SPEAKER_EMBEDDING_URL),
+        integrity,
+        format: ManagedArtifactFormat::RawFile,
+        archive_limits: None,
+        selected_files: Vec::new(),
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from(
+            "Apache-2.0 (NeMo Toolkit) and CC-BY-4.0 (NVIDIA's TitaNet model card, which requires attribution)",
+        ),
+        notice_url: String::from(
+            "https://github.com/k2-fsa/sherpa-onnx/releases/tag/speaker-recongition-models",
+        ),
+        source_code_url: String::from("https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8"),
+        trust_limit: String::from(
+            "Release asset anchored by the release's own checksum.txt (the release tag is a name the publisher can re-point; the pinned size and SHA-256 are what VSift trusts). The attribution TitaNet requires is the notice shown with the speakers group (ADR 0031); VSift installs no licence file beside the model (L-226).",
+        ),
+        files: vec![file(
+            "nemo_en_titanet_small.onnx",
+            SPEAKER_EMBEDDING_BYTES,
+            SPEAKER_EMBEDDING_SHA256,
+            false,
+        )?],
+    })
+}
+
+/// The accepted artifact of one engine release: every inventory file is
+/// selected by its path under the root and installed flat by its last part.
+fn engine_artifact(
+    release: &EngineRelease,
+) -> Result<AcceptedManagedArtifact, ManagedCatalogueError> {
+    let integrity = integrity(release.archive_bytes, release.archive_sha256)?;
+    validate_source(release.url, PublisherOrigin::GitHubRelease, integrity)?;
+    let runtime_name = |path: &'static str| path.rsplit('/').next().unwrap_or(path);
+    Ok(AcceptedManagedArtifact {
+        component: release.component,
+        version: String::from(release.version),
+        publisher: String::from(VSIFT_ENGINE_PUBLISHER),
+        source_url: String::from(release.url),
+        integrity,
+        format: ManagedArtifactFormat::TarGz,
+        archive_limits: Some(ReviewedArchiveLimits {
+            max_stream_bytes: release.tar_stream_bytes,
+            entries: release.entries,
+            expanded_bytes: release.expanded_bytes,
+        }),
+        selected_files: release
+            .files
+            .iter()
+            .map(|(path, bytes, sha256, _)| {
+                selection(
+                    &format!("{}/{path}", release.stem),
+                    runtime_name(path),
+                    *bytes,
+                    sha256,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from(release.licence),
+        notice_url: String::from(release.notice_url),
+        source_code_url: format!(
+            "https://github.com/smormah/vsift/releases/tag/{}",
+            release.tag
+        ),
+        trust_limit: String::from(release.trust_limit),
+        files: release
+            .files
+            .iter()
+            .map(|(path, bytes, sha256, executable)| {
+                file(runtime_name(path), *bytes, sha256, *executable)
+            })
             .collect::<Result<Vec<_>, _>>()?,
     })
 }
@@ -1360,11 +2243,18 @@ mod tests {
     use vsift_domain::{AsrModelProfile, ManagedComponent, ManagedTarget, ReviewedAsrModel};
 
     use super::{
-        ManagedCatalogueError, REVIEWED_ROUTES, ReviewedUbuntuAction, accepted_catalogue,
-        accepted_ubuntu_catalogue, accepted_windows_catalogue, detect_managed_target,
-        every_accepted_artifact, pinned_whisper_model, reviewed_whisper_models, validate_layout,
+        EXPECTED_DIARIZER_FIRST_LINE, FFMPEG_BUILDS_PUBLISHER, LINUX_OCR, LINUX_SHERPA,
+        MACOS_FFMPEG, MACOS_OCR, MACOS_SHERPA, MACOS_WHISPER, ManagedCatalogueError,
+        REVIEWED_ROUTES, ReviewedUbuntuAction, SHERPA_PUBLISHER, SPEAKER_EMBEDDING_BYTES,
+        SPEAKER_EMBEDDING_SHA256, SPEAKER_EMBEDDING_URL, SPEAKER_SEGMENTATION_BYTES,
+        SPEAKER_SEGMENTATION_SHA256, SPEAKER_SEGMENTATION_URL, VSIFT_ENGINE_PUBLISHER,
+        VSIFT_ENGINE_RELEASES, WINDOWS_OCR, WINDOWS_SHERPA, WINDOWS_WHISPER, accepted_catalogue,
+        accepted_macos_catalogue, accepted_ubuntu_catalogue, accepted_windows_catalogue,
+        detect_managed_target, every_accepted_artifact, pinned_whisper_model,
+        reviewed_compatibility_policy, reviewed_whisper_models, validate_layout,
         whisper_model_profile,
     };
+    use crate::{WhisperBuildIdentity, WhisperBuildRecognition};
 
     /// D6: the quantized profile sits beside the default, in the same
     /// repository, and a file is its profile only by exact size and digest.
@@ -1403,10 +2293,11 @@ mod tests {
         Ok(())
     }
 
-    /// The v1.9.2 managed install of `0.2.2` and earlier is named, with its
-    /// security reason, and nothing the catalogue pins now is superseded.
+    /// The v1.9.2 managed install of `0.2.2` and earlier and the `FFmpeg` of
+    /// `0.2.3` and earlier are named, with their security reason, and nothing
+    /// the catalogue pins now is superseded.
     #[test]
-    fn the_earlier_whisper_pin_is_superseded_for_its_security_fixes()
+    fn the_earlier_pins_are_superseded_for_their_security_fixes()
     -> Result<(), Box<dyn std::error::Error>> {
         let catalogue = accepted_ubuntu_catalogue()?;
         let update = catalogue
@@ -1417,6 +2308,14 @@ mod tests {
             .ok_or("v1.9.2 is not reported as superseded")?;
         assert_eq!(update.reviewed_version, "whisper.cpp-v1.9.5-ubuntu-x64");
         assert_eq!(update.reason, SupersessionReason::SecurityFixes);
+        let media = catalogue
+            .update_for(
+                ManagedComponent::MediaTools,
+                "n9.0.1-11-ge47273f4d9-20260831",
+            )
+            .ok_or("the FFmpeg of 0.2.3 is not reported as superseded")?;
+        assert_eq!(media.reviewed_version, "n9.0.2-39-g7adfbe40dc-20261031");
+        assert_eq!(media.reason, SupersessionReason::SecurityFixes);
         let mut seen = HashSet::new();
         for entry in &catalogue.superseded {
             assert!(seen.insert((entry.component.identifier(), entry.version.clone())));
@@ -1434,6 +2333,35 @@ mod tests {
                 None
             );
         }
+        Ok(())
+    }
+
+    /// The `0.2.4` re-pin raised two reviewed bounds for the `FFmpeg` archive of
+    /// 2026-10-31 (`n9.0.2-39`), each only as far as that archive needs: the XZ
+    /// compressed ceiling and the tar stream cap.
+    #[test]
+    fn the_reviewed_ffmpeg_archive_fits_its_raised_bounds() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let catalogue = accepted_ubuntu_catalogue()?;
+        let ffmpeg = catalogue
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.component == ManagedComponent::MediaTools)
+            .ok_or("the catalogue has an FFmpeg artifact")?;
+        assert_eq!(ffmpeg.integrity.bytes(), 136_027_168);
+        assert!(ffmpeg.integrity.bytes() <= crate::MAX_XZ_ARCHIVE_BYTES);
+        let limits = ffmpeg
+            .archive_limits
+            .ok_or("the FFmpeg archive has reviewed limits")?;
+        assert_eq!(limits.entries, 73);
+        assert_eq!(limits.expanded_bytes, 444_067_173);
+        assert_eq!(limits.max_stream_bytes, 450_000_000);
+        // The archive's tar stream: 73 headers of 512 bytes, each file padded to
+        // 512 bytes, and the two end blocks (from the hosted inventory of run
+        // 41693413562). The cap holds it with under 6 MB to spare.
+        let tar_stream_bytes = 444_122_624_u64;
+        assert!(tar_stream_bytes <= limits.max_stream_bytes);
+        assert!(limits.max_stream_bytes - tar_stream_bytes < 6_000_000);
         Ok(())
     }
 
@@ -1455,7 +2383,7 @@ mod tests {
             catalogue.artifacts[2].component,
             ManagedComponent::WhisperModel
         );
-        assert_eq!(catalogue.stop_new_plans_date, "2028-08-01T00:00:00Z");
+        assert_eq!(catalogue.stop_new_plans_date, "2028-10-01T00:00:00Z");
         assert_eq!(catalogue.compatibility.fixture.bytes(), 76_500);
         assert_eq!(
             catalogue.compatibility.fixture.sha256_hex(),
@@ -1487,9 +2415,11 @@ mod tests {
         Ok(())
     }
 
-    /// #409: the optional part offers the runtime then yt-dlp, each pinned
-    /// to its publisher's release, with a reviewed banner, and the zip is
-    /// reviewed as exactly one executable.
+    /// #409, W5b and W5c: the optional part offers the runtime and yt-dlp
+    /// (online links), the OCR runner (`ocr`), then the speaker tool and its
+    /// two models (`speakers`), each pinned to its publisher's release; every
+    /// program has a reviewed banner (the models are data and have none), and
+    /// the zip is reviewed as exactly one executable.
     #[test]
     fn the_optional_components_are_pinned_with_their_banners()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -1501,10 +2431,17 @@ mod tests {
             .collect();
         assert_eq!(
             components,
-            [ManagedComponent::JsRuntimeDeno, ManagedComponent::YtDlp]
+            [
+                ManagedComponent::JsRuntimeDeno,
+                ManagedComponent::YtDlp,
+                ManagedComponent::OcrRunner,
+                ManagedComponent::SpeakerDiarizer,
+                ManagedComponent::SpeakerSegmentationModel,
+                ManagedComponent::SpeakerEmbeddingModel
+            ]
         );
-        let [deno, yt_dlp] = catalogue.optional_artifacts.as_slice() else {
-            return Err("two optional artifacts".into());
+        let [deno, yt_dlp, ..] = catalogue.optional_artifacts.as_slice() else {
+            return Err("six optional artifacts".into());
         };
         assert_eq!(deno.format, vsift_domain::ManagedArtifactFormat::Zip);
         assert_eq!(deno.integrity.bytes(), 41_596_794);
@@ -1519,12 +2456,18 @@ mod tests {
         assert_eq!(deno.licence, "MIT");
         for artifact in &catalogue.optional_artifacts {
             assert!(artifact.component.is_optional());
-            assert!(artifact.source_url.starts_with("https://github.com/"));
             assert!(
+                artifact.source_url.starts_with("https://github.com/")
+                    || artifact.source_url.starts_with("https://huggingface.co/")
+            );
+            assert_eq!(
                 catalogue
                     .compatibility
                     .optional_banner(artifact.component)
-                    .is_some_and(|banner| !banner.is_empty())
+                    .is_some_and(|banner| !banner.is_empty()),
+                !artifact.component.is_model(),
+                "{}",
+                artifact.component.identifier()
             );
             assert!(vsift_domain::is_canonical_managed_key(&artifact.version));
         }
@@ -1548,7 +2491,12 @@ mod tests {
     fn the_hosted_review_checks_the_catalogue_pins() -> Result<(), Box<dyn std::error::Error>> {
         let review = include_str!("../../../tools/online_video_component_review.py");
         let catalogue = accepted_ubuntu_catalogue()?;
-        for artifact in &catalogue.optional_artifacts {
+        for artifact in catalogue.optional_artifacts.iter().filter(|artifact| {
+            matches!(
+                artifact.component,
+                ManagedComponent::JsRuntimeDeno | ManagedComponent::YtDlp
+            )
+        }) {
             assert!(
                 review.contains(&artifact.integrity.sha256_hex()),
                 "{}",
@@ -1592,41 +2540,185 @@ mod tests {
         Ok(())
     }
 
-    /// ADR 0032: Windows x86-64 has a catalogue of `FFmpeg` (the zip of the
-    /// Ubuntu pin's release) and the model; macOS and other hosts have none
-    /// yet.
+    /// ADR 0032: Windows x86-64 and macOS arm64 each have a complete
+    /// catalogue of `FFmpeg`, whisper.cpp and the model, in that order; other
+    /// hosts have none.
     #[test]
     fn each_target_has_its_catalogue() -> Result<(), Box<dyn std::error::Error>> {
+        let core = [
+            ManagedComponent::MediaTools,
+            ManagedComponent::WhisperCli,
+            ManagedComponent::WhisperModel,
+        ];
         let windows =
             accepted_catalogue(ManagedTarget::WindowsX86_64)?.ok_or("no Windows catalogue")?;
         assert_eq!(windows, accepted_windows_catalogue()?);
         assert_eq!(windows.target, ManagedTarget::WindowsX86_64);
-        let components: Vec<ManagedComponent> = windows
-            .artifacts
-            .iter()
-            .map(|artifact| artifact.component)
-            .collect();
-        assert_eq!(
-            components,
-            [ManagedComponent::MediaTools, ManagedComponent::WhisperModel]
-        );
-        let ffmpeg = &windows.artifacts[0];
-        assert_eq!(ffmpeg.format, vsift_domain::ManagedArtifactFormat::Zip);
-        assert_eq!(ffmpeg.integrity.bytes(), 147_007_942);
-        let names: Vec<&str> = ffmpeg.files.iter().map(|file| file.name.as_str()).collect();
-        assert_eq!(names, ["LICENSE.txt", "ffmpeg.exe", "ffprobe.exe"]);
-        assert!(
-            windows
+        assert_eq!(windows.revision, "windows-x86_64-2026-11-21-r6");
+        let macos = accepted_catalogue(ManagedTarget::MacOsArm64)?.ok_or("no macOS catalogue")?;
+        assert_eq!(macos, accepted_macos_catalogue()?);
+        assert_eq!(macos.target, ManagedTarget::MacOsArm64);
+        assert_eq!(macos.revision, "macos-arm64-2026-11-21-r3");
+        for catalogue in [&windows, &macos] {
+            let components: Vec<ManagedComponent> = catalogue
                 .artifacts
                 .iter()
-                .all(|artifact| validate_layout(artifact).is_ok())
+                .map(|artifact| artifact.component)
+                .collect();
+            assert_eq!(components, core);
+            // The optional groups of Windows and macOS are `ocr` and `speakers`.
+            let optional: Vec<ManagedComponent> = catalogue
+                .optional_artifacts
+                .iter()
+                .map(|artifact| artifact.component)
+                .collect();
+            assert_eq!(
+                optional,
+                [
+                    ManagedComponent::OcrRunner,
+                    ManagedComponent::SpeakerDiarizer,
+                    ManagedComponent::SpeakerSegmentationModel,
+                    ManagedComponent::SpeakerEmbeddingModel
+                ]
+            );
+            assert_eq!(
+                catalogue.superseded,
+                [] as [vsift_application::SupersededManagedVersion; 0]
+            );
+            assert_eq!(catalogue.artifacts[2].integrity, pinned_whisper_model()?);
+            assert!(
+                catalogue
+                    .artifacts
+                    .iter()
+                    .all(|artifact| validate_layout(artifact).is_ok())
+            );
+        }
+        let ffmpeg = &windows.artifacts[0];
+        assert_eq!(ffmpeg.format, vsift_domain::ManagedArtifactFormat::Zip);
+        assert_eq!(ffmpeg.integrity.bytes(), 168_715_328);
+        let names = |artifact: &vsift_application::AcceptedManagedArtifact| -> Vec<String> {
+            artifact
+                .files
+                .iter()
+                .map(|file| file.name.clone())
+                .collect()
+        };
+        assert_eq!(names(ffmpeg), ["LICENSE.txt", "ffmpeg.exe", "ffprobe.exe"]);
+        assert_eq!(names(&windows.artifacts[1]), ["LICENSE", "whisper-cli.exe"]);
+        assert_eq!(
+            names(&macos.artifacts[0]),
+            ["COPYING.LGPLv2.1", "LICENSE.md", "ffmpeg", "ffprobe"]
         );
+        assert_eq!(names(&macos.artifacts[1]), ["LICENSE", "whisper-cli"]);
         assert_eq!(
             accepted_catalogue(ManagedTarget::Ubuntu2404X86_64)?,
             Some(accepted_ubuntu_catalogue()?)
         );
-        assert_eq!(accepted_catalogue(ManagedTarget::MacOsArm64)?, None);
         assert_eq!(accepted_catalogue(ManagedTarget::Unsupported)?, None);
+        Ok(())
+    }
+
+    /// Each engine table is the archive its release URL names: the URL is the
+    /// engine release route of its tag and stem, the tag names the engine and
+    /// version of the stem, and the counts add up the way the published
+    /// inventory reports them (a header for the root folder, each subfolder
+    /// and each file; the tar stream padded to whole 10 KiB records).
+    #[test]
+    fn each_engine_pin_is_the_archive_its_release_publishes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for release in [
+            &WINDOWS_WHISPER,
+            &MACOS_WHISPER,
+            &MACOS_FFMPEG,
+            &LINUX_OCR,
+            &WINDOWS_OCR,
+            &MACOS_OCR,
+        ] {
+            assert_eq!(
+                release.url,
+                format!(
+                    "{VSIFT_ENGINE_RELEASES}/{}/{}.tar.gz",
+                    release.tag, release.stem
+                )
+            );
+            let (engine, version) = release.tag.split_once("-v").ok_or("not an engine tag")?;
+            assert!(
+                release.stem.starts_with(&format!("{engine}-{version}-")),
+                "{} is not the stem of {}",
+                release.stem,
+                release.tag
+            );
+            let expanded: u64 = release.files.iter().map(|(_, bytes, _, _)| bytes).sum();
+            assert_eq!(expanded, release.expanded_bytes);
+            let folders = release
+                .files
+                .iter()
+                .filter_map(|(path, _, _, _)| path.rsplit_once('/').map(|(folder, _)| folder))
+                .collect::<HashSet<_>>()
+                .len();
+            assert_eq!(release.entries, 1 + folders + release.files.len());
+            assert!(release.tar_stream_bytes >= release.expanded_bytes);
+            assert_eq!(release.tar_stream_bytes % 10_240, 0);
+            assert!(vsift_domain::is_canonical_managed_key(release.version));
+        }
+        Ok(())
+    }
+
+    /// The managed whisper.cpp of every target is a reviewed v1.9.5 build, so
+    /// `setup check` names it as the pin rather than an unrecognised build.
+    #[test]
+    fn every_managed_whisper_is_a_reviewed_build() -> Result<(), Box<dyn std::error::Error>> {
+        let mut checked = 0_usize;
+        for artifact in every_accepted_artifact()? {
+            if artifact.component != ManagedComponent::WhisperCli {
+                continue;
+            }
+            let executable = artifact
+                .files
+                .iter()
+                .find(|file| file.name.starts_with("whisper-cli"))
+                .ok_or("no whisper-cli in the artifact")?;
+            let identity = WhisperBuildIdentity::for_tests(
+                executable.integrity.bytes(),
+                executable.integrity.sha256(),
+            );
+            assert_eq!(
+                identity.recognition(),
+                WhisperBuildRecognition::ReviewedV1_9_5,
+                "{}",
+                artifact.version
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 3);
+        Ok(())
+    }
+
+    /// The macOS policy differs from the shared one only in the banners of
+    /// `VSift`'s `FFmpeg` build; bring-your-own verification keeps the shared one.
+    #[test]
+    fn the_macos_policy_differs_only_in_its_ffmpeg_banner() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let shared = reviewed_compatibility_policy()?;
+        let macos = accepted_macos_catalogue()?.compatibility;
+        assert_eq!(
+            macos.expected_ffmpeg_version,
+            "ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1"
+        );
+        assert_eq!(
+            macos.expected_ffprobe_version,
+            "ffprobe version n9.0.2-39-g7adfbe40dc-vsift-r1"
+        );
+        let mut aligned = macos.clone();
+        aligned
+            .expected_ffmpeg_version
+            .clone_from(&shared.expected_ffmpeg_version);
+        aligned
+            .expected_ffprobe_version
+            .clone_from(&shared.expected_ffprobe_version);
+        assert_eq!(aligned, shared);
+        assert_eq!(accepted_windows_catalogue()?.compatibility, shared);
+        assert_eq!(accepted_ubuntu_catalogue()?.compatibility, shared);
         Ok(())
     }
 
@@ -1669,6 +2761,311 @@ mod tests {
                 .iter()
                 .all(|artifact| vsift_domain::is_canonical_managed_key(&artifact.version))
         );
+        Ok(())
+    }
+
+    /// The repository each GitHub-hosted publisher record stands for. A
+    /// pinned release URL and the record must name the same owner and
+    /// repository, so a repository move (as `FFmpeg-Builds` made on
+    /// 2026-11-07) cannot leave the URLs and the record apart: the move is made
+    /// here and in the catalogue together, after a person has read it.
+    const PUBLISHER_REPOSITORIES: [(&str, &str); 6] = [
+        (FFMPEG_BUILDS_PUBLISHER, "FFmpeg-Builds/FFmpeg-Builds"),
+        (VSIFT_ENGINE_PUBLISHER, "smormah/vsift"),
+        ("ggml-org whisper.cpp", "ggml-org/whisper.cpp"),
+        ("Deno Land deno", "denoland/deno"),
+        ("yt-dlp", "yt-dlp/yt-dlp"),
+        (SHERPA_PUBLISHER, "k2-fsa/sherpa-onnx"),
+    ];
+
+    #[test]
+    fn every_github_release_url_names_the_repository_of_its_publisher_record()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut checked = 0_usize;
+        for artifact in every_accepted_artifact()? {
+            let Some(path) = artifact.source_url.strip_prefix("https://github.com/") else {
+                continue;
+            };
+            let Some((_, repository)) = PUBLISHER_REPOSITORIES
+                .iter()
+                .find(|(publisher, _)| *publisher == artifact.publisher)
+            else {
+                return Err(format!(
+                    "no repository is recorded for the publisher {:?} of {}",
+                    artifact.publisher, artifact.source_url
+                )
+                .into());
+            };
+            assert!(
+                path.starts_with(&format!("{repository}/releases/download/")),
+                "{} is not a release of {repository}, the repository of {:?}",
+                artifact.source_url,
+                artifact.publisher
+            );
+            assert!(
+                artifact
+                    .source_code_url
+                    .starts_with(&format!("https://github.com/{repository}/")),
+                "{} is not a page of {repository}, the repository of {:?}",
+                artifact.source_code_url,
+                artifact.publisher
+            );
+            checked += 1;
+        }
+        // Ubuntu: FFmpeg, whisper.cpp, Deno, yt-dlp, the OCR runner, the
+        // sherpa-onnx archive and the TitaNet model (the segmentation model is
+        // on Hugging Face); Windows: FFmpeg, whisper.cpp, the OCR runner and
+        // the two sherpa-onnx pieces; macOS: the same five.
+        assert_eq!(checked, 17);
+        Ok(())
+    }
+
+    /// W5b: the `ocr` group is one archive of the OCR runner's own release per
+    /// target, installed flat: the runner (the only executable), the ONNX
+    /// Runtime library, the two models and every licence file, each under the
+    /// name the runner looks for beside itself.
+    #[test]
+    fn the_ocr_group_is_one_flat_archive_of_the_runners_release_per_target()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let runner_cli = include_str!("../../vsift-ocr-runner/src/cli.rs");
+        let runner_onnx = include_str!("../../vsift-ocr-runner/src/onnx.rs");
+        let models_script = include_str!("../../../tools/p16_ocr_runner.py");
+        let expected_names = |library: &str, runner: &str| -> Vec<String> {
+            let mut names = vec![
+                String::from("models-NOTICE.txt"),
+                String::from("onnxruntime-LICENSE"),
+                String::from("onnxruntime-ThirdPartyNotices.txt"),
+                String::from("vsift-ocr-runner-LICENSE-APACHE"),
+                String::from("vsift-ocr-runner-LICENSE-MIT"),
+                String::from("ch_PP-OCRv5_det_mobile.onnx"),
+                String::from("latin_PP-OCRv5_rec_mobile.onnx"),
+                String::from(library),
+                String::from(runner),
+            ];
+            names.sort();
+            names
+        };
+        let targets = [
+            (
+                accepted_ubuntu_catalogue()?,
+                expected_names("libonnxruntime.so.1.31.0", "vsift-ocr-runner"),
+            ),
+            (
+                accepted_windows_catalogue()?,
+                expected_names("onnxruntime.dll", "vsift-ocr-runner.exe"),
+            ),
+            (
+                accepted_macos_catalogue()?,
+                expected_names("libonnxruntime.1.31.0.dylib", "vsift-ocr-runner"),
+            ),
+        ];
+        for (catalogue, expected) in targets {
+            let ocr = catalogue
+                .optional_artifacts
+                .iter()
+                .find(|artifact| artifact.component == ManagedComponent::OcrRunner)
+                .ok_or("no OCR runner artifact")?;
+            assert_eq!(ocr.format, vsift_domain::ManagedArtifactFormat::TarGz);
+            assert_eq!(ocr.publisher, VSIFT_ENGINE_PUBLISHER);
+            let mut names: Vec<String> = ocr.files.iter().map(|file| file.name.clone()).collect();
+            names.sort();
+            assert_eq!(names, expected, "{:?}", catalogue.target);
+            // Only the runner executes; every other file is data.
+            let executables: Vec<&str> = ocr
+                .files
+                .iter()
+                .filter(|file| file.executable)
+                .map(|file| file.name.as_str())
+                .collect();
+            assert_eq!(executables.len(), 1);
+            assert!(executables[0].starts_with("vsift-ocr-runner"));
+            // The names and digests are what the runner and its release
+            // script say: the files the runner finds beside itself, the two
+            // models' digests, and the pinned runtime libraries.
+            for file in &ocr.files {
+                let sha = file.integrity.sha256_hex();
+                if std::path::Path::new(&file.name)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("onnx"))
+                {
+                    assert!(runner_cli.contains(&format!("\"{}\"", file.name)));
+                    assert!(models_script.contains(&sha), "{}", file.name);
+                } else if file.name.contains("onnxruntime")
+                    && !file.name.contains("LICENSE")
+                    && !file.name.contains("Notices")
+                {
+                    assert!(runner_cli.contains(&format!("\"{}\"", file.name)));
+                    assert!(runner_onnx.contains(&sha), "{}", file.name);
+                }
+            }
+            assert!(
+                catalogue
+                    .compatibility
+                    .optional_banner(ManagedComponent::OcrRunner)
+                    .is_some_and(|banner| banner.starts_with("{\"record\":\"describe\""))
+            );
+        }
+        // The reviewed `describe` prefix names the runner version the tables pin.
+        assert!(super::EXPECTED_OCR_RUNNER_DESCRIPTION.contains("\"runner_version\":\"0.1.0\""));
+        for release in [&LINUX_OCR, &WINDOWS_OCR, &MACOS_OCR] {
+            assert_eq!(release.tag, "ocr-runner-v0.1.0-r1");
+            assert!(release.stem.starts_with("ocr-runner-0.1.0-r1-"));
+        }
+        Ok(())
+    }
+
+    /// W5c: the `speakers` group is sherpa-onnx's archive per target, of which
+    /// two files install flat (the tool, the only executable, and ONNX Runtime
+    /// beside it), then the same two models on every target. Every pin is the
+    /// one the evaluation measured: the archive and model pins are the
+    /// evaluation script's, and the two files' digests are the ones its
+    /// flat-folder run recorded in the evaluation document.
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One walk over the three targets and the group's three pieces, read in order"
+    )]
+    fn the_speakers_group_is_the_tool_with_its_runtime_and_the_two_models()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let script = include_str!("../../../tools/p16_speakers_eval.py");
+        let evaluation = include_str!("../../../docs/planning/speaker-labels-evaluation.md");
+        // The script writes a size with `_` between thousands: 28_156_791.
+        let grouped = |bytes: u64| {
+            let digits = bytes.to_string();
+            let mut text = String::new();
+            for (index, digit) in digits.chars().enumerate() {
+                if index > 0 && (digits.len() - index).is_multiple_of(3) {
+                    text.push('_');
+                }
+                text.push(digit);
+            }
+            text
+        };
+        let abbreviated = |sha: &str| format!("`{}...{}`", &sha[..8], &sha[sha.len() - 4..]);
+        let targets = [
+            (
+                accepted_ubuntu_catalogue()?,
+                &LINUX_SHERPA,
+                "sherpa-onnx-offline-speaker-diarization",
+                "libonnxruntime.so",
+            ),
+            (
+                accepted_windows_catalogue()?,
+                &WINDOWS_SHERPA,
+                "sherpa-onnx-offline-speaker-diarization.exe",
+                "onnxruntime.dll",
+            ),
+            (
+                accepted_macos_catalogue()?,
+                &MACOS_SHERPA,
+                "sherpa-onnx-offline-speaker-diarization",
+                "libonnxruntime.dylib",
+            ),
+        ];
+        for (catalogue, release, tool_name, runtime_name) in targets {
+            let group: Vec<&vsift_application::AcceptedManagedArtifact> = catalogue
+                .optional_artifacts
+                .iter()
+                .filter(|artifact| {
+                    vsift_application::OptionalComponent::of(artifact.component)
+                        == Some(vsift_application::OptionalComponent::Speakers)
+                })
+                .collect();
+            let [tool, segmentation, embedding] = group.as_slice() else {
+                return Err("the speakers group is the tool and two models".into());
+            };
+            assert_eq!(tool.component, ManagedComponent::SpeakerDiarizer);
+            assert_eq!(
+                segmentation.component,
+                ManagedComponent::SpeakerSegmentationModel
+            );
+            assert_eq!(embedding.component, ManagedComponent::SpeakerEmbeddingModel);
+
+            // The tool: sherpa-onnx's own archive, two files, one executable.
+            assert_eq!(tool.format, vsift_domain::ManagedArtifactFormat::TarBz2);
+            assert_eq!(tool.publisher, SHERPA_PUBLISHER);
+            assert_eq!(tool.source_url, release.url);
+            assert!(release.url.ends_with(&format!("{}.tar.bz2", release.root)));
+            assert!(script.contains(release.url.rsplit('/').next().unwrap_or_default()));
+            assert!(script.contains(release.archive_sha256));
+            assert!(script.contains(&grouped(release.archive_bytes)));
+            assert_eq!(
+                tool.files
+                    .iter()
+                    .map(|file| file.name.as_str())
+                    .collect::<Vec<_>>(),
+                [tool_name, runtime_name],
+                "{:?}",
+                catalogue.target
+            );
+            assert_eq!(
+                tool.files
+                    .iter()
+                    .map(|file| file.executable)
+                    .collect::<Vec<_>>(),
+                [true, false]
+            );
+            for (path, _, sha256) in [release.tool, release.runtime] {
+                assert!(path.ends_with(tool_name) || path.ends_with(runtime_name));
+                assert!(
+                    evaluation.contains(&abbreviated(sha256)),
+                    "{path}: the evaluation records no such digest"
+                );
+            }
+            assert!(evaluation.contains(&abbreviated(release.archive_sha256)));
+            let limits = tool.archive_limits.ok_or("no archive limits")?;
+            assert!(limits.entries >= tool.selected_files.len());
+            assert!(limits.max_stream_bytes >= limits.expanded_bytes);
+            assert!(vsift_domain::is_canonical_managed_key(&tool.version));
+            assert_eq!(
+                catalogue
+                    .compatibility
+                    .optional_banner(ManagedComponent::SpeakerDiarizer),
+                Some(EXPECTED_DIARIZER_FIRST_LINE)
+            );
+
+            // The models: one raw file each, the same on every target.
+            for (artifact, name, url, sha256, publisher_origin) in [
+                (
+                    segmentation,
+                    "pyannote-segmentation-3.0.onnx",
+                    SPEAKER_SEGMENTATION_URL,
+                    SPEAKER_SEGMENTATION_SHA256,
+                    "huggingface.co",
+                ),
+                (
+                    embedding,
+                    "nemo_en_titanet_small.onnx",
+                    SPEAKER_EMBEDDING_URL,
+                    SPEAKER_EMBEDDING_SHA256,
+                    "github.com",
+                ),
+            ] {
+                assert_eq!(
+                    artifact.format,
+                    vsift_domain::ManagedArtifactFormat::RawFile
+                );
+                assert_eq!(artifact.source_url, url);
+                assert!(artifact.source_url.contains(publisher_origin));
+                assert_eq!(artifact.files.len(), 1);
+                assert_eq!(artifact.files[0].name, name);
+                assert!(!artifact.files[0].executable);
+                assert_eq!(artifact.files[0].integrity, artifact.integrity);
+                assert_eq!(artifact.integrity.sha256_hex(), sha256);
+                assert!(script.contains(sha256), "{name}");
+                assert!(script.contains(url.rsplit('/').next().unwrap_or_default()));
+                assert!(vsift_domain::is_canonical_managed_key(&artifact.version));
+                assert!(
+                    catalogue
+                        .compatibility
+                        .optional_banner(artifact.component)
+                        .is_none()
+                );
+            }
+            assert_eq!(segmentation.integrity.bytes(), SPEAKER_SEGMENTATION_BYTES);
+            assert_eq!(embedding.integrity.bytes(), SPEAKER_EMBEDDING_BYTES);
+            assert!(script.contains("5_992_913") && script.contains("40_257_283"));
+        }
         Ok(())
     }
 

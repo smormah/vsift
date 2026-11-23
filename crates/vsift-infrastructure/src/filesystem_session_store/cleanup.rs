@@ -115,7 +115,7 @@ impl FilesystemSessionStore {
             }
             bucket
                 .remove_file(session_id.as_str())
-                .map_err(map_storage_io)?;
+                .map_err(map_removal_io)?;
             return Ok(CleanOutcome::Removed);
         }
         let _hold = self.try_acquire_exclusive_lifetime(session_id)?;
@@ -163,15 +163,15 @@ impl FilesystemSessionStore {
             }
             sessions
                 .rename(session_id.as_str(), &sessions, &quarantine_name)
-                .map_err(map_storage_io)?;
+                .map_err(map_removal_io)?;
         }
         sessions
             .remove_dir_all(&quarantine_name)
-            .map_err(map_storage_io)?;
+            .map_err(map_removal_io)?;
         if let Some((bucket, _marker_lock, _marker)) = index_claim {
             bucket
                 .remove_file(session_id.as_str())
-                .map_err(map_storage_io)?;
+                .map_err(map_removal_io)?;
         }
         Ok(CleanOutcome::Removed)
     }
@@ -240,6 +240,40 @@ impl FilesystemSessionStore {
         )
         .map_err(map_lock_error)
     }
+}
+
+/// Maps a failure of one of the removal's own steps: the rename into
+/// quarantine, the quarantine's removal and the registration marker's removal.
+///
+/// On Windows a file or folder that another handle holds open without sharing
+/// deletion (a scanner, an indexer, a child process) cannot be renamed or
+/// deleted until that handle closes. The answer is a sharing violation (os
+/// error 32), a lock violation (33), or, for a folder whose last file is still
+/// being deleted, "directory not empty" (145); the standard library's own
+/// removal tries the first and the last again only for a few dozen yields. None
+/// of them says anything about the storage, and each goes away when the holder
+/// lets go, so each is `Busy`: `session clean` skips the session this time, and
+/// a failed open's bounded retry tries again (#604). They used to be `Io`, which
+/// that retry treats as final, so a failed open could leave its registration
+/// listed as `initializing`. An access refusal (os error 5, a folder renamed
+/// while a file in it is open) is already `AccessDenied`, which the retry also
+/// waits for on Windows. Unix deletes an open file and has no such refusal.
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Result::map_err requires ownership of the source error"
+)]
+fn map_removal_io(error: std::io::Error) -> SessionStorageError {
+    if is_held_by_another_handle(&error) {
+        SessionStorageError::Busy
+    } else {
+        map_storage_io(error)
+    }
+}
+
+/// Whether a rename or deletion was refused only because another handle holds
+/// the file or folder (see [`map_removal_io`]).
+fn is_held_by_another_handle(error: &std::io::Error) -> bool {
+    cfg!(windows) && matches!(error.raw_os_error(), Some(32 | 33 | 145))
 }
 
 /// Whether a session folder that is not already quarantined may be cleaned

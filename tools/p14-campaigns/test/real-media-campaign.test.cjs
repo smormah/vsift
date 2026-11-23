@@ -205,6 +205,64 @@ test('a window over its candidate budget is measured, not retried and not a find
   assert.equal(report.measurements.candidates.dropped_candidates, 7);
 });
 
+test('the local speech measurement lists each unplaced range\'s start and end, beside the unchanged count and total', (t) => {
+  const { run } = standIn();
+  const unplaced = [{ from_us: 10 * SECOND, to_us: 14 * SECOND }, { from_us: 12 * SECOND, to_us: 16 * SECOND }, { from_us: 90 * SECOND, to_us: 95.5 * SECOND, reason: 'ignored' }];
+  const withGaps = (step, args, extra) => {
+    const answer = run(step, args, extra);
+    if (args[0] === 'transcript' && args[1] === 'retranscribe') answer.json.data.revision.local_asr.unplaced_ranges = unplaced;
+    return answer;
+  };
+  const publicItem = { ...PRIVATE_ITEM, id: 'RM01', private: undefined, title: 'T', attribution: 'A', tests: ['#363'] };
+  const report = campaign.investigate(publicItem, FILE, withGaps, { folder: scratch(t), copyFile: () => {}, exists: () => true });
+  const measured = report.measurements.transcription;
+  assert.equal(measured.unplaced_ranges, 3, 'the count, as before');
+  assert.equal(measured.unplaced_us, 11.5 * SECOND, 'the merged total, as before');
+  assert.deepEqual(measured.unplaced, [{ from_us: 10 * SECOND, to_us: 14 * SECOND }, { from_us: 12 * SECOND, to_us: 16 * SECOND }, { from_us: 90 * SECOND, to_us: 95.5 * SECOND }], 'times only, as reported');
+  const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
+    setup: { passed: true, findings: [] }, items: [{ id: 'RM01', measurements: { transcription: measured }, verdict: { passed: true, findings: [] } }] });
+  assert.match(summary, /^- RM01: speech not placed in 00:00:10\.0-00:00:14\.0, 00:00:12\.0-00:00:16\.0, 00:01:30\.0-00:01:35\.5$/m);
+  const none = campaign.investigate(publicItem, FILE, run, { folder: scratch(t), copyFile: () => {}, exists: () => true });
+  assert.deepEqual(none.measurements.transcription.unplaced, []);
+  assert.doesNotMatch(campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
+    setup: { passed: true, findings: [] }, items: [{ id: 'RM01', measurements: { transcription: none.measurements.transcription }, verdict: { passed: true, findings: [] } }] }), /speech not placed/);
+});
+
+test('the watch report carries every screen change the candidates step read, by time and reasons, once (not only the listed ones)', (t) => {
+  const { run } = standIn();
+  const many = (step, args, extra) => {
+    // The stand-in's frame step knows only its own two candidates: any other asks for the first.
+    const known = args[0] === 'frame' && !/^vcd_[12]$/.test(args[args.indexOf('--candidate') + 1]);
+    const answer = run(step, known ? args.map((arg, index) => (args[index - 1] === '--candidate' ? 'vcd_1' : arg)) : args, extra);
+    if (args[0] === 'candidates') {
+      // The stand-in's two candidates (which its frame step knows) and the rest of 589.
+      const rest = Array.from({ length: 587 }, (_, index) => ({ candidate_id: `vcd_x${index}`, representative_us: (index + 2) * SECOND, reasons: index === 5 ? ['visual_change', 'motion_start'] : ['visual_change'] }));
+      answer.json.data.items = [...answer.json.data.items, ...rest];
+    }
+    return answer;
+  };
+  const publicItem = { ...WATCHED_ITEM, tests: ['#363'] };
+  const { file, item } = watchedSource(t);
+  const report = campaign.investigate(publicItem, FILE, many, { folder: item, copyFile: () => {}, exists: () => true });
+  assert.equal(report.measurements.candidates.count, 589);
+  const changes = campaign.takeChanges(report);
+  assert.equal(changes.length, 589, 'every change found, not the listed 200');
+  assert.deepEqual(changes[0], { time_us: 0, reason: 'first_frame' });
+  assert.deepEqual(changes[1], { time_us: 50 * SECOND, reason: 'motion_start' });
+  assert.deepEqual(changes[7], { time_us: 7 * SECOND, reason: 'visual_change,motion_start' });
+  assert.deepEqual(Object.keys(changes[1]).sort(), ['reason', 'time_us'], 'times and reasons only');
+  assert.equal(report.measurements.candidates.changes, undefined, 'kept once, under watch');
+  assert.equal(campaign.takeChanges(report), null, 'taken already');
+  const { run: watchRun } = watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 589, listed: 200 });
+  const watched = campaign.watchItem(WATCHED_ITEM, file, watchRun, { folder: item, changes });
+  assert.deepEqual(watched.measurements.changes, changes);
+  const bare = watchedSource(t);
+  assert.equal(campaign.watchItem(WATCHED_ITEM, bare.file, watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 3 }).run, { folder: bare.item }).measurements.changes, null, 'no candidates step, no list');
+  const priv = campaign.investigate(PRIVATE_ITEM, FILE, many, { folder: scratch(t), copyFile: () => {}, exists: () => true, writeFile: () => {} });
+  assert.equal(campaign.takeChanges(priv), null, 'a private item is not watched and lists no changes');
+  assert.equal(JSON.stringify(campaign.privateReport(priv)).includes('time_us\":7'), false);
+});
+
 test('the shifted run starts at a segment boundary well inside a chunk step, or not at all', () => {
   const at = (...seconds) => seconds.map((s) => ({ start_us: s * SECOND }));
   assert.equal(campaign.shiftPoint(at(0, 6, 11.9, 17.92, 30), 200 * SECOND), 11.9 * SECOND);
@@ -429,4 +487,117 @@ test('a private report keeps the kind of each missing run, from the closed set o
   assert.equal(runs[3].words, 3, 'a run whose kind is not in the set keeps its numbers');
   assert.deepEqual(kept.measurements.note, {}, 'a kind outside the set is dropped wherever it appears');
   assert.deepEqual(leaks(JSON.stringify(kept)), []);
+});
+
+/**
+ * A stand-in `vsift <video>` (ADR 0037): it writes the three outputs beside the
+ * video it is given and answers with their hashes, as the binary does.
+ * `changes` screen changes, frames for at most 180 of them; `spoil` changes one
+ * thing so a check can see it.
+ */
+function watchStandIn({ videoSha256, changes, listed = changes, spoil = null }) {
+  const calls = [];
+  const hash = (bytes) => require('node:crypto').createHash('sha256').update(bytes).digest('hex');
+  const run = (step, args, { root }) => {
+    calls.push({ step, args, root });
+    const video = args[0];
+    const folder = path.dirname(video);
+    const stem = path.basename(video, path.extname(video));
+    const transcript = path.join(folder, `${stem}.txt`);
+    const subtitles = path.join(folder, `${stem}.srt`);
+    const frames = path.join(folder, `${stem}-vsift`);
+    const list = path.join(frames, 'screen-changes.txt');
+    fs.mkdirSync(frames);
+    const header = `${path.basename(video)}: transcript by VSift 0.3.0, 2026-10-28 09:00 UTC (local speech recognition).\n\nVideo SHA-256    ${spoil === 'header' ? 'f'.repeat(64) : videoSha256}\n\n[00:00:01] Hello.\n`;
+    fs.writeFileSync(transcript, header);
+    fs.writeFileSync(subtitles, '1\n00:00:01,000 --> 00:00:02,000\nHello.\n\n');
+    const written = [];
+    const count = Math.min(listed, campaign.WATCH_MAX_FRAMES) - (spoil === 'frames' ? 1 : 0);
+    for (let index = 0; index < count; index += 1) {
+      const file = path.join(frames, `00-00-${String(index % 60).padStart(2, '0')}.${String(index).padStart(3, '0')}.png`);
+      const bytes = Buffer.from(`frame ${index}`);
+      fs.writeFileSync(file, bytes);
+      written.push({ time_us: index * SECOND, candidate_id: `vcd_${index}`, evidence_id: `evd_${index}`, path: file, sha256: hash(bytes) });
+    }
+    if (spoil === 'frame bytes' && written.length > 0) fs.writeFileSync(written[0].path, 'replaced');
+    const reasons = ['first frame', 'settled after motion', 'visual change'];
+    const lines = Array.from({ length: listed }, (_, index) => {
+      const frame = written[index];
+      return `00:00:${String(index % 60).padStart(2, '0')}    ${reasons[Math.min(index, 2)].padEnd(20)}  ${frame ? path.basename(frame.path) : '(not written)'}  vcd_${index}  ${frame ? frame.sha256 : '-'}`;
+    });
+    fs.writeFileSync(list, `Video SHA-256    ${videoSha256}\n\n${lines.join('\n')}\n`);
+    if (spoil === 'partial') fs.writeFileSync(path.join(folder, `.${stem}.txt.1234.vsift-partial`), '');
+    const output = (file) => ({ path: file, name: path.basename(file), sha256: hash(fs.readFileSync(file)) });
+    return {
+      step,
+      exit: 0,
+      seconds: 42,
+      json: {
+        command: 'watch',
+        status: 'complete',
+        error: null,
+        data: {
+          source_id: `src_sha256_${videoSha256}`, session_id: 'ses_1', session_closed: spoil !== 'session', job_id: 'job_1', duration_us: 120 * SECOND,
+          transcript_revision_id: 'trv_1', visual_index_revision_id: 'vix_1', outcome: 'complete', not_transcribed: [],
+          screen_changes_beyond_bound: false, names_shortened: false,
+          outputs: { transcript: output(transcript), subtitles: output(subtitles), folder: { path: frames, name: path.basename(frames), sha256: null }, screen_changes: output(list) },
+          changes_found: changes, changes_listed: listed, frames: written,
+        },
+      },
+    };
+  };
+  return { run, calls };
+}
+
+const WATCHED_ITEM = { id: 'RM10', status: 'approved', title: 'A screen recording', attribution: 'public domain', file_name: 'talk.mp4', sha256: 'a'.repeat(64) };
+
+function watchedSource(t) {
+  const folder = scratch(t);
+  const media = path.join(folder, 'media');
+  fs.mkdirSync(media);
+  const file = path.join(media, 'talk.mp4');
+  fs.writeFileSync(file, 'not really a video');
+  const item = path.join(folder, 'RM10');
+  fs.mkdirSync(item);
+  return { file, item };
+}
+
+test('vsift <video> runs the bare form on a copy, and its outputs, header, frames and hashes are checked (ADR 0037)', (t) => {
+  const { file, item } = watchedSource(t);
+  const { run, calls } = watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 576, listed: 200 });
+  const watched = campaign.watchItem(WATCHED_ITEM, file, run, { folder: item });
+  assert.deepEqual(watched.check, { passed: true, findings: [] });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, [path.join(item, 'watch', 'talk.mp4')], 'the bare form, on the copy, by its absolute path');
+  assert.equal(calls[0].root, path.join(item, 'watch-root'), 'a session root of its own');
+  assert.ok(fs.existsSync(file), 'the item itself is never touched');
+  assert.equal(watched.measurements.changes_found, 576);
+  assert.equal(watched.measurements.changes_listed, 200, 'the settled screens');
+  assert.deepEqual(watched.measurements.listed_by_reason, { 'first frame': 1, 'settled after motion': 1, 'visual change': 198 });
+  assert.equal(watched.measurements.frames_written, 180, 'the bound of L-234');
+  assert.equal(watched.measurements.seconds, 42);
+  assert.ok(watched.measurements.frame_bytes > 0);
+  const summary = campaign.markdown({ binary: { version: 'vsift 0.0.0', sha256: '0'.repeat(64) }, started: 's', finished: 'f', platform: 'p',
+    setup: { passed: true, findings: [] }, items: [{ id: 'RM10', measurements: { watch: watched.measurements }, verdict: { passed: true, findings: [] } }] });
+  assert.match(summary, /\| RM10 \| 42 s \(0\.35\) \| complete \| 576 \| 200 \| first frame 1, settled after motion 1, visual change 198 \| 180 \(\d+\) \|/);
+});
+
+test('vsift <video> findings: a wrong header hash, a missing frame, changed frame bytes, a temporary file left, an open session, a failure', (t) => {
+  const cases = [
+    ['header', /does not name the item's pinned SHA-256/],
+    ['frames', /179 frames were written for 576 listed changes, not 180/],
+    ['partial', /1 temporary file\(s\) left beside the video/],
+    ['frame bytes', /1 frame\(s\) missing or differing from their SHA-256/],
+    ['session', /the session was not closed/],
+  ];
+  for (const [spoil, finding] of cases) {
+    const { file, item } = watchedSource(t);
+    const { run } = watchStandIn({ videoSha256: WATCHED_ITEM.sha256, changes: 576, spoil });
+    const watched = campaign.watchItem(WATCHED_ITEM, file, run, { folder: item });
+    assert.equal(watched.check.passed, false, spoil);
+    assert.ok(watched.check.findings.some((entry) => finding.test(entry)), `${spoil}: ${watched.check.findings.join('; ')}`);
+  }
+  const { file, item } = watchedSource(t);
+  const failed = campaign.watchItem(WATCHED_ITEM, file, (step) => ({ step, exit: 3, seconds: 1, json: { command: 'watch', status: 'failed', data: null, error: { code: 'MISSING_CAPABILITY' } } }), { folder: item });
+  assert.deepEqual(failed.check, { passed: false, findings: ['vsift <video>: MISSING_CAPABILITY on valid media (exit 3)'] });
 });

@@ -37,6 +37,7 @@ MAX_EXPANDED_BYTES = 4_000_000_000
 CHUNK_BYTES = 1024 * 1024
 
 PINS = {
+    "ubuntu-ffmpeg": ("tar", ubuntu.ARCHIVES["ffmpeg"]),
     "ubuntu-whisper": ("tar", ubuntu.ARCHIVES["whisper"]),
     "windows-whisper": ("zip", windows.ARCHIVES["whisper"]),
     "windows-ffmpeg": ("zip", windows.ARCHIVES["ffmpeg"]),

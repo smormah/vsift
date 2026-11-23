@@ -28,6 +28,9 @@ jobs:
       - name: Inventory the pinned whisper.cpp archive
         run: python tools/p06_archive_inventory.py ubuntu-whisper
 
+      - name: Inventory the pinned FFmpeg archive
+        run: python tools/p06_archive_inventory.py ubuntu-ffmpeg
+
       - name: Download pinned whisper.cpp archive for the Rust layout check
         env:
           VSIFT_P06_WHISPER_ARCHIVE: ${{ runner.temp }}/vsift-p06-whisper-v1.9.5.tar.gz

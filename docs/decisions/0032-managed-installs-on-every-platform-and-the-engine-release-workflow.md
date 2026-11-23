@@ -14,7 +14,7 @@
   setup half this ADR absorbs from draft #503); the OCR and speaker-label stories (ADR 0030 and ADR 0031, in
   review), which add their components on top of it.
 - Register: [L-214](../planning/known-limits.md#l-214) (this pull request); L-215 and L-216 with the catalogue and
-  the engine workflow.
+  the engine workflow; [L-224](../planning/known-limits.md#l-224) with the Windows and macOS catalogues (W5a).
 
 ## Context
 
@@ -28,7 +28,7 @@ may leave out.
 The publishers' own builds were read on 2026-10-21 from their release pages and APIs only (nothing was downloaded
 to a development machine):
 
-| System | FFmpeg (the build Linux pins, `n9.0.1-11-ge47273f4d9`) | whisper.cpp v1.9.5 |
+| System | FFmpeg (the build Linux pinned on 2026-10-21, `n9.0.1-11-ge47273f4d9`; see the note of 2026-11-06) | whisper.cpp v1.9.5 |
 | --- | --- | --- |
 | Ubuntu 24.04 x64 | BtbN `autobuild-2026-08-31-13-27`, linux64 LGPL `.tar.xz` (pinned) | `b5454/whisper-bin-ubuntu-x64.tar.gz` (pinned) |
 | Windows x64 | the same release's `win64-lgpl-9.0.zip`, 147,007,942 bytes, the publisher's digest and checksum file agreeing; already reviewed (`p06-windows-artifact-candidate.md`) | `b5454/whisper-bin-x64.zip`, 8,928,640 bytes, attested upstream; built with MSVC and, most likely, the dynamic C runtime and OpenMP |
@@ -101,7 +101,7 @@ like any other, through the reviewed GitHub release route.
 - **whisper.cpp's command-line build for macOS arm64**, from tag v1.9.5 (`d1be6fde11ac`): static, Metal embedded,
   OpenMP off, no SDL. Upstream's licence is MIT; the archive carries it.
 - **An LGPL static FFmpeg for macOS arm64 (D1, the maintainer's decision of 2026-10-21)**, from FFmpeg commit
-  `e47273f4d9227152dcbf543cebaf9e2430ddbcc4`, the commit the Linux and Windows pins are built from, configured
+  `e47273f4d9227152dcbf543cebaf9e2430ddbcc4` (**moved on 2026-11-06 to `7adfbe40dcde598f93a6963d2f7b22cd75202ccc`; see the note of that date**), the commit the Linux and Windows pins were built from, configured
   without `--enable-gpl`, `--enable-version3` or `--enable-nonfree`. VSift then distributes an LGPL binary, so the
   release carries the licence text and the exact corresponding source (the source archive of that commit and the
   build recipe) beside the binary, for as long as the binary is published. **This supersedes ADR 0014's
@@ -167,6 +167,14 @@ and Deno 2.9.7 pins on Ubuntu (catalogue revision `ubuntu-24.04-x86_64-2026-10-2
 39535463204). Reused from #503: the plan and install shapes, the core-then-optional transaction, the pins and their
 hosted review; replaced: its one-entry zip reader (by the general one) and its online-video-only members (by the
 group-generic `optional_groups` and `optional_components`).
+
+## Implementation note, 2026-11-01 (the online links group, #409's setup half)
+
+`setup check`'s `optional_components` entries gain `source` (`managed`, or `user_managed` for a yt-dlp or JavaScript
+runtime the user registered with `setup configure yt-dlp|js-runtime`, ADR 0028 section 4.6) and, for a user-managed
+file, `sha256`; the entry gains `unused_components` when a registered runtime has no registered yt-dlp to run with.
+The group's `unavailable` sentence names the registration for Windows and macOS. The lifecycle commands were checked
+on the two components, and a hosted install with `--include online_links` was added to `P13 managed smoke`.
 
 ## Implementation note, 2026-10-21 (slice 2: the engine release workflow)
 
@@ -268,3 +276,222 @@ On 2026-10-22 the maintainer accepted Windows FFmpeg as a managed pin (decision 
 review rule as the Ubuntu pin ([ADR 0023](0023-r0-distribution-managed-installation-and-handoff-check.md), note of
 2026-10-04). The branch was rebased onto `main` at `b4172359` (slices 1 and 2 merged) for the merge, keeping only
 slice 3's own commits; only the records conflicted, and nothing in the design changed.
+
+*Note, 2026-10-27 ([ADR 0036](0036-the-setup-door.md), section 4, its second pull request):* the core of the
+transaction is now two independent parts, video and speech, like the optional groups here. Their downloads run side
+by side, "the first failure stops the transaction" holds within a part, and speech's verified download is kept when
+video does not install. Optional components keep this record's rule: installed after a complete core, each a part of
+its own.
+
+## Implementation note, 2026-11-06 (W5a: the macOS FFmpeg moves to `n9.0.2-39` before its first publish)
+
+Decision D1 named FFmpeg commit `e47273f4d9` (`n9.0.1-11`), the commit the Linux and Windows pins were built from on
+2026-10-21. The `0.2.4` hot fix ([#571](https://github.com/smormah/vsift/pull/571), [#573](https://github.com/smormah/vsift/pull/573);
+[#272](https://github.com/smormah/vsift/issues/272) is the open tracking issue) moved Ubuntu and Windows to BtbN's
+`autobuild-2026-10-31-12-59`, FFmpeg `n9.0.2-39-g7adfbe40dc`. The planner ruled on 2026-11-06 that a macOS build must not ship one FFmpeg
+release behind them, and the macOS engine had published nothing, so the recipe moved before any tag: `ffmpeg-macos` is built from
+`7adfbe40dcde598f93a6963d2f7b22cd75202ccc` (a strict descendant of the earlier commit, 112 commits later on `release/9.0`, read with
+`gh api` on 2026-11-06), its engine version is `9.0.2.39-r1` (tag `ffmpeg-macos-v9.0.2.39-r1`), and its reviewed banner is
+`n9.0.2-39-g7adfbe40dc-vsift-r1`. Nothing else in decision D1 changes: the configuration, the licence and the corresponding-source
+duty stand. [L-227](../planning/known-limits.md#l-227) and [L-216](../planning/known-limits.md#l-216) record what the newer commit does
+and does not fix.
+
+## Implementation note, 2026-11-09 (H1: the FFmpeg builds repository moved to a new owner)
+
+On 2026-11-07 the repository the Ubuntu and Windows FFmpeg pins come from, `BtbN/FFmpeg-Builds`, was transferred to a new
+organisation, `FFmpeg-Builds/FFmpeg-Builds`. The old release addresses now answer `301` to the new owner's `github.com`
+address, which then answers `302` to `release-assets.githubusercontent.com`. `reviewed_redirect` allows only that last
+host, so VSift refuses the extra `github.com` hop (`download redirect_policy`), and the managed FFmpeg install failed on
+`main` (Nightly 42439681932, 8 November). The refusal is the design working: a pin is a URL, a size and a SHA-256, and a
+repository that moves must be read by a person before VSift follows it.
+
+*Evidence that it is the same publisher and the same bytes* (read with `gh api` on 2026-11-08 and 2026-11-09, nothing
+downloaded to a development machine):
+
+- `repos/BtbN/FFmpeg-Builds` resolves to `FFmpeg-Builds/FFmpeg-Builds`, with repository id 292087234 and creation date
+  2020-09-01 unchanged, and the `302`'s asset path carries the same id: a transfer, not a new repository.
+- The organisation was created on 2026-11-07 at 17:36 UTC and lists no public members; the three commits made after the
+  transfer (7 November) are authored by `BtbN`. This is consistent with the same maintainer moving their own repository
+  into an organisation. It is not proof: the membership is not public.
+- Release `autobuild-2026-10-31-12-59` under the new owner lists the Linux and Windows archives with the pinned sizes
+  (136,027,168 and 168,715,328 bytes) and the pinned SHA-256 digests; the build-scripts commit `5031c6f1` that the
+  catalogue's source link names resolves under the new owner. The release of 2026-08-31 that `0.2.3` and earlier pin,
+  and that the Codex container and the Windows tryout sheet use, likewise lists its pinned sizes and digests.
+- Hosted runs of the branch installed both `autobuild-2026-10-31-12-59` archives from the new address through the
+  catalogue, which refuses any size or SHA-256 that differs from the pin: `Guide` run 42540792882 (Ubuntu) and
+  `P13 managed smoke` run 42540599893 (Ubuntu and Windows). Only the two scenarios that install with an older
+  *published* binary stay red, for the cause above (H1b changes their set-up).
+- The published `0.2.4` Linux binary, run on a hosted runner (run 42540769420), plans FFmpeg from the old address and
+  ends `setup install` with `download_failed` (`redirect_policy`). The maintainer decided on 2026-11-09 that there is
+  no `0.2.5`; the fix ships with `0.3.0`, and [`install.md`](../operations/install.md) section 5.1 gives the
+  workaround for `0.2.x` that run 42610842957 tried.
+
+*What changed:* the two `FFmpeg` source addresses and the two source-code links in the catalogue name
+`FFmpeg-Builds/FFmpeg-Builds`; the publisher's display name is "FFmpeg-Builds (BtbN)"; the catalogue revisions are
+`ubuntu-24.04-x86_64-2026-11-09-r6` and `windows-x86_64-2026-11-09-r3`. The pinned release tag, file names, sizes,
+SHA-256 digests, archive bounds and file inventories are **unchanged**. The test
+`every_github_release_url_names_the_repository_of_its_publisher_record` keeps the URLs and the publisher record from
+drifting apart again. **`reviewed_redirect` is not widened**, and its tests are unchanged. The earlier planning records
+(`p06-*`, the P14 scan readings) keep their `BtbN/FFmpeg-Builds` links as written: GitHub redirects them, and they
+describe what was read at the time. See [L-254](../planning/known-limits.md#l-254).
+
+## Implementation note, 2026-11-20 (W5a: the Windows and macOS catalogues, slice 3's second part)
+
+The three engines of decision D were published from 18 to 20 November 2026, each built twice and compared, attested,
+and approved by the maintainer at the `release` environment, none marked latest: `whisper-cli-windows-v1.9.5-r1`
+(publish run 44299218614), `whisper-cli-macos-v1.9.5-r1` (44303732626) and `ffmpeg-macos-v9.0.2.39-r1`
+(44380924394, with its corresponding source). Their pins were copied from each release's `.inventory.json`, read with
+`gh` as data on 2026-11-20 (the inventories' own SHA-256s agree with the release records); no archive was downloaded
+to a development machine.
+
+- **Windows x86-64, revision `windows-x86_64-2026-11-20-r4`:** whisper.cpp joins the catalogue as VSift's build
+  (decision D2), between FFmpeg and the model, so every core component is offered and the model is planned beside
+  the managed whisper.cpp. P07's speech clips ran on the published build before the pin (the workflow's
+  `vsift_whisper_windows_tag` input fetches the archive and its inventory from the release and refuses any
+  disagreement): run 44733161663 on 093802c3 passed on both legs, the Windows leg on the published archive, whose `whisper-cli.exe` it read as 2,147,328 bytes with the pinned SHA-256.
+- **macOS arm64, revision `macos-arm64-2026-11-20-r1`:** VSift's FFmpeg and whisper.cpp and the same model.
+  `compatibility_policy()` was shared by every target; the macOS catalogue now carries its own policy, which differs
+  only in the expected banners (`ffmpeg version n9.0.2-39-g7adfbe40dc-vsift-r1` and the `ffprobe` one). Only the
+  managed smoke checks the banner, against the catalogue being installed, so bring-your-own verification keeps the
+  shared policy on every host.
+- **Metal.** The macOS whisper.cpp is built with Metal, but VSift has always run whisper.cpp with `-ng`
+  (`whisper_cli.rs`, decoding profile `r0-v1`), so recognition is on the CPU on every Mac and the build needs no
+  GPU. The hosted macOS jobs of `P13 managed smoke` record whether the runner has a Metal device and must pass
+  either way. In run 44739937555 the `macos-15` runner reported no display adapter and no Metal support, and the
+  smoke, install and transcription all passed: the build starts and recognises without a GPU.
+- **One table per engine archive.** Every engine archive has the same shape (a gzip tar with one root folder named
+  by its stem, regular files only), so each is one `EngineRelease` table copied from its inventory, turned into a
+  catalogue action by `engine_artifact`. The OCR runner (W5b) is one more table and an optional group; nothing in
+  the catalogue's shape has to change for it.
+- **Reviewed whisper builds.** `REVIEWED_BUILDS` in `whisper_build.rs` names the two VSift builds beside upstream's,
+  so `setup check` reports them as the reviewed v1.9.5 build, by their exact bytes only.
+- **Publisher record.** The actions' publisher is `VSift engine release`; their `source_code_url` is the release
+  page, which holds the build information (upstream commit, recipe digest, runner image) and, for FFmpeg, the
+  source.
+- **Proof (section F):** `P13 managed smoke` gains macOS jobs beside the Windows ones; on all three systems the
+  install checkpoint now also transcribes F05's speech variant with the managed tools alone. Run 44739937555 on
+  `bfbc5ab5`: the smoke and the install passed on Ubuntu, Windows and macOS, and each transcript heard "success
+  banner" and "submit" (Windows install 21.4 s, transcription 6.4 s; macOS 30.7 s and 5.1 s). Its one failure, the
+  Ubuntu install E2E stage's killed-download check, is a race in that test since the video and speech parts
+  download at once (ADR 0036, #538): a kill can find one stage per started download, up to three, and the check
+  now allows that. [L-215](../planning/known-limits.md#l-215) and [L-216](../planning/known-limits.md#l-216) are
+  amended and [L-224](../planning/known-limits.md#l-224) added.
+- **Left for later pull requests:** the OCR group (W5b, L-225 reserved) and the
+  speaker group (W5c: see its note of 2026-11-21).
+
+## Implementation note, 2026-11-20 (W5b: the `ocr` group)
+
+The fourth engine, `ocr-runner-v0.1.0-r1`, was published on 20 November 2026 with one archive per system
+(`ocr-runner-0.1.0-r1-linux-x64`, `-windows-x64` and `-macos-arm64`; publish run 44380930959, built twice and
+compared, attested, approved by the maintainer at the `release` environment, not marked latest). The group's pins
+were copied from each archive's `.inventory.json`, read with `gh` as data (the inventories' SHA-256s agree with the
+release's `SHA256SUMS` and with `engine-releases-2026-11.md`); no archive was downloaded to a development machine.
+
+- **One component, not three.** Section C expected OCR to need three components (the runner, ONNX Runtime and the
+  models), each with a publisher of its own. The release carries all of it: the runner, the ONNX Runtime library, the
+  two PP-OCRv5 models and every licence file are one archive of VSift's own engine release. So the `ocr` group is
+  **one managed component, `ocr_runner`**, and the catalogue pins VSift's release and nothing else. The ONNX
+  Runtime library comes from Microsoft's NuGet package since the GitHub archives went away
+  ([L-254](../planning/known-limits.md#l-254), H9, #609); that is the runner release's staging concern, already
+  done inside the archive, and no catalogue entry names NuGet. The group's tokens: `--include ocr` on
+  `setup plan` (and `on-screen-text` at the setup door, ADR 0036 section 7), the component `ocr_runner` in
+  `setup install`, `setup list`, `setup remove` and `setup rollback`, and the part `on_screen_text` in the
+  unattended door's result. All are additive (decision G).
+- **Flat in the store.** The component's nine files install flat in one folder, each under its archive file's own
+  name (`vsift-ocr-runner[.exe]`, the library, `ch_PP-OCRv5_det_mobile.onnx`, `latin_PP-OCRv5_rec_mobile.onnx`
+  and the five licence files). The runner already finds its library and models beside itself (ADR 0030,
+  `Layout::beside`, since #499). Only the runner is executable. A test holds the catalogue's names and digests to the
+  runner's own constants and to the release script, so the two cannot drift.
+- **All three targets, revisions bumped.** Ubuntu 24.04 x86-64 (`…-2026-11-20-r7`, after online links), Windows
+  x86-64 (`windows-x86_64-2026-11-20-r5`) and macOS arm64 (`macos-arm64-2026-11-20-r2`) each offer the group as
+  their `optional_artifacts`; no core entry changed. The group is 23.3, 18.4 and 24.7 MB (the archives'). A desktop
+  plan lists it as `not_included` with its add command, a worker plan only when asked, as for `online_links`.
+- **The smoke.** The compatibility smoke runs the staged runner's `describe` (it hashes the library and both models
+  beside it and names the build in one JSON line) and checks the line's reviewed prefix: protocol 1, runner
+  `0.1.0`, ONNX Runtime `1.31.0`. The runner names a library by its digest, so any other library prints
+  `sha256-…` and fails. The rest of the line is pinned by the archive's per-file digests. It does not read a frame:
+  that is the hosted install checkpoint's job.
+- **Use.** `vsift ocr` finds the runner in this order: `--runner`, the one registered with `setup configure
+  ocr-runner`, the managed one (verified and held like every managed tool), then `PATH`. The managed folder's files
+  are that version's own verified files, so the runner's per-read build proof (ADR 0030) stands as before.
+- **Windows needs the Visual C++ runtime for ONNX Runtime.** The import step of the `managed-install-ocr-windows` job (`P13 managed smoke` run 44832924154) read the installed `onnxruntime.dll`: it imports `MSVCP140.dll`, `MSVCP140_1.dll`, `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`. VSift installs none of them; a Windows PC without the Redistributable fails the group's `describe` smoke, and the door and `setup install` point to it. The runner (static C runtime) is unchanged ([L-225](../planning/known-limits.md#l-225)).
+- **Two groups, one test.** With `ocr` beside `online_links`, `two_optional_groups_fail_apart` shows that one group's
+  download or smoke failing leaves the other installed and the core active ([L-214](../planning/known-limits.md#l-214)).
+- **The door and `setup check`.** The readable table and the setup door gain an "On-screen text" row (`OCR runner`,
+  "reading text shown on screen (optional)"), the extras line names every extra that could be added, and the
+  unattended door's refusal of an extra it cannot add names the extra being refused. [L-225](../planning/known-limits.md#l-225)
+  records that `setup check` does not report a runner registered by hand and that the group was checked on hosted
+  runners only.
+- **Proof (section F):** `P13 managed smoke` with the group on all three systems (the install checkpoint, then
+  `vsift ocr` and `vsift ocr search` on a synthetic video through the managed runner, with an empty `PATH`), and
+  `P16 OCR runner` parity staying green. The coordinator dispatches the runs; they are recorded on the pull request
+  and in L-225's evidence, not here.
+- **Left for a later pull request:** the speaker group (W5c, below).
+
+## Implementation note, 2026-11-21 (W5c: the `speakers` group)
+
+The speaker group (ADR 0031) is the optional group `speakers`, offered on all three systems. Unlike the OCR group it
+is three components, because three publishers supply it and VSift builds none of it: sherpa-onnx's own release
+archive, pinned by URL, size and SHA-256 (GitHub's asset digest, the only one published, [L-217](../planning/known-limits.md#l-217)),
+the pyannote segmentation 3.0 model (one raw file at the Hugging Face revision `9403a690`, anchored by Hugging Face's
+LFS SHA-256) and the `NeMo` `TitaNet` small model (one raw file of sherpa-onnx's model release, anchored by that
+release's `checksum.txt`). Before pinning anything every upstream address and digest was re-read as metadata (`gh api`
+for the release assets and their digests, a HEAD request with a neutral client name for the two model files); all five
+resolved and agreed with the evaluation's pins (sizes, digests and the Hugging Face linked size), and nothing was
+downloaded to a development machine. The pins are the ones the evaluation's `flat-folder` job measured on hosted
+runners of all three systems (`P16 speakers evaluation` run 39621390749,
+[`speaker-labels-evaluation.md`](../planning/speaker-labels-evaluation.md) section 10.1).
+
+- **Three components, one group.** `speaker_diarizer` (sherpa-onnx's `sherpa-onnx-offline-speaker-diarization` with
+  ONNX Runtime's library beside it: two files out of the archive's 32 to 44, installed flat), `speaker_segmentation_model`
+  (`pyannote-segmentation-3.0.onnx`) and `speaker_embedding_model` (`nemo_en_titanet_small.onnx`). The group's tokens
+  are `--include speakers` on `setup plan` (and `speaker-labels` at the setup door), the three components in
+  `setup install`, `setup list`, `setup remove` and `setup rollback`, and the part `speaker_labels` in the unattended
+  door's result; all additive (decision G). Each component has its own version key, so a re-pin of one never moves
+  another; the group installs as one part (a failure of any component leaves none of the group active, the core and
+  the other groups untouched).
+- **The archive's bounds are pinned from the archive.** The reader takes a `.tar.bz2` (D5) and the catalogue
+  bounds it by the most entries it may hold, the sum of its declared sizes and a cap on its decompressed tar stream.
+  The first two were derived from the evaluation's inventory (every regular file, with the folders they sit in);
+  `tools/p13_archive_inventory.py` re-reads them from the archive itself on a hosted runner, first in each
+  `managed-install-speakers` job of `P13 managed smoke`, and fails if the pins do not describe the archive, so a wrong
+  bound shows there and not in a user's install.
+- **Two files, not the archive.** The tool needs ONNX Runtime beside it and nothing else (the evaluation ran it from
+  a flat folder with no library path variable on all three systems), so the catalogue selects exactly those two
+  files; every other member (more than forty other programs and libraries) is read for the inventory and discarded.
+  The tool is the only executable.
+- **Models are data and have no banner.** A catalogue's optional component had to have a reviewed banner; a model
+  prints nothing, so `ManagedComponent::is_model` exempts the three model components (the Whisper model among them)
+  from the rule, and only the tool has one.
+- **The smoke runs the tool.** sherpa-onnx's tool prints its usage on standard error, so it has no version line to
+  read. Its banner check is a run: the tool hears a three-second 16 kHz tone in the smoke directory with both staged
+  models, through the same closed argument list as a real run (`SherpaOnnxDiarizer::argv`), and must exit
+  successfully and print `OfflineSpeakerDiarizationConfig(` first, which proves the tool starts, finds its library and
+  parses both model paths. The tone is removed afterwards and the smoke directory must end empty. When a component
+  is staged without the others (a later re-pin of one), the others come from the selected installation
+  (`SmokeCompanions`), and without them the smoke refuses.
+- **Use.** `transcript speakers` takes each piece from its flag when given (`--diarizer`, `--segmentation-model`,
+  `--embedding-model`), otherwise from the managed install (verified and held like every managed tool, the tool's
+  executable retaining all three versions), and for the tool, finally, from the filtered `PATH`; the models are never
+  looked up there. A caller may mix: its own model with the managed tool.
+- **Three catalogue revisions.** Ubuntu `…-2026-11-21-r8`, Windows `windows-x86_64-2026-11-21-r6` and macOS
+  `macos-arm64-2026-11-21-r3`; no core entry changed.
+- **The notice.** `TitaNet`'s licences require attribution (decision 2 of ADR 0031). The plan's `speakers` entry
+  carries that notice as its `terms_notice`, for an agent to relay before the models are fetched; the summary
+  every offer shows (the setup door's included) names each licence and the attribution; and each artifact names its
+  licence and the page of its licence text. No licence **file** is installed beside the
+  tool or the models: the archives hold none, the group has no VSift release of its own to carry them, and the
+  store installs only the bytes of a pinned artifact ([L-226](../planning/known-limits.md#l-226)).
+- **Windows needs no Visual C++ runtime for this group.** The evaluation read the imports of the installed tool and
+  library on a hosted Windows runner: the tool imports `onnxruntime.dll` and `KERNEL32.dll`; sherpa-onnx's bundled
+  `onnxruntime.dll` imports `KERNEL32`, `ADVAPI32`, the `api-ms-win-core-path` set, `dbghelp`, `SETUPAPI` and `dxgi`, and
+  the archive is the `MT` build (static runtime). No Visual C++ import appears, unlike Microsoft's `onnxruntime.dll`
+  (L-225), so the door's advice after a failed smoke is not extended to this group. The `managed-install-speakers-windows`
+  job reads the imports of the installed copies again and records the verdict in its summary.
+- **Proof (section F):** `P13 managed smoke` with the group on all three systems: the archive's bounds re-read, a
+  real install, `setup check`, then `vsift transcript speakers` on F01's spoken sentence (opened with a supplied
+  transcript, so its revision is sealed) with an empty `PATH`, where the record must name the pinned tool and both
+  pinned models. The coordinator dispatches the runs; they are recorded on the pull request and in the register's
+  evidence, not here.
+- **Left for later:** the licence files (L-226), a person running the group on a Windows PC and a Mac (L-215), and
+  the archives' provenance gap (L-217).

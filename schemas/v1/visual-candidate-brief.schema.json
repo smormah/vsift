@@ -14,6 +14,10 @@
     "visual_hash"
   ],
   "properties": {
+    "clock_time": {
+      "description": "As in the full candidate: the clock times of its span and representative frame; absent when the session has no time anchor.",
+      "$ref": "time-anchor.schema.json#/$defs/clock_time"
+    },
     "candidate_id": {
       "description": "Derived from the session, source, stream, analysis profile, window and representative time, so it never changes when later windows are analysed.",
       "type": "string",

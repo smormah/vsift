@@ -15,6 +15,7 @@ capability as implemented. Work only on an active packet whose predecessors are 
 - VSift is local-first and provider-neutral.
 - Original audiovisual media is authoritative; generated metadata is evidence assistance only.
 - Desktop investigations are disposable by default. Persistence requires explicit user intent.
+  A person's explicit `vsift <video>` writes derived files they asked for; the session behind it stays disposable ([ADR 0037](docs/decisions/0037-vsift-video-the-action.md)).
 - Media engines and ML runtimes are adapters. Do not embed provider behaviour in the domain.
 - The stable CLI and its versioned JSON contracts are public APIs.
 

@@ -32,6 +32,9 @@ getrandom.workspace = true
 # Cross-checks every handoff verdict of the shared check (P13 PR 5).
 jsonschema.workspace = true
 process-wrap.workspace = true
+# Times written in free-text reports (the value measurement's grader); already
+# in the workspace and the lock file.
+regex.workspace = true
 serde.workspace = true
 # `raw_value` lets the harness rewrite one member of Claude Code's
 # `.claude.json` while copying every other member back byte for byte

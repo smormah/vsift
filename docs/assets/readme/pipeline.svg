@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="540" viewBox="0 0 1200 540" role="img" aria-labelledby="title desc" xml:space="preserve">
 <title id="title">How VSift works</title>
-<desc id="desc">Inside a dashed boundary labelled on your machine, VSift uploads nothing: a local video and an optional transcript go into vsift ingest, which opens a disposable session. The session yields speech (transcript and search) and screen changes (visual candidates), which lead to frames, crops and audio with hashes. Outside the boundary, you or your AI assistant read that cited evidence; what an assistant does next is up to it. A draft report goes back through vsift handoff check and comes out as a cited handoff.</desc>
+<desc id="desc">Inside a dashed boundary labelled on your machine, VSift uploads nothing: a local video and an optional transcript go into vsift ingest, which opens a disposable session. The session yields speech (transcript and search) and screen changes (visual candidates), which lead to frames, crops and audio with hashes. Outside the boundary, you or your AI assistant read that cited evidence; what an assistant does next is up to it. A draft report goes back through vsift handoff check, which refuses a claim with no evidence behind it, and comes out as a cited handoff.</desc>
 <style>
 .s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
 .t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
@@ -53,7 +53,7 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <rect x="900" y="412" width="270" height="74" rx="12" fill="#13233a" stroke="#2dd4bf" stroke-opacity="0.8" stroke-width="1.5"/>
 <circle cx="920" cy="436" r="4.5" fill="#2dd4bf"/>
 <text x="932" y="441" font-size="15" class="s t b" text-anchor="start" >Cited handoff</text>
-<text x="916" y="463" font-size="12.5" class="s mu" text-anchor="start" >every statement points at an id,</text>
+<text x="916" y="463" font-size="12.5" class="s mu" text-anchor="start" >each claim in its block cites an id,</text>
 <text x="916" y="481" font-size="12.5" class="s mu" text-anchor="start" >a time and the original frame</text>
 <path d="M224 155 C243 155 243 186 260 186" fill="none" stroke="#9fb2c8" stroke-width="1.6" marker-end="url(#ah)"/>
 <path d="M224 253 C243 253 243 206 260 206" fill="none" stroke="#9fb2c8" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#ah)"/>
@@ -67,4 +67,6 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <text x="1047" y="330" font-size="12.5" class="s mu" text-anchor="start" >draft report</text>
 <path d="M636 449 H898" fill="none" stroke="#2dd4bf" stroke-width="1.6" marker-end="url(#aht)"/>
 <text x="770" y="440" font-size="12.5" class="s" text-anchor="middle" fill="#2dd4bf">passes</text>
+<text x="748" y="470" font-size="12.5" class="s" text-anchor="middle" fill="#e5535a">refused when a claim</text>
+<text x="748" y="486" font-size="12.5" class="s" text-anchor="middle" fill="#e5535a">has no evidence behind it</text>
 </svg>

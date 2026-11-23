@@ -223,3 +223,20 @@ test('materialising writes bytes, a sparse file, a link, a fifo-less folder and 
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('the protection-system and Video for Windows cases carry what they say', () => {
+  const cases = hostile.cases({ fixture: () => base });
+  const build = (id) => cases.find((entry) => entry.id === id).build();
+  const pssh = mp4.findAll(mp4.parse(build('mp4-pssh-200000')), ['moov', 'pssh']);
+  assert.equal(pssh.length, 200000);
+  assert.equal(pssh[0].payload.length, 24);
+  assert.equal(pssh[0].payload.readUInt32BE(20), 0, 'no data follows the system id');
+  for (const [id, fourcc] of [['mkv-fourcc-huffyuv', 'HFYU'], ['mkv-fourcc-g2m4', 'G2M4']]) {
+    const segment = readElements(readElements(build(id))[1].payload);
+    const tracks = readElements(segment.find((element) => element.id === '1654ae6b').payload);
+    const entry = readElements(tracks[0].payload);
+    assert.equal(entry.find((element) => element.id === '86').payload.toString('latin1'), 'V_MS/VFW/FOURCC');
+    assert.equal(entry.find((element) => element.id === '63a2').payload.toString('latin1', 16, 20), fourcc);
+    assert.equal(Buffer.compare(build(id), build(id)), 0, 'the frame bytes are seeded');
+  }
+});

@@ -933,3 +933,106 @@ fn validate_update(update: StoredUpdate) -> Option<ProgressUpdate> {
         media,
     })
 }
+
+/// Largest record of the names a `watch` run claimed.
+pub(super) const MAX_WATCH_CLAIM_BYTES: u64 = 16 * 1024;
+
+/// What the claim record calls itself.
+const WATCH_CLAIM_FORMAT: &str = "vsift.watch_claim";
+
+/// `watch-outputs.json` v1: the folder and the three names a `watch` run
+/// claimed, beside the `prepare` job it runs (ADR 0037 section 8, the
+/// planner's call 2 of 2026-10-29). Nothing else: a rerun compares it with
+/// its own names, and never reads the person's folder to decide. Read
+/// strictly; a record that fails any check is never a claim.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct StoredWatchClaim {
+    schema_version: u16,
+    format: String,
+    folder: String,
+    transcript: String,
+    subtitles: String,
+    screen_changes: String,
+}
+
+impl MetadataVersion for StoredWatchClaim {
+    fn schema_version(&self) -> u16 {
+        self.schema_version
+    }
+}
+
+/// Encodes the names a `watch` run claimed.
+///
+/// # Errors
+///
+/// [`SessionStorageError::IntegrityFailure`] when the outputs do not share
+/// one absolute folder or a path is not Unicode text, and
+/// [`SessionStorageError::Io`] if serialisation failed.
+pub(super) fn encode_watch_claim(
+    claimed: &vsift_application::ClaimedOutputs,
+) -> Result<Vec<u8>, SessionStorageError> {
+    let folder = claimed
+        .transcript
+        .parent()
+        .filter(|folder| folder.is_absolute())
+        .ok_or(SessionStorageError::IntegrityFailure)?;
+    let name = |path: &std::path::Path| {
+        (path.parent() == Some(folder))
+            .then(|| path.file_name().and_then(|name| name.to_str()))
+            .flatten()
+            .map(str::to_owned)
+            .ok_or(SessionStorageError::IntegrityFailure)
+    };
+    let stored = StoredWatchClaim {
+        schema_version: STORAGE_SCHEMA_VERSION,
+        format: WATCH_CLAIM_FORMAT.to_owned(),
+        folder: folder
+            .to_str()
+            .ok_or(SessionStorageError::IntegrityFailure)?
+            .to_owned(),
+        transcript: name(&claimed.transcript)?,
+        subtitles: name(&claimed.subtitles)?,
+        screen_changes: name(&claimed.folder)?,
+    };
+    serde_json::to_vec(&stored).map_err(|_| SessionStorageError::Io)
+}
+
+/// Decodes the names a `watch` run claimed.
+///
+/// # Errors
+///
+/// [`SessionStorageError::UnsupportedVersion`] for a newer record and
+/// [`SessionStorageError::IntegrityFailure`] for anything else that is not a
+/// valid record: an unknown format, a folder that is not absolute, or a name
+/// that is not one plain component.
+pub(super) fn decode_watch_claim(
+    bytes: &[u8],
+) -> Result<vsift_application::ClaimedOutputs, SessionStorageError> {
+    let stored: StoredWatchClaim = parse_versioned_json(bytes)?;
+    let folder = std::path::PathBuf::from(&stored.folder);
+    let plain = |name: &str| {
+        let mut components = std::path::Path::new(name).components();
+        matches!(
+            (components.next(), components.next()),
+            (Some(std::path::Component::Normal(_)), None)
+        )
+    };
+    if stored.format != WATCH_CLAIM_FORMAT
+        || !folder.is_absolute()
+        || ![
+            &stored.transcript,
+            &stored.subtitles,
+            &stored.screen_changes,
+        ]
+        .into_iter()
+        .all(|name| plain(name))
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    Ok(vsift_application::ClaimedOutputs {
+        transcript: folder.join(&stored.transcript),
+        subtitles: folder.join(&stored.subtitles),
+        folder: folder.join(&stored.screen_changes),
+    })
+}

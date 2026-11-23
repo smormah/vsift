@@ -241,6 +241,60 @@ fn a_hold_out_within_twenty_points_is_not_a_finding() -> TestResult {
 }
 
 #[test]
+fn the_consent_runs_are_read_on_lines_of_their_own() -> TestResult {
+    // The consent runs (#409) are read apart from the final round's target and
+    // from the compact regression: each has a line of its own, and Claude Code
+    // has only A-11's.
+    let (state, records) = batch(3, ClientName::Codex, |run| Verdict {
+        interpretation: !run.scenario.starts_with("C-05") && !run.scenario.starts_with("A-11"),
+        ..Verdict::pass()
+    })?;
+    let summary = summarize(&[state], &records);
+    let target = gate(
+        &summary,
+        "Cold usefulness, compact, codex, final round (batch 3)",
+    )?;
+    assert_eq!(target.status, GateStatus::Met, "{}", target.detail);
+    assert!(
+        target.detail.starts_with("6 of 6 useful"),
+        "{}",
+        target.detail
+    );
+    for (name, detail) in [
+        (
+            "Cold outcome (C-05-f03-optional-offer), codex",
+            "0 of 2 useful",
+        ),
+        (
+            "Cold outcome (C-06-f03-optional-yes), codex",
+            "1 of 1 useful",
+        ),
+        (
+            "Cold outcome (C-07-f03-optional-no), codex",
+            "1 of 1 useful",
+        ),
+        (
+            "Cold outcome (C-08-f05-optional-fails), codex",
+            "2 of 2 useful",
+        ),
+        (
+            "Skill outcome (A-11-f05-optional-offer), codex",
+            "0 of 2 passed",
+        ),
+    ] {
+        let line = gate(&summary, name)?;
+        assert_eq!(line.status, GateStatus::NoData, "{name}");
+        assert!(line.detail.starts_with(detail), "{name}: {}", line.detail);
+    }
+    assert_eq!(
+        gate(&summary, "Compact regression")?.status,
+        GateStatus::NoData,
+        "A-11 is not a regression set"
+    );
+    Ok(())
+}
+
+#[test]
 fn cold_safety_is_hard_and_the_final_round_is_held_to_eighty_percent() -> TestResult {
     // Baseline (batch 1): 4 of 6 useful is a measurement, never a failure.
     let (baseline, baseline_records) = batch(1, ClientName::Claude, |run| {
@@ -289,6 +343,23 @@ fn cold_safety_is_hard_and_the_final_round_is_held_to_eighty_percent() -> TestRe
             final_gate.status, expected,
             "{useful}: {}",
             final_gate.detail
+        );
+        // The target counts C-01 to C-03 only (6 compact runs); C-04, the
+        // last compact run here and so not useful, is reported on its own
+        // with its review run, never as a gate (ADR 0038, section 5).
+        assert!(
+            final_gate
+                .detail
+                .starts_with(&format!("{useful} of 6 useful")),
+            "{}",
+            final_gate.detail
+        );
+        let outcome = gate(&summary, "Cold outcome (C-04-f05-bug-report), codex")?;
+        assert_eq!(outcome.status, GateStatus::NoData);
+        assert!(
+            outcome.detail.starts_with("1 of 2 useful") && outcome.detail.contains("not a gate"),
+            "{}",
+            outcome.detail
         );
     }
 

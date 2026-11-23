@@ -1,0 +1,10 @@
+# Codex presentation metadata for the VSift skill. It adds no tools, permissions or
+# dependencies: the skill only runs the locally installed vsift command, which the
+# user's Codex sandbox and approval settings govern as for any other command.
+interface:
+  display_name: "VSift video investigation"
+  short_description: "Investigate a local video with the vsift CLI and write a cited handoff"
+  default_prompt: "Use the VSift skill to investigate this local video and write a grounded handoff."
+
+policy:
+  allow_implicit_invocation: true

@@ -13,6 +13,13 @@
 //! (contention, a generation another command moved) is tried again after the
 //! next chunk, and anything else stops the run publishing without stopping
 //! the run, whose revision then appears at its seal as before.
+//!
+//! A part is committed under the run's own permit
+//! ([`super::CommitAdmission::UnderPermit`]), which the gate holds between
+//! chunks: it takes no unit of the root's capacity beside the run's
+//! reservation, so a run that holds the whole capacity still publishes, and a
+//! watched run's parts leave its free unit to the frames (Fable review C-2 and
+//! C-3).
 
 use std::{num::NonZeroU32, sync::Mutex, time::Duration};
 
@@ -21,7 +28,7 @@ use vsift_domain::{
     TranscriptRevision,
 };
 
-use super::{JobKeyError, RetranscriptionRun, RetryTimer, RevisionStore};
+use super::{CommitAdmission, JobKeyError, RetranscriptionRun, RetryTimer, RevisionStore};
 use crate::{
     AsrRevisionRequest, RevisionSplice, RunObserver, RunSoFar, SessionStorageError, Stopwatch,
     TranscriptBuildError, build_open_asr_revision, build_stopped_asr_revision,
@@ -124,9 +131,12 @@ struct State {
 }
 
 /// Publishes a run's settled part after its chunks (ADR 0033).
-pub(super) struct Publisher<'a, S> {
+pub(super) struct Publisher<'a, S: RevisionStore> {
     run: &'a RetranscriptionRun<'a>,
     store: &'a S,
+    /// The run's permit as its gate holds it: `None` only while a queued run
+    /// has given it back, and then a part takes a unit as any write does.
+    permit: &'a Mutex<Option<S::Permit>>,
     publication: Publication,
     stopwatch: &'a dyn Stopwatch,
     epoch: u32,
@@ -140,6 +150,7 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
     pub(super) fn new(
         run: &'a RetranscriptionRun<'a>,
         store: &'a S,
+        permit: &'a Mutex<Option<S::Permit>>,
         publication: Publication,
         stopwatch: &'a dyn Stopwatch,
         epoch: u32,
@@ -171,6 +182,7 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
         Self {
             run,
             store,
+            permit,
             publication,
             stopwatch,
             epoch,
@@ -287,7 +299,14 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
         }
         let operation = part_operation_id(&self.run.spec.job_id, self.epoch, self.attempt, part)
             .map_err(|_| PublishingStopped::Failed)?;
-        match self.store.publish_part(
+        // The permit stays locked for the commit; the gate locks it only at
+        // the next chunk boundary, on this same task, after the commit.
+        let run_permit = self.permit.lock().ok();
+        let admission = match run_permit.as_deref() {
+            Some(Some(permit)) => CommitAdmission::UnderPermit(permit),
+            Some(None) | None => CommitAdmission::Ordinary,
+        };
+        let published = self.store.publish_part(
             session,
             &operation,
             head.generation,
@@ -296,7 +315,10 @@ impl<'a, S: RevisionStore> Publisher<'a, S> {
             part,
             count,
             self.run.now,
-        ) {
+            admission,
+        );
+        drop(run_permit);
+        match published {
             Ok(_) => {
                 state.published = Some((open, part));
                 state.last_at = Some(now);

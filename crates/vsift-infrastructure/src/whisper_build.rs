@@ -16,20 +16,26 @@ use crate::TrustedExecutable;
 
 /// Largest executable the build identity will hash.
 ///
-/// The reviewed builds are under 1 MiB; a generous bound still keeps a hostile
-/// or mistaken selection (a disk image renamed `whisper-cli`) from turning a
-/// diagnostic into an unbounded read.
+/// The reviewed builds are at most about 8 MiB (`VSift`'s static macOS build,
+/// Metal shaders embedded); a generous bound still keeps a hostile or mistaken
+/// selection (a disk image renamed `whisper-cli`) from turning a diagnostic
+/// into an unbounded read.
 pub const MAX_WHISPER_EXECUTABLE_BYTES: u64 = 64 * 1024 * 1024;
 const HASH_CHUNK_BYTES: usize = 64 * 1024;
 
 /// The whisper.cpp v1.9.5 CLI builds reviewed for the current pin.
 ///
-/// Both come from upstream's build release `b5454` of the v1.9.5 commit.
-/// Windows: `Release/whisper-cli.exe` from the official x64 CPU archive
-/// (`docs/planning/p06-windows-artifact-candidate.md`). Ubuntu: `whisper-cli`
-/// from the reviewed Ubuntu 24.04 x86-64 catalogue
-/// (`docs/planning/p06-ubuntu-artifact-candidate.md`).
-const REVIEWED_BUILDS: [(u64, &str); 2] = [
+/// The first two come from upstream's build release `b5454` of the v1.9.5
+/// commit. Windows: `Release/whisper-cli.exe` from the official x64 CPU
+/// archive (`docs/planning/p06-windows-artifact-candidate.md`), which a user
+/// may still run as their own. Ubuntu: `whisper-cli` from the reviewed Ubuntu
+/// 24.04 x86-64 catalogue (`docs/planning/p06-ubuntu-artifact-candidate.md`).
+///
+/// The last two are `VSift`'s own builds of the same commit, from the engine
+/// releases `whisper-cli-windows-v1.9.5-r1` and `whisper-cli-macos-v1.9.5-r1`
+/// (ADR 0032), each pinned from its release's `.inventory.json`: the managed
+/// whisper.cpp of the Windows and macOS catalogues.
+const REVIEWED_BUILDS: [(u64, &str); 4] = [
     (
         479_744,
         "331dba46d6427105d2b802cdbc7eae916ea1c5abf9b0d3b5cfe460d8db8e4366",
@@ -37,6 +43,14 @@ const REVIEWED_BUILDS: [(u64, &str); 2] = [
     (
         976_312,
         "110a858e128d1fbc5a75899b42a1de8a7a4c10856bfe45dad1adc278f6459d14",
+    ),
+    (
+        2_147_328,
+        "5e69216878a5f0ea533e067146d3bbd85183b0eb6198ab40dd89d57dc55454ec",
+    ),
+    (
+        8_023_944,
+        "39abe0df7b80c16e20b6ea722fcb32500730e004c90fb7458c49ac92dc164601",
     ),
 ];
 
@@ -79,6 +93,13 @@ pub struct WhisperBuildIdentity {
 }
 
 impl WhisperBuildIdentity {
+    /// An identity from a pinned size and digest, for the catalogue's tests:
+    /// production identities come only from hashing an executable.
+    #[cfg(test)]
+    pub(crate) const fn for_tests(bytes: u64, sha256: [u8; 32]) -> Self {
+        Self { bytes, sha256 }
+    }
+
     /// Executable size in bytes.
     #[must_use]
     pub const fn bytes(self) -> u64 {
@@ -255,7 +276,8 @@ mod tests {
     }
 
     /// The re-pin's builds are the current reviewed ones, told apart from the
-    /// earlier pin even where the Ubuntu executable kept its size.
+    /// earlier pin even where the Ubuntu executable kept its size; `VSift`'s
+    /// own Windows and macOS builds (ADR 0032) are reviewed v1.9.5 builds too.
     #[test]
     fn the_v1_9_5_builds_are_the_current_reviewed_ones() -> Result<(), Box<dyn std::error::Error>> {
         for (bytes, sha256) in [
@@ -266,6 +288,14 @@ mod tests {
             (
                 976_312,
                 "110a858e128d1fbc5a75899b42a1de8a7a4c10856bfe45dad1adc278f6459d14",
+            ),
+            (
+                2_147_328,
+                "5e69216878a5f0ea533e067146d3bbd85183b0eb6198ab40dd89d57dc55454ec",
+            ),
+            (
+                8_023_944,
+                "39abe0df7b80c16e20b6ea722fcb32500730e004c90fb7458c49ac92dc164601",
             ),
         ] {
             let identity = WhisperBuildIdentity {

@@ -14,12 +14,13 @@
 //! analysed.
 
 use vsift_domain::{
-    CursorError, CursorToken, MAX_SCREEN_TEXT_LINES, PageLimit, QueryDigest, ScreenTextIndex,
-    ScreenTextIndexId, ScreenTextOccurrence, SearchMatch, SearchPosition, SearchQuery, SessionId,
-    TimeRange, screen_text_occurrences,
+    CursorError, CursorToken, MAX_SCREEN_TEXT_LINES, MediaTime, PageLimit, QueryDigest, ReadTarget,
+    ScreenTextCoverage, ScreenTextIndex, ScreenTextIndexId, ScreenTextOccurrence, SearchMatch,
+    SearchPosition, SearchQuery, SessionId, TimeRange, VisualCandidateId, VisualIndex, plan_reads,
+    screen_text_occurrences,
 };
 
-use crate::transcript::sha256_hex;
+use crate::{clip_to_source, missing_windows, transcript::sha256_hex};
 
 /// Separates the tier from the ordinal in a cursor's last-item key.
 const KEY_SEPARATOR: char = '-';
@@ -126,6 +127,46 @@ pub fn screen_text_query_digest(
         material.push_str(term);
     }
     QueryDigest::parse(sha256_hex(material.as_bytes()))
+}
+
+/// How much of the plan of `range` (the whole video when `None`) `index` has
+/// read, and whether every visual window of it is analysed. Without a visual
+/// index nothing is planned and the candidates are not known.
+///
+/// `None` when the visual index states a video with no duration, which it
+/// refuses to hold, so a caller treats it as an invalid range.
+#[must_use]
+pub fn screen_text_plan_coverage(
+    visual: Option<&VisualIndex>,
+    index: &ScreenTextIndex,
+    range: Option<TimeRange>,
+) -> Option<(ScreenTextCoverage, bool)> {
+    let (plan, candidates_complete) = match visual {
+        Some(visual) => {
+            let whole = TimeRange::new(MediaTime::from_micros(0), visual.duration()).ok()?;
+            let searched =
+                range.map_or(Ok(whole), |range| clip_to_source(range, visual.duration()));
+            match searched {
+                Ok(searched) => {
+                    let candidates: Vec<(VisualCandidateId, MediaTime)> = visual
+                        .candidates_in(searched)
+                        .map(|candidate| (candidate.id().clone(), candidate.representative()))
+                        .collect();
+                    let plan = plan_reads(searched, &candidates, index.period_micros())
+                        .unwrap_or_default();
+                    let complete =
+                        missing_windows(Some(visual), visual.duration(), searched).is_empty();
+                    (plan, complete)
+                }
+                Err(_) => (Vec::<ReadTarget>::new(), true),
+            }
+        }
+        None => (Vec::new(), false),
+    };
+    Some((
+        ScreenTextCoverage::of(&plan, Some(index)),
+        candidates_complete,
+    ))
 }
 
 /// The cursor key of a rank position: `<tier>-<ordinal>`, for example `1-42`.

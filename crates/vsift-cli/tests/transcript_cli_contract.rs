@@ -499,6 +499,7 @@ async fn seed_f10_session(root: &OwnedRoot) -> Result<String, Box<dyn Error>> {
         &OperationId::parse("op_2222222222222222")?,
         StorageGeneration::INITIAL,
         now,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(session_id.as_str().to_owned())

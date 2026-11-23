@@ -15,16 +15,23 @@
 //! passes the agent's draft report to `vsift handoff check` in exactly two
 //! literal forms, each for its own shell: a quoted heredoc for a POSIX shell
 //! (`sh`, `bash`, including Git Bash on Windows) and a single-quoted
-//! here-string piped in for PowerShell. A script that is exactly the form of
-//! the dialect it is read in, at any wrapper depth, is that one `vsift
-//! handoff check --json` command; its body is the draft, data that is never
-//! read as commands. The form of the other shell is not recognised: in bash
+//! here-string piped in for PowerShell. Each has one more shape, with
+//! `--session <id>` before `--json` (0.3.0, ADR 0029 decision 28), for a report
+//! that states a clock time; `<id>` is a literal session id and nothing else.
+//! The same two forms may also run `vsift handoff finish <id>` (0.3.0, M5b),
+//! with nothing, `--close`, or `--retain <folder>` (one literal word, plain
+//! or single-quoted) and optionally `--include-source`, before `--json`.
+//! A script that is exactly the form of the dialect it is read in, at any
+//! wrapper depth, is that one `vsift handoff check` command; its body is the
+//! draft, data that is never read as commands. The form of the other shell is
+//! not recognised: in bash
 //! `@'...'@` is `@` and a single-quoted string that the draft's first
 //! apostrophe ends, so the rest of the draft would run as commands; in
 //! PowerShell `<<` is a parse error. Anything else, however close (an
 //! unquoted heredoc, a double-quoted here-string, another command piped in,
-//! text after the closing line, the other shell's form), is read as ordinary
-//! shell text and stays strict.
+//! `--session` after `--json`, a variable as the id, text after the closing
+//! line, the other shell's form), is read as ordinary shell text and stays
+//! strict.
 
 use serde::{Deserialize, Serialize};
 
@@ -96,38 +103,150 @@ pub fn program_name(path: &str) -> String {
 
 const MAX_NESTING: usize = 4;
 
-/// The first line of the POSIX draft form.
-const HEREDOC_OPENING: &str = "vsift handoff check --json <<'VSIFT_HANDOFF'";
+/// What follows the command on the first line of the POSIX draft form.
+const HEREDOC_OPENING_SUFFIX: &str = " <<'VSIFT_HANDOFF'";
 /// The line that ends the POSIX draft form.
 const HEREDOC_CLOSING: &str = "VSIFT_HANDOFF";
 /// The first line of the PowerShell draft form.
 const HERE_STRING_OPENING: &str = "@'";
-/// The line that ends the PowerShell draft form.
-const HERE_STRING_CLOSING: &str = "'@ | vsift handoff check --json";
-/// The command both draft forms run.
-const HANDOFF_CHECK_ARGV: [&str; 4] = ["vsift", "handoff", "check", "--json"];
+/// What comes before the command on the line that ends the PowerShell form.
+const HERE_STRING_CLOSING_PREFIX: &str = "'@ | ";
+/// The command the draft forms run.
+const HANDOFF_CHECK: &str = "vsift handoff check --json";
+/// What comes before the session id in the command with `--session`.
+const HANDOFF_CHECK_SESSION_PREFIX: &str = "vsift handoff check --session ";
+/// What comes after the session id in the command with `--session`.
+const HANDOFF_CHECK_SESSION_SUFFIX: &str = " --json";
 
-/// Whether `text` is exactly the draft form of `vsift handoff check` that
-/// belongs to `dialect`: the quoted heredoc in a POSIX shell, the
-/// single-quoted here-string in PowerShell, neither in `cmd`. The heredoc
-/// ends at the first line that is exactly its delimiter, and the here-string
-/// at the first line that starts with `'@`, as the shells end them; only
-/// white space may follow.
+/// Whether `text` is a literal session id, by the handoff schema's pattern
+/// `^ses_[a-z0-9]{16,64}$`.
+fn is_session_id(text: &str) -> bool {
+    text.strip_prefix("ses_").is_some_and(|rest| {
+        (16..=64).contains(&rest.len())
+            && rest
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    })
+}
+
+/// The arguments of `command` when it is exactly one of the commands a
+/// draft form may run. It is compared as text, so a quote, a variable or a
+/// substitution is simply not one of them.
+fn handoff_check_argv(command: &str) -> Option<Vec<String>> {
+    if command == HANDOFF_CHECK {
+        return Some(command.split(' ').map(str::to_owned).collect());
+    }
+    if let Some(argv) = handoff_finish_argv(command) {
+        return Some(argv);
+    }
+    command
+        .strip_prefix(HANDOFF_CHECK_SESSION_PREFIX)?
+        .strip_suffix(HANDOFF_CHECK_SESSION_SUFFIX)
+        .filter(|session| is_session_id(session))?;
+    Some(command.split(' ').map(str::to_owned).collect())
+}
+
+/// What comes before the session id in a `handoff finish` draft form.
+const HANDOFF_FINISH_PREFIX: &str = "vsift handoff finish ";
+
+/// The arguments of `command` when it is exactly a `handoff finish` a draft
+/// form may run (0.3.0, M5b): `vsift handoff finish <id>`, then nothing,
+/// `--close`, or `--retain <folder>` with or without `--include-source`,
+/// then `--json`, each word separated by one space. `<id>` is a literal
+/// session id; `<folder>` is one plain word ([`is_plain_folder`]) or one
+/// single-quoted word without a quote, line break or control character,
+/// which neither shell expands. Anything else is not the form.
+fn handoff_finish_argv(command: &str) -> Option<Vec<String>> {
+    let rest = command
+        .strip_prefix(HANDOFF_FINISH_PREFIX)?
+        .strip_suffix(HANDOFF_CHECK_SESSION_SUFFIX)?;
+    let (session, options) = match rest.split_once(' ') {
+        Some((session, options)) if !options.is_empty() => (session, options),
+        Some(_) => return None,
+        None => (rest, ""),
+    };
+    if !is_session_id(session) {
+        return None;
+    }
+    let mut argv: Vec<String> = ["vsift", "handoff", "finish", session]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    match options {
+        "" => {}
+        "--close" => argv.push("--close".to_owned()),
+        _ => {
+            let folder_text = options.strip_prefix("--retain ")?;
+            let (folder_text, include_source) = folder_text
+                .strip_suffix(" --include-source")
+                .map_or((folder_text, false), |folder| (folder, true));
+            argv.push("--retain".to_owned());
+            argv.push(literal_folder(folder_text)?);
+            if include_source {
+                argv.push("--include-source".to_owned());
+            }
+        }
+    }
+    argv.push("--json".to_owned());
+    Some(argv)
+}
+
+/// The folder a `--retain` word names, when it is one literal word.
+fn literal_folder(word: &str) -> Option<String> {
+    if let Some(quoted) = word
+        .strip_prefix('\'')
+        .and_then(|rest| rest.strip_suffix('\''))
+    {
+        let literal = !quoted.is_empty()
+            && !quoted
+                .chars()
+                .any(|character| character == '\'' || character.is_control());
+        return literal.then(|| quoted.to_owned());
+    }
+    is_plain_folder(word).then(|| word.to_owned())
+}
+
+/// Whether `word` is a folder name no shell changes: ASCII letters, digits,
+/// `.`, `_`, `-` and `/`, not starting with `-`, and never `..` as a name.
+fn is_plain_folder(word: &str) -> bool {
+    !word.is_empty()
+        && !word.starts_with('-')
+        && word
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/'))
+        && !word.split('/').any(|name| name == "..")
+}
+
+/// The arguments of the draft form `text` is, in `dialect`: the quoted heredoc
+/// in a POSIX shell, the single-quoted here-string in PowerShell, neither in
+/// `cmd`. The heredoc ends at the first line that is exactly its delimiter,
+/// and the here-string at the first line that starts with `'@`, as the shells
+/// end them; only white space may follow.
+fn handoff_check_form(text: &str, dialect: Dialect) -> Option<Vec<String>> {
+    let lines: Vec<&str> = text.trim().lines().collect();
+    let (first, body) = lines.split_first()?;
+    let (end, command) = match dialect {
+        Dialect::Posix => (
+            body.iter().position(|line| *line == HEREDOC_CLOSING)?,
+            first.strip_suffix(HEREDOC_OPENING_SUFFIX)?,
+        ),
+        Dialect::PowerShell if *first == HERE_STRING_OPENING => {
+            let end = body.iter().position(|line| line.starts_with("'@"))?;
+            (end, body[end].strip_prefix(HERE_STRING_CLOSING_PREFIX)?)
+        }
+        Dialect::PowerShell | Dialect::Cmd => return None,
+    };
+    if !body[end + 1..].iter().all(|line| line.trim().is_empty()) {
+        return None;
+    }
+    handoff_check_argv(command)
+}
+
+/// Whether `text` is exactly a draft form of `vsift handoff check` that
+/// belongs to `dialect`.
 #[must_use]
 pub fn is_handoff_check_form(text: &str, dialect: Dialect) -> bool {
-    let lines: Vec<&str> = text.trim().lines().collect();
-    let Some((first, body)) = lines.split_first() else {
-        return false;
-    };
-    let end = match (*first, dialect) {
-        (HEREDOC_OPENING, Dialect::Posix) => body.iter().position(|line| *line == HEREDOC_CLOSING),
-        (HERE_STRING_OPENING, Dialect::PowerShell) => body
-            .iter()
-            .position(|line| line.starts_with("'@"))
-            .filter(|&index| body[index] == HERE_STRING_CLOSING),
-        _ => None,
-    };
-    end.is_some_and(|end| body[end + 1..].iter().all(|line| line.trim().is_empty()))
+    handoff_check_form(text, dialect).is_some()
 }
 
 /// Analyses a command text in `dialect`, unwrapping shell wrappers.
@@ -143,9 +262,9 @@ fn parse_into(text: &str, dialect: Dialect, depth: usize, result: &mut ParsedScr
         result.opaque = Some("shell wrappers nested too deeply".to_owned());
         return;
     }
-    if is_handoff_check_form(text, dialect) {
+    if let Some(argv) = handoff_check_form(text, dialect) {
         result.commands.push(SimpleCommand {
-            argv: HANDOFF_CHECK_ARGV.map(str::to_owned).to_vec(),
+            argv,
             writes_file: false,
             piped_from_previous: false,
         });
@@ -579,6 +698,179 @@ mod tests {
             assert!(!parsed.expands_variables, "{script}");
             assert_eq!(argvs(&parsed), expected, "{script}");
         }
+    }
+
+    const CHECKED_SESSION: &str = "ses_0123456789abcdef0123456789abcdef";
+
+    /// 0.3.0, M5b: the same two forms may run `handoff finish` with one
+    /// literal write; it is one command, and its body is still data.
+    #[test]
+    fn each_draft_form_may_run_handoff_finish() {
+        let id = CHECKED_SESSION;
+        for (options, expected) in [
+            ("", vec![]),
+            ("--close ", vec!["--close"]),
+            (
+                "--retain evidence-bundle-phase-1 ",
+                vec!["--retain", "evidence-bundle-phase-1"],
+            ),
+            (
+                "--retain 'kept evidence' --include-source ",
+                vec!["--retain", "kept evidence", "--include-source"],
+            ),
+        ] {
+            let command = format!("vsift handoff finish {id} {options}--json");
+            let mut argv = vec!["vsift", "handoff", "finish", id];
+            argv.extend(expected);
+            argv.push("--json");
+            for (script, dialect) in [
+                (heredoc().replace(HANDOFF_CHECK, &command), Dialect::Posix),
+                (
+                    here_string().replace(HANDOFF_CHECK, &command),
+                    Dialect::PowerShell,
+                ),
+            ] {
+                let parsed = parse_script(&script, dialect);
+                assert_eq!(parsed.opaque, None, "{script}");
+                assert!(!parsed.expands_variables, "{script}");
+                assert_eq!(argvs(&parsed), vec![argv.clone()], "{script}");
+            }
+        }
+    }
+
+    /// Anything wider than the finish form is ordinary shell text: the draft
+    /// is then read as commands, and the grader stays strict.
+    #[test]
+    fn a_finish_form_with_anything_more_is_not_the_form() {
+        let id = CHECKED_SESSION;
+        for command in [
+            format!("vsift handoff finish {id} --json --close"),
+            format!("vsift handoff finish {id} --close --retain b --json"),
+            format!("vsift handoff finish {id} --include-source --json"),
+            format!("vsift handoff finish {id} --retain --json"),
+            format!("vsift handoff finish {id} --retain $DIR --json"),
+            format!("vsift handoff finish {id} --retain \"b\" --json"),
+            format!("vsift handoff finish {id} --retain 'it'\"'\"'s' --json"),
+            format!("vsift handoff finish {id} --retain ../outside --json"),
+            format!("vsift handoff finish {id} --retain -b --json"),
+            format!("vsift handoff finish {id} --retain b c --json"),
+            format!("vsift handoff finish {id} --retain=b --json"),
+            format!("vsift handoff finish {id} --file x --json"),
+            format!("vsift handoff finish {id}  --json"),
+            "vsift handoff finish $SESSION --json".to_owned(),
+            "vsift handoff finish ses_short --json".to_owned(),
+            format!("vsift handoff finish {id}"),
+        ] {
+            let posix = heredoc().replace(HANDOFF_CHECK, &command);
+            let powershell = here_string().replace(HANDOFF_CHECK, &command);
+            assert!(!is_handoff_check_form(&posix, Dialect::Posix), "{command}");
+            assert!(
+                !is_handoff_check_form(&powershell, Dialect::PowerShell),
+                "{command}"
+            );
+        }
+        let command = format!("vsift handoff finish {id} --close --json");
+        assert!(!is_handoff_check_form(
+            &heredoc().replace(HANDOFF_CHECK, &command),
+            Dialect::PowerShell
+        ));
+        assert!(!is_handoff_check_form(
+            &here_string().replace(HANDOFF_CHECK, &command),
+            Dialect::Posix
+        ));
+    }
+
+    /// ADR 0029 decision 28: each form has one more shape, for a report that
+    /// states a clock time. It is still one command, and its body still data.
+    #[test]
+    fn each_draft_form_takes_a_literal_session_before_json() {
+        let command = format!("vsift handoff check --session {CHECKED_SESSION} --json");
+        let posix = heredoc().replace(HANDOFF_CHECK, &command);
+        let powershell = here_string().replace(HANDOFF_CHECK, &command);
+        let expected = vec![vec![
+            "vsift",
+            "handoff",
+            "check",
+            "--session",
+            CHECKED_SESSION,
+            "--json",
+        ]];
+        for (script, dialect) in [
+            (posix.clone(), Dialect::Posix),
+            (posix.replace('\n', "\r\n"), Dialect::Posix),
+            (powershell.clone(), Dialect::PowerShell),
+            (
+                format!("bash -lc '{}'", posix.replace('\'', "'\"'\"'")),
+                Dialect::Posix,
+            ),
+            (
+                format!(
+                    "pwsh -NoProfile -Command '{}'",
+                    powershell.replace('\'', "'\"'\"'")
+                ),
+                Dialect::Posix,
+            ),
+        ] {
+            let parsed = parse_script(&script, dialect);
+            assert_eq!(parsed.opaque, None, "{script}");
+            assert!(!parsed.expands_variables, "{script}");
+            assert_eq!(argvs(&parsed), expected, "{script}");
+        }
+        assert!(!is_handoff_check_form(&posix, Dialect::PowerShell));
+        assert!(!is_handoff_check_form(&posix, Dialect::Cmd));
+        assert!(!is_handoff_check_form(&powershell, Dialect::Posix));
+        assert!(!is_handoff_check_form(&powershell, Dialect::Cmd));
+    }
+
+    #[test]
+    fn only_a_literal_session_before_json_is_the_form() {
+        let id = CHECKED_SESSION;
+        for command in [
+            format!("vsift handoff check --json --session {id}"),
+            "vsift handoff check --session $SESSION --json".to_owned(),
+            "vsift handoff check --session ${SESSION} --json".to_owned(),
+            "vsift handoff check --session $(cat id) --json".to_owned(),
+            "vsift handoff check --session `cat id` --json".to_owned(),
+            format!("vsift handoff check --session '{id}' --json"),
+            format!("vsift handoff check --session \"{id}\" --json"),
+            format!("vsift handoff check --session={id} --json"),
+            "vsift handoff check --session ses_short --json".to_owned(),
+            format!("vsift handoff check --session {} --json", id.to_uppercase()),
+            format!(
+                "vsift handoff check --session ses_{} --json",
+                "a".repeat(65)
+            ),
+            "vsift handoff check --session ses_0123456789abcde- --json".to_owned(),
+            format!("vsift handoff check --session {id} --session {id} --json"),
+            format!("vsift handoff check --session {id} --json --file x"),
+            format!("vsift handoff check --session {id}"),
+            format!("vsift  handoff check --session {id} --json"),
+        ] {
+            let posix = heredoc().replace(HANDOFF_CHECK, &command);
+            let powershell = here_string().replace(HANDOFF_CHECK, &command);
+            assert!(!is_handoff_check_form(&posix, Dialect::Posix), "{command}");
+            assert!(
+                !is_handoff_check_form(&powershell, Dialect::PowerShell),
+                "{command}"
+            );
+        }
+        let command = format!("vsift handoff check --session {id} --json");
+        for variant in [
+            heredoc()
+                .replace(HANDOFF_CHECK, &command)
+                .replace("<<'VSIFT_HANDOFF'", "<<VSIFT_HANDOFF"),
+            format!("{}\necho done", heredoc().replace(HANDOFF_CHECK, &command)),
+        ] {
+            assert!(
+                !is_handoff_check_form(&variant, Dialect::Posix),
+                "{variant}"
+            );
+        }
+        let trailing = format!(
+            "{} | Select-Object -Last 1",
+            here_string().replace(HANDOFF_CHECK, &command)
+        );
+        assert!(!is_handoff_check_form(&trailing, Dialect::PowerShell));
     }
 
     /// Anything wider is ordinary shell text: another command piped in, an

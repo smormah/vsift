@@ -1,0 +1,578 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/clocks-data.schema.json",
+  "title": "VSift clocks data v1",
+  "description": "The data member of a clocks result (0.3.0, ADR 0029, stage 2): the clocks found in the text ocr read. A time on a screen counts as a clock only if it moves with the video. Each clock is a source of its own, compared only with itself, so clock faces from different zones are never mixed, and no zone is ever guessed. offset is the clock's reading minus the video's own time, an interval whose width is its precision. Every claim comes with the frames that prove it. An observation is an inference and is never applied. An excursion offers two explanations and chooses neither: a misread, or another clock's turn in the same place. A gap changes no clock time until the user accepts it with --accept-gap, and a zone is confirmed only by the user, with --screen-zone. Absence is never a claim: no clock listed speaks only for the frames read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "state",
+    "rules_version",
+    "index",
+    "read_now",
+    "stopped",
+    "reads_pending",
+    "clocks",
+    "observations",
+    "conflicts",
+    "refused",
+    "time_anchor"
+  ],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "state": {
+      "description": "not_run until ocr has read the session; partial while ocr has planned frames unread or the search has reads left; complete otherwise.",
+      "enum": [
+        "not_run",
+        "partial",
+        "complete"
+      ]
+    },
+    "rules_version": {
+      "description": "The version of the rules that derived this result.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "index": {
+      "description": "The session's newest screen-text index; null before ocr has read it.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object"
+        }
+      ]
+    },
+    "read_now": {
+      "description": "Frames this call read.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "stopped": {
+      "enum": [
+        "frame_limit",
+        "deadline_exceeded",
+        "cancelled",
+        "engine_failed",
+        "media_failed",
+        "index_full",
+        null
+      ]
+    },
+    "reads_pending": {
+      "description": "How many reads the search around rollovers would make next.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "clocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/clock"
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/conflict"
+      }
+    },
+    "refused": {
+      "description": "Lines that gave no clock, by why.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "too_long",
+        "several_times",
+        "low_score",
+        "stood_still",
+        "irregular",
+        "places_past_bound"
+      ],
+      "properties": {
+        "too_long": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "several_times": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low_score": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stood_still": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "irregular": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "places_past_bound": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "time_anchor": {
+      "description": "The session's anchors after the call; null when it has none.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "time-anchor.schema.json"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "read": {
+      "description": "An exact place on a frame: open it with frame get --at time_us.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time_us",
+        "pts",
+        "region"
+      ],
+      "properties": {
+        "time_us": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pts": {
+          "type": "integer"
+        },
+        "region": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "y": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clock_id",
+        "kind",
+        "format",
+        "unit",
+        "reads",
+        "first_us",
+        "last_us",
+        "offset",
+        "confirmed_utc_offset",
+        "rate",
+        "first",
+        "excursions",
+        "excursions_total",
+        "stopped_brackets",
+        "freezes",
+        "jumps"
+      ],
+      "properties": {
+        "clock_id": {
+          "description": "Null past the eight clocks a session names.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "time-anchor.schema.json#/$defs/clock_id"
+            }
+          ]
+        },
+        "kind": {
+          "description": "counter: an elapsed timer, which gives no anchor, no observation and no gap.",
+          "enum": [
+            "clock",
+            "counter"
+          ]
+        },
+        "format": {
+          "enum": [
+            "24_hour",
+            "12_hour",
+            "dated",
+            "dated_with_zone"
+          ]
+        },
+        "unit": {
+          "description": "What the face shows: a minute face's reading holds for 60 s.",
+          "enum": [
+            "minute",
+            "second"
+          ]
+        },
+        "reads": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first_us": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "last_us": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "offset": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "low_us",
+                "high_us",
+                "precision_us"
+              ],
+              "properties": {
+                "low_us": {
+                  "type": "integer"
+                },
+                "high_us": {
+                  "type": "integer"
+                },
+                "precision_us": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          ]
+        },
+        "confirmed_utc_offset": {
+          "description": "The zone the user confirmed; null when unknown.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[+-][0-9]{2}:[0-9]{2}$"
+        },
+        "rate": {
+          "description": "Over the clock's longest stretch without a jump; null for one run, which always fits. differs is true only where the video's rate is proved impossible.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "span_us",
+                "drift_us",
+                "differs"
+              ],
+              "properties": {
+                "span_us": {
+                  "type": "integer"
+                },
+                "drift_us": {
+                  "type": "integer"
+                },
+                "differs": {
+                  "type": "boolean"
+                }
+              }
+            }
+          ]
+        },
+        "first": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/read"
+            }
+          ]
+        },
+        "excursions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/excursion"
+          }
+        },
+        "excursions_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stopped_brackets": {
+          "description": "Rollovers whose search an excursion or a freeze ended, at the width they have. The search moves to the next rollover, so one misread costs one bracket, and this says which.",
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from_us",
+              "to_us",
+              "width_us"
+            ],
+            "properties": {
+              "from_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "to_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "width_us": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "freezes": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from_us",
+              "to_us",
+              "reads"
+            ],
+            "properties": {
+              "from_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "to_us": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reads": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "jumps": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/jump"
+          }
+        }
+      }
+    },
+    "excursion": {
+      "description": "Reads whose offset left the clock and returned to the same interval. They left the track, and nothing about them is a gap.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_us",
+        "to_us",
+        "reads",
+        "first",
+        "last",
+        "explanations"
+      ],
+      "properties": {
+        "from_us": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "to_us": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "first": {
+          "$ref": "#/$defs/read"
+        },
+        "last": {
+          "$ref": "#/$defs/read"
+        },
+        "explanations": {
+          "description": "Both are always offered; the cause is not known.",
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "misread"
+            },
+            {
+              "const": "another_clock"
+            }
+          ],
+          "items": false,
+          "minItems": 2
+        }
+      }
+    },
+    "jump": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "gap_id",
+        "before",
+        "after",
+        "jump_us",
+        "uncertainty_us"
+      ],
+      "properties": {
+        "kind": {
+          "description": "gap: time may be missing from the video, or the machine changed; it changes no clock time until accepted. backward: a stretch repeated or moved, or a clock set back.",
+          "enum": [
+            "gap",
+            "backward"
+          ]
+        },
+        "gap_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^g[1-9][0-9]?$"
+        },
+        "before": {
+          "$ref": "#/$defs/read"
+        },
+        "after": {
+          "$ref": "#/$defs/read"
+        },
+        "jump_us": {
+          "type": "integer"
+        },
+        "uncertainty_us": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "observation": {
+      "description": "How a clock of unknown zone compares with an anchor that names an instant. It is never applied to a clock time.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clock_id",
+        "anchor",
+        "inference",
+        "measured_us",
+        "uncertainty_us",
+        "fits"
+      ],
+      "properties": {
+        "clock_id": {
+          "$ref": "time-anchor.schema.json#/$defs/clock_id"
+        },
+        "anchor": {
+          "$ref": "time-anchor.schema.json#/$defs/source"
+        },
+        "inference": {
+          "const": true
+        },
+        "measured_us": {
+          "type": "integer"
+        },
+        "uncertainty_us": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fits": {
+          "description": "The UTC offsets it fits; empty when none, which usually means the anchor is not the recording's start. A clock with no date can fit two.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[+-][0-9]{2}:[0-9]{2}$"
+          }
+        }
+      }
+    },
+    "conflict": {
+      "description": "Something that disagrees. It is reported and never resolved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "clock_id",
+        "other_clock_id",
+        "at_us"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "instants_disagree",
+            "rates_differ",
+            "jump_not_shared",
+            "backward"
+          ]
+        },
+        "clock_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "other_clock_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "at_us": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

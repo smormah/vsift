@@ -3,26 +3,29 @@
 
 use std::{
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use vsift_application::{
-    ForegroundSessionPort, OpenSession, OpenSessionError, OpenSessionOutcome, OpenSessionRequest,
-    SessionStorageError, TranscriptImportRequest,
+    ForegroundSessionPort, NoSourceProbe, OpenSession, OpenSessionError, OpenSessionOutcome,
+    OpenSessionRequest, SessionSource, SessionStorageError, TranscriptImportRequest,
 };
 use vsift_domain::{
-    DurabilityRequirement, OperationId, SessionId, SessionLifetime, SessionPhase, SourceId,
-    StorageGeneration, TranscriptRevision, WorkspacePolicy,
+    ClockReading, DownloadLimits, DurabilityRequirement, OperationId, SessionId, SessionLifetime,
+    SessionPhase, SourceFetchReason, SourceId, SourceLink, SourceOrigin, StorageGeneration,
+    TimeAnchors, TranscriptRevision, WorkspacePolicy,
 };
 use vsift_infrastructure::{
     BundleSourcePolicy, BundleStatus, CleanOutcome, ContainedFile, ContainedSourceStore,
     FfprobeSourceDuration, FilesystemAdmissionPermit, FilesystemSessionStore, FreeSpaceCheck,
-    MAX_SOURCE_BYTES, SessionRootProvisioning, SessionStatus, SourceSnapshot,
+    MAX_SOURCE_BYTES, MediaProviderConformance, PageSourceStore, SessionRootProvisioning,
+    SessionStatus, SourceSnapshot,
 };
 
 use crate::{
     engine::{Engine, absolute_selection},
     error::{EngineError, SessionRootError},
+    pages::EnginePageTools,
     verification::Cancellation,
 };
 
@@ -56,12 +59,45 @@ pub struct IngestRequest {
     pub durability: DurabilityRequirement,
 }
 
+/// A request to open a video from a direct HTTPS link as a new disposable
+/// session (`ingest --url`, ADR 0028): the video is fetched once into the
+/// session, within `limits`, and everything after is the ordinary local
+/// pipeline, offline.
+#[derive(Clone, Debug)]
+pub struct LinkIngestRequest {
+    /// The link; it is never printed, logged or stored (only a digest of it
+    /// and the hosts it reached are recorded).
+    pub link: SourceLink,
+    /// The fetch's size and time bounds.
+    pub limits: DownloadLimits,
+    /// Optional supplied `SubRip` or `WebVTT` transcript to import with it.
+    pub transcript: Option<SuppliedTranscriptRequest>,
+    /// The recording's start as the caller states it (`ingest --recorded-at`),
+    /// the first rung of the time-anchor ladder (ADR 0029); the fetched
+    /// file's own recording-time tags follow it.
+    pub recorded_at: Option<ClockReading>,
+    /// Signal that stops the fetch within 200 ms while it waits for the
+    /// network (a chunk being written, and the final flush, finish first)
+    /// and the transcript's duration probe; a cancelled ingest opens no
+    /// session.
+    pub cancellation: Cancellation,
+    /// How the session publishes, as for [`IngestRequest::durability`].
+    pub durability: DurabilityRequirement,
+}
+
 /// The source an ingest copies: a path the caller selected, or a file a
 /// worker request named inside the operator's input root, already opened
-/// there following no link (P11, ADR 0021 section 9).
+/// there following no link (P11, ADR 0021 section 9), or a link to fetch.
 pub(crate) enum IngestSource {
     /// An absolute path, opened by the staging itself.
     Path(PathBuf),
+    /// A direct HTTPS link, fetched into the session (ADR 0028).
+    Link {
+        /// The link.
+        link: SourceLink,
+        /// The fetch's bounds.
+        limits: DownloadLimits,
+    },
     /// A file opened inside the input root, and the copy's admission when
     /// the caller already holds it.
     Contained {
@@ -95,6 +131,7 @@ pub(crate) struct PreparedIngest {
     pub(crate) cancellation: Cancellation,
     pub(crate) durability: DurabilityRequirement,
     pub(crate) session_id: Option<SessionId>,
+    pub(crate) recorded_at: Option<ClockReading>,
 }
 
 /// A supplied transcript file and the explicit offset that aligns it.
@@ -144,6 +181,8 @@ pub struct SessionSnapshot {
     artifact_count: usize,
     artifact_bytes: u64,
     observed_at_unix_seconds: u64,
+    time_anchors: TimeAnchors,
+    origin: Option<SourceOrigin>,
 }
 
 impl SessionSnapshot {
@@ -158,7 +197,24 @@ impl SessionSnapshot {
             artifact_count: status.artifact_count(),
             artifact_bytes: status.artifact_bytes(),
             observed_at_unix_seconds,
+            time_anchors: status.time_anchors().clone(),
+            origin: status.origin().cloned(),
         }
+    }
+
+    /// The clock-time anchors the session was opened with (ADR 0029), in
+    /// ladder order; empty when no clock time is known. Every timestamped
+    /// result of the session derives its clock times from these.
+    #[must_use]
+    pub const fn time_anchors(&self) -> &TimeAnchors {
+        &self.time_anchors
+    }
+
+    /// Where the session's source was fetched from (ADR 0028); `None` for a
+    /// local file's copy.
+    #[must_use]
+    pub const fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
     }
 
     /// Session identity.
@@ -474,8 +530,12 @@ impl Engine {
     /// Copies and hashes one local source into a new disposable session,
     /// optionally importing a supplied transcript with it.
     ///
-    /// The session root is provisioned on first use. Without a transcript no
-    /// provider runs. With one, everything that can fail without touching the
+    /// The session root is provisioned on first use. Without a transcript the
+    /// only provider run is one `FFprobe` call that reads the container's
+    /// recording-time tags, and only with media tools a recorded verification
+    /// pass already covers (time anchoring, ADR 0029; see
+    /// [`Self::ingest_recorded_at`]); it never fails the ingest. With one,
+    /// everything that can fail without touching the
     /// session root runs first (offset bounds, reading and parsing the sidecar,
     /// locating `FFmpeg` and `FFprobe`, and the automatic media-tool preflight,
     /// which verifies them once per tool identity); then the source is staged,
@@ -490,6 +550,29 @@ impl Engine {
     /// transcript or a failed verification never leaves an open session, and a
     /// failed verification happens before the session root is touched.
     pub async fn ingest(&self, request: IngestRequest) -> Result<IngestOutcome, EngineError> {
+        self.ingest_recorded_at(request, None).await
+    }
+
+    /// [`Self::ingest`] with the recording's start as the caller states it
+    /// (`ingest --recorded-at`): the first rung of the time-anchor ladder
+    /// (ADR 0029), above the container's recording-time tags.
+    ///
+    /// Whatever `recorded_at` is, a plain ingest also reads the container's
+    /// two recording-time tags with one `FFprobe` run when the media tools
+    /// are set up and a recorded verification pass covers them; it never
+    /// starts a verification and never fails for want of tools. The anchors
+    /// are stored with the session and reported by
+    /// [`OpenSessionOutcome::time_anchors`] and
+    /// [`SessionSnapshot::time_anchors`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::ingest`].
+    pub async fn ingest_recorded_at(
+        &self,
+        request: IngestRequest,
+        recorded_at: Option<ClockReading>,
+    ) -> Result<IngestOutcome, EngineError> {
         let source = absolute_selection(&request.source)?;
         self.ingest_prepared(PreparedIngest {
             source: IngestSource::Path(source),
@@ -497,12 +580,63 @@ impl Engine {
             cancellation: request.cancellation,
             durability: request.durability,
             session_id: None,
+            recorded_at,
+        })
+        .await
+    }
+
+    /// Fetches one video from a direct HTTPS link into a new disposable
+    /// session, then opens it exactly as [`Self::ingest`] opens a local file
+    /// (ADR 0028, #407).
+    ///
+    /// A link that answers with a web page goes to yt-dlp when one is set
+    /// up (ADR 0028 section 4.7), and is refused as `web_page` when none is.
+    ///
+    /// This is the only operation that uses the network for a video, and
+    /// only for the link the caller gave. HTTPS on port 443, no credentials,
+    /// at most three redirects, public addresses only (checked where the
+    /// connection is made), the bounds of `request.limits`, one complete
+    /// identity body whose first bytes are an MP4/MOV or Matroska/WebM file.
+    /// The body goes straight into the session's own source slot; a failure
+    /// leaves no file and no session. The outcome's
+    /// [`OpenSessionOutcome::origin`] records a digest of the link and the
+    /// hosts it reached, never the link.
+    ///
+    /// # Errors
+    ///
+    /// `SOURCE_FETCH_FAILED` ([`OpenSessionError::SourceFetch`]) with its
+    /// typed reason, including [`SourceFetchReason::StrictIsolation`] before
+    /// anything is fetched on a strict worker host; otherwise as
+    /// [`Self::ingest`].
+    pub async fn ingest_link(
+        &self,
+        request: LinkIngestRequest,
+    ) -> Result<IngestOutcome, EngineError> {
+        if self.config().host_isolation != crate::engine::HostIsolation::ProcessOnly {
+            return Err(EngineError::OpenSession(OpenSessionError::SourceFetch(
+                SourceFetchReason::StrictIsolation,
+            )));
+        }
+        self.ingest_prepared(PreparedIngest {
+            source: IngestSource::Link {
+                link: request.link,
+                limits: request.limits,
+            },
+            transcript: request.transcript.map(IngestTranscript::Path),
+            cancellation: request.cancellation,
+            durability: request.durability,
+            session_id: None,
+            recorded_at: request.recorded_at,
         })
         .await
     }
 
     /// [`Self::ingest`] of a resolved request: a worker request's step
     /// passes its contained source and its recorded session id here.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one auditable path from the request to the opened session"
+    )]
     pub(crate) async fn ingest_prepared(
         &self,
         request: PreparedIngest,
@@ -517,11 +651,7 @@ impl Engine {
             }) => Some(self.prepare_contained_transcript_import(file, offset_micros)?),
             None => None,
         };
-        // Only the transcript path runs FFprobe on the source, so only it
-        // needs verified tools; a plain ingest runs no provider.
-        if let Some((_, tools)) = &import {
-            self.ensure_media_tools_verified(tools).await?;
-        }
+        let clock_tools = self.ingest_tools(import.as_ref()).await?;
         let root = self.session_root_path()?;
         let store = self
             .open_session_store(&root, SessionRootProvisioning::CreateIfMissing)?
@@ -532,6 +662,8 @@ impl Engine {
                 std::fs::metadata(source).map_or(0, |metadata| metadata.len())
             }
             IngestSource::Contained { file, .. } => file.len(),
+            // A fetch checks the room itself once it knows the length.
+            IngestSource::Link { .. } => 0,
         };
         let free_space = free_space_reserve(&store, incoming)?;
         let now = self.now_unix_seconds()?;
@@ -539,49 +671,74 @@ impl Engine {
             Some(session_id) => session_id,
             None => self.new_session_id()?,
         };
-        let (source_path, contained) = match request.source {
-            IngestSource::Path(path) => (path, None),
+        let from_link = matches!(request.source, IngestSource::Link { .. });
+        let (source, contained) = match request.source {
+            IngestSource::Path(path) => (SessionSource::Local(path), None),
             // The contained adapter stages the opened file; the use case's
             // path is not read.
-            IngestSource::Contained { file, admission } => {
-                (PathBuf::new(), Some((file, admission)))
-            }
+            IngestSource::Contained { file, admission } => (
+                SessionSource::Local(PathBuf::new()),
+                Some((file, admission)),
+            ),
+            IngestSource::Link { link, limits } => (SessionSource::Link { link, limits }, None),
         };
         let open = OpenSessionRequest {
-            source: source_path,
+            source,
             session_id,
             initialize_operation_id: self.new_operation_id()?,
             stage_operation_id: self.new_operation_id()?,
             activate_operation_id: self.new_operation_id()?,
             durability,
             now_unix_seconds: now,
+            recorded_at: request.recorded_at,
         };
         let import = match import {
-            Some((import, tools)) => {
-                let probe_store = self
-                    .open_session_store(&root, SessionRootProvisioning::ExistingOnly)?
-                    .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-                let probe = FfprobeSourceDuration::new(
-                    tools,
-                    self.config().host_isolation.into_infrastructure(),
-                    probe_store,
-                    request.cancellation.0.clone(),
-                );
-                Some((import, probe))
-            }
+            Some((import, tools)) => Some((
+                import,
+                self.source_probe(&root, tools, &request.cancellation)?,
+            )),
             None => None,
         };
+        let clock_probe = clock_tools
+            .map(|tools| self.source_probe(&root, tools, &request.cancellation))
+            .transpose()?;
         let registered = (
             open.session_id.clone(),
             open.initialize_operation_id.clone(),
         );
         let opened = match contained {
-            None => open_session(store, open, import.as_ref(), &request.cancellation).await,
+            None if from_link => {
+                open_session(
+                    PageSourceStore::new(
+                        store,
+                        EnginePageTools {
+                            engine: self,
+                            cancellation: request.cancellation.0.clone(),
+                        },
+                    ),
+                    open,
+                    import.as_ref(),
+                    clock_probe.as_ref(),
+                    &request.cancellation,
+                )
+                .await
+            }
+            None => {
+                open_session(
+                    store,
+                    open,
+                    import.as_ref(),
+                    clock_probe.as_ref(),
+                    &request.cancellation,
+                )
+                .await
+            }
             Some((file, admission)) => {
                 open_session(
                     ContainedSourceStore::new(store, file, admission),
                     open,
                     import.as_ref(),
+                    clock_probe.as_ref(),
                     &request.cancellation,
                 )
                 .await
@@ -602,6 +759,46 @@ impl Engine {
             transcript,
             free_space,
         })
+    }
+
+    /// Verifies the tools an ingest with a transcript needs, and returns the
+    /// tools a plain ingest probes for the recording-time tags.
+    ///
+    /// The transcript path needs the probe, so it verifies the tools and
+    /// fails without them; it returns `None` because that probe also reads
+    /// the tags. A plain ingest probes only to read the recording-time tags
+    /// (ADR 0029), only with tools a recorded pass already verified, and
+    /// never fails for want of them.
+    async fn ingest_tools(
+        &self,
+        import: Option<&(TranscriptImportRequest, MediaProviderConformance)>,
+    ) -> Result<Option<MediaProviderConformance>, EngineError> {
+        match import {
+            Some((_, tools)) => {
+                self.ensure_media_tools_verified(tools).await?;
+                Ok(None)
+            }
+            None => Ok(self.media_tools_already_verified()),
+        }
+    }
+
+    /// The restricted `FFprobe` adapter over the session root at `root`, for
+    /// the ingest's one probe of its staged source.
+    fn source_probe(
+        &self,
+        root: &Path,
+        tools: MediaProviderConformance,
+        cancellation: &Cancellation,
+    ) -> Result<FfprobeSourceDuration, EngineError> {
+        let probe_store = self
+            .open_session_store(root, SessionRootProvisioning::ExistingOnly)?
+            .ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        Ok(FfprobeSourceDuration::new(
+            tools,
+            self.config().host_isolation.into_infrastructure(),
+            probe_store,
+            cancellation.0.clone(),
+        ))
     }
 
     /// Removes the registration, and the session folder it began, that one open
@@ -626,13 +823,20 @@ impl Engine {
     /// few tries: the root's lock is held for tens of milliseconds by every
     /// other opener (measured: five consecutive refusals were common in a batch
     /// of two requests at a time on Windows, and a fixed eight tries then gave up
-    /// on a slow runner). The wait is five seconds
-    /// ([`crate::EnginePorts::with_failed_open_removal_wait`]) and applies only to this
-    /// failure path, so a request that did not fail never waits for it, and the
-    /// engine is asynchronous, so no thread is blocked. If the removal still
-    /// fails, or the root cannot be reopened, the registration is left for
-    /// `session clean` exactly as before, and the caller keeps its original
-    /// failure: this never reports and never masks.
+    /// on a slow runner). The wait is five seconds of pauses between tries
+    /// ([`crate::EnginePorts::with_failed_open_removal_wait`]), not of the
+    /// clock, so a runner that holds the process up between two tries does not
+    /// use it up (#604). It applies only to this failure path, so a request that
+    /// did not fail never waits for it, and the engine is asynchronous, so no
+    /// thread is blocked.
+    ///
+    /// **A file held open in the folder is waited for too**: on Windows a
+    /// scanner, an indexer or a child process that holds a file without
+    /// sharing deletion refuses the rename (`AccessDenied`) or the deletion (a
+    /// sharing violation, which the store answers as `Busy`) until it lets go
+    /// (#604). If the removal still fails, or the root cannot be reopened, the
+    /// registration is left for `session clean` exactly as before, and the
+    /// caller keeps its original failure: this never reports and never masks.
     async fn abandon_failed_open(
         &self,
         root: &Path,
@@ -733,13 +937,17 @@ impl Engine {
     /// A job of the session that a process runs (a background runner, ADR
     /// 0033) is asked to cancel first, and the close waits up to
     /// [`SESSION_CLOSE_JOB_WAIT`] for every such job to stop, so the runner
-    /// seals what it published as stopped and ends. A runner that has not
-    /// stopped by then fails its next publication on the closed session and
-    /// ends there. With no job running, nothing waits.
+    /// seals what it published as stopped and ends. A runner that still holds
+    /// the session then (it keeps a shared hold on the session's lifetime for
+    /// as long as it lives, which the close needs exclusively) makes the close
+    /// answer `BUSY`: nothing is closed, and the same command closes the
+    /// session once the runner has ended (ADR 0033 section 5, note of
+    /// 2026-11-11; Fable review C-6). With no job running, nothing waits.
     ///
     /// # Errors
     ///
-    /// Fails when the session cannot be read or closed.
+    /// Fails when the session cannot be read or closed, and `BUSY` while a
+    /// runner still holds it.
     pub fn close_session(&self, session_id: &SessionId) -> Result<SessionSnapshot, EngineError> {
         self.stop_live_jobs(session_id);
         let (store, now) = self.existing_store()?;
@@ -935,13 +1143,22 @@ pub(crate) fn published_status(
 }
 
 /// Runs `attempt` again while it reports a refusal that goes away by itself,
-/// for at most `limit` (the first attempt always runs), pausing 5 ms and then
-/// twice as long after each, up to 100 ms; any other outcome, success included,
-/// ends it at once.
+/// until the pauses between tries add up to `limit` (the first attempt always
+/// runs), pausing 5 ms and then twice as long after each, up to 100 ms; any
+/// other outcome, success included, ends it at once.
 ///
 /// `Busy` is such a refusal everywhere. On Windows so is `AccessDenied`: a file
 /// that another handle (a scanner, a child process, a remover) still holds open
-/// refuses to be deleted until it lets go.
+/// refuses to be deleted until it lets go. (The store answers `Busy` for the
+/// sharing violations of the same case, #604.)
+///
+/// **The limit counts the pauses, not the clock** (#604). Measured on the
+/// clock, time the process spent anywhere else counted as waiting: a hosted
+/// Windows runner that held the process up for about 35 seconds between two
+/// tries used up the whole limit, and the next refusal, which the other opener
+/// was about to lift, ended the retry. Counting the pauses keeps the bound
+/// exact in tries instead: five seconds is 55 tries, each one a single bounded
+/// store call, so a removal that never succeeds still ends.
 async fn retry_while_transient<T, F>(
     limit: Duration,
     mut attempt: F,
@@ -949,12 +1166,13 @@ async fn retry_while_transient<T, F>(
 where
     F: FnMut() -> Result<T, SessionStorageError>,
 {
-    let started = Instant::now();
+    let mut waited = Duration::ZERO;
     let mut pause = Duration::from_millis(5);
     loop {
         match attempt() {
-            Err(error) if is_transient(error) && started.elapsed() < limit => {
+            Err(error) if is_transient(error) && waited < limit => {
                 tokio::time::sleep(pause).await;
+                waited += pause;
                 pause = (pause * 2).min(Duration::from_millis(100));
             }
             outcome => return outcome,
@@ -969,24 +1187,31 @@ const fn is_transient(error: SessionStorageError) -> bool {
 }
 
 /// Registers, stages and activates one session through `port`, importing
-/// the supplied transcript in the same generation when there is one.
+/// the supplied transcript in the same generation when there is one. A plain
+/// open reads the recording-time tags with `clock_probe` when there is one.
 async fn open_session<Port>(
     port: Port,
     open: OpenSessionRequest,
     import: Option<&(TranscriptImportRequest, FfprobeSourceDuration)>,
+    clock_probe: Option<&FfprobeSourceDuration>,
     cancellation: &Cancellation,
 ) -> Result<(OpenSessionOutcome, Option<TranscriptRevision>), EngineError>
 where
     Port: ForegroundSessionPort<Snapshot = SourceSnapshot>,
 {
     let use_case = OpenSession::new(port);
-    match import {
-        None => use_case
-            .execute(open, &cancellation.0)
+    match (import, clock_probe) {
+        (None, Some(probe)) => use_case
+            .execute(open, probe, &cancellation.0)
             .await
             .map(|session| (session, None))
             .map_err(EngineError::OpenSession),
-        Some((import, probe)) => use_case
+        (None, None) => use_case
+            .execute(open, &NoSourceProbe, &cancellation.0)
+            .await
+            .map(|session| (session, None))
+            .map_err(EngineError::OpenSession),
+        (Some((import, probe)), _) => use_case
             .execute_with_transcript(open, import, probe, &cancellation.0)
             .await
             .map(|(session, revision)| (session, Some(revision)))
@@ -1289,6 +1514,33 @@ mod tests {
         .await;
         assert_eq!(none, Err(SessionStorageError::Busy));
         assert_eq!(once.get(), 1);
+    }
+
+    /// #604: the limit counts the pauses between tries, not time the process
+    /// spent anywhere else. Twice a hosted Windows runner held the whole test
+    /// binary up for about 35 seconds; a removal that met a busy root before
+    /// such a stall and once more just after it found its five seconds gone
+    /// and gave up, though it had waited a few milliseconds, and the failed
+    /// open's registration stayed `initializing`. Here every try itself takes
+    /// longer than the whole limit, a stand-in for the stall: the root frees
+    /// up at the third try, and that try is still made.
+    #[tokio::test]
+    async fn time_spent_outside_the_pauses_does_not_use_up_the_limit() {
+        let calls = Cell::new(0_u32);
+
+        let outcome = retry_while_transient(Duration::from_millis(50), || {
+            calls.set(calls.get() + 1);
+            std::thread::sleep(Duration::from_millis(60));
+            if calls.get() < 3 {
+                Err(SessionStorageError::Busy)
+            } else {
+                Ok("removed")
+            }
+        })
+        .await;
+
+        assert_eq!(outcome, Ok("removed"));
+        assert_eq!(calls.get(), 3);
     }
 
     /// Any other failure, like success, is final at once: no retry of an

@@ -13,14 +13,15 @@ use std::{env, fs, io, path::PathBuf};
 
 use serde_json::Value;
 use vsift_application::{
-    AcceptedManagedArtifact, AcceptedManagedCatalogue, ComponentInstallFailure,
+    AcceptedManagedArtifact, AcceptedManagedCatalogue, CompatibilitySmokeCheck,
+    CompatibilitySmokeFailure, CompatibilitySmokeFailureReason, ComponentInstallFailure,
     ComponentInstallOutcome, ComponentInstallReport, DownloadFailureReason, InstallFailureReason,
     InstallStep, LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason,
     LocalAsrSetupStatus, ManagedInstallReport, ManagedPlanAvailability, ManagedPlanObservation,
     ManagedSetupPlan, OptionalCapability, OptionalComponent, OptionalComponentSet,
     ReviewedArchiveLimits, ReviewedArchiveSelection, ReviewedBanner, ReviewedCompatibilityPolicy,
     ReviewedManagedFile, RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal,
-    plan_managed_setup_including,
+    UserSuppliedKind, UserSuppliedTool, plan_managed_setup_including,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, InstallSource, OPERATOR_DECISION_INSTRUCTION,
@@ -95,7 +96,11 @@ fn catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
         stop_new_plans_at: 2_000_000_000,
         stop_new_plans_date: String::from("2033-05-18T03:33:20Z"),
         artifacts: core_fixtures()?,
-        optional_artifacts: online_links_pins()?,
+        optional_artifacts: online_links_pins()?
+            .into_iter()
+            .chain(ocr_pin()?)
+            .chain(speaker_pins()?)
+            .collect(),
         compatibility: ReviewedCompatibilityPolicy {
             fixture: integrity(10, &"f".repeat(64))?,
             expected_ffmpeg_version: String::from("ffmpeg version fixture"),
@@ -115,6 +120,14 @@ fn catalogue() -> Result<AcceptedManagedCatalogue, Box<dyn std::error::Error>> {
                 ReviewedBanner {
                     component: YT_DLP,
                     first_line_prefix: String::from("2026.08.19"),
+                },
+                ReviewedBanner {
+                    component: ManagedComponent::OcrRunner,
+                    first_line_prefix: String::from("{\"record\":\"describe\""),
+                },
+                ReviewedBanner {
+                    component: ManagedComponent::SpeakerDiarizer,
+                    first_line_prefix: String::from("OfflineSpeakerDiarizationConfig("),
                 },
             ],
         },
@@ -214,6 +227,104 @@ fn online_links_pins() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::erro
     Ok(vec![deno, yt_dlp])
 }
 
+/// The `ocr` group's one artifact as the Ubuntu catalogue pins it (ADR 0032,
+/// W5b): `VSift`'s own OCR runner release, by its archive's size and SHA-256.
+/// The fixture keeps the real identity and a one-file review.
+fn ocr_pin() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::error::Error>> {
+    let archive_sha = "b9e562b8a91c55e80ef778670f8aa3d4a44b47891a3b8feace8bf1b67028488d";
+    Ok(vec![AcceptedManagedArtifact {
+        component: ManagedComponent::OcrRunner,
+        version: String::from("ocr-runner-0.1.0-r1-linux-x64"),
+        publisher: String::from("VSift engine release"),
+        source_url: String::from(
+            "https://github.com/smormah/vsift/releases/download/ocr-runner-v0.1.0-r1/ocr-runner-0.1.0-r1-linux-x64.tar.gz",
+        ),
+        integrity: integrity(23_268_888, archive_sha)?,
+        format: ManagedArtifactFormat::RawFile,
+        archive_limits: None,
+        selected_files: Vec::new(),
+        archive_links: Vec::new(),
+        runtime_copies: Vec::new(),
+        licence: String::from("Runner MIT OR Apache-2.0; ONNX Runtime MIT; models Apache-2.0"),
+        notice_url: String::from(
+            "https://github.com/smormah/vsift/blob/ocr-runner-v0.1.0-r1/LICENSE-MIT",
+        ),
+        source_code_url: String::from(
+            "https://github.com/smormah/vsift/releases/tag/ocr-runner-v0.1.0-r1",
+        ),
+        trust_limit: String::from("VSift's own build, pinned by the release inventory."),
+        files: vec![file("vsift-ocr-runner", 23_268_888, archive_sha)?],
+    }])
+}
+
+/// The `speakers` group as the Ubuntu catalogue pins it (ADR 0031, ADR 0032,
+/// W5c): sherpa-onnx's archive by its size and SHA-256 and the two models by
+/// theirs. The fixture keeps the real identities and one-file reviews.
+fn speaker_pins() -> Result<Vec<AcceptedManagedArtifact>, Box<dyn std::error::Error>> {
+    let archive_sha = "c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4";
+    let segmentation_sha = "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079";
+    let embedding_sha = "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e";
+    let artifact = |component,
+                    version: &str,
+                    publisher: &str,
+                    url: &str,
+                    bytes: u64,
+                    sha: &str,
+                    licence: &str,
+                    name: &str|
+     -> Result<AcceptedManagedArtifact, Box<dyn std::error::Error>> {
+        Ok(AcceptedManagedArtifact {
+            component,
+            version: version.to_owned(),
+            publisher: publisher.to_owned(),
+            source_url: url.to_owned(),
+            integrity: integrity(bytes, sha)?,
+            format: ManagedArtifactFormat::RawFile,
+            archive_limits: None,
+            selected_files: Vec::new(),
+            archive_links: Vec::new(),
+            runtime_copies: Vec::new(),
+            licence: licence.to_owned(),
+            notice_url: String::from("https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.8/LICENSE"),
+            source_code_url: String::from("https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.8"),
+            trust_limit: String::from("The publisher's own release, pinned by size and SHA-256."),
+            files: vec![file(name, bytes, sha)?],
+        })
+    };
+    Ok(vec![
+        artifact(
+            ManagedComponent::SpeakerDiarizer,
+            "sherpa-onnx-1.13.8-linux-x64",
+            "k2-fsa sherpa-onnx",
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2",
+            28_156_791,
+            archive_sha,
+            "Apache-2.0 (sherpa-onnx); MIT (ONNX Runtime)",
+            "sherpa-onnx-offline-speaker-diarization",
+        )?,
+        artifact(
+            ManagedComponent::SpeakerSegmentationModel,
+            "pyannote-segmentation-3.0-9403a690",
+            "csukuangfj sherpa-onnx pyannote segmentation (Hugging Face)",
+            "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.onnx",
+            5_992_913,
+            segmentation_sha,
+            "MIT",
+            "pyannote-segmentation-3.0.onnx",
+        )?,
+        artifact(
+            ManagedComponent::SpeakerEmbeddingModel,
+            "nemo-en-titanet-small",
+            "k2-fsa sherpa-onnx",
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx",
+            40_257_283,
+            embedding_sha,
+            "Apache-2.0 (NeMo Toolkit); CC-BY-4.0 attribution (TitaNet model card)",
+            "nemo_en_titanet_small.onnx",
+        )?,
+    ])
+}
+
 fn every_tool_available() -> RuntimeDiagnosis {
     RuntimeDiagnosis {
         readiness: RuntimeReadiness::Ready,
@@ -292,6 +403,71 @@ fn the_default_desktop_plan_offers_online_links_and_asks_for_the_operator() -> T
         assert!(summary.contains(needed), "{needed}: {summary}");
     }
     assert_eq!(offer["actions"], Value::Array(Vec::new()));
+    // The second group the catalogue offers: on-screen text (W5b), one
+    // component, left out until it is asked for.
+    let ocr = &data["optional_components"][1];
+    assert_eq!(ocr["name"], "ocr");
+    assert_eq!(ocr["status"], "not_included");
+    assert_eq!(ocr["installs"], serde_json::json!(["ocr_runner"]));
+    assert_eq!(ocr["download_bytes"], 23_268_888);
+    assert_eq!(
+        ocr["add_command"],
+        serde_json::json!({
+            "executable": "vsift",
+            "arguments": ["setup", "plan", "--profile", "desktop", "--include", "ocr", "--json"]
+        })
+    );
+    assert!(ocr["terms_notice"].is_null());
+    let ocr_summary = ocr["summary"].as_str().ok_or("no OCR summary")?;
+    // The size is the archive's 23,268,888 bytes, rounded up to a whole megabyte.
+    for needed in ["about 24 MB", "OCR runner", "ONNX Runtime", "Apache-2.0"] {
+        assert!(ocr_summary.contains(needed), "{needed}: {ocr_summary}");
+    }
+    // The third group: speaker labels (W5c), three components, whose offer
+    // carries the attribution notice the models' licences require (ADR 0031).
+    let speakers = &data["optional_components"][2];
+    assert_eq!(speakers["name"], "speakers");
+    assert_eq!(speakers["status"], "not_included");
+    assert_eq!(
+        speakers["installs"],
+        serde_json::json!([
+            "speaker_diarizer",
+            "speaker_segmentation_model",
+            "speaker_embedding_model"
+        ])
+    );
+    // 28,156,791 + 5,992,913 + 40,257,283 bytes.
+    assert_eq!(speakers["download_bytes"], 74_406_987);
+    assert_eq!(
+        speakers["add_command"],
+        serde_json::json!({
+            "executable": "vsift",
+            "arguments": ["setup", "plan", "--profile", "desktop", "--include", "speakers", "--json"]
+        })
+    );
+    assert_eq!(
+        speakers["terms_notice"],
+        vsift_contract::SPEAKER_MODELS_NOTICE
+    );
+    let notice = speakers["terms_notice"].as_str().ok_or("no notice")?;
+    for needed in [
+        "pyannote segmentation 3.0",
+        "CNRS",
+        "TitaNet",
+        "Creative Commons Attribution 4.0",
+        "sherpa-onnx",
+        "ONNX Runtime",
+    ] {
+        assert!(notice.contains(needed), "{needed}: {notice}");
+    }
+    let speaker_summary = speakers["summary"].as_str().ok_or("no speaker summary")?;
+    // The size is 74,406,987 bytes, rounded up to a whole megabyte.
+    for needed in ["about 75 MB", "sherpa-onnx", "TitaNet", "MIT"] {
+        assert!(
+            speaker_summary.contains(needed),
+            "{needed}: {speaker_summary}"
+        );
+    }
     matches_example(&response, "examples/setup-plan.optional-offered.json")
 }
 
@@ -646,4 +822,155 @@ fn setup_check_reports_optional_components_apart_from_local_readiness() -> TestR
     )?;
     assert_eq!(elsewhere["optional_components"][0]["status"], "unavailable");
     Ok(())
+}
+
+const DIGEST: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+fn user_tool(kind: UserSuppliedKind, line: &str) -> UserSuppliedTool {
+    UserSuppliedTool {
+        kind,
+        version_line: String::from(line),
+        sha256: String::from(DIGEST),
+    }
+}
+
+/// A yt-dlp and a runtime the user registered are reported as user-managed,
+/// with the version line and the digest; a registered yt-dlp with no runtime
+/// says so; one that could not be used makes the group not installed and
+/// carries only a fixed reason in words.
+#[test]
+fn setup_check_reports_user_supplied_tools_with_their_lower_trust() -> TestResult {
+    let check = |capability: &OptionalCapability| -> Result<Value, Box<dyn std::error::Error>> {
+        let value = serde_json::to_value(
+            SetupCheckResponse::new(
+                &every_tool_available(),
+                SetupProfile::Desktop,
+                |_| DependencyLookup::ManagedVersion,
+                ManagedPlanAvailability::TargetUnavailable,
+                &NOTHING_REGISTERED,
+            )
+            .with_optional_components(
+                &[(OptionalComponent::OnlineLinks, capability.clone())],
+                SetupProfile::Desktop,
+            ),
+        )?;
+        validate("setup-check-response.schema.json", &value)?;
+        Ok(value["optional_components"][0].clone())
+    };
+    let both = check(&OptionalCapability::UserSupplied(vec![
+        user_tool(UserSuppliedKind::YtDlp, "2026.08.19"),
+        user_tool(UserSuppliedKind::JsRuntime, "deno 2.9.7 (stable, release)"),
+    ]))?;
+    assert_eq!(both["status"], "installed");
+    assert_eq!(both["components"][0]["component"], "yt_dlp");
+    assert_eq!(both["components"][0]["source"], "user_managed");
+    assert_eq!(both["components"][0]["sha256"], DIGEST);
+    assert_eq!(both["components"][1]["component"], "js_runtime");
+    assert_eq!(both["add_command"], Value::Null);
+    assert!(both.get("unused_components").is_none());
+    let no_runtime = check(&OptionalCapability::UserSupplied(vec![user_tool(
+        UserSuppliedKind::YtDlp,
+        "2026.08.19",
+    )]))?;
+    let step = no_runtime["next_step"].as_str().ok_or("no step")?;
+    assert!(
+        step.contains("No JavaScript runtime is registered"),
+        "{step}"
+    );
+    assert!(step.contains("setup configure js-runtime"), "{step}");
+
+    let unusable = check(&OptionalCapability::UserSuppliedUnusable {
+        tool: UserSuppliedKind::JsRuntime,
+        reason: "unexpected_output",
+    })?;
+    assert_eq!(unusable["status"], "not_installed");
+    assert_eq!(unusable["components"], serde_json::json!([]));
+    assert_eq!(unusable["add_command"], Value::Null);
+    let step = unusable["next_step"].as_str().ok_or("no step")?;
+    assert!(step.contains("setup configure js-runtime"), "{step}");
+    assert!(step.contains("version line expected"), "{step}");
+    Ok(())
+}
+
+/// A runtime registered without a yt-dlp is reported as unused, beside the
+/// state the component is in without it, and never as in use; a Deno that
+/// answered is listed apart from `components`, one that did not is named in
+/// words only.
+#[test]
+fn setup_check_reports_a_registered_runtime_with_no_ytdlp_as_unused() -> TestResult {
+    let check = |capability: &OptionalCapability| -> Result<Value, Box<dyn std::error::Error>> {
+        let value = serde_json::to_value(
+            SetupCheckResponse::new(
+                &every_tool_available(),
+                SetupProfile::Desktop,
+                |_| DependencyLookup::ManagedVersion,
+                ManagedPlanAvailability::Qualified,
+                &NOTHING_REGISTERED,
+            )
+            .with_optional_components(
+                &[(OptionalComponent::OnlineLinks, capability.clone())],
+                SetupProfile::Desktop,
+            ),
+        )?;
+        validate("setup-check-response.schema.json", &value)?;
+        Ok(value["optional_components"][0].clone())
+    };
+    let managed = OptionalCapability::Installed(vec![
+        (DENO, String::from("deno-2.9.7-x86_64-linux-gnu")),
+        (YT_DLP, String::from("yt-dlp-2026.08.19-linux-x86_64")),
+    ]);
+    let healthy = check(&OptionalCapability::WithUnusedRuntime {
+        base: Box::new(managed.clone()),
+        runtime: Ok(user_tool(
+            UserSuppliedKind::JsRuntime,
+            "deno 2.9.7 (stable)",
+        )),
+    })?;
+    // The managed pair is what is in use; the user's runtime is not.
+    assert_eq!(healthy["status"], "installed");
+    assert_eq!(healthy["components"][0]["source"], "managed");
+    assert_eq!(healthy["components"][1]["source"], "managed");
+    assert_eq!(healthy["unused_components"][0]["component"], "js_runtime");
+    assert_eq!(healthy["unused_components"][0]["sha256"], DIGEST);
+    let step = healthy["next_step"].as_str().ok_or("no step")?;
+    assert!(step.contains("is not used"), "{step}");
+    assert!(step.contains("setup configure yt-dlp"), "{step}");
+
+    let not_deno = check(&OptionalCapability::WithUnusedRuntime {
+        base: Box::new(OptionalCapability::NotInstalled),
+        runtime: Err("unexpected_output"),
+    })?;
+    assert_eq!(not_deno["status"], "not_installed");
+    assert!(not_deno.get("unused_components").is_none());
+    assert_eq!(not_deno["add_command"]["arguments"][5], "online_links");
+    let step = not_deno["next_step"].as_str().ok_or("no step")?;
+    assert!(step.contains("is not used"), "{step}");
+    assert!(step.contains("Only Deno is accepted"), "{step}");
+    Ok(())
+}
+
+/// L-225: a failed OCR smoke names the Visual C++ Redistributable on Windows
+/// (where ONNX Runtime imports its runtime) and keeps the ordinary advice
+/// elsewhere, within the same bound as every optional advice.
+#[test]
+fn a_failed_ocr_smoke_names_the_visual_cpp_runtime_on_windows() {
+    let advice = optional_install_failure_summary(
+        OptionalComponent::Ocr,
+        ManagedComponent::OcrRunner,
+        ComponentInstallFailure::at(
+            InstallStep::Smoke,
+            InstallFailureReason::Smoke(CompatibilitySmokeFailure {
+                check: CompatibilitySmokeCheck::Banner,
+                reason: CompatibilitySmokeFailureReason::ProviderFailed,
+            }),
+        ),
+    );
+    assert!(advice.len() <= 640, "{} bytes: {advice}", advice.len());
+    assert!(advice.contains("on-screen text"), "{advice}");
+    assert_eq!(
+        advice.contains("Visual C++ Redistributable"),
+        cfg!(windows),
+        "{advice}"
+    );
+    assert!(advice.contains("ready for local videos"), "{advice}");
 }

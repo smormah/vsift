@@ -47,17 +47,38 @@ pub enum ManagedComponent {
     /// The optional yt-dlp that fetches a video from a public platform page
     /// (ADR 0028 section 4). Never in a plan unless the user includes it.
     YtDlp,
+    /// The optional OCR runner (ADR 0030, ADR 0032): `VSift`'s own runner
+    /// with the ONNX Runtime library, the two models and their licence files,
+    /// as one archive of `VSift`'s engine release. Never in a plan unless the
+    /// user includes the `ocr` group.
+    OcrRunner,
+    /// The optional speaker-diarization tool (ADR 0031, ADR 0032):
+    /// sherpa-onnx's `sherpa-onnx-offline-speaker-diarization` with its ONNX
+    /// Runtime library beside it, from the publisher's own release archive.
+    /// Never in a plan unless the user includes the `speakers` group.
+    SpeakerDiarizer,
+    /// The optional pyannote segmentation 3.0 model of the `speakers` group
+    /// (ADR 0031): one raw file at a pinned Hugging Face revision.
+    SpeakerSegmentationModel,
+    /// The optional `NeMo` `TitaNet` small speaker-embedding model of the
+    /// `speakers` group (ADR 0031): one raw file of sherpa-onnx's model
+    /// release.
+    SpeakerEmbeddingModel,
 }
 
 impl ManagedComponent {
     /// Every component, the core three first and then the optional ones, in
     /// the order a plan installs them.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 9] = [
         Self::MediaTools,
         Self::WhisperCli,
         Self::WhisperModel,
         Self::JsRuntimeDeno,
         Self::YtDlp,
+        Self::OcrRunner,
+        Self::SpeakerDiarizer,
+        Self::SpeakerSegmentationModel,
+        Self::SpeakerEmbeddingModel,
     ];
 
     /// Stable identifier used by the catalogue and public plans.
@@ -69,6 +90,10 @@ impl ManagedComponent {
             Self::WhisperModel => "whisper_model",
             Self::JsRuntimeDeno => "js_runtime_deno",
             Self::YtDlp => "yt_dlp",
+            Self::OcrRunner => "ocr_runner",
+            Self::SpeakerDiarizer => "speaker_diarizer",
+            Self::SpeakerSegmentationModel => "speaker_segmentation_model",
+            Self::SpeakerEmbeddingModel => "speaker_embedding_model",
         }
     }
 
@@ -80,6 +105,16 @@ impl ManagedComponent {
             .find(|component| component.identifier() == identifier)
     }
 
+    /// Whether the component is one model file: data the program of another
+    /// component loads, never run itself, so it has no version banner.
+    #[must_use]
+    pub const fn is_model(self) -> bool {
+        matches!(
+            self,
+            Self::WhisperModel | Self::SpeakerSegmentationModel | Self::SpeakerEmbeddingModel
+        )
+    }
+
     /// Whether the component is optional: never in a plan unless the user
     /// includes it, and its failure never fails the core installation
     /// (#409). Local investigation never needs an optional component.
@@ -87,7 +122,12 @@ impl ManagedComponent {
     pub const fn is_optional(self) -> bool {
         match self {
             Self::MediaTools | Self::WhisperCli | Self::WhisperModel => false,
-            Self::JsRuntimeDeno | Self::YtDlp => true,
+            Self::JsRuntimeDeno
+            | Self::YtDlp
+            | Self::OcrRunner
+            | Self::SpeakerDiarizer
+            | Self::SpeakerSegmentationModel
+            | Self::SpeakerEmbeddingModel => true,
         }
     }
 }
@@ -429,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn optional_components_are_named_and_only_the_online_links_ones_are_optional() {
+    fn optional_components_are_named_and_only_the_group_ones_are_optional() {
         use super::ManagedComponent;
         let identifiers = ManagedComponent::ALL.map(ManagedComponent::identifier);
         assert_eq!(
@@ -439,7 +479,11 @@ mod tests {
                 "whisper_cli",
                 "whisper_model",
                 "js_runtime_deno",
-                "yt_dlp"
+                "yt_dlp",
+                "ocr_runner",
+                "speaker_diarizer",
+                "speaker_segmentation_model",
+                "speaker_embedding_model"
             ]
         );
         for component in ManagedComponent::ALL {
@@ -451,7 +495,7 @@ mod tests {
         }
         assert_eq!(
             ManagedComponent::ALL.map(ManagedComponent::is_optional),
-            [false, false, false, true, true]
+            [false, false, false, true, true, true, true, true, true]
         );
         assert_eq!(ManagedComponent::from_identifier("YT_DLP"), None);
         assert_eq!(ManagedComponent::from_identifier("yt-dlp"), None);

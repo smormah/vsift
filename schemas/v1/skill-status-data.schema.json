@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/skill-status-data.schema.json",
+  "title": "VSift skill.status data v1",
+  "description": "The data of a skill.status result (0.3.0, ADR 0038 section 3), read only: what is at each of the two skill folders of the scope, read without following a link, beside this release's skill. absent: nothing; current: this release's skill byte for byte; different: a folder whose SKILL.md names the skill vsift, with other bytes (another version, or edited); link: a symbolic link or junction, never followed; not_vsift: a file, or a folder that is not a vsift skill; parent_not_folder: .claude, .agents or their skills folder is a link or not a folder. files lists the skill's files by the names skill show takes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scope",
+    "skill_digest",
+    "files",
+    "folders"
+  ],
+  "properties": {
+    "scope": {
+      "enum": [
+        "user",
+        "project"
+      ],
+      "description": "user: below the person's home folder; project: below the folder --project named. No result names an absolute path."
+    },
+    "skill_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 over this release's skill: each file in name order as its name, a NUL, its length in decimal, a NUL and its bytes."
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*){0,2}$"
+      }
+    },
+    "folders": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layout",
+          "path",
+          "clients",
+          "state"
+        ],
+        "properties": {
+          "layout": {
+            "enum": [
+              "claude",
+              "agents"
+            ]
+          },
+          "path": {
+            "enum": [
+              ".claude/skills/vsift",
+              ".agents/skills/vsift"
+            ]
+          },
+          "clients": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "claude-code",
+                "codex",
+                "copilot",
+                "cursor",
+                "gemini-cli",
+                "opencode",
+                "goose",
+                "amp"
+              ]
+            }
+          },
+          "state": {
+            "enum": [
+              "absent",
+              "current",
+              "different",
+              "link",
+              "not_vsift",
+              "parent_not_folder"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

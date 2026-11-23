@@ -56,7 +56,9 @@ pub struct Freeze {
     pub freeze_sha256: String,
 }
 
-fn component(repository: &Path, name: &str) -> Result<String, TrialError> {
+/// The digest of one P14 freeze component; the value freeze
+/// ([`crate::value::freeze`]) reuses `grader`, `skill` and `truth`.
+pub(crate) fn component(repository: &Path, name: &str) -> Result<String, TrialError> {
     let harness = repository.join(CRATE);
     match name {
         "skill" => directory_digest(&repository.join("skills").join("vsift")),
@@ -92,7 +94,8 @@ fn component(repository: &Path, name: &str) -> Result<String, TrialError> {
     }
 }
 
-fn combined(components: &BTreeMap<String, String>) -> String {
+/// One digest over named component digests.
+pub(crate) fn combined(components: &BTreeMap<String, String>) -> String {
     let text = components
         .iter()
         .fold(String::new(), |mut text, (name, digest)| {

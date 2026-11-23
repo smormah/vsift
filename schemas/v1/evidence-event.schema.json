@@ -31,7 +31,13 @@
       ]
     },
     "record_type": {
-      "enum": ["transcript_segment", "visual_candidate", "frame_evidence", "audio_evidence"]
+      "enum": [
+        "transcript_segment",
+        "visual_candidate",
+        "frame_evidence",
+        "audio_evidence",
+        "screen_change"
+      ]
     },
     "key": {
       "type": "string",
@@ -98,6 +104,21 @@
             "pattern": "^evd_[a-z0-9]{16,64}$"
           },
           "record": { "$ref": "audio-evidence.schema.json" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "record_type": { "const": "screen_change" } },
+        "required": ["record_type"]
+      },
+      "then": {
+        "properties": {
+          "key": {
+            "description": "The record's change_id (changes, ADR 0034).",
+            "pattern": "^chg_[a-z0-9]{16,64}$"
+          },
+          "record": { "$ref": "screen-change.schema.json" }
         }
       }
     }

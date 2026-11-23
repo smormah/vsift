@@ -15,9 +15,14 @@
 //!   [`SavedSetupPlan`] input, and the configured-selection responses; the managed
 //!   lifecycle data [`SetupListResponse`], [`SetupRollbackResponse`],
 //!   [`SetupRemoveResponse`] and [`SetupRepairResponse`] (P13 PR 6).
+//! - **Bundle search (ADR 0035):** [`BundleSearchData`] and
+//!   [`bundle_search_response`], one question over retained bundles.
 //! - **Session:** [`OpenData`], [`StatusData`], [`PageData`], [`CleanData`],
 //!   [`BundleData`] and their item types; `session status` adds its newest
 //!   jobs through [`SessionStatusData`].
+//! - **Time anchoring (ADR 0029):** the session's [`TimeAnchorData`] summary
+//!   and the [`ClockTimeData`] (`clock_time`) of every timestamped item, both
+//!   absent when the session has no anchor.
 //! - **Jobs:** [`JobData`] for `job status` and `job cancel`, built from a
 //!   host's [`JobPresentation`], [`JobResumeData`] for `job resume`, and the
 //!   fixed-prose remediation for interrupted, unknown, ended and session-less
@@ -58,6 +63,12 @@
 //!   [`CandidatesStreamData`]), built from a [`CandidatesPresentation`] by
 //!   [`candidates_response`], which fills the envelope coverage and the
 //!   `partial` status when the range has gaps (P08).
+//! - **Screen changes:** the `changes` page [`ScreenChangesData`], its
+//!   published evidence record [`ScreenChangeData`] and its stream
+//!   [`ScreenChangesEvidenceStream`] (the page's `frame_evidence` records,
+//!   then its `screen_change` records, then [`ScreenChangesStreamData`]),
+//!   built from a [`ScreenChangesPresentation`] by [`screen_changes_response`]
+//!   (ADR 0034).
 //! - **Evidence navigation:** the `frame get`, `frame neighbours`,
 //!   `frame burst` and `crop` result [`FrameData`], its published evidence
 //!   record [`FrameEvidenceData`] and its stream [`FrameEvidenceStream`]
@@ -88,6 +99,10 @@
 //!   and the report-text rules; [`HandoffCheckData`] is the `handoff.check`
 //!   data, whose findings never repeat the draft. The trial grader uses the
 //!   same checker, so the command and the grader cannot disagree.
+//!   [`HandoffFinishData`] is the `handoff.finish` data (0.3.0, M5b): the
+//!   check with the session's records and at most one write after it.
+//!   [`HandoffSkeletonData`] is the `handoff.skeleton` data (ADR 0038): a
+//!   valid handoff that states nothing yet, written by `VSift`.
 //! - **Worker requests (P11):** the strict bounded document decoder
 //!   [`decode_strict_json`]; the versioned [`WorkRequest`] decoded by
 //!   [`decode_work_request`] (and [`decode_batch_line`] for a `job batch`
@@ -107,7 +122,10 @@
 #![forbid(unsafe_code)]
 
 mod batch;
+mod bundle_search;
 mod candidates;
+mod clock;
+mod clocks;
 mod command;
 mod delivered_path;
 mod envelope;
@@ -119,20 +137,26 @@ mod input;
 mod install;
 mod job;
 mod lifecycle;
+mod link;
 mod local_asr;
 mod navigation;
 mod optional_component;
 mod request;
+mod screen_changes;
 mod screen_text;
 mod search;
 mod session;
 mod setup;
+mod setup_door;
+mod skill;
+mod speakers;
 mod storage;
 mod stream;
 mod text;
 mod transcript;
 mod verification;
 mod view;
+mod watch;
 mod work;
 mod workspace;
 
@@ -150,7 +174,7 @@ pub use input::{JsonLimits, StrictJsonError, decode_strict_json};
 pub use request::{
     BatchLine, BundleName, InputPathError, MAX_BATCH_LINES, MAX_BUNDLE_NAME_BYTES,
     MAX_INPUT_PATH_BYTES, MAX_INPUT_PATH_COMPONENTS, MAX_REQUEST_DEADLINE_MS, MAX_REQUEST_STEPS,
-    RelativeInputPath, RequestDeadline, RequestDurability, RequestRejection,
+    RecordedAtInput, RelativeInputPath, RequestDeadline, RequestDurability, RequestRejection,
     SuppliedTranscriptInput, WORK_REQUEST_LIMITS, WorkRequest, WorkRequestDigest, WorkStep,
     WorkStepKind, WorkTarget, decode_batch_line, decode_work_request, validate_steps,
 };
@@ -175,27 +199,41 @@ pub use workspace::{
     WORKSPACE_ROOT_REMEDIATION, WorkspaceData, WorkspaceInitOutcome, WorkspacePolicyError,
 };
 
+pub use bundle_search::{
+    BUNDLE_CURSOR_REMEDIATION, BUNDLE_LIMIT_REASON, BUNDLE_NOT_PRIVATE_WARNING,
+    BUNDLE_SEARCH_PARTIAL_WARNING, BUNDLE_UNAVAILABLE_REASON, BundleSearchData,
+    NO_BUNDLES_REMEDIATION, NO_TRANSCRIPT_REASON, READ_BUDGET_REASON, TOO_MANY_ENTRIES_REMEDIATION,
+    TOO_MANY_PATHS_REMEDIATION, bundle_search_remediation, bundle_search_response,
+};
 pub use candidates::{
     CANDIDATE_CURSOR_REMEDIATION, CandidatesBriefData, CandidatesData, CandidatesEvidenceStream,
     CandidatesPresentation, CandidatesStreamData, NO_VIDEO_STREAM_REMEDIATION,
     VISUAL_COVERAGE_WARNING, VISUAL_TOOLS_REMEDIATION, VisualCandidateData, candidates_response,
     candidates_response_with_view,
 };
+pub use clock::{ClockData, ClockItemPosition, ClockTimeData, TimeAnchorData};
+pub use clocks::{
+    CLOCK_RULES_REMEDIATION, CLOCKS_PARTIAL_WARNING, ClocksData, ClocksPresentation,
+    READS_PENDING_REASON, clocks_response,
+};
 pub use command::CommandName;
 pub use envelope::{
     CONTRACT_VERSION, CoverageResponse, ErrorResponse, LifecycleResponse, MAX_AFFECTED_IDS,
-    OperationResponse, TerminalEventResponse,
+    OperationResponse, TerminalEventResponse, utc_seconds_rfc3339,
 };
 pub use evidence::{ConfidenceResponse, FrameTimingResponse};
 pub use handoff::{
     COMPACT_BUDGET, HANDOFF_DRAFT_NOT_UTF8_REMEDIATION, HANDOFF_DRAFT_TOO_LARGE_REMEDIATION,
-    HANDOFF_FILE_REMEDIATION, HANDOFF_SCHEMA_JSON, HANDOFF_VERSION, HandoffBudgetLimits,
-    HandoffCheck, HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding,
-    HandoffRule, HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck, HandoffSessionGap,
-    HandoffSessionRecords, HandoffVocabulary, MAX_HANDOFF_FINDINGS, MAX_HANDOFF_REPORT_BYTES,
-    MAX_RESUME_CARD_BYTES, STANDARD_BUDGET, budget_profile, extract_handoff_block,
-    handoff_is_cut_short, handoff_pattern_has_message, handoff_report_text_findings,
-    handoff_vocabulary,
+    HANDOFF_FILE_REMEDIATION, HANDOFF_SCHEMA_JSON, HANDOFF_SKELETON_FILL,
+    HANDOFF_SKELETON_QUESTION_REMEDIATION, HANDOFF_VERSION, HandoffBudgetLimits, HandoffCheck,
+    HandoffCheckData, HandoffChecker, HandoffEvidenceKind, HandoffFinding, HandoffFinishData,
+    HandoffFinishDecision, HandoffFinishLifecycle, HandoffFinishRequest, HandoffFinishStop,
+    HandoffLifecycleAction, HandoffRule, HandoffRuleScope, HandoffSchemaError, HandoffSessionCheck,
+    HandoffSessionGap, HandoffSessionRecords, HandoffSkeletonData, HandoffSkeletonError,
+    HandoffSkeletonFacts, HandoffTranscriptBasis, HandoffVocabulary, MAX_HANDOFF_FINDINGS,
+    MAX_HANDOFF_REPORT_BYTES, MAX_RESUME_CARD_BYTES, READ_THROUGH_BUDGET, STANDARD_BUDGET,
+    budget_profile, extract_handoff_block, handoff_is_cut_short, handoff_pattern_has_message,
+    handoff_report_text_findings, handoff_vocabulary,
 };
 pub use install::{
     ARTIFACT_DIRECTORY_REMEDIATION, InstallSource, MANAGED_INSTALL_BUSY_REMEDIATION,
@@ -214,6 +252,10 @@ pub use lifecycle::{
     InstallCleanupResponse, SetupListResponse, SetupRemoveResponse, SetupRepairResponse,
     SetupRollbackResponse, SuggestedCommandResponse, managed_lifecycle_remediation,
     repair_fix_command, setup_remove_failure_summary,
+};
+pub use link::{
+    DirectOriginData, OriginData, PageOriginData, PageToolData, source_fetch_command,
+    source_fetch_remediation,
 };
 pub use local_asr::{
     CANCELLATION_TOO_LATE_WARNING, CHECKPOINT_DISCARDED_WARNING, IDEMPOTENCY_CONFLICT_REMEDIATION,
@@ -234,22 +276,31 @@ pub use navigation::{
     audio_response, frame_response, frame_selection_summary, partial_evidence_warning,
 };
 pub use optional_component::{
-    OptionalComponentText, SITE_TERMS_NOTICE, include_command_arguments, optional_check_step,
-    optional_component_text,
+    OptionalComponentText, SITE_TERMS_NOTICE, SPEAKER_MODELS_NOTICE, include_command_arguments,
+    optional_check_step, optional_component_text,
+};
+pub use screen_changes::{
+    CHANGES_COVERAGE_WARNING, CHANGES_CROPS_STOPPED_WARNING, CHANGES_CURSOR_REMEDIATION,
+    CHANGES_CURSOR_WITHOUT_INDEX_REMEDIATION, CHANGES_STOPPED_WARNING, ListedScreenChange,
+    ScreenChangeData, ScreenChangeResumePresentation, ScreenChangesData,
+    ScreenChangesEvidenceStream, ScreenChangesPresentation, ScreenChangesStreamData,
+    screen_changes_response,
 };
 pub use screen_text::{
     CANDIDATES_INCOMPLETE_REASON, FRAMES_AWAITING_ANALYSIS_REASON, FRAMES_FAILED_REASON,
     FRAMES_PENDING_REASON, NOT_RUN_REASON, OCR_FAILED_REMEDIATION, OCR_INDEX_FULL_REMEDIATION,
     OCR_RUNNER_REMEDIATION, OCR_SEARCH_CURSOR_REMEDIATION, OCR_SEARCH_PARTIAL_WARNING,
-    SCREEN_TEXT_PARTIAL_WARNING, SCREEN_TEXT_SCOPE, ScreenTextData, ScreenTextHitPresentation,
-    ScreenTextPresentation, ScreenTextSearchData, ScreenTextSearchPageData,
-    ScreenTextSearchPagePresentation, ScreenTextSearchPresentation, ScreenTextUnavailable,
-    UnreadableIndex, UnreadableReason, screen_text_response, screen_text_search_response,
+    SCREEN_TEXT_PARTIAL_WARNING, SCREEN_TEXT_SCOPE, ScreenTextData, ScreenTextHitData,
+    ScreenTextHitPresentation, ScreenTextPresentation, ScreenTextSearchData,
+    ScreenTextSearchPageData, ScreenTextSearchPagePresentation, ScreenTextSearchPresentation,
+    ScreenTextUnavailable, UnreadableIndex, UnreadableReason, screen_text_response,
+    screen_text_search_response,
 };
 pub use search::{
     MAX_COVERAGE_RANGES, SearchBriefData, SearchData, SearchEvidenceStream, SearchPresentation,
     SearchStreamData, UNPLACED_WORDS_SEARCH_WARNING, UNTRANSCRIBED_SEARCH_WARNING,
-    search_query_rejection_summary, search_response, search_response_with_view,
+    search_query_rejection_summary, search_response, search_response_with_speakers,
+    search_response_with_view,
 };
 pub use session::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, ListedSession,
@@ -260,6 +311,23 @@ pub use setup::{
     NO_FOLDER_SEARCH_ADVICE, OPERATOR_DECISION_INSTRUCTION, OptionalComponentView,
     ProbeTimeHeadroom, SavedSetupPlan, SetupCheckResponse, SetupPlanResponse, explicit_path_option,
     managed_update_next_step, probe_deadline_text,
+};
+pub use setup_door::{
+    SETUP_FAILED_REMEDIATION, SETUP_NEXT_AFTER_VIDEO, SETUP_NEXT_AGAIN, SETUP_NEXT_CANCELLED,
+    SETUP_NEXT_CONNECTION, SETUP_NEXT_SPACE, SetupOutcome, SetupPartName, SetupPartResult,
+    SetupPartStatus, SetupResponse, setup_door_response, setup_failure_code, setup_next_install,
+};
+pub use skill::{
+    SKILL_FILES, SKILL_HOME_UNKNOWN_REMEDIATION, SKILL_INSTALL_REFUSED_REMEDIATION,
+    SKILL_PROJECT_REMEDIATION, SKILL_SHOW_ENTRY_REMEDIATION, SkillFolderData, SkillInstallData,
+    SkillInstallFolderData, SkillInstallFolderOutcome, SkillShowData, SkillStatusData,
+    SkillStatusFolderData, shipped_skill, skill_digest,
+};
+pub use speakers::{
+    DIARIZATION_RANGE_REMEDIATION, DIARIZER_REMEDIATION, NO_SPEAKER_RECORD_REMEDIATION,
+    SPEAKER_COUNT_SHORTFALL_REMEDIATION, SPEAKER_LABELS_STATEMENT,
+    SPEAKERS_REVISION_OPEN_REMEDIATION, STOPPED_REVISION_LABELS_WARNING, SpeakersData,
+    SpeakersPresentation, SpeakersResultData, UNLABELLED_SEGMENTS_WARNING, speakers_response,
 };
 pub use storage::{
     PrivateFolder, SESSION_NOT_PUBLISHED_REMEDIATION, SESSION_ROOT_NAME_REMEDIATION,
@@ -284,8 +352,22 @@ pub use transcript::{
     TRANSCRIPT_RUNNING_REMEDIATION, TranscriptBriefPageData, TranscriptPageData,
     TranscriptPresentation, TranscriptRetranscribeData, TranscriptRevisionData,
     TranscriptSegmentData, UNTRANSCRIBED_READ_WARNING, finish_retranscription,
-    retranscription_gaps, transcript_get_response, transcript_rejection_summary,
-    transcript_warning_messages,
+    retranscription_gaps, transcript_get_response, transcript_get_response_with_speakers,
+    transcript_rejection_summary, transcript_warning_messages,
 };
 pub use verification::media_tool_verification_summary;
 pub use view::{BRIEF_VIEW_STREAM_REMEDIATION, ResultView};
+pub use watch::{
+    WATCH_BEYOND_BOUND_REASON, WATCH_FOLDER_EXISTS_REMEDIATION, WATCH_FRAME_MISMATCH_REMEDIATION,
+    WATCH_FRAMES_SKIPPED_REASON, WATCH_FRAMES_STOPPED_REASON, WATCH_KEEP_FOLDER_REMEDIATION,
+    WATCH_KEEP_INSIDE_VSIFT_REMEDIATION, WATCH_KEEP_NAME_NOT_ALLOWED_REMEDIATION,
+    WATCH_KEEP_NAME_TAKEN_REMEDIATION, WATCH_KEEP_REFUSED_REMEDIATION,
+    WATCH_KEPT_AFTER_FAILURE_REMEDIATION, WATCH_NAME_EMPTY_REMEDIATION,
+    WATCH_NAME_NOT_UNICODE_REMEDIATION, WATCH_NOT_KEPT_REASON, WATCH_NOT_KEPT_WARNING,
+    WATCH_OUTPUT_FOLDER_REMEDIATION, WATCH_OUTPUT_HELD_REMEDIATION,
+    WATCH_OUTPUT_INSIDE_VSIFT_REMEDIATION, WATCH_OUTPUT_REFUSED_REMEDIATION,
+    WATCH_RUN_IN_PROGRESS_REMEDIATION, WATCH_STOPPED_REMEDIATION,
+    WATCH_SUBTITLES_EXISTS_REMEDIATION, WATCH_TRANSCRIPT_EXISTS_REMEDIATION, WatchCompleteness,
+    WatchData, WatchFailureData, WatchFrameData, WatchFrameGaps, WatchKeptData, WatchKeptState,
+    WatchOutputData, WatchOutputsData, WatchRangeData, watch_response,
+};

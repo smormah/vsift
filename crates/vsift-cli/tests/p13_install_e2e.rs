@@ -403,9 +403,15 @@ fn killed_in_download(base: &Base, plan: &AcceptedPlan) -> StageResult {
         "the first download reached 1 MiB",
     )?;
     let evidence = after_a_kill(base)?;
+    // Since ADR 0036's independent parts (#538), the video part (FFmpeg) and
+    // the speech part (whisper.cpp, then the model) download at the same
+    // time, so the kill can find one, two or three stages: one per component
+    // whose download had started. More than one per planned component would
+    // be a stage the install did not account for.
+    let stages_on_disk = evidence["stages_on_disk"].as_u64().unwrap_or(0);
     ensure(
-        evidence["stages_on_disk"] == 1,
-        "the killed download did not leave exactly one stage",
+        (1..=3).contains(&stages_on_disk),
+        "the killed download did not leave one stage per started download",
     )?;
     Ok(json!({"killed_after_ms": ran.as_millis(), "after": evidence}))
 }

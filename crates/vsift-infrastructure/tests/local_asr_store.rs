@@ -775,6 +775,7 @@ async fn imported_session() -> Built<Imported> {
         &OperationId::parse("op_2222222222222222")?,
         StorageGeneration::INITIAL,
         OPENED_AT,
+        &vsift_domain::TimeAnchors::none(),
         &import,
     )?;
     drop(snapshot);

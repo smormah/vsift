@@ -23,11 +23,12 @@ use vsift_domain::{
     VISUAL_CELL_MICROS, VISUAL_FRAME_HEIGHT, VISUAL_FRAME_WIDTH, VISUAL_SAMPLE_INTERVAL_MICROS,
     VISUAL_WINDOW_MICROS, VisualCandidate, VisualCoverageGap, VisualIndex, VisualWindow,
 };
+use vsift_domain::{MediaTime, TimeAnchors};
 
 use crate::{
-    CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse, MAX_COVERAGE_RANGES,
-    OperationResponse, ResultView, TerminalEventResponse, stream::EvidenceStream,
-    transcript::RangeData, view::BRIEF_VIEW,
+    ClockTimeData, CommandName, CoverageResponse, EvidenceEventResponse, LifecycleResponse,
+    MAX_COVERAGE_RANGES, OperationResponse, ResultView, TerminalEventResponse,
+    stream::EvidenceStream, transcript::RangeData, view::BRIEF_VIEW,
 };
 
 /// Envelope reason: more gaps exist than the envelope lists.
@@ -73,6 +74,9 @@ pub struct CandidatesPresentation<'a> {
     pub omission: CandidateOmission,
     /// How many candidates of the whole range the omission left out.
     pub omitted: usize,
+    /// The session's clock-time anchors, from which every item's
+    /// `clock_time` is derived (ADR 0029).
+    pub time_anchors: &'a TimeAnchors,
 }
 
 /// What a page left out, at the caller's request (`--omit`, #367): the
@@ -147,6 +151,10 @@ pub struct VisualCandidateData {
     sample_count: u16,
     displayed_dimensions: DimensionsData,
     analysis: AnalysisData,
+    /// The candidate's real-world clock times (ADR 0029): its span's ends and
+    /// its representative frame; absent when the session has no time anchor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 /// What every candidate of one visual index repeats in the full view: the
@@ -237,7 +245,28 @@ impl VisualCandidateData {
             sample_count: candidate.sample_count(),
             displayed_dimensions: constants.displayed_dimensions,
             analysis: constants.analysis,
+            clock_time: None,
         }
+    }
+
+    /// Adds the clock times of the candidate's span and representative
+    /// frame from the session's anchors (ADR 0029); without an anchor the
+    /// item is unchanged.
+    #[must_use]
+    pub fn with_clock_time(mut self, anchors: &TimeAnchors) -> Self {
+        self.clock_time = TimeRange::new(
+            MediaTime::from_micros(self.span.from_us),
+            MediaTime::from_micros(self.span.to_us),
+        )
+        .ok()
+        .and_then(|span| {
+            ClockTimeData::range_with_point(
+                anchors,
+                span,
+                MediaTime::from_micros(self.representative_us),
+            )
+        });
+        self
     }
 }
 
@@ -263,6 +292,9 @@ pub(crate) struct BriefVisualCandidateData {
     #[serde(skip_serializing_if = "Option::is_none")]
     change: Option<ChangeData>,
     visual_hash: String,
+    /// As in the full item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clock_time: Option<ClockTimeData>,
 }
 
 impl From<&VisualCandidateData> for BriefVisualCandidateData {
@@ -275,13 +307,14 @@ impl From<&VisualCandidateData> for BriefVisualCandidateData {
             stability: full.stability,
             change: full.change,
             visual_hash: full.visual_hash.clone(),
+            clock_time: full.clock_time.clone(),
         }
     }
 }
 
 /// The index revision a page was read from and its fixed sampling grid.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct IndexData {
+pub(crate) struct IndexData {
     index_id: String,
     number: u32,
     profile: &'static str,
@@ -292,7 +325,9 @@ struct IndexData {
 }
 
 impl IndexData {
-    fn new(index: &VisualIndex) -> Self {
+    /// Presents the index revision a page was read from; `changes` reports
+    /// it as `candidates` does (ADR 0034).
+    pub(crate) fn new(index: &VisualIndex) -> Self {
         Self {
             index_id: index.id().as_str().to_owned(),
             number: index.number().get(),
@@ -316,7 +351,7 @@ struct GapData {
 
 /// The coverage of the range: what is analysed and every typed gap.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct VisualCoverageData {
+pub(crate) struct VisualCoverageData {
     searched_range: RangeData,
     analyzed: Vec<RangeData>,
     gaps: Vec<GapData>,
@@ -325,13 +360,22 @@ struct VisualCoverageData {
 
 impl VisualCoverageData {
     fn new(page: &CandidatesPresentation<'_>) -> Self {
-        let gaps = merged_typed_gaps(page.gaps);
+        Self::of(page.searched, page.analysed, page.gaps)
+    }
+
+    /// The coverage of `searched`: its analysed parts and typed gaps, the
+    /// same for `candidates` and `changes` (ADR 0034 section 7).
+    pub(crate) fn of(
+        searched: TimeRange,
+        analysed: &[TimeRange],
+        gaps: &[VisualCoverageGap],
+    ) -> Self {
+        let gaps = merged_typed_gaps(gaps);
         let ranges_truncated =
-            page.analysed.len() > MAX_COVERAGE_RANGES || gaps.len() > MAX_COVERAGE_RANGES;
+            analysed.len() > MAX_COVERAGE_RANGES || gaps.len() > MAX_COVERAGE_RANGES;
         Self {
-            searched_range: RangeData::new(page.searched),
-            analyzed: page
-                .analysed
+            searched_range: RangeData::new(searched),
+            analyzed: analysed
                 .iter()
                 .take(MAX_COVERAGE_RANGES)
                 .map(|range| RangeData::new(*range))
@@ -395,6 +439,7 @@ impl CandidatesData {
                 .iter()
                 .map(|candidate| {
                     VisualCandidateData::new(page.index, page.source_segment_id, candidate)
+                        .with_clock_time(page.time_anchors)
                 })
                 .collect(),
             next_cursor: page.next_cursor.map(str::to_owned),
@@ -466,8 +511,19 @@ pub struct CandidatesStreamData {
 /// any gap, the gaps merged across reasons as `<from_us>-<to_us>`, and the
 /// distinct reasons in taxonomy order.
 pub(crate) fn envelope_coverage(gaps: &[VisualCoverageGap]) -> CoverageResponse {
+    envelope_coverage_with_stop(gaps, None)
+}
+
+/// [`envelope_coverage`] with the part of the range a `changes` page left
+/// unlisted when it stopped early (ADR 0034 section 6), and the stop's
+/// identifier after the gap reasons.
+pub(crate) fn envelope_coverage_with_stop(
+    gaps: &[VisualCoverageGap],
+    stopped: Option<(TimeRange, &'static str)>,
+) -> CoverageResponse {
     let mut ranges: Vec<TimeRange> = Vec::new();
     let mut ordered: Vec<TimeRange> = gaps.iter().map(|gap| gap.range).collect();
+    ordered.extend(stopped.map(|(range, _)| range));
     ordered.sort_by_key(|range| (range.start(), range.end()));
     for range in ordered {
         match ranges.last_mut() {
@@ -484,6 +540,7 @@ pub(crate) fn envelope_coverage(gaps: &[VisualCoverageGap]) -> CoverageResponse 
         .filter(|reason| gaps.iter().any(|gap| gap.reason == **reason))
         .map(|reason| reason.identifier().to_owned())
         .collect();
+    reasons.extend(stopped.map(|(_, reason)| reason.to_owned()));
     if ranges.len() > MAX_COVERAGE_RANGES {
         reasons.push(GAPS_TRUNCATED_REASON.to_owned());
     }
@@ -580,7 +637,8 @@ impl CandidatesEvidenceStream {
                 EvidenceEventResponse::visual_candidate(
                     sequence,
                     command,
-                    VisualCandidateData::new(page.index, page.source_segment_id, candidate),
+                    VisualCandidateData::new(page.index, page.source_segment_id, candidate)
+                        .with_clock_time(page.time_anchors),
                 )
             })
             .collect();

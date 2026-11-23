@@ -132,7 +132,9 @@ jobs:
           VSIFT_P13_REAL_INSTALL: "1"
         run: >-
           cargo test --release --locked -p vsift-cli
-          --test p13_managed_install_real -- --ignored --exact --nocapture
+          --test p13_managed_install_real
+          real_managed_install_selects_every_tool_and_a_rerun_is_current
+          -- --ignored --exact --nocapture
 
       - name: Say what ran
         if: always() && steps.mode.outputs.published == 'true'
@@ -145,11 +147,96 @@ jobs:
             echo "A failure here with an unchanged binary means a publisher's file or route moved (L-099): open an issue before rerunning."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ADR 0028 section 4 and ADR 0032: the same install with the optional
+  # `online_links` group (`setup plan --include online_links`), built from
+  # this ref (a dispatch only: the published binaries and the weekly schedule
+  # predate the group). It downloads the pinned yt-dlp and Deno, smokes them
+  # offline (no URL is fetched), and checks `setup check`, `setup list` and the
+  # removal of the runtime. No credentials and no personal details are sent.
+  managed-install-online-links:
+    name: Managed install with online links (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with online_links, install, check, list and remove the runtime
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_online_links_installs_reports_and_removes_the_pair
+          -- --ignored --exact --nocapture
+
+  # ADR 0028 section 4.6: the only way to use public pages on Windows and
+  # macOS is a yt-dlp the user supplies, so the pinned publisher files
+  # (`yt-dlp.exe` and `yt-dlp_macos`, 2026.08.19, with the sizes and SHA-256
+  # of ADR 0028 section 4.1) are fetched by the runner, size-checked here and
+  # digest-checked by the test, registered with `setup configure yt-dlp`, and
+  # `setup check` must report them as user_managed with that version and
+  # digest. VSift's restricted environment is the one under test. No page is
+  # fetched, and the requests carry no credentials or personal details.
+  user-yt-dlp-windows:
+    name: A user-supplied yt-dlp (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp.exe and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --output "$RUNNER_TEMP/yt-dlp.exe"             "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp.exe")" -eq 17840399
+
+      - name: Register it and check that setup check reports it as user-managed
+        env:
+          VSIFT_P13_REAL_USER_YT_DLP: "1"
+        run: |
+          VSIFT_P13_USER_YT_DLP="$(cygpath -w "$RUNNER_TEMP/yt-dlp.exe")"
+          export VSIFT_P13_USER_YT_DLP
+          cargo test --release --locked -p vsift-cli             --test p13_managed_install_real             real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed             -- --ignored --exact --nocapture
+
+  user-yt-dlp-macos:
+    name: A user-supplied yt-dlp (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp_macos and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --output "$RUNNER_TEMP/yt-dlp_macos"             "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp_macos" | tr -d ' ')" -eq 37146048
+          chmod 755 "$RUNNER_TEMP/yt-dlp_macos"
+
+      - name: Register it and check that setup check reports it as user-managed
+        env:
+          VSIFT_P13_REAL_USER_YT_DLP: "1"
+        run: |
+          export VSIFT_P13_USER_YT_DLP="$RUNNER_TEMP/yt-dlp_macos"
+          cargo test --release --locked -p vsift-cli             --test p13_managed_install_real             real_user_supplied_yt_dlp_is_registered_and_reported_as_user_managed             -- --ignored --exact --nocapture
+
   # ADR 0032: the same two checkpoints on Windows x64, built from this ref
   # (a dispatch only; the published mode and the weekly schedule stay on
-  # Ubuntu). The Windows catalogue offers FFmpeg and the model, and the model
-  # only beside a whisper.cpp, so until VSift's own whisper.cpp is pinned the
-  # plan installs FFmpeg and FFprobe and the checks cover them and a frame.
+  # Ubuntu). The Windows catalogue offers FFmpeg (FFmpeg-Builds' LGPL zip),
+  # VSift's own whisper.cpp and the model, so the install checkpoint also runs
+  # the local-ASR check and transcribes F05's speech variant.
   managed-smoke-windows:
     name: Managed smoke on pinned tools (Windows x64)
     if: github.event_name == 'workflow_dispatch'
@@ -185,12 +272,358 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Plan, install, check, rerun and take a frame with the managed tools
+      - name: Plan, install, check, rerun, take a frame and transcribe with the managed tools
         env:
           VSIFT_P13_REAL_INSTALL: "1"
         run: >-
           cargo test --release --locked -p vsift-cli
-          --test p13_managed_install_real -- --ignored --exact --nocapture
+          --test p13_managed_install_real
+          real_managed_install_selects_every_tool_and_a_rerun_is_current
+          -- --ignored --exact --nocapture
+
+  # ADR 0032: the same two checkpoints on macOS arm64, built from this ref (a
+  # dispatch only). The macOS catalogue's FFmpeg and whisper.cpp are VSift's own
+  # engine releases, smoked against their own banner. whisper.cpp is built with
+  # Metal, but VSift runs it with the GPU off (-ng): the first step records
+  # whether this runner has a Metal device, and both checkpoints must pass
+  # either way, which is the check that recognition falls back to the CPU.
+  managed-smoke-macos:
+    name: Managed smoke on pinned tools (macOS arm64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain, host and the runner's Metal support
+        run: |
+          rustup show active-toolchain
+          sw_vers
+          uname -m
+          sysctl -n hw.ncpu
+          system_profiler SPDisplaysDataType | grep -E 'Chipset Model|Metal' || echo "no display adapter or Metal support reported"
+
+      - name: Smoke the pinned macOS tools before activation
+        env:
+          VSIFT_P13_REAL_TOOL_SMOKE: "1"
+        run: >-
+          cargo test --release --locked -p vsift-infrastructure
+          --test p13_managed_smoke_real_tools -- --ignored --exact --nocapture
+
+  managed-install-macos:
+    name: Managed install through the CLI (macOS arm64)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show the runner's Metal support
+        run: system_profiler SPDisplaysDataType | grep -E 'Chipset Model|Metal' || echo "no display adapter or Metal support reported"
+
+      - name: Plan, install, check, rerun, take a frame and transcribe with the managed tools
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_selects_every_tool_and_a_rerun_is_current
+          -- --ignored --exact --nocapture
+
+  # ADR 0030, ADR 0032 (W5b): the same install with the optional `ocr` group
+  # (`setup plan --include ocr`) on all three systems, built from this ref (a
+  # dispatch only: the published binaries and the weekly schedule predate the
+  # group). Each job installs the core and the group's one archive (VSift's own
+  # OCR runner release with ONNX Runtime and the two models), checks
+  # `setup check`, then runs `vsift ocr` and `vsift ocr search` on F05 with an
+  # empty PATH, so the managed runner alone reads the frames; its index must
+  # name the pinned runner, models and runtime. The downloads are the pinned
+  # artifacts of the accepted catalogue; no credentials and no personal
+  # details are sent.
+  managed-install-ocr:
+    name: Managed install with on-screen text (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_ocr_installs_and_reads_on_screen_text
+          -- --ignored --exact --nocapture
+
+  managed-install-ocr-windows:
+    name: Managed install with on-screen text (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The test's base folder is kept (VSIFT_P13_KEEP_BASE) under the runner's
+      # temp folder, so the next step can read the installed library.
+      - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+          VSIFT_P13_KEEP_BASE: "1"
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_ocr_installs_and_reads_on_screen_text
+          -- --ignored --exact --nocapture
+
+      # L-225: does Microsoft's onnxruntime.dll import the Visual C++ runtime?
+      # Read the import table of the installed copy and say so; the run fails
+      # if no tool can read it, so the answer is never silently missing.
+      - name: Read the imports of the installed onnxruntime.dll
+        if: always()
+        run: |
+          set -euo pipefail
+          dll="$(find "$RUNNER_TEMP" -path '*vsift-p13-real-ocr-*' -name onnxruntime.dll | head -n 1)"
+          test -n "$dll" || { echo "the installed onnxruntime.dll was not found"; exit 1; }
+          echo "library: $dll ($(wc -c < "$dll") bytes)"
+          imports="$RUNNER_TEMP/onnxruntime-imports.txt"
+          objdump="$(command -v llvm-objdump || true)"
+          if [ -z "$objdump" ] && [ -x "/c/Program Files/LLVM/bin/llvm-objdump.exe" ]; then objdump="/c/Program Files/LLVM/bin/llvm-objdump.exe"; fi
+          if [ -n "$objdump" ]; then
+            tool="llvm-objdump -p"
+            "$objdump" -p "$dll" | grep -i 'DLL Name:' | sed 's/^ *//' > "$imports"
+          else
+            vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+            dumpbin="$("$vswhere" -latest -products '*' -find '**/Hostx64/x64/dumpbin.exe' | head -n 1)"
+            test -n "$dumpbin" || { echo "neither llvm-objdump nor dumpbin is available"; exit 1; }
+            tool="dumpbin /dependents"
+            "$(cygpath -u "$dumpbin")" /dependents "$(cygpath -w "$dll")" | grep -i '\.dll' > "$imports"
+          fi
+          cat "$imports"
+          if grep -i -E 'vcruntime140|msvcp140|vcomp140|concrt140' "$imports" >/dev/null; then
+            verdict="IMPORTS the Visual C++ runtime"
+          else
+            verdict="does NOT import the Visual C++ runtime"
+          fi
+          {
+            echo "### onnxruntime.dll imports ($tool)"
+            echo
+            echo "The installed onnxruntime.dll $verdict."
+            echo
+            echo '```'
+            cat "$imports"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "onnxruntime.dll $verdict"
+
+      - name: Remove the kept base folder
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/vsift-p13-real-ocr-*
+
+  managed-install-ocr-macos:
+    name: Managed install with on-screen text (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plan with ocr, install, check, then read F05's on-screen text with the managed runner
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_ocr_installs_and_reads_on_screen_text
+          -- --ignored --exact --nocapture
+
+  # ADR 0031, ADR 0032 (W5c): the same install with the optional `speakers`
+  # group (`setup plan --include speakers`) on all three systems, built from this
+  # ref (a dispatch only, like the `ocr` jobs). Each job first reads the
+  # sherpa-onnx archive it will install from (its entry count, expanded size and
+  # tar stream, beside the digest the catalogue pins) so the pins are checked
+  # against the archive itself; then it installs the core and the group's three
+  # components (sherpa-onnx's archive, the segmentation model and the TitaNet
+  # model), checks `setup check`, and runs `vsift transcript speakers` on F01's
+  # spoken sentence, opened with a supplied transcript (a sealed revision) and an
+  # empty PATH, so the managed tool and models alone label it; the record must
+  # name the pinned tool and both pinned models. The downloads are the pinned
+  # artifacts of the accepted catalogue; no credentials and no personal details
+  # are sent.
+  managed-install-speakers:
+    name: Managed install with speaker labels (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the sherpa-onnx archive's inventory against the pins
+        env:
+          ARCHIVE_URL: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared.tar.bz2
+          ARCHIVE_BYTES: "28156791"
+          ARCHIVE_SHA256: c0bdb7907d3a74bba1d55d22bf4d9fa75586cf1530614ebe88a27b9118e015c4
+          PINNED_ENTRIES: "50"
+          PINNED_EXPANDED: "86050728"
+          PINNED_STREAM: "86400000"
+        run: python3 tools/p13_archive_inventory.py
+
+      - name: Plan with speakers, install, check, then label F01's sentence with the managed tool
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_speakers_installs_and_labels_a_sentence
+          -- --ignored --exact --nocapture
+
+  managed-install-speakers-windows:
+    name: Managed install with speaker labels (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the sherpa-onnx archive's inventory against the pins
+        env:
+          ARCHIVE_URL: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release.tar.bz2
+          ARCHIVE_BYTES: "24805859"
+          ARCHIVE_SHA256: 6dffdc715a4465b989446a6105265d2cb345e7101591a17d35534b6758f6e8df
+          PINNED_ENTRIES: "38"
+          PINNED_EXPANDED: "67766399"
+          PINNED_STREAM: "68100000"
+        run: python tools/p13_archive_inventory.py
+
+      # The test's base folder is kept (VSIFT_P13_KEEP_BASE) under the runner's
+      # temp folder, so the next step can read the installed files.
+      - name: Plan with speakers, install, check, then label F01's sentence with the managed tool
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+          VSIFT_P13_KEEP_BASE: "1"
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_speakers_installs_and_labels_a_sentence
+          -- --ignored --exact --nocapture
+
+      # L-225 asked whether ONNX Runtime's Windows library imports the Visual
+      # C++ runtime. Microsoft's did; sherpa-onnx's bundled build and its tool
+      # are measured here the same way, so the speaker group's advice rests on
+      # a reading and not on L-225's. The run fails if no tool can read an
+      # import table, so the answer is never silently missing.
+      - name: Read the imports of the installed tool and ONNX Runtime library
+        if: always()
+        run: |
+          set -euo pipefail
+          objdump="$(command -v llvm-objdump || true)"
+          if [ -z "$objdump" ] && [ -x "/c/Program Files/LLVM/bin/llvm-objdump.exe" ]; then objdump="/c/Program Files/LLVM/bin/llvm-objdump.exe"; fi
+          if [ -z "$objdump" ]; then
+            vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+            dumpbin="$("$vswhere" -latest -products '*' -find '**/Hostx64/x64/dumpbin.exe' | head -n 1)"
+            test -n "$dumpbin" || { echo "neither llvm-objdump nor dumpbin is available"; exit 1; }
+            tool="dumpbin /dependents"
+          else
+            tool="llvm-objdump -p"
+          fi
+          verdict_all="does NOT import the Visual C++ runtime"
+          {
+            echo "### sherpa-onnx imports ($tool)"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          for name in sherpa-onnx-offline-speaker-diarization.exe onnxruntime.dll; do
+            file="$(find "$RUNNER_TEMP" -path '*vsift-p13-real-speakers-*' -name "$name" | head -n 1)"
+            test -n "$file" || { echo "the installed $name was not found"; exit 1; }
+            echo "file: $file ($(wc -c < "$file") bytes)"
+            imports="$RUNNER_TEMP/$name-imports.txt"
+            if [ -n "$objdump" ]; then
+              "$objdump" -p "$file" | grep -i 'DLL Name:' | sed 's/^ *//' > "$imports"
+            else
+              "$(cygpath -u "$dumpbin")" /dependents "$(cygpath -w "$file")" | grep -i '\.dll' > "$imports"
+            fi
+            cat "$imports"
+            if grep -i -E 'vcruntime140|msvcp140|vcomp140|concrt140' "$imports" >/dev/null; then
+              verdict="IMPORTS the Visual C++ runtime"
+              verdict_all="IMPORTS the Visual C++ runtime"
+            else
+              verdict="does NOT import the Visual C++ runtime"
+            fi
+            {
+              echo "The installed $name $verdict."
+              echo
+              echo '```'
+              cat "$imports"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "$name $verdict"
+          done
+          echo "speakers group: $verdict_all"
+
+      - name: Remove the kept base folder
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/vsift-p13-real-speakers-*
+
+  managed-install-speakers-macos:
+    name: Managed install with speaker labels (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.published_version == ''
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the sherpa-onnx archive's inventory against the pins
+        env:
+          ARCHIVE_URL: https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared.tar.bz2
+          ARCHIVE_BYTES: "20314448"
+          ARCHIVE_SHA256: b10e5c7e2c30ea03de9c442655d14860d9edc475c6251d58a8f5f06e913a1d56
+          PINNED_ENTRIES: "42"
+          PINNED_EXPANDED: "66830207"
+          PINNED_STREAM: "67200000"
+        run: python3 tools/p13_archive_inventory.py
+
+      - name: Plan with speakers, install, check, then label F01's sentence with the managed tool
+        env:
+          VSIFT_P13_REAL_INSTALL: "1"
+        run: >-
+          cargo test --release --locked -p vsift-cli
+          --test p13_managed_install_real
+          real_managed_install_with_speakers_installs_and_labels_a_sentence
+          -- --ignored --exact --nocapture
 
   # P13 PR 7: the P13 stage of the end-to-end spine. From a fresh per-user
   # base with an empty PATH it kills the accepted install (SIGKILL) during a
@@ -337,6 +770,16 @@ jobs:
         run: |
           python tools/p14_journeys.py select-source --version "$VERSION" --tag-source "$GITHUB_WORKSPACE/tag-source" --workflow-source "$GITHUB_WORKSPACE" --tests-from workflow-ref
           python tools/p14_journeys.py install --export-environment
+
+      # L-254: a published release pins the exact address of each managed artifact and refuses a
+      # redirect it has not reviewed, so a release that pins the FFmpeg builds repository's old
+      # address (it moved to a new owner on 2026-11-07) cannot download its own FFmpeg. This job
+      # needs the earlier release only as its starting point, so the files its own plan names are
+      # fetched here, each checked against that plan's size and SHA-256, and handed to it with
+      # `--artifact-dir`. Nothing is fetched when the plan names no moved address. The redirect
+      # policy of VSift is not involved.
+      - name: Fetch the files the earlier release's plan names, where its repository moved to
+        run: node tools/p14-published/fetch-plan-artifacts.cjs --binary "$VSIFT_E2E_BINARY" --folder "$RUNNER_TEMP/earlier-plan-files" >> "$GITHUB_ENV"
 
       - name: Show toolchain and host
         run: |

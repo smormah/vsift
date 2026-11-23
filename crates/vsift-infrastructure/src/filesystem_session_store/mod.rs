@@ -16,9 +16,12 @@
 #[cfg(test)]
 mod abandon_tests;
 mod bundle;
+mod bundle_search;
 mod chain;
 mod cleanup;
 mod commit;
+#[cfg(test)]
+mod commit_admission_tests;
 mod evidence;
 mod index;
 #[cfg(test)]
@@ -29,6 +32,7 @@ mod job_records;
 mod job_tests;
 mod jobs;
 mod lifecycle;
+mod origin;
 #[cfg(test)]
 mod p10_tests;
 mod publication;
@@ -38,6 +42,7 @@ mod root;
 mod stored;
 #[cfg(test)]
 mod tests;
+mod time_anchors;
 mod work;
 #[cfg(test)]
 mod worker_request_tests;
@@ -60,18 +65,23 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use vsift_application::{SessionStorageError, StorageCapabilities};
 use vsift_domain::{
-    DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, SessionArtifactKind,
-    SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId, StorageGeneration,
-    WorkspacePolicy, WorkspaceRetention,
+    DurabilityRequirement, EvidenceMediaKind, EvidenceRecord, OperationId, RegisteredClock,
+    SessionArtifactKind, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
+    SourceOrigin, SpeakerRecordParts, StorageGeneration, TimeAnchors, WorkspacePolicy,
+    WorkspaceRetention,
 };
 
 use crate::{VerifiedSourceIdentity, file_lock::HeldFileLock};
 
+pub use bundle::BundleDestinationRefusal;
+pub use bundle_search::SearchableBundle;
 pub use job_records::{
     decode_chunk_checkpoint, decode_job_record, encode_chunk_checkpoint, encode_job_record,
 };
 pub use jobs::{FilesystemJobOwner, JOB_CANCEL_POLL};
 pub use queue::{MAX_QUEUED_JOBS, QueueTurn, QueuedEntry};
+#[cfg(any(test, feature = "install-test-hooks"))]
+pub(crate) use root::decide_copy_room;
 pub use root::{FREE_SPACE_RESERVE_BYTES, FreeSpaceCheck};
 pub(crate) use root::{RootProvisioningState, root_provisioning_state};
 pub use worker_requests::{
@@ -84,7 +94,7 @@ const MAX_METADATA_BYTES: u64 = 64 * 1024;
 /// Largest generation manifest (and retained bundle manifest), which lists
 /// every artifact: 512 entries of about 200 bytes need about 100 KiB (ADR
 /// 0020 D-2). Every other metadata file keeps [`MAX_METADATA_BYTES`].
-const MAX_MANIFEST_BYTES: u64 = 128 * 1024;
+const MAX_MANIFEST_BYTES: u64 = vsift_application::MAX_BUNDLE_MANIFEST_BYTES;
 const OWNERSHIP_FILE: &str = "ownership.json";
 const COORDINATION_DIRECTORY: &str = "coordination";
 const SESSIONS_DIRECTORY: &str = "sessions";
@@ -231,20 +241,58 @@ pub struct FilesystemSessionStore {
 ///
 /// Dropping the value releases every reservation. The slot files themselves are
 /// immutable anchors and are never replaced during normal operation.
+///
+/// What it holds is boxed, so the permit is one pointer wide: callers keep it
+/// inside larger values (an ingest source, a run's gate), and the root it
+/// records (Fable review C-2 and C-3) must not make every one of them larger.
 pub struct FilesystemAdmissionPermit {
+    held: Box<HeldAdmission>,
+}
+
+/// What a [`FilesystemAdmissionPermit`] holds. Its fields drop in order: the
+/// root first, then the slots in their list's order.
+struct HeldAdmission {
+    /// The canonical root the permit was taken on, when a store's own
+    /// admission took it: what lets the run's part commits be made under it
+    /// ([`vsift_application::CommitAdmission::UnderPermit`]). `None` for the
+    /// unit a commit takes for itself, which nothing else may use.
+    root: Option<PathBuf>,
     /// The slots, and for queued work (ADR 0033 section 6) the marker that
     /// makes an ordinary caller who finds the slots taken wait for them
-    /// instead of being refused: one list, so the permit stays as small as
-    /// before.
-    _slots: Vec<HeldFileLock>,
+    /// instead of being refused: one list.
+    ///
+    /// **The marker must stay last.** A list drops its elements in order, so
+    /// the slots are released before the marker, and a caller that reads the
+    /// marker as gone knows the slots are free; the wait for queued work takes
+    /// the slots once more on that reading (`root::wait_for_queued_work`).
+    /// Putting the marker first would bring the refusal with free slots back.
+    slots: Vec<HeldFileLock>,
 }
 
 impl FilesystemAdmissionPermit {
+    /// The permit of `slots`, taken on no recorded root.
+    pub(super) fn of_slots(slots: Vec<HeldFileLock>) -> Self {
+        Self {
+            held: Box::new(HeldAdmission { root: None, slots }),
+        }
+    }
+
     /// The same slots, held for queued work under `marker`.
-    pub(super) fn marked_queued(self, marker: HeldFileLock) -> Self {
-        let Self { _slots: mut held } = self;
-        held.push(marker);
-        Self { _slots: held }
+    pub(super) fn marked_queued(mut self, marker: HeldFileLock) -> Self {
+        self.held.slots.push(marker);
+        self
+    }
+
+    /// The same slots, known to be taken on the canonical root `root`.
+    pub(super) fn taken_on(mut self, root: &Path) -> Self {
+        self.held.root = Some(root.to_path_buf());
+        self
+    }
+
+    /// Whether the permit was taken on the canonical root `root`. A permit
+    /// whose root is not known is not.
+    pub(super) fn is_taken_on(&self, root: &Path) -> bool {
+        self.held.root.as_deref() == Some(root)
     }
 }
 
@@ -336,6 +384,18 @@ pub struct EvidenceMediaFile<'a> {
     pub bytes: &'a [u8],
 }
 
+/// The newest speaker record of a revision, as read (ADR 0031).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeakerRecordRead {
+    /// The record's stored fields, decoded strictly; `None` when the session holds no
+    /// record of the revision asked for.
+    pub record: Option<SpeakerRecordParts>,
+    /// How many speaker records the session holds, of any revision.
+    pub records: usize,
+    /// The committed session state the record was read from.
+    pub status: SessionStatus,
+}
+
 /// A session's committed evidence and what it may still take (ADR 0019 D4).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceInventory {
@@ -373,6 +433,25 @@ impl EvidenceInventory {
         if evidence < total { evidence } else { total }
     }
 
+    /// Evidence artifacts the session could take if none were stored yet:
+    /// the room `vsift <video>` fits its frames to. Its session holds only
+    /// its own frames, which `frame get` gives again without storing them
+    /// twice, so a run that continues an interrupted one spreads its frames
+    /// over the same changes (ADR 0037 section 8).
+    #[must_use]
+    pub const fn evidence_slots_if_reused(&self) -> usize {
+        let others = self
+            .status
+            .artifact_count
+            .saturating_sub(self.evidence_artifacts);
+        let total = MAX_SESSION_ARTIFACTS.saturating_sub(others);
+        if crate::MAX_EVIDENCE_ARTIFACTS < total {
+            crate::MAX_EVIDENCE_ARTIFACTS
+        } else {
+            total
+        }
+    }
+
     /// Artifact bytes the session can still take.
     #[must_use]
     pub const fn bytes_left(&self) -> u64 {
@@ -391,6 +470,9 @@ pub struct SessionStatus {
     generation: StorageGeneration,
     artifact_count: usize,
     artifact_bytes: u64,
+    time_anchors: TimeAnchors,
+    screen_clocks: Vec<RegisteredClock>,
+    origin: Option<SourceOrigin>,
 }
 
 /// Explicit portability requested for a user-selected retained bundle.
@@ -530,6 +612,17 @@ struct BundleManifest {
     source_included: bool,
     publication: String,
     artifacts: Vec<StoredArtifact>,
+    /// The session's anchors, written only when it has some, so a bundle
+    /// without them is written as before (ADR 0029 decision 20). A release
+    /// before 0.3.0 refuses a bundle that carries them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+    /// The clocks the session named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    screen_clocks: Vec<time_anchors::StoredScreenClock>,
+    /// The gaps those clocks showed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    clock_segments: Vec<time_anchors::StoredClockGap>,
 }
 
 impl MetadataVersion for BundleManifest {
@@ -586,6 +679,26 @@ impl SessionStatus {
     pub const fn artifact_bytes(&self) -> u64 {
         self.artifact_bytes
     }
+
+    /// The clock-time anchors stored when the session opened (ADR 0029);
+    /// empty when no clock time is known.
+    #[must_use]
+    pub const fn time_anchors(&self) -> &TimeAnchors {
+        &self.time_anchors
+    }
+
+    /// The clocks on the screen the session has named (ADR 0029 decision 18).
+    #[must_use]
+    pub fn screen_clocks(&self) -> &[RegisteredClock] {
+        &self.screen_clocks
+    }
+
+    /// Where the source was fetched from (ADR 0028); `None` for a local
+    /// file's copy.
+    #[must_use]
+    pub const fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
+    }
 }
 
 enum LifecycleUpdate {
@@ -598,11 +711,23 @@ enum LifecycleUpdate {
         artifacts: Vec<StoredArtifact>,
         /// The lifetime rules of the root the session opens in.
         lifetime: SessionLifetimePolicy,
+        /// The source's time anchors, stored once (ADR 0029).
+        time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+        /// Where a fetched source came from (ADR 0028).
+        origin: Option<origin::StoredOrigin>,
     },
     Renew {
         now: u64,
     },
     Close,
+    /// What `clocks` found: the anchors with the screen's replaced, and the
+    /// session's register of clocks (ADR 0029 decision 18).
+    SetClocks {
+        time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+        screen_clocks: Vec<time_anchors::StoredScreenClock>,
+        clock_segments: Vec<time_anchors::StoredClockGap>,
+        now: u64,
+    },
     AddArtifact {
         artifact: StoredArtifact,
         now: u64,
@@ -654,6 +779,68 @@ fn map_open_error(error: SessionStoreOpenError) -> SessionStorageError {
         | SessionStoreOpenError::InvalidOwnership
         | SessionStoreOpenError::InvalidLayout => SessionStorageError::IntegrityFailure,
         _ => SessionStorageError::Io,
+    }
+}
+
+/// How often a commit looks again for a session's writer lock another commit
+/// holds.
+const WRITER_LOCK_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+/// How long a commit waits at most for a session's writer lock before it is
+/// refused `BUSY` (Fable review C-2; ADR 0033, note of 2026-11-11).
+const WRITER_LOCK_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Takes `session_id`'s writer lock, waiting up to [`WRITER_LOCK_WAIT`] while
+/// another commit of the session holds it, then `BUSY`. Every commit takes the
+/// writer lock here, and only here.
+///
+/// **Why the wait is safe.** The writer lock is the innermost lock of every
+/// commit: its holder took its admission unit (or holds its run's permit) and
+/// its hold on the session's lifetime first, and **no code waits for any other
+/// lock while holding the writer lock**. A holder does the file operations of
+/// one generation and lets it go, so the wait can never be part of a cycle
+/// and lasts at most one commit. Before 0.3.0's fix a commit that met another
+/// commit of its session was refused at once: a frame taken while the run's
+/// own transcript part committed failed the whole `vsift <video>` run.
+///
+/// **The wait is never made on an async worker thread.** The store's port
+/// methods for generations run their commits under `spawn_blocking`, but the
+/// engine and the job run call the other commits (evidence, artifacts, parts,
+/// the seal, lifecycle changes) synchronously from async code. Each pause is
+/// therefore made through [`pause_off_the_runtime`], which on a
+/// multi-threaded runtime hands the worker's other tasks to another thread
+/// while this one waits.
+fn take_writer_lock(
+    coordination: &Dir,
+    session_id: &SessionId,
+    hooks: &commit::CommitHooks<'_>,
+) -> Result<HeldFileLock, SessionStorageError> {
+    let started = std::time::Instant::now();
+    loop {
+        match HeldFileLock::try_exclusive(open_session_lock(coordination, session_id, "writer")?) {
+            Ok(held) => return Ok(held),
+            Err(fs::TryLockError::WouldBlock) => {}
+            Err(fs::TryLockError::Error(error)) => return Err(map_storage_io(error)),
+        }
+        if started.elapsed() >= WRITER_LOCK_WAIT {
+            return Err(SessionStorageError::Busy);
+        }
+        hooks.writer_busy();
+        pause_off_the_runtime(WRITER_LOCK_POLL);
+    }
+}
+
+/// Sleeps the calling thread for `pause` without holding up an async worker:
+/// on a worker of a multi-threaded Tokio runtime (the command line's), the
+/// sleep runs in [`tokio::task::block_in_place`], which first moves the
+/// worker's other tasks to another thread. Anywhere else (a blocking thread,
+/// a thread with no runtime, a current-thread runtime, where
+/// `block_in_place` is not allowed) it is a plain sleep.
+fn pause_off_the_runtime(pause: std::time::Duration) {
+    let flavor = tokio::runtime::Handle::try_current().map(|handle| handle.runtime_flavor());
+    if matches!(flavor, Ok(tokio::runtime::RuntimeFlavor::MultiThread)) {
+        tokio::task::block_in_place(|| std::thread::sleep(pause));
+    } else {
+        std::thread::sleep(pause);
     }
 }
 
@@ -1214,6 +1401,25 @@ struct StoredLifecycle {
     /// session, whose record is unchanged since P05.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     workspace_retention_seconds: Option<u64>,
+    /// The source's clock-time anchors (time anchoring, ADR 0029), written at
+    /// activation and carried; `clocks` replaces those from the screen. Absent
+    /// when there are none, so a session without them is recorded exactly as
+    /// before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    time_anchors: Vec<time_anchors::StoredTimeAnchor>,
+    /// The clocks on the screen the session has named (ADR 0029 decision 18);
+    /// absent until `clocks` finds one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    screen_clocks: Vec<time_anchors::StoredScreenClock>,
+    /// The gaps those clocks showed, which divide the timeline into segments
+    /// (ADR 0029 decision 13); absent until one is found.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    clock_segments: Vec<time_anchors::StoredClockGap>,
+    /// Where a fetched source came from (ADR 0028), written at activation
+    /// and carried unchanged; absent for a local file's copy, so such a
+    /// session is recorded exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    origin: Option<origin::StoredOrigin>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1236,6 +1442,7 @@ enum StoredArtifactKind {
     EvidenceRecord,
     ScreenTextIndexRecord,
     TranscriptPart,
+    SpeakerRecord,
 }
 
 impl StoredArtifactKind {
@@ -1249,6 +1456,7 @@ impl StoredArtifactKind {
             SessionArtifactKind::EvidenceRecord => Self::EvidenceRecord,
             SessionArtifactKind::ScreenTextIndexRecord => Self::ScreenTextIndexRecord,
             SessionArtifactKind::TranscriptPart => Self::TranscriptPart,
+            SessionArtifactKind::SpeakerRecord => Self::SpeakerRecord,
         }
     }
 
@@ -1268,7 +1476,8 @@ impl StoredArtifactKind {
             | Self::VisualIndexRecord
             | Self::EvidenceRecord
             | Self::ScreenTextIndexRecord
-            | Self::TranscriptPart => "json",
+            | Self::TranscriptPart
+            | Self::SpeakerRecord => "json",
         }
     }
 
@@ -1280,7 +1489,8 @@ impl StoredArtifactKind {
             Self::TranscriptRecord
             | Self::VisualIndexRecord
             | Self::ScreenTextIndexRecord
-            | Self::TranscriptPart => false,
+            | Self::TranscriptPart
+            | Self::SpeakerRecord => false,
         }
     }
 
@@ -1295,6 +1505,7 @@ impl StoredArtifactKind {
             Self::EvidenceRecord => crate::MAX_EVIDENCE_RECORD_BYTES,
             Self::ScreenTextIndexRecord => crate::MAX_SCREEN_TEXT_INDEX_RECORD_BYTES,
             Self::TranscriptPart => crate::MAX_TRANSCRIPT_PART_BYTES,
+            Self::SpeakerRecord => crate::MAX_SPEAKER_RECORD_BYTES,
         }
     }
 }

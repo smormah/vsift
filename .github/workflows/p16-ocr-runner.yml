@@ -2,7 +2,10 @@ name: P16 OCR runner
 
 # The OCR runner's hosted checks for 0.3.0 (ADR 0030; tools/p16_ocr_runner.py).
 # The runner, ONNX Runtime and the models are staged on the runner only, each
-# download held to its pinned size and SHA-256; nothing is published.
+# download held to its pinned size and SHA-256; nothing is published. ONNX Runtime
+# is Microsoft's NuGet package at nuget.org (its GitHub release archives went away
+# on 2026-11-18, L-254); `provenance` also holds it to the SHA-512 nuget.org
+# publishes and runs `dotnet nuget verify --all` on it.
 #
 # - `linux` (Ubuntu): stages the runner folder and records its inventory (the
 #   managed catalogue's file data), checks `describe` against the pins, then on
@@ -73,6 +76,57 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tools -p test_p16_ocr_runner.py
           python3 -m unittest discover -s tools -p test_p16_ocr_evaluation.py
+
+  provenance:
+    name: ONNX Runtime package provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned package; hold it to its pins and to the SHA-512 nuget.org publishes
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          status=0
+          python3 tools/p16_ocr_runner.py provenance --out "$RUNNER_TEMP/package" \
+            --report "$RUNNER_TEMP/report/provenance.json" || status=$?
+          { echo '## ONNX Runtime package (nuget.org)'; echo; echo '```json'; cat "$RUNNER_TEMP/report/provenance.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Verify the package's author and repository signatures
+        if: always()
+        run: |
+          set -uo pipefail
+          package="$RUNNER_TEMP/package/microsoft.ml.onnxruntime.${ONNXRUNTIME_VERSION}.nupkg"
+          if [ ! -f "$package" ]; then
+            echo "The package was not fetched, so its signatures were not checked." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if ! command -v dotnet > /dev/null; then
+            echo "This runner image has no .NET SDK: the signature check was not run; the SHA-512 check above stands alone." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          dotnet --version
+          status=0
+          dotnet nuget verify --all "$package" > "$RUNNER_TEMP/report/nuget-verify.txt" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/report/nuget-verify.txt"
+          { echo '## dotnet nuget verify --all'; echo; echo "exit status: $status"; echo; echo '```'; cat "$RUNNER_TEMP/report/nuget-verify.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: p16-ocr-runner-provenance
+          path: ${{ runner.temp }}/report
+          if-no-files-found: warn
+          retention-days: 90
 
   linux:
     name: Parity and end to end (ubuntu-24.04)

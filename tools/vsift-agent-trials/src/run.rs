@@ -257,7 +257,7 @@ pub fn phase_prompt(
 pub fn client_arguments(
     request: &RunRequest,
     layout: &TrialLayout,
-    scenario: &Scenario,
+    image_policy: ImagePolicy,
     prompt: &str,
 ) -> Vec<String> {
     let workspace = layout.workspace().to_string_lossy().into_owned();
@@ -310,7 +310,7 @@ pub fn client_arguments(
             if cfg!(windows) {
                 arguments.extend(["-c".to_owned(), CODEX_WINDOWS_SANDBOX.to_owned()]);
             }
-            if scenario.image_policy == ImagePolicy::Disabled {
+            if image_policy == ImagePolicy::Disabled {
                 arguments.extend(["--disable".to_owned(), CODEX_IMAGE_FEATURE.to_owned()]);
             }
             arguments.push(prompt.to_owned());
@@ -392,7 +392,14 @@ pub fn client_environment(
     layout: &TrialLayout,
     manifest: &TrialManifest,
 ) -> Result<Vec<(String, OsString)>, TrialError> {
-    let path = if manifest.client_path_directories.is_empty() {
+    let path = if let Some(value) = &manifest.value {
+        crate::value::prepare::client_path(
+            manifest,
+            value,
+            &request.path_directories,
+            &request.system_path,
+        )?
+    } else if manifest.client_path_directories.is_empty() {
         client_path(
             &manifest.vsift_executable,
             &request.path_directories,
@@ -468,13 +475,28 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         ));
     }
     let manifest = read_manifest(&layout)?;
-    let scenario = Scenario::load(&layout.scenario())?;
+    // A value trial runs under its task's budget, the same for every arm,
+    // whatever the operator passed; it has no scenario file.
+    let budgeted;
+    let (request, image_policy) = if let Some(value) = &manifest.value {
+        budgeted = RunRequest {
+            timeout: Duration::from_secs(value.budget.timeout_s),
+            max_turns: value.budget.max_turns,
+            ..request.clone()
+        };
+        (&budgeted, ImagePolicy::ClientDefault)
+    } else {
+        (request, Scenario::load(&layout.scenario())?.image_policy)
+    };
     check_before_start(request, &layout, &manifest)?;
+    if manifest.value.is_some() && request.phase > 1 && request.debug_prompt.is_none() {
+        crate::value::prepare::write_earlier_answer(&layout, request.phase)?;
+    }
     let prompt = match &request.debug_prompt {
         Some(prompt) => prompt.clone(),
         None => phase_prompt(&layout, &manifest, request.phase)?,
     };
-    let arguments = client_arguments(request, &layout, &scenario, &prompt);
+    let arguments = client_arguments(request, &layout, image_policy, &prompt);
     let environment = client_environment(request, &layout, &manifest)?;
     for directory in [
         layout.trial().join("tmp"),
@@ -489,8 +511,13 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     let raw = layout.raw(request.phase);
     let stdout_path = raw.join("stdout.jsonl");
     let stderr_path = raw.join("stderr.txt");
-    let stdout = File::create(&stdout_path)
+    let times_path = raw.join(crate::timing::TIMES_FILE);
+    let stdout = tokio::fs::File::create(&stdout_path)
+        .await
         .map_err(|error| TrialError::io_step("creating the raw stdout log", &stdout_path, error))?;
+    let times = tokio::fs::File::create(&times_path)
+        .await
+        .map_err(|error| TrialError::io_step("creating the arrival times", &times_path, error))?;
     let stderr = File::create(&stderr_path)
         .map_err(|error| TrialError::io_step("creating the raw stderr log", &stderr_path, error))?;
 
@@ -501,7 +528,7 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         .envs(environment.iter().map(|(name, value)| (name, value)))
         .current_dir(layout.workspace())
         .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
+        .stdout(Stdio::piped())
         .stderr(Stdio::from(stderr));
     let mut wrapped = CommandWrap::from(command);
     contain(&mut wrapped);
@@ -513,6 +540,18 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
     let mut child = wrapped
         .spawn()
         .map_err(|error| TrialError::Process(format!("the client did not start: {error}")))?;
+    // The harness reads stdout itself so that each line gets its arrival
+    // time (crate::timing); the bytes written are the client's, unchanged.
+    let client_stdout = child
+        .stdout()
+        .take()
+        .ok_or_else(|| TrialError::Process("the client's stdout could not be read".to_owned()))?;
+    let copier = tokio::spawn(crate::timing::copy_with_times(
+        client_stdout,
+        stdout,
+        times,
+        started,
+    ));
     let waited = tokio::time::timeout(request.timeout, child.wait()).await;
     let timed_out = waited.is_err();
     let exit_code = if let Ok(status) = waited {
@@ -527,7 +566,33 @@ pub async fn run(request: &RunRequest) -> Result<RunRecord, TrialError> {
         None
     };
     let wall_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let sign_in_leak_check = check_sign_in_leak(&request.client_home, &stdout_path, &stderr_path)?;
+    // The stream ends when the client and every process holding its stdout
+    // have exited. A grandchild that outlives the client could hold the pipe
+    // (L-229 saw the like on Windows), so after 30 s the copy stops: the
+    // client's own lines are already written, and a missing arrival time
+    // only leaves that line out of the time split.
+    let abort = copier.abort_handle();
+    match tokio::time::timeout(Duration::from_secs(30), copier).await {
+        Ok(Ok(Ok(()))) | Err(_) => abort.abort(),
+        Ok(Ok(Err(error))) => {
+            return Err(TrialError::io_step(
+                "copying the client's stdout to",
+                &stdout_path,
+                error,
+            ));
+        }
+        Ok(Err(error)) => {
+            return Err(TrialError::Process(format!(
+                "copying the client's stdout failed: {error}"
+            )));
+        }
+    }
+    let sign_in_leak_check = check_sign_in_leak(
+        &request.client_home,
+        &request.pass_environment,
+        &stdout_path,
+        &stderr_path,
+    )?;
     let (stdout_text, stderr_text) = (
         fs::read(&stdout_path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
@@ -580,7 +645,11 @@ fn check_before_start(
             "the installed vsift executable is not the one prepare verified".to_owned(),
         ));
     }
-    if manifest.mode == TrialMode::Cold && request.debug_prompt.is_none() {
+    // A value trial's later phase finds the earlier answer in the workspace,
+    // which names the tools it used; the workspace was proved cold for
+    // phase 1 and nothing but the harness wrote to it since.
+    let later_value_phase = manifest.value.is_some() && request.phase > 1;
+    if manifest.mode == TrialMode::Cold && request.debug_prompt.is_none() && !later_value_phase {
         assert_cold_workspace(
             &layout.workspace(),
             request.cold_scan_stop.as_deref(),
@@ -599,6 +668,7 @@ fn check_before_start(
 /// [`TrialError::Io`] when a raw log cannot be read.
 fn check_sign_in_leak(
     client_home: &Path,
+    pass_environment: &[String],
     stdout: &Path,
     stderr: &Path,
 ) -> Result<LeakCheck, TrialError> {
@@ -608,7 +678,15 @@ fn check_sign_in_leak(
             .map_err(|error| TrialError::io_step("reading the raw log", path, error))
     };
     let (out, err) = (read(stdout)?, read(stderr)?);
-    Ok(leak_check::scan(client_home, &[&out, &err]))
+    let passed: Vec<String> = pass_environment
+        .iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .collect();
+    Ok(leak_check::with_passed_values(
+        leak_check::scan(client_home, &[&out, &err]),
+        &passed,
+        &[&out, &err],
+    ))
 }
 
 /// Changes the client home needs before this trial starts, described for

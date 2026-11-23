@@ -1,6 +1,10 @@
 # Security threat model and control plan
 
-Status: proposed release requirements. Date: 2026-09-09.
+Status: the control plan for the release requirements, written 2026-09-09 and amended
+since (P13 notes, the R1 threats, the 0.3.0 notes on OCR and online sources). Read each
+control as a requirement; the sections that say "implemented" or name a packet and a
+release record what ships, and [the CLI contract](../contracts/cli-v1.md) and the
+[known-limits register](known-limits.md) are the authority on the current behaviour.
 Applies to the CLI, local state, runtime provisioning, native providers, agent handoff
 and R0 worker deployment. Read [baseline findings](baseline-review.md) separately:
 prospective controls below are not claims about current implementation.
@@ -513,6 +517,34 @@ flagged), and SEC-T02 is re-run over all of it (verification section 7).
   reported, so a runner folder swapped during a call cannot record its text under another build's
   identity (RV-2 finding 3). The library is loaded only from the runner's own folder by absolute
   path; an unpinned library is accepted but named by its digest, never by a version.
+
+## Online sources (`0.3.0`, ADR 0028)
+
+`ingest --url` is the one place VSift fetches a location a caller chose. The first table is the threat
+review of #407's slice (direct HTTPS links); the second is #409's (a page fetched through yt-dlp and its
+JavaScript runtime).
+
+| Threat | Control (#407) | Residual |
+| --- | --- | --- |
+| Request forgery through a chosen link or a redirect (SEC-06, SEC-31): an internal service, the cloud metadata address, a loopback port | HTTPS on 443 only; every name of the link or a hop resolved by VSift, and a name with any non-public address refused whole (the proxy's own name is the person's configuration and is not screened; nothing goes direct to that name, 2026-11-10); the connector reaches only the addresses checked; a host written as an address checked on every hop; at most three redirects, each held to the same rules; no credentials in a link; a proxy variable that is set but unusable is refused (`proxy_unusable`), never bypassed | Through a proxy the proxy resolves the name: only internal-looking names and addresses are refused on each request the proxy carries (`NO_PROXY` decided for each hop by its own host since 2026-11-10), and the origin says `proxy_resolved` ([L-208](known-limits.md#l-208)) |
+| DNS rebinding: a name public for the check and private for the connection | The check is the resolution the connector uses; no second lookup | None known for direct connections |
+| Links and instructions inside evidence (#221) | Only `ingest --url` fetches, and only the link it is given; nothing found in a transcript, a frame or a page is fetched; the skill is unchanged in this slice | An agent that runs `ingest --url` on a link it read in evidence; the skill text and an injection trial come with #409, at the `0.3.0` freeze |
+| A stranger chooses the bytes FFmpeg decodes | The body must start as an admitted container and then meets the unchanged restricted media profile (ADR 0012) and the same snapshot rules as a copied file | The accepted media-parser residuals (for example [L-144](known-limits.md#l-144)) now apply to a file anyone can serve; acquired-style files are to be added to the hostile-media campaign |
+| Signed tokens leak through output, logs, errors or bundles | The link is never stored, printed or logged; the origin keeps its SHA-256 and the hosts only; errors carry a typed reason and fixed prose; tests put a token in the query, the fragment and the path and find it nowhere VSift writes | The link is on the command line unless given on standard input (`--url -`) |
+| A huge, endless or slow body | A declared length over the limit is refused before the body; bytes are counted as they arrive; a 30-second stall and a whole-transfer deadline stop it; free space is checked for a declared length first, and for a body without one 64 MiB at a time | Bounded by the limits a caller chooses (at most 20 GiB and 4 hours) |
+| Identifying the user to a server | A fixed user agent naming the product only; no cookie, `Authorization` or `Referer` | The server sees the connecting address, as for any download |
+| The strict worker's isolation | `--host-isolation strict-linux` refuses `--url` before anything is fetched; a worker job request takes no link | None |
+
+**Public pages (#409, ADR 0028 sections 4.6 to 4.9).** These apply only when a link answers with a web page and a yt-dlp is set up.
+
+| Threat | Control (#409) | Residual |
+| --- | --- | --- |
+| A stranger's page drives yt-dlp: its extractors, its JavaScript solving in the runtime, and everything it reports | No shell; a fixed argument list with the link after `--`; no configuration, plugin, cookie, update, remote component, `--exec` or merge; a playlist bounded to one entry. Its output is untrusted: at most 8 MiB, parsed strictly by a fuzzed parser (`ytdlp_info_json`), format ids held to a fixed pattern and selected exactly, HTTPS formats only, at most 4 hours. Only exit 0 succeeds, and the folder must then hold exactly the expected files with admitted magic, counted on disk under the download limits. Its text only chooses a reason and is never echoed, stored or logged | yt-dlp runs as the user, with no filesystem or network sandbox: a bug in it or in a runtime that a page can reach is code running with the user's rights ([L-209](known-limits.md#l-209)). A user's own yt-dlp and runtime are not reviewed at all ([L-247](known-limits.md#l-247)) |
+| FFmpeg demuxes two hostile inputs when separate audio and video are joined | The same verified FFmpeg as every read; only the two checked files, each with its demuxer forced from its magic; `-protocol_whitelist file` on each input and no external references in MOV; a stream copy with no filter, decoder or other input; the result is then an ordinary source under the restricted media profile (ADR 0012) | The same exposure as any ingest, with the accepted media-parser residuals (for example [L-144](known-limits.md#l-144)), on two files a stranger chose. |
+| First use of FFmpeg as a muxer: the `mp4` and `matroska` muxers meet a stranger's packets | Stream copy only, metadata dropped, written to the session's slot only; the two muxers are in the scan scope of every reading ([`p14-qualification.md`](p14-qualification.md), R-SEC03) | No campaign has yet aimed hostile files at the muxers; the fake yt-dlp and the hosted probe exercise the join with well-formed files only |
+| yt-dlp's connections have no address policy: its resolving, redirects and media hosts | A host written as an address and an internal name are refused before yt-dlp starts, with or without a proxy; only formats reported as `https` are selected | A public name that resolves inward, a redirect or a format URL can reach any address VSift itself would refuse, unseen. A system proxy on Windows or macOS can carry the fetch with no record of it. The limit stays while yt-dlp is an external process ([L-209](known-limits.md#l-209)) |
+| What the restricted environment leaves open | The environment is empty but for a private temporary and home folder inside the session, the variables that stop plugins and update checks, the proxy variables VSift honours, and on Windows `SystemRoot`; no `PATH`; the proxy is never on the command line; `--fixup never` so no unverified FFmpeg found beside a tool touches the files | The environment hides configuration and credentials from a well-behaved tool; it is not a sandbox. A compromised tool can still read what the user can read, and on Windows and macOS the system proxy is read from outside the environment ([L-209](known-limits.md#l-209)) |
+| The link on yt-dlp's command line | The link is passed as one argument after `--`, in both phases, and goes nowhere else: the origin keeps its digest. VSift's own output, logs and errors never hold it (ADR 0028 section 5, which is about what VSift writes) | While yt-dlp runs, other local users can read the link in the process list, and it can hold a signed token or an unlisted video's id. Giving it on standard input (`--url -`) keeps it off VSift's command line only, not off yt-dlp's ([L-209](known-limits.md#l-209)) |
 
 ## Agent-specific controls
 

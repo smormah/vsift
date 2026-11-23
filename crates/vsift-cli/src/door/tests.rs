@@ -1,0 +1,1619 @@
+//! Scripted terminal tests of the setup door (ADR 0036 section 11): a
+//! scripted person at a fake console, and setup steps that answer from the
+//! published v1 examples, so the whole conversation runs without a
+//! terminal, a tool on the machine or a network.
+//!
+//! The snapshots in `crates/vsift-cli/tests/human_output/setup-door-*.txt`
+//! are what a person reads; `VSIFT_UPDATE_HUMAN_SNAPSHOTS=1` rewrites them.
+//! They hold standard output only: on a real terminal the typed answer and
+//! its Enter, echoed by the terminal, sit between the question and what
+//! follows it.
+
+use std::{
+    cell::{Cell, RefCell},
+    collections::VecDeque,
+    future::{Future, ready},
+};
+
+use serde_json::{Value, json};
+use vsift::{
+    Cancellation, CorePart, CorePartSet, DependencyState, DependencyStatus, FailureCode,
+    LocalAsrCheckOutcome, LocalAsrModelStatus, LocalAsrNotRunReason, LocalAsrSetupStatus,
+    ManagedComponent, ManagedPlanAvailability, OptionalCapability, OptionalComponent,
+    OptionalComponentSet, PieceProgress, PieceStage, ProbeTimeout, ProbeTimeoutKind,
+    ProgressObserver, ReviewedAsrModel, RuntimeDependency, RuntimeDiagnosis, RuntimeReadiness,
+};
+use vsift_contract::DependencyLookup;
+
+use super::{
+    Answer, CheckedSetup, Console, DoorOptions, DoorRun, InstallResults, QuestionLine, Reply,
+    ReviewedPlan, SetupSteps, run,
+};
+use crate::{
+    CommandFailure,
+    command::DoorExtra,
+    human::{
+        self, Styling,
+        tests::{check_snapshot, example},
+    },
+    live_line::LiveLine,
+    output::{OutputMode, OutputWriter, ProcessExit},
+};
+
+type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// The version in the heading of every snapshot.
+const VERSION: &str = "0.0.0-test";
+
+/// A person at the fake terminal, or nobody.
+struct ScriptedConsole {
+    present: bool,
+    styling: Styling,
+    reply: Reply,
+    /// Presses Ctrl-C while the question waits: the cancellation fires,
+    /// whatever was typed.
+    interrupts: bool,
+    asked: Cell<u32>,
+}
+
+impl ScriptedConsole {
+    /// A person who types `answer` and presses Enter.
+    fn person(answer: Answer) -> Self {
+        Self {
+            present: true,
+            styling: Styling::Plain,
+            reply: Reply {
+                answer,
+                line: QuestionLine::Ended,
+            },
+            interrupts: false,
+            asked: Cell::new(0),
+        }
+    }
+
+    fn nobody() -> Self {
+        Self {
+            present: false,
+            ..Self::person(Answer::Yes)
+        }
+    }
+}
+
+impl Console for ScriptedConsole {
+    fn person_present(&self) -> bool {
+        self.present
+    }
+
+    fn styling(&self) -> Styling {
+        self.styling
+    }
+
+    fn live_line(&self) -> LiveLine {
+        LiveLine::Hidden
+    }
+
+    fn answer(&mut self, cancellation: &Cancellation) -> impl Future<Output = Reply> {
+        self.asked.set(self.asked.get() + 1);
+        if self.interrupts {
+            cancellation.cancel();
+        }
+        ready(self.reply)
+    }
+}
+
+/// Setup steps that answer from a script and count what was asked of them.
+struct ScriptedSteps {
+    checks: RefCell<VecDeque<CheckedSetup>>,
+    plan: Option<Value>,
+    install: RefCell<Option<Result<InstallResults, CommandFailure>>>,
+    planned: Cell<u32>,
+    planned_parts: Cell<Option<CorePartSet>>,
+    installed: Cell<u32>,
+    /// What the install reports of its pieces, in order.
+    pieces: Vec<PieceProgress>,
+}
+
+impl ScriptedSteps {
+    fn new(checks: Vec<CheckedSetup>) -> Self {
+        Self {
+            checks: RefCell::new(checks.into()),
+            plan: None,
+            install: RefCell::new(None),
+            planned: Cell::new(0),
+            planned_parts: Cell::new(None),
+            installed: Cell::new(0),
+            pieces: Vec::new(),
+        }
+    }
+
+    fn with_pieces(mut self, pieces: Vec<PieceProgress>) -> Self {
+        self.pieces = pieces;
+        self
+    }
+
+    fn with_plan(mut self, plan: Value) -> Self {
+        self.plan = Some(plan);
+        self
+    }
+
+    fn with_install(self, install: Result<InstallResults, CommandFailure>) -> Self {
+        *self.install.borrow_mut() = Some(install);
+        self
+    }
+}
+
+impl SetupSteps for ScriptedSteps {
+    fn check(&self) -> impl Future<Output = Result<CheckedSetup, CommandFailure>> {
+        ready(
+            self.checks
+                .borrow_mut()
+                .pop_front()
+                .ok_or_else(|| CommandFailure::from(FailureCode::Internal)),
+        )
+    }
+
+    fn plan(
+        &self,
+        parts: CorePartSet,
+        _include: OptionalComponentSet,
+    ) -> impl Future<Output = Result<ReviewedPlan, CommandFailure>> {
+        self.planned.set(self.planned.get() + 1);
+        self.planned_parts.set(Some(parts));
+        ready(
+            self.plan
+                .clone()
+                .ok_or_else(|| CommandFailure::from(FailureCode::Internal))
+                .and_then(|envelope| ReviewedPlan::from_envelope(envelope, parts)),
+        )
+    }
+
+    fn install(
+        &self,
+        _plan: &ReviewedPlan,
+        _cancellation: &Cancellation,
+        progress: ProgressObserver,
+    ) -> impl Future<Output = Result<InstallResults, CommandFailure>> {
+        self.installed.set(self.installed.get() + 1);
+        for piece in &self.pieces {
+            progress.install_piece(piece);
+        }
+        ready(
+            self.install
+                .borrow_mut()
+                .take()
+                .unwrap_or_else(|| Err(CommandFailure::from(FailureCode::Internal))),
+        )
+    }
+}
+
+fn found() -> DependencyState {
+    DependencyState::Available {
+        version: String::from("fixture 1"),
+    }
+}
+
+const SPEECH_WORKS: LocalAsrSetupStatus = LocalAsrSetupStatus {
+    model: LocalAsrModelStatus::KnownPinned(ReviewedAsrModel::BaseQ5_1),
+    verification: LocalAsrCheckOutcome::Verified(vsift::LocalAsrVerificationSource::Recorded),
+};
+
+const NO_SPEECH: LocalAsrSetupStatus = LocalAsrSetupStatus {
+    model: LocalAsrModelStatus::NotSelected,
+    verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::WhisperUnavailable),
+};
+
+const NOTHING_YET: LocalAsrSetupStatus = LocalAsrSetupStatus {
+    model: LocalAsrModelStatus::NotSelected,
+    verification: LocalAsrCheckOutcome::NotRun(LocalAsrNotRunReason::MediaToolsUnavailable),
+};
+
+/// A check that found `states`, where managed installs are `managed` and
+/// web videos stand as `web_videos`.
+fn checked(
+    states: [DependencyState; 3],
+    local_asr: LocalAsrSetupStatus,
+    managed: ManagedPlanAvailability,
+    web_videos: OptionalCapability,
+) -> CheckedSetup {
+    let media_missing = states[..2]
+        .iter()
+        .any(|state| !matches!(state, DependencyState::Available { .. }));
+    let complete = !media_missing && local_asr == SPEECH_WORKS;
+    CheckedSetup {
+        diagnosis: RuntimeDiagnosis {
+            readiness: if media_missing {
+                RuntimeReadiness::Blocked
+            } else if complete {
+                RuntimeReadiness::Ready
+            } else {
+                RuntimeReadiness::Degraded
+            },
+            dependencies: RuntimeDependency::ALL
+                .into_iter()
+                .zip(states)
+                .map(|(dependency, state)| DependencyStatus { dependency, state })
+                .collect(),
+        },
+        local_asr,
+        availability: managed,
+        by_dependency: [managed; 3],
+        updates: Vec::new(),
+        optional: vec![(OptionalComponent::OnlineLinks, web_videos)],
+        lookups: [DependencyLookup::FilteredPath; 3],
+    }
+}
+
+fn video_ready_speech_missing(managed: ManagedPlanAvailability) -> CheckedSetup {
+    checked(
+        [found(), found(), DependencyState::Missing],
+        NO_SPEECH,
+        managed,
+        OptionalCapability::NotInstalled,
+    )
+}
+
+fn all_ready() -> CheckedSetup {
+    checked(
+        [found(), found(), found()],
+        SPEECH_WORKS,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    )
+}
+
+/// One reviewed action of a plan, as `setup plan --json` publishes it.
+fn action(component: &str, version: &str, publisher: &str, bytes: u64) -> Value {
+    json!({
+        "id": format!("install-{component}"),
+        "state": "pending",
+        "component": component,
+        "version": version,
+        "publisher": publisher,
+        "source_url": format!("https://example.invalid/{component}"),
+        "bytes": bytes,
+        "sha256": "b".repeat(64),
+        "format": "raw_file",
+        "archive_limits": null,
+        "selected_files": [],
+        "archive_links": [],
+        "runtime_copies": [],
+        "licence": "MIT",
+        "notice_url": "https://example.invalid/LICENSE",
+        "source_code_url": "https://example.invalid/source",
+        "trust_limit": "Publisher bytes pinned by digest.",
+        "licence_scope": "disclosure_not_legal_clearance",
+        "destination": "private_per_user_managed_runtime",
+        "permissions": "private_user_only",
+        "change": "planned_download_verify_extract_smoke_activate",
+        "required_authority": "user",
+        "files": [{"name": component, "bytes": bytes, "sha256": "b".repeat(64), "mode": "owner_read_write"}]
+    })
+}
+
+/// A plan of the reviewed catalogue that installs `actions`.
+fn plan(actions: Vec<Value>) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut plan = example("setup-plan.unavailable.json")?;
+    plan["data"]["target"] = json!("ubuntu_24_04_x86_64");
+    plan["data"]["managed_install"] = json!("catalogue_accepted");
+    plan["data"]["catalogue_revision"] = json!("2026-09-20.1");
+    plan["data"]["plan_digest"] = json!("a".repeat(64));
+    plan["data"]["install_needed"] = json!(true);
+    plan["data"]["actions"] = Value::Array(actions);
+    Ok(plan)
+}
+
+fn speech_plan() -> Result<Value, Box<dyn std::error::Error>> {
+    plan(vec![
+        action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        action("whisper_model", "base-q5_1", "ggml-org", 59_707_625),
+    ])
+}
+
+/// The `data` of a `setup.install` example, with its components replaced.
+fn install_results(
+    components: Value,
+    failure: Option<FailureCode>,
+) -> Result<InstallResults, Box<dyn std::error::Error>> {
+    let mut data = example("setup-install.json")?["data"].take();
+    data["components"] = components;
+    InstallResults::from_data(data, failure).map_err(|_| "the install result does not read".into())
+}
+
+fn component(name: &str, status: &str, step: Option<&str>, reason: Option<&str>) -> Value {
+    json!({
+        "component": name,
+        "version": "fixture",
+        "status": status,
+        "step": step,
+        "reason": reason,
+        "failure_code": null,
+        "smoke_check": null,
+        "stage": null,
+        "retention_reason": null
+    })
+}
+
+/// Runs the door and returns its exit status and what it wrote.
+async fn converse(
+    console: &mut ScriptedConsole,
+    steps: &ScriptedSteps,
+    include: Vec<DoorExtra>,
+) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let cancellation = Cancellation::new();
+    let exit = {
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        run(
+            DoorRun {
+                console,
+                steps,
+                options: DoorOptions { include },
+                version: VERSION,
+                cancellation: &cancellation,
+                trap_interruptions: false,
+            },
+            &mut writer,
+        )
+        .await
+    };
+    Ok((exit, String::from_utf8(stdout)?, String::from_utf8(stderr)?))
+}
+
+fn assert_plain(text: &str) {
+    assert!(
+        text.chars()
+            .all(|character| character == '\n' || !character.is_control()),
+        "{text:?}"
+    );
+    assert!(
+        !text.contains('\u{2713}') && !text.contains('\u{2717}'),
+        "{text}"
+    );
+}
+
+/// Video works, speech is missing, `VSift` can install it: one offer naming
+/// each piece's publisher, size and licence, one question, and on yes the
+/// install, the results and the table again, ending with what to try.
+#[tokio::test]
+async fn yes_installs_what_was_offered_and_ends_complete() -> TestResult {
+    let steps = ScriptedSteps::new(vec![
+        video_ready_speech_missing(ManagedPlanAvailability::Qualified),
+        all_ready(),
+    ])
+    .with_plan(speech_plan()?)
+    .with_install(Ok(install_results(
+        json!([
+            component("whisper_cli", "activated", None, None),
+            component("whisper_model", "activated", None, None),
+        ]),
+        None,
+    )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (exit, stdout, stderr) = converse(&mut console, &steps, Vec::new()).await?;
+
+    check_snapshot("setup-door-yes", &stdout)?;
+    assert_plain(&stdout);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((console.asked.get(), steps.installed.get()), (1, 1));
+    assert!(stdout.contains("Install speech now? [y/N] "), "{stdout}");
+    assert!(
+        stdout.ends_with("Try it: vsift ./your-video.mp4\n"),
+        "{stdout}"
+    );
+    assert!(stderr.is_empty(), "{stderr}");
+    Ok(())
+}
+
+/// No (Enter, `n`, a closed input) installs nothing, and the last line
+/// says how to come back.
+#[tokio::test]
+async fn no_installs_nothing_and_says_how_to_come_back() -> TestResult {
+    let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::Qualified,
+    )])
+    .with_plan(speech_plan()?);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (exit, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    check_snapshot("setup-door-no", &stdout)?;
+    assert_eq!(steps.installed.get(), 0);
+    assert_eq!(exit, ProcessExit::Success);
+    assert!(
+        stdout.ends_with("Nothing was installed. Run vsift setup again when you're ready.\n"),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// A typed answer's Enter is the only break after the question; with no
+/// typed answer (the time limit, Ctrl-C, a closed input) the door breaks the
+/// line itself, so the close never sits on the question's line.
+#[tokio::test]
+async fn the_close_starts_on_the_line_after_the_question() -> TestResult {
+    const QUESTION: &str = "Install speech now? [y/N] ";
+    const CLOSE: &str = "Nothing was installed.";
+    for (reply, between) in [
+        (
+            Reply {
+                answer: Answer::No,
+                line: QuestionLine::Ended,
+            },
+            "",
+        ),
+        (Reply::UNANSWERED, "\n"),
+    ] {
+        let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+            ManagedPlanAvailability::Qualified,
+        )])
+        .with_plan(speech_plan()?);
+        let mut console = ScriptedConsole {
+            reply,
+            ..ScriptedConsole::person(Answer::No)
+        };
+
+        let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+        assert!(
+            stdout.contains(&format!("{QUESTION}{between}{CLOSE}")),
+            "{reply:?}: {stdout:?}"
+        );
+    }
+    Ok(())
+}
+
+/// Ctrl-C at the question is a no, even when something was typed.
+#[tokio::test]
+async fn ctrl_c_at_the_question_installs_nothing() -> TestResult {
+    let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::Qualified,
+    )])
+    .with_plan(speech_plan()?);
+    let mut console = ScriptedConsole {
+        interrupts: true,
+        ..ScriptedConsole::person(Answer::Yes)
+    };
+
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    assert_eq!(steps.installed.get(), 0);
+    assert!(stdout.ends_with("Nothing was installed. Run vsift setup again when you're ready.\n"));
+    Ok(())
+}
+
+/// Only `y` and `yes` are yes.
+#[test]
+fn only_y_and_yes_are_yes() {
+    for line in ["y", "Y\n", "yes", " YES \r\n", "Yes"] {
+        assert_eq!(Answer::of(line), Answer::Yes, "{line:?}");
+    }
+    for line in [
+        "",
+        "\n",
+        "n",
+        "no",
+        "yeah",
+        "y es",
+        "yes please",
+        "\u{1b}[A",
+    ] {
+        assert_eq!(Answer::of(line), Answer::No, "{line:?}");
+    }
+}
+
+/// A piece that fails: video is installed, speech's program fails to
+/// download, its model is not tried. What finished stays, the table says
+/// where the person stands, and the last line says what to do.
+#[tokio::test]
+async fn a_failed_piece_keeps_what_finished_and_says_what_to_do() -> TestResult {
+    let nothing = checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![
+        nothing,
+        video_ready_speech_missing(ManagedPlanAvailability::Qualified),
+    ])
+    .with_plan(plan(vec![
+        action("ffmpeg_ffprobe", "n9.0.1", "BtbN", 112_640_000),
+        action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        action("whisper_model", "base-q5_1", "ggml-org", 59_707_625),
+    ])?)
+    .with_install(Ok(install_results(
+        json!([
+            component("ffmpeg_ffprobe", "activated", None, None),
+            component("whisper_cli", "failed", Some("download"), Some("offline")),
+            component("whisper_model", "failed", None, Some("blocked")),
+        ]),
+        Some(FailureCode::DownloadFailed),
+    )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (exit, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    check_snapshot("setup-door-failed", &stdout)?;
+    assert_eq!(exit, ProcessExit::from(FailureCode::DownloadFailed.class()));
+    assert!(
+        stdout.contains("Install video and speech now? [y/N] "),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("whisper.cpp   the download stopped: no connection"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.ends_with("Next: check your connection, then run  vsift setup\n"),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// When video fails first, speech is waiting for video, not failed.
+#[tokio::test]
+async fn speech_after_a_failed_video_is_waiting_for_video() -> TestResult {
+    let nothing = checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![nothing.clone(), nothing])
+        .with_plan(plan(vec![
+            action("ffmpeg_ffprobe", "n9.0.1", "BtbN", 112_640_000),
+            action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        ])?)
+        .with_install(Ok(install_results(
+            json!([
+                component(
+                    "ffmpeg_ffprobe",
+                    "failed",
+                    Some("smoke"),
+                    Some("provider_failed")
+                ),
+                component("whisper_cli", "failed", None, Some("blocked")),
+            ]),
+            Some(FailureCode::MissingCapability),
+        )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    assert!(stdout.contains("waiting for video"), "{stdout}");
+    assert!(stdout.ends_with("Next: vsift setup\n"), "{stdout}");
+    assert!(stdout.contains("troubleshooting guide"), "{stdout}");
+    Ok(())
+}
+
+/// Where `VSift` cannot install a missing part, nothing is offered for it:
+/// one line says so, the guide is linked, and the last line is the one
+/// command that registers a tool the person installs themselves.
+#[tokio::test]
+async fn a_part_vsift_cannot_install_here_gets_the_do_it_yourself_step() -> TestResult {
+    let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::TargetUnavailable,
+    )]);
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (exit, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    check_snapshot("setup-door-cannot-install", &stdout)?;
+    assert_eq!((console.asked.get(), steps.planned.get()), (0, 0));
+    assert_eq!(exit, ProcessExit::Success);
+    assert!(
+        stdout.contains("VSift can't install speech on this computer yet.\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.ends_with(
+            "Next: vsift setup configure whisper --executable <full-path-to-whisper-cli>\n"
+        ),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// Issue #396 at the door: for each tool, missing or found and failing,
+/// where `VSift` cannot install it, the last line is the one command that
+/// registers it, never advice to look for it.
+#[tokio::test]
+async fn each_tool_vsift_cannot_install_ends_with_its_registration_command() -> TestResult {
+    let commands = [
+        "Next: vsift setup configure ffmpeg --executable <full-path-to-ffmpeg>\n",
+        "Next: vsift setup configure ffprobe --executable <full-path-to-ffprobe>\n",
+        "Next: vsift setup configure whisper --executable <full-path-to-whisper-cli>\n",
+    ];
+    for (index, command) in commands.into_iter().enumerate() {
+        for state in [
+            DependencyState::Missing,
+            DependencyState::Unhealthy {
+                message: String::from("process exited with exit code: 3"),
+            },
+        ] {
+            let mut states = [found(), found(), found()];
+            states[index] = state;
+            let steps = ScriptedSteps::new(vec![checked(
+                states,
+                SPEECH_WORKS,
+                ManagedPlanAvailability::TargetUnavailable,
+                OptionalCapability::Unavailable,
+            )]);
+            let mut console = ScriptedConsole::person(Answer::Yes);
+
+            let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+            assert!(stdout.ends_with(command), "{index}: {stdout}");
+            assert!(
+                !stdout.contains("locate") && !stdout.contains("search"),
+                "{stdout}"
+            );
+            assert_eq!(console.asked.get(), 0);
+        }
+    }
+    Ok(())
+}
+
+/// Nobody at a terminal: the read-only table, no question and no plan,
+/// and the exit status `setup check` gives.
+#[tokio::test]
+async fn without_a_terminal_it_reports_and_never_asks() -> TestResult {
+    let steps = ScriptedSteps::new(vec![checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    )])
+    .with_plan(speech_plan()?);
+    let mut console = ScriptedConsole::nobody();
+
+    let (exit, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    check_snapshot("setup-door-no-terminal", &stdout)?;
+    assert_plain(&stdout);
+    assert_eq!(exit, ProcessExit::UsageOrCapability);
+    assert_eq!(
+        (
+            console.asked.get(),
+            steps.planned.get(),
+            steps.installed.get()
+        ),
+        (0, 0, 0)
+    );
+    assert!(!stdout.contains("[y/N]"), "{stdout}");
+    Ok(())
+}
+
+/// Already complete: the table, the extras line, and what to try.
+#[tokio::test]
+async fn a_complete_setup_says_so_and_names_the_extras() -> TestResult {
+    let steps = ScriptedSteps::new(vec![all_ready()]);
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (exit, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    check_snapshot("setup-door-complete", &stdout)?;
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((console.asked.get(), steps.planned.get()), (0, 0));
+    assert!(
+        stdout.contains(
+            "Optional extras: web videos. Add one with: vsift setup --include web-videos\n"
+        ),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// Checks that ran out of time are not an offer: nothing is planned, and
+/// the step is to check again, where more time can be allowed.
+#[tokio::test]
+async fn timed_out_checks_offer_nothing() -> TestResult {
+    let timed_out = DependencyState::TimedOut(ProbeTimeout {
+        kind: ProbeTimeoutKind::NoAnswer,
+        shared_deadline: std::time::Duration::from_secs(30),
+    });
+    let steps = ScriptedSteps::new(vec![checked(
+        [found(), found(), timed_out],
+        NO_SPEECH,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    )])
+    .with_plan(speech_plan()?);
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+
+    assert_eq!((console.asked.get(), steps.planned.get()), (0, 0));
+    assert!(stdout.ends_with("Next: vsift setup check\n"), "{stdout}");
+    Ok(())
+}
+
+/// An extra the person asked for, on a complete setup: the offer covers
+/// the extra alone, with its own words, and the question says "Add".
+#[tokio::test]
+async fn an_included_extra_is_offered_on_its_own() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "online_links",
+        "status": "included",
+        "summary": "yt-dlp (GPL-3.0-or-later, with the MIT-licensed Deno runtime) fetches videos from web pages when you give VSift a link. Downloading is subject to each site's terms.",
+        "add_command": null,
+        "actions": [
+            action("js_runtime_deno", "2.5.0", "denoland", 41_000_000),
+            action("yt_dlp", "2026.09.01", "yt-dlp", 3_100_000),
+        ],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let steps = ScriptedSteps::new(vec![all_ready()]).with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::WebVideos]).await?;
+
+    assert_eq!(steps.planned.get(), 1);
+    assert!(
+        stdout.contains("VSift can add web videos for you:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("subject to each site's terms"), "{stdout}");
+    assert!(stdout.contains("Add web videos now? [y/N] "), "{stdout}");
+    Ok(())
+}
+
+/// A registered JavaScript runtime that no registered yt-dlp uses changes
+/// nothing at the door: with nothing installed, the extra is still offered.
+#[tokio::test]
+async fn an_unused_registered_runtime_does_not_hide_the_offer_of_an_extra() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "online_links",
+        "status": "included",
+        "summary": "yt-dlp fetches videos from web pages when you give VSift a link. Downloading is subject to each site's terms.",
+        "add_command": null,
+        "actions": [
+            action("js_runtime_deno", "2.5.0", "denoland", 41_000_000),
+            action("yt_dlp", "2026.09.01", "yt-dlp", 3_100_000),
+        ],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let stray = OptionalCapability::WithUnusedRuntime {
+        base: Box::new(OptionalCapability::NotInstalled),
+        runtime: Err("unexpected_output"),
+    };
+    let steps = ScriptedSteps::new(vec![checked(
+        [found(), found(), found()],
+        SPEECH_WORKS,
+        ManagedPlanAvailability::Qualified,
+        stray,
+    )])
+    .with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::WebVideos]).await?;
+
+    assert_eq!(steps.planned.get(), 1, "{stdout}");
+    assert!(
+        stdout.contains("VSift can add web videos for you:"),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// The colour fallback: on a terminal that takes colour, each status has a
+/// symbol and a colour; plain, the same words and nothing else.
+#[tokio::test]
+async fn symbols_and_colour_only_when_the_terminal_takes_them() -> TestResult {
+    let mut rich = ScriptedConsole {
+        styling: Styling::Rich,
+        ..ScriptedConsole::person(Answer::No)
+    };
+    let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::TargetUnavailable,
+    )]);
+    let (_, styled, _) = converse(&mut rich, &steps, Vec::new()).await?;
+    let steps = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::TargetUnavailable,
+    )]);
+    let mut plain = ScriptedConsole::person(Answer::No);
+    let (_, unstyled, _) = converse(&mut plain, &steps, Vec::new()).await?;
+
+    assert!(
+        styled.contains("\u{1b}[32m\u{2713} ready\u{1b}[0m"),
+        "{styled:?}"
+    );
+    assert!(
+        styled.contains("\u{1b}[31m\u{2717} not set up\u{1b}[0m"),
+        "{styled:?}"
+    );
+    assert_plain(&unstyled);
+    let stripped = styled
+        .replace("\u{1b}[32m\u{2713} ", "")
+        .replace("\u{1b}[31m\u{2717} ", "")
+        .replace("\u{1b}[2m\u{2013} ", "")
+        .replace("\u{1b}[0m", "");
+    // Without the symbols the words are the same; only the padding after a
+    // status differs, by the symbol's two columns.
+    let squeeze = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert_eq!(squeeze(&stripped), squeeze(&unstyled));
+    Ok(())
+}
+
+/// Runs the unattended door and returns its exit status and what it wrote.
+async fn unattended(
+    steps: &ScriptedSteps,
+    parts: CorePartSet,
+    accept_plan: Option<&str>,
+    mode: OutputMode,
+) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
+    unattended_including(steps, parts, OptionalComponentSet::EMPTY, accept_plan, mode).await
+}
+
+/// The same with the extras the caller named.
+async fn unattended_including(
+    steps: &ScriptedSteps,
+    parts: CorePartSet,
+    include: OptionalComponentSet,
+    accept_plan: Option<&str>,
+    mode: OutputMode,
+) -> Result<(ProcessExit, String, String), Box<dyn std::error::Error>> {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let cancellation = Cancellation::new();
+    let exit = {
+        let mut writer = OutputWriter::new(&mut stdout, &mut stderr);
+        super::unattended::run(
+            super::unattended::UnattendedRun {
+                steps,
+                parts,
+                include,
+                accept_plan: accept_plan.map(str::to_owned),
+                version: VERSION,
+                cancellation: &cancellation,
+                mode,
+                trap_interruptions: false,
+            },
+            &mut writer,
+        )
+        .await
+    };
+    Ok((exit, String::from_utf8(stdout)?, String::from_utf8(stderr)?))
+}
+
+const SPEECH: CorePartSet = CorePartSet::EMPTY.with(CorePart::Speech);
+
+fn piece(component: ManagedComponent, stage: PieceStage) -> PieceProgress {
+    PieceProgress {
+        component,
+        stage,
+        received: 10,
+        total: 10,
+    }
+}
+
+/// ADR 0036 section 6: naming the parts installs the plan built for them,
+/// with no question; one plain line per piece as it finishes, then the
+/// table and `Result: pass`, exit 0.
+#[tokio::test]
+async fn unattended_installs_the_named_parts_and_passes() -> TestResult {
+    let steps = ScriptedSteps::new(vec![
+        video_ready_speech_missing(ManagedPlanAvailability::Qualified),
+        all_ready(),
+    ])
+    .with_plan(speech_plan()?)
+    .with_pieces(vec![
+        piece(ManagedComponent::WhisperCli, PieceStage::Waiting),
+        piece(ManagedComponent::WhisperCli, PieceStage::Ready),
+        piece(ManagedComponent::WhisperModel, PieceStage::Ready),
+    ])
+    .with_install(Ok(install_results(
+        json!([
+            component("whisper_cli", "activated", None, None),
+            component("whisper_model", "activated", None, None),
+        ]),
+        None,
+    )?));
+
+    let (exit, stdout, stderr) = unattended(&steps, SPEECH, None, OutputMode::Human).await?;
+
+    check_snapshot("setup-door-unattended", &stdout)?;
+    assert_plain(&stdout);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!(steps.planned_parts.get(), Some(SPEECH));
+    assert_eq!(steps.installed.get(), 1);
+    assert!(stdout.ends_with("Result: pass\n"), "{stdout}");
+    assert!(stderr.is_empty(), "{stderr}");
+    Ok(())
+}
+
+/// With `--json` the result is the `setup` command's, and a speech part
+/// that waits for video is a fail with its next step; the exit status is
+/// the install's, and so is the failed envelope's `error.code` (Fable
+/// review P-2): `data` is the same result beside the error.
+#[tokio::test]
+async fn unattended_json_reports_a_fail_with_each_parts_next_step() -> TestResult {
+    let nothing = checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![nothing.clone(), nothing])
+        .with_plan(plan(vec![
+            action("ffmpeg_ffprobe", "n9.0.1", "BtbN", 112_640_000),
+            action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        ])?)
+        .with_install(Ok(install_results(
+            json!([
+                component(
+                    "ffmpeg_ffprobe",
+                    "failed",
+                    Some("download"),
+                    Some("offline")
+                ),
+                component("whisper_cli", "failed", None, Some("blocked")),
+            ]),
+            Some(FailureCode::DownloadFailed),
+        )?));
+
+    let (exit, stdout, _) = unattended(&steps, CorePartSet::ALL, None, OutputMode::Json).await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(result["command"], "setup");
+    assert_eq!(result["status"], "failed");
+    assert_eq!(result["error"]["code"], "DOWNLOAD_FAILED");
+    assert_eq!(
+        result["error"]["remediation"][0]["summary"],
+        vsift_contract::SETUP_FAILED_REMEDIATION
+    );
+    assert_eq!(result["data"]["outcome"], "fail");
+    assert_eq!(result["data"]["parts"][0]["status"], "not_set_up");
+    assert_eq!(
+        result["data"]["parts"][0]["next_step"],
+        vsift_contract::SETUP_NEXT_CONNECTION
+    );
+    assert_eq!(
+        result["data"]["parts"][1]["next_step"],
+        vsift_contract::SETUP_NEXT_AFTER_VIDEO
+    );
+    assert_eq!(
+        result["data"]["install"]["components"][0]["reason"],
+        "offline"
+    );
+    assert_eq!(exit, ProcessExit::from(FailureCode::DownloadFailed.class()));
+    Ok(())
+}
+
+/// An install that ended without a failure code but left a named part not
+/// working is a fail too: the envelope is `failed` with
+/// `MISSING_CAPABILITY`, the class the process exits with (Fable review P-2).
+#[tokio::test]
+async fn unattended_json_fail_without_an_install_failure_is_missing_capability() -> TestResult {
+    let nothing = checked(
+        [
+            DependencyState::Missing,
+            DependencyState::Missing,
+            DependencyState::Missing,
+        ],
+        NOTHING_YET,
+        ManagedPlanAvailability::Qualified,
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![nothing.clone(), nothing])
+        .with_plan(plan(vec![
+            action("ffmpeg_ffprobe", "n9.0.1", "BtbN", 112_640_000),
+            action("whisper_cli", "whisper.cpp-v1.9.2", "ggml-org", 9_412_000),
+        ])?)
+        .with_install(Ok(install_results(
+            json!([
+                component("ffmpeg_ffprobe", "activated", None, None),
+                component("whisper_cli", "activated", None, None),
+            ]),
+            None,
+        )?));
+
+    let (exit, stdout, _) = unattended(&steps, CorePartSet::ALL, None, OutputMode::Json).await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(result["status"], "failed");
+    assert_eq!(result["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(result["data"]["outcome"], "fail");
+    assert_eq!(
+        exit,
+        ProcessExit::from(FailureCode::MissingCapability.class())
+    );
+    Ok(())
+}
+
+/// A managed pair is installed and a stray registered runtime is beside
+/// it: the extra the caller named is added, not "not added".
+#[tokio::test]
+async fn unattended_reports_an_installed_extra_added_beside_an_unused_runtime() -> TestResult {
+    let managed = OptionalCapability::Installed(vec![
+        (ManagedComponent::JsRuntimeDeno, String::from("deno-2.9.7")),
+        (ManagedComponent::YtDlp, String::from("yt-dlp-2026.08.19")),
+    ]);
+    let stray = OptionalCapability::WithUnusedRuntime {
+        base: Box::new(managed),
+        runtime: Err("unexpected_output"),
+    };
+    let steps = ScriptedSteps::new(vec![checked(
+        [found(), found(), found()],
+        SPEECH_WORKS,
+        ManagedPlanAvailability::Qualified,
+        stray,
+    )]);
+
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::OnlineLinks),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    let part = result["data"]["parts"]
+        .as_array()
+        .and_then(|parts| parts.iter().find(|part| part["part"] == "web_videos"))
+        .ok_or("no web_videos part")?;
+    assert_eq!(part["status"], "added", "{result}");
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
+/// Nothing to do is a pass, with no plan built and `install` null.
+#[tokio::test]
+async fn unattended_with_nothing_to_do_passes_without_a_plan() -> TestResult {
+    let steps = ScriptedSteps::new(vec![all_ready()]);
+
+    let (exit, stdout, _) = unattended(&steps, CorePartSet::ALL, None, OutputMode::Json).await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(result["data"]["outcome"], "pass");
+    assert_eq!(result["data"]["install"], Value::Null);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
+/// A named part `VSift` cannot install here, timed-out checks, and a plan
+/// whose digest is not the one given are errors, refused before anything
+/// is installed.
+#[tokio::test]
+async fn unattended_errors_refuse_before_anything_is_installed() -> TestResult {
+    let unavailable = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::TargetUnavailable,
+    )]);
+    let (exit, stdout, _) = unattended(&unavailable, SPEECH, None, OutputMode::Json).await?;
+    let failure: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(failure["command"], "setup");
+    assert_eq!(failure["error"]["code"], "MISSING_CAPABILITY");
+    assert_eq!(
+        exit,
+        ProcessExit::from(FailureCode::MissingCapability.class())
+    );
+    assert_eq!(unavailable.planned.get(), 0);
+
+    let mismatch = ScriptedSteps::new(vec![video_ready_speech_missing(
+        ManagedPlanAvailability::Qualified,
+    )])
+    .with_plan(speech_plan()?);
+    let (_, stdout, _) =
+        unattended(&mismatch, SPEECH, Some(&"b".repeat(64)), OutputMode::Json).await?;
+    let failure: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(failure["error"]["code"], "INVALID_ARGUMENT");
+    assert_eq!(mismatch.installed.get(), 0);
+
+    let matching = ScriptedSteps::new(vec![
+        video_ready_speech_missing(ManagedPlanAvailability::Qualified),
+        all_ready(),
+    ])
+    .with_plan(speech_plan()?)
+    .with_install(Ok(install_results(json!([]), None)?));
+    let (exit, _, _) =
+        unattended(&matching, SPEECH, Some(&"a".repeat(64)), OutputMode::Json).await?;
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!(matching.installed.get(), 1);
+    Ok(())
+}
+
+/// `checked` with the on-screen-text extra (W5b) standing as `capability`.
+fn with_on_screen_text(mut checked: CheckedSetup, capability: OptionalCapability) -> CheckedSetup {
+    checked.optional.push((OptionalComponent::Ocr, capability));
+    checked
+}
+
+/// W5b: on-screen text is the door's second extra. Asked for on a complete
+/// setup, the offer covers it alone, with its own words, and names the OCR
+/// runner as the piece it downloads.
+#[tokio::test]
+async fn an_included_on_screen_text_extra_is_offered_with_its_own_words() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "ocr",
+        "status": "included",
+        "summary": "VSift's own OCR runner reads on-screen text from a recording's frames on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "ocr_runner",
+            "ocr-runner-0.1.0-r1-linux-x64",
+            "VSift engine release",
+            23_268_888
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let steps = ScriptedSteps::new(vec![with_on_screen_text(
+        all_ready(),
+        OptionalCapability::NotInstalled,
+    )])
+    .with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::OnScreenText]).await?;
+
+    assert_eq!(steps.planned.get(), 1);
+    assert!(
+        stdout.contains("VSift can add on-screen text for you:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("OCR runner"), "{stdout}");
+    assert!(stdout.contains("from VSift engine release"), "{stdout}");
+    assert!(
+        stdout.contains("Add on-screen text now? [y/N] "),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5b: the table has a row for each extra, and the extras line names every
+/// extra that could be added here and each one's flag; where web videos
+/// are not offered it names on-screen text alone.
+#[tokio::test]
+async fn the_table_and_the_extras_line_name_each_extra() -> TestResult {
+    let both = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![both]);
+    let mut console = ScriptedConsole::person(Answer::No);
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+    check_snapshot("setup-door-complete-two-extras", &stdout)?;
+    assert!(
+        stdout.contains("On-screen text"),
+        "the table has no row for on-screen text: {stdout}"
+    );
+    assert!(stdout.contains("OCR runner"), "{stdout}");
+    assert!(
+        stdout.contains(
+            "Optional extras: web videos, on-screen text. Add one with: vsift setup --include web-videos, or --include on-screen-text\n"
+        ),
+        "{stdout}"
+    );
+
+    let mut elsewhere = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    elsewhere.optional[0].1 = OptionalCapability::Unavailable;
+    let steps = ScriptedSteps::new(vec![elsewhere]);
+    let mut console = ScriptedConsole::person(Answer::No);
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+    check_snapshot("setup-door-complete-on-screen-text-only", &stdout)?;
+    assert!(
+        stdout.contains(
+            "Optional extras: on-screen text. Add one with: vsift setup --include on-screen-text\n"
+        ),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5b: the unattended door refuses an extra it cannot add here before
+/// anything is installed, and its remediation names the extra it refuses,
+/// whichever extra that is.
+#[tokio::test]
+async fn unattended_refusal_names_the_extra_it_cannot_add() -> TestResult {
+    for (extra, words) in [
+        (OptionalComponent::Ocr, "on-screen text"),
+        (OptionalComponent::OnlineLinks, "web videos"),
+    ] {
+        let mut checked = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+        for (component, capability) in &mut checked.optional {
+            if *component == extra {
+                *capability = OptionalCapability::Unavailable;
+            }
+        }
+        let steps = ScriptedSteps::new(vec![checked]);
+
+        let (exit, stdout, _) = unattended_including(
+            &steps,
+            CorePartSet::EMPTY,
+            OptionalComponentSet::EMPTY.with(extra),
+            None,
+            OutputMode::Json,
+        )
+        .await?;
+
+        let failure: Value = serde_json::from_str(&stdout)?;
+        assert_eq!(failure["error"]["code"], "MISSING_CAPABILITY", "{stdout}");
+        assert!(
+            stdout.contains(&format!(
+                "VSift can't add {words} on this computer yet, so nothing was installed."
+            )),
+            "{stdout}"
+        );
+        assert_eq!(
+            exit,
+            ProcessExit::from(FailureCode::MissingCapability.class())
+        );
+        assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    }
+    Ok(())
+}
+
+/// L-225: on Windows, where ONNX Runtime imports the Visual C++ runtime, an
+/// on-screen-text install that fails its test points to Microsoft's
+/// Redistributable; elsewhere the ordinary advice stands.
+#[tokio::test]
+async fn a_failed_on_screen_text_test_points_to_the_visual_cpp_runtime_on_windows() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "ocr",
+        "status": "included",
+        "summary": "VSift's own OCR runner reads on-screen text on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "ocr_runner",
+            "ocr-runner-0.1.0-r1-windows-x64",
+            "VSift engine release",
+            18_437_413
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let before = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let after = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![before, after])
+        .with_plan(plan)
+        .with_install(Ok(install_results(
+            json!([component(
+                "ocr_runner",
+                "failed",
+                Some("smoke"),
+                Some("smoke")
+            )]),
+            None,
+        )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::OnScreenText]).await?;
+
+    let mentions = stdout.contains("Visual C++ Redistributable for x64");
+    assert_eq!(mentions, cfg!(windows), "{stdout}");
+    if cfg!(windows) {
+        assert!(
+            stdout.contains("https://aka.ms/vs/17/release/vc_redist.x64.exe"),
+            "{stdout}"
+        );
+        assert!(
+            stdout.ends_with(
+                "Next: run  vsift setup --include on-screen-text  again
+"
+            ),
+            "{stdout}"
+        );
+    } else {
+        assert!(stdout.contains("troubleshooting guide"), "{stdout}");
+    }
+    Ok(())
+}
+
+/// L-225: only a failed install test names the Visual C++ runtime. Another
+/// reason for the OCR runner, an integrity failure here, gets the ordinary
+/// advice on every system.
+#[tokio::test]
+async fn a_non_smoke_on_screen_text_failure_gets_the_ordinary_advice() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "ocr",
+        "status": "included",
+        "summary": "VSift's own OCR runner reads on-screen text on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "ocr_runner",
+            "ocr-runner-0.1.0-r1-windows-x64",
+            "VSift engine release",
+            18_437_413
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let before = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let after = with_on_screen_text(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![before, after])
+        .with_plan(plan)
+        .with_install(Ok(install_results(
+            json!([component(
+                "ocr_runner",
+                "failed",
+                Some("import"),
+                Some("digest_mismatch")
+            )]),
+            None,
+        )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::OnScreenText]).await?;
+
+    assert!(!stdout.contains("Visual C++"), "{stdout}");
+    assert!(stdout.contains("troubleshooting guide"), "{stdout}");
+    Ok(())
+}
+
+/// W5b: an installed on-screen-text extra is reported by its own part name.
+#[tokio::test]
+async fn unattended_reports_the_on_screen_text_part() -> TestResult {
+    let installed = OptionalCapability::Installed(vec![(
+        ManagedComponent::OcrRunner,
+        String::from("ocr-runner-0.1.0-r1-linux-x64"),
+    )]);
+    let steps = ScriptedSteps::new(vec![with_on_screen_text(all_ready(), installed)]);
+
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::Ocr),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+
+    let result: Value = serde_json::from_str(&stdout)?;
+    let part = result["data"]["parts"]
+        .as_array()
+        .and_then(|parts| parts.iter().find(|part| part["part"] == "on_screen_text"))
+        .ok_or("no on_screen_text part")?;
+    assert_eq!(part["status"], "added", "{result}");
+    assert_eq!(part["requested"], true);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
+/// `checked` with the speaker-labels extra (W5c) standing as `capability`.
+fn with_speaker_labels(mut checked: CheckedSetup, capability: OptionalCapability) -> CheckedSetup {
+    checked
+        .optional
+        .push((OptionalComponent::Speakers, capability));
+    checked
+}
+
+/// W5c: speaker labels are the door's third extra. Asked for on a complete
+/// setup, the offer covers it alone, with its own words, and names each of the
+/// three pieces it downloads.
+#[tokio::test]
+async fn an_included_speaker_labels_extra_is_offered_with_its_own_words() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "speakers",
+        "status": "included",
+        "summary": "sherpa-onnx (Apache-2.0) with ONNX Runtime (MIT), the pyannote segmentation 3.0 model and NVIDIA's NeMo TitaNet small model group a recording's speech by voice on this machine.",
+        "add_command": null,
+        "actions": [
+            action(
+                "speaker_diarizer",
+                "sherpa-onnx-1.13.8-linux-x64",
+                "k2-fsa sherpa-onnx",
+                28_156_791
+            ),
+            action(
+                "speaker_segmentation_model",
+                "pyannote-segmentation-3.0-9403a690",
+                "csukuangfj sherpa-onnx pyannote segmentation (Hugging Face)",
+                5_992_913
+            ),
+            action(
+                "speaker_embedding_model",
+                "nemo-en-titanet-small",
+                "k2-fsa sherpa-onnx",
+                40_257_283
+            ),
+        ],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let steps = ScriptedSteps::new(vec![with_speaker_labels(
+        all_ready(),
+        OptionalCapability::NotInstalled,
+    )])
+    .with_plan(plan);
+    let mut console = ScriptedConsole::person(Answer::No);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::SpeakerLabels]).await?;
+
+    assert_eq!(steps.planned.get(), 1);
+    assert!(
+        stdout.contains("VSift can add speaker labels for you:"),
+        "{stdout}"
+    );
+    for piece in ["speaker tool", "segmentation model", "voice model"] {
+        assert!(stdout.contains(piece), "{piece}: {stdout}");
+    }
+    assert!(
+        stdout.contains("Add speaker labels now? [y/N] "),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5c: with all three extras offered, the table has a row for each, and the
+/// extras line names every one with its flag.
+#[tokio::test]
+async fn the_table_and_the_extras_line_name_all_three_extras() -> TestResult {
+    let all = with_speaker_labels(
+        with_on_screen_text(all_ready(), OptionalCapability::NotInstalled),
+        OptionalCapability::NotInstalled,
+    );
+    let steps = ScriptedSteps::new(vec![all]);
+    let mut console = ScriptedConsole::person(Answer::No);
+    let (_, stdout, _) = converse(&mut console, &steps, Vec::new()).await?;
+    check_snapshot("setup-door-complete-three-extras", &stdout)?;
+    for row in ["Web videos", "On-screen text", "Speaker labels"] {
+        assert!(stdout.contains(row), "{row}: {stdout}");
+    }
+    assert!(
+        stdout.contains(
+            "Optional extras: web videos, on-screen text, speaker labels. Add one with: vsift setup --include web-videos, --include on-screen-text, or --include speaker-labels\n"
+        ),
+        "{stdout}"
+    );
+    Ok(())
+}
+
+/// W5c: the unattended door refuses speaker labels where they cannot be added,
+/// by name, and reports an installed group by its own part name.
+#[tokio::test]
+async fn unattended_speaker_labels_are_refused_by_name_and_reported_by_part() -> TestResult {
+    let mut checked = with_speaker_labels(all_ready(), OptionalCapability::Unavailable);
+    checked.optional.reverse();
+    let steps = ScriptedSteps::new(vec![checked]);
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::Speakers),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+    let failure: Value = serde_json::from_str(&stdout)?;
+    assert_eq!(failure["error"]["code"], "MISSING_CAPABILITY", "{stdout}");
+    assert!(
+        stdout.contains(
+            "VSift can't add speaker labels on this computer yet, so nothing was installed."
+        ),
+        "{stdout}"
+    );
+    assert_eq!(
+        exit,
+        ProcessExit::from(FailureCode::MissingCapability.class())
+    );
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+
+    let installed = OptionalCapability::Installed(vec![
+        (
+            ManagedComponent::SpeakerDiarizer,
+            String::from("sherpa-onnx-1.13.8-linux-x64"),
+        ),
+        (
+            ManagedComponent::SpeakerSegmentationModel,
+            String::from("pyannote-segmentation-3.0-9403a690"),
+        ),
+        (
+            ManagedComponent::SpeakerEmbeddingModel,
+            String::from("nemo-en-titanet-small"),
+        ),
+    ]);
+    let steps = ScriptedSteps::new(vec![with_speaker_labels(all_ready(), installed)]);
+    let (exit, stdout, _) = unattended_including(
+        &steps,
+        CorePartSet::EMPTY,
+        OptionalComponentSet::EMPTY.with(OptionalComponent::Speakers),
+        None,
+        OutputMode::Json,
+    )
+    .await?;
+    let result: Value = serde_json::from_str(&stdout)?;
+    let part = result["data"]["parts"]
+        .as_array()
+        .and_then(|parts| parts.iter().find(|part| part["part"] == "speaker_labels"))
+        .ok_or("no speaker_labels part")?;
+    assert_eq!(part["status"], "added", "{result}");
+    assert_eq!(part["requested"], true);
+    assert_eq!(exit, ProcessExit::Success);
+    assert_eq!((steps.planned.get(), steps.installed.get()), (0, 0));
+    Ok(())
+}
+
+/// W5c: sherpa-onnx's Windows libraries do not import the Visual C++ runtime
+/// (L-225), so a failed install test of the speaker group gets the ordinary
+/// advice on every system, Windows included.
+#[tokio::test]
+async fn a_failed_speaker_labels_test_never_points_to_the_visual_cpp_runtime() -> TestResult {
+    let mut plan = plan(Vec::new())?;
+    plan["data"]["optional_components"] = json!([{
+        "name": "speakers",
+        "status": "included",
+        "summary": "sherpa-onnx groups a recording's speech by voice on this machine.",
+        "add_command": null,
+        "actions": [action(
+            "speaker_diarizer",
+            "sherpa-onnx-1.13.8-windows-x64",
+            "k2-fsa sherpa-onnx",
+            24_805_859
+        )],
+        "next_step": "Ask the operator before accepting."
+    }]);
+    let before = with_speaker_labels(all_ready(), OptionalCapability::NotInstalled);
+    let after = with_speaker_labels(all_ready(), OptionalCapability::NotInstalled);
+    let steps = ScriptedSteps::new(vec![before, after])
+        .with_plan(plan)
+        .with_install(Ok(install_results(
+            json!([component(
+                "speaker_diarizer",
+                "failed",
+                Some("smoke"),
+                Some("smoke")
+            )]),
+            None,
+        )?));
+    let mut console = ScriptedConsole::person(Answer::Yes);
+
+    let (_, stdout, _) = converse(&mut console, &steps, vec![DoorExtra::SpeakerLabels]).await?;
+
+    assert!(!stdout.contains("Visual C++"), "{stdout}");
+    assert!(stdout.contains("troubleshooting guide"), "{stdout}");
+    Ok(())
+}
+
+/// The bars name each piece, fill with its bytes and end with its stage.
+#[test]
+fn each_piece_has_a_bar_its_megabytes_and_its_stage() {
+    let lines = human::piece_bars(&[
+        PieceProgress {
+            component: ManagedComponent::MediaTools,
+            stage: PieceStage::Downloading,
+            received: 56_000_000,
+            total: 112_000_000,
+        },
+        PieceProgress {
+            component: ManagedComponent::WhisperModel,
+            stage: PieceStage::WaitingForVideo,
+            received: 60_000_000,
+            total: 60_000_000,
+        },
+    ]);
+    assert_eq!(
+        lines,
+        [
+            format!(
+                "  FFmpeg        {}{}    56 of 112 MB  downloading",
+                "\u{2588}".repeat(10),
+                "\u{2591}".repeat(10)
+            ),
+            format!(
+                "  speech model  {}    60 of 60 MB  waiting for video",
+                "\u{2588}".repeat(20)
+            ),
+        ]
+    );
+}

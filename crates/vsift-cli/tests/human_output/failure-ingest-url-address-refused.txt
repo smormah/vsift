@@ -1,0 +1,2 @@
+Error: The video link could not be fetched; local video files are not affected. (SOURCE_FETCH_FAILED)
+Fix: Fetching the video link failed; nothing was opened and local video files are not affected. The link, or a redirect, points at a private, local or internal address, which VSift never fetches (reason address_refused). If the video is on the user's own network, ask the user to download it and give you the file; do not look for another way to reach the address.

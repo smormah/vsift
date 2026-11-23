@@ -4,10 +4,24 @@
     limit aware, stoppable, and writing only bounded records.
 
 .DESCRIPTION
-    THIS SCRIPT SPENDS THE MAINTAINER'S CLAUDE OR CODEX ALLOWANCE. It is never
-    run by a test, by CI or by an agent. The maintainer starts each batch with
-    an explicit go (docs/agents/trials.md, "The P14 batches"); until then
-    nothing here has run.
+    THIS SCRIPT SPENDS MONEY: the capped API keys the maintainer funded (the
+    default, -Credential ApiKey) or their own Claude or Codex allowance
+    (-Credential SignIn). It is never run by a test or by CI. The maintainer
+    starts each batch with an explicit go for that batch and amount
+    (docs/agents/trials.md, "The P14 batches"); until then nothing here has
+    run.
+
+    With -Credential ApiKey the clients run on API keys with a spending
+    limit, never on a person's sign-in (the maintainer's rule of 2026-11-11
+    for unattended runs). Claude Code reads its key from the user environment
+    variable VSIFT_TRIALS_ANTHROPIC_API_KEY, which this script hands to the
+    harness as ANTHROPIC_API_KEY, passed to the client by name only; the
+    variable has its own name so that no other Claude Code on the machine
+    starts billing the key. Its client home must hold no sign-in, so a run
+    cannot fall back to one. Codex reads its key from its trial home's
+    auth.json, written once by `codex login --with-api-key`; a home that
+    holds a ChatGPT sign-in is refused. No key value is ever printed,
+    logged or written by this script.
 
     What it does, in order:
       1. reads the campaign configuration (a JSON file of local paths kept
@@ -36,7 +50,10 @@
          the campaign for the maintainer to decide;
       6. when the client stops at its usage limit, waits until the reset time
          the client gave (or -WaitMinutes) and tries the same run again, up to
-         -MaxWaitHours in all;
+         -MaxWaitHours in all. On an API key a used-up allowance is the key's
+         spending limit or credit, which no wait lifts: the script stops
+         instead (exit 5), nothing is counted for that run, and the same
+         command resumes once the key is topped up;
       7. writes summary.json and SUMMARY.md for the batch after every counted
          run, so a pause loses nothing.
 
@@ -120,6 +137,12 @@ param(
     # for Claude Code.
     [switch] $IsolatedMachine,
 
+    # What the clients sign in with. ApiKey (the default): the capped keys
+    # described above, the only choice for an unattended batch. SignIn: the
+    # client homes' own sign-ins, as every batch before 2026-11-14 ran.
+    [ValidateSet('ApiKey', 'SignIn')]
+    [string] $Credential = 'ApiKey',
+
     [switch] $NoBuild,
 
     # Regenerate summary.json and SUMMARY.md from every plan and record the
@@ -163,6 +186,15 @@ $harnessExe = Join-Path $repository 'target\release\vsift-agent-trials.exe'
 $usageLimitExit = 75
 
 function Write-Step([string] $Text) { Write-Host ("[{0:HH:mm:ss}] {1}" -f (Get-Date), $Text) }
+
+# A member of a parsed JSON object, or $null when it has none (strict mode
+# refuses to read a missing member).
+function Get-Field([object] $Object, [string] $Name) {
+    if ($null -eq $Object) { return $null }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($property) { return $property.Value }
+    return $null
+}
 
 # The neutral-root rule of the harness, checked early so a mistake costs nothing.
 function Assert-NeutralPath([string] $Path, [string] $What) {
@@ -273,6 +305,57 @@ if ($SummaryOnly) {
     exit 0
 }
 
+# --- the credential ------------------------------------------------------------
+# Checked before the plan is written and in a dry run too, so a missing key or
+# a sign-in left in a client home costs nothing. Only presence is checked; no
+# key value is printed, logged or written.
+$claudeKeyVariable = 'VSIFT_TRIALS_ANTHROPIC_API_KEY'
+$spendLimitExit = 5
+
+# The key variable as this process sees it, or else as the user set it: a
+# variable set after the parent process started (a terminal opened earlier)
+# is only in the user's registry hive on Windows.
+function Get-UserVariable([string] $Name) {
+    $value = [Environment]::GetEnvironmentVariable($Name, 'Process')
+    if ([string]::IsNullOrEmpty($value) -and $IsWindows) {
+        $value = [Environment]::GetEnvironmentVariable($Name, 'User')
+    }
+    return $value
+}
+
+# Refuses a credential that is missing or could fall back to a sign-in, and
+# returns Claude Code's key ($null for Codex and for -Credential SignIn).
+function Assert-TrialCredential {
+    if ($Credential -eq 'SignIn') {
+        Write-Step 'Credential: the client homes'' own sign-ins (-Credential SignIn)'
+        return $null
+    }
+    if ($Client -eq 'claude') {
+        $key = Get-UserVariable $claudeKeyVariable
+        if ([string]::IsNullOrEmpty($key)) {
+            throw "No Claude API key: set the user environment variable $claudeKeyVariable to the capped key (its value is never printed), or run with -Credential SignIn"
+        }
+        if (Test-Path -LiteralPath (Join-Path $configuration.clientHome '.credentials.json')) {
+            throw "The Claude Code trial home $($configuration.clientHome) holds a sign-in (.credentials.json): a run on the API key must not be able to fall back to it. Point clientHome in the campaign configuration at a home without one."
+        }
+        Write-Step "Credential: the API key in $claudeKeyVariable (present; the value is never shown), a client home without a sign-in"
+        return $key
+    }
+    $codexAuth = Join-Path $configuration.codexClientHome 'auth.json'
+    if (-not (Test-Path -LiteralPath $codexAuth -PathType Leaf)) {
+        throw "No Codex API-key login at ${codexAuth}: set CODEX_HOME to $($configuration.codexClientHome) and pipe the key into codex login --with-api-key"
+    }
+    $login = Get-Content -LiteralPath $codexAuth -Raw | ConvertFrom-Json
+    $hasKey = -not [string]::IsNullOrEmpty((Get-Field $login 'OPENAI_API_KEY'))
+    $hasSignIn = $null -ne (Get-Field $login 'tokens')
+    if ($hasSignIn -or -not $hasKey) {
+        throw "The Codex trial home $($configuration.codexClientHome) is not an API-key login only (a ChatGPT sign-in, or no key): use a home written by codex login --with-api-key, or run with -Credential SignIn"
+    }
+    Write-Step 'Credential: the API-key login in the Codex trial home (present; the value is never shown)'
+    return $null
+}
+$claudeKey = Assert-TrialCredential
+
 # --- the plan ----------------------------------------------------------------
 New-Item -ItemType Directory -Force -Path $records | Out-Null
 if (-not (Test-Path -LiteralPath $state)) {
@@ -305,6 +388,16 @@ if ($Client -eq 'claude') {
     }
     Write-Step "Claude Code: $versionLine"
     $env:CLAUDE_CODE_GIT_BASH_PATH = $configuration.gitBashPath
+    $passEnvironment = @('--pass-env', 'CLAUDE_CODE_GIT_BASH_PATH')
+    if ($Credential -eq 'ApiKey') {
+        # Only this process and the harness it starts hold the key under the
+        # client's name; the harness passes it to Claude Code by name and adds
+        # its value to the leak scan of every log. The scrub keeps it out of
+        # the environment of the commands the agent runs.
+        $env:ANTHROPIC_API_KEY = $claudeKey
+        $env:CLAUDE_CODE_SUBPROCESS_ENV_SCRUB = '1'
+        $passEnvironment += @('--pass-env', 'ANTHROPIC_API_KEY', '--pass-env', 'CLAUDE_CODE_SUBPROCESS_ENV_SCRUB')
+    }
     $proof = Join-Path $root ".installs\$Version.proof.json"
     if (-not (Test-Path -LiteralPath $proof)) {
         Write-Step "Installing vsift-cli@$Version from the registry into a fresh prefix (scripts off; a cleared environment)"
@@ -364,6 +457,42 @@ function Wait-ForUsageLimit([object] $ResetUnix) {
     return $true
 }
 
+# What a Claude Code run on the API key showed, read from the harness's
+# run.json and the raw logs it names:
+#   'leaked'      the key's value is in the client's stdout or stderr. The
+#                 harness's own flag is not proof on its own: it also counts
+#                 any other passed value of 24 characters or more, such as
+#                 the Git Bash path;
+#   'not-on-key'  the client's init event names another credential source;
+#   'spend-limit' the client stopped at an allowance (not a rate) limit,
+#                 which on a key is its spending limit or its credit;
+#   'ok'          none of these.
+function Test-ClaudeKeyRun([string] $TrialDirectory) {
+    $runFile = Join-Path $TrialDirectory 'harness\phase-1\run.json'
+    if (-not (Test-Path -LiteralPath $runFile)) { return 'ok' }
+    $runRecord = Get-Content -LiteralPath $runFile -Raw | ConvertFrom-Json
+    $stdoutLog = Get-Field $runRecord 'stdout'
+    $logs = @($stdoutLog, (Get-Field $runRecord 'stderr')) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+    if (Get-Field (Get-Field $runRecord 'sign_in_leak_check') 'found') {
+        foreach ($log in $logs) {
+            if ([IO.File]::ReadAllText($log).Contains($claudeKey)) { return 'leaked' }
+        }
+    }
+    if ($stdoutLog -and (Test-Path -LiteralPath $stdoutLog)) {
+        foreach ($line in [IO.File]::ReadLines($stdoutLog)) {
+            if (-not $line.StartsWith('{')) { continue }
+            $entry = $null
+            try { $entry = $line | ConvertFrom-Json } catch { continue }
+            if ((Get-Field $entry 'type') -eq 'system' -and (Get-Field $entry 'subtype') -eq 'init') {
+                if ((Get-Field $entry 'apiKeySource') -ne 'ANTHROPIC_API_KEY') { return 'not-on-key' }
+                break
+            }
+        }
+    }
+    if ((Get-Field (Get-Field $runRecord 'usage_limit') 'matched') -eq 'limit') { return 'spend-limit' }
+    return 'ok'
+}
+
 function Invoke-ClaudeRun([object] $Run) {
     $scenario = Find-Scenario $Run.scenario
     $prepared = Invoke-Harness @(
@@ -377,10 +506,23 @@ function Invoke-ClaudeRun([object] $Run) {
     if ($prepared.Code -ne 0) { return @{ Outcome = 'harness-error'; Note = 'prepare failed'; Trial = $null } }
     $trialDirectory = ($prepared.Output[0] -replace '^prepared ', '').Trim()
     $trialId = Split-Path $trialDirectory -Leaf
-    $ran = Invoke-Harness @(
+    $ran = Invoke-Harness (@(
         'run', '--trial', $trialDirectory, '--client', 'claude', '--executable', $claude,
         '--model', $Run.model, '--client-home', $configuration.clientHome,
-        '--path-dir', $configuration.gitBashUsr, '--pass-env', 'CLAUDE_CODE_GIT_BASH_PATH')
+        '--path-dir', $configuration.gitBashUsr) + $passEnvironment)
+    if ($Credential -eq 'ApiKey') {
+        $keyCheck = Test-ClaudeKeyRun $trialDirectory
+        if ($keyCheck -eq 'leaked') {
+            Remove-Item -LiteralPath $trialDirectory -Recurse -Force
+            throw "The API key appeared in the client's output. The trial ($trialId) was deleted and nothing of it was recorded. Revoke the key at the provider now and create a new one before any further run."
+        }
+        if ($keyCheck -eq 'not-on-key') {
+            throw "Run $trialId did not run on the API key (the client's init event names another source): the campaign stops before anything is counted. Check that the client home holds no sign-in."
+        }
+        if ($ran.Code -eq $usageLimitExit -and $keyCheck -eq 'spend-limit') {
+            return @{ Outcome = 'spend-limit'; Note = 'the API key''s spending limit or credit'; Trial = $trialId }
+        }
+    }
     if ($ran.Code -eq $usageLimitExit) {
         $reset = $null
         if ($ran.Output[0] -match 'reset=(\d+)') { $reset = $Matches[1] }
@@ -402,12 +544,27 @@ function Invoke-CodexRun([object] $Run) {
         -Scenario $Run.scenario -Model $Run.model -Freeze $freezeFile `
         -ClientHome $configuration.codexClientHome -Exports $configuration.codexExports
     $code = $LASTEXITCODE
+    # The container script does not say which limit stopped Codex. On an API
+    # key Codex retries a rate limit itself, so a limit that ends the run is
+    # taken as the key's spending limit or credit, which no wait lifts.
+    if ($code -eq $usageLimitExit -and $Credential -eq 'ApiKey') { return @{ Outcome = 'spend-limit'; Note = 'the API key''s spending limit or credit'; Trial = $null } }
     if ($code -eq $usageLimitExit) { return @{ Outcome = 'usage-limited'; Note = 'usage limit'; Trial = $null; Reset = $null } }
     if ($code -ne 0) { return @{ Outcome = 'harness-error'; Note = "the container script exited $code"; Trial = $null } }
     $idLine = @($lines | Where-Object { $_ -match '^trial-id (\S+)$' })
     if ($idLine.Count -ne 1) { return @{ Outcome = 'harness-error'; Note = 'no trial id'; Trial = $null } }
     $trialId = ($idLine[0] -replace '^trial-id ', '').Trim()
     $source = Join-Path $configuration.codexExports "records\$trialId-codex.json"
+    if ($Credential -eq 'ApiKey') {
+        # The key is the only value of an API-key login's auth.json, so the
+        # leak scan the container ran over that file finds nothing else.
+        $exported = Join-Path $configuration.codexExports "trials\$trialId"
+        $runFile = Join-Path $exported 'harness\phase-1\run.json'
+        if ((Test-Path -LiteralPath $runFile) -and (Get-Field (Get-Field (Get-Content -LiteralPath $runFile -Raw | ConvertFrom-Json) 'sign_in_leak_check') 'found')) {
+            Remove-Item -LiteralPath $exported -Recurse -Force
+            if (Test-Path -LiteralPath $source) { Remove-Item -LiteralPath $source -Force }
+            throw "The API key appeared in Codex's output. The exported trial ($trialId) was deleted and nothing of it was recorded; its raw logs are still in the Docker volume vsift-codex-trials. Revoke the key at the provider now and create a new one before any further run."
+        }
+    }
     if (-not (Test-Path -LiteralPath $source)) { return @{ Outcome = 'harness-error'; Note = 'no record exported'; Trial = $trialId } }
     $record = Join-Path $records "$trialId-codex-p1.json"
     Copy-Item -LiteralPath $source -Destination $record
@@ -417,6 +574,7 @@ function Invoke-CodexRun([object] $Run) {
 
 $ran = 0
 $waitedSeconds = 0
+$exitCode = 0
 while ($true) {
     if (Test-Stop) { break }
     if ($MaxRuns -gt 0 -and $ran -ge $MaxRuns) { Write-Step "Reached -MaxRuns $MaxRuns"; break }
@@ -437,6 +595,8 @@ while ($true) {
         'counted' { 'counted' }
         'invalid' { 'invalid' }
         'usage-limited' { 'usage-limited' }
+        # Not counted, and the run stays next, as for any usage limit.
+        'spend-limit' { 'usage-limited' }
         default { 'harness-error' }
     }
     $markArguments = @('campaign', 'mark', '--state', $state, '--run', $run.run_id, '--outcome', $outcome)
@@ -445,6 +605,11 @@ while ($true) {
     $marked = Invoke-Harness $markArguments
     Write-Step $marked.Output[0]
 
+    if ($result.Outcome -eq 'spend-limit') {
+        Write-Warning 'The API key reached its spending limit or ran out of credit. Nothing was counted for this run and it stays next. Check the key''s usage at the provider, top it up only with the maintainer''s go, and start the same command again.'
+        $exitCode = $spendLimitExit
+        break
+    }
     if ($outcome -eq 'usage-limited') {
         $started = Get-Date
         if (-not (Wait-ForUsageLimit $result.Reset)) { break }
@@ -461,3 +626,4 @@ while ($true) {
 Update-Summary
 Write-Step ((Invoke-Harness @('campaign', 'status', '--state', $state)).Output -join ' ')
 Write-Step "Records: $records. Summary: $(Join-Path $BatchDirectory 'SUMMARY.md')."
+exit $exitCode

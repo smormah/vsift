@@ -16,6 +16,10 @@
     "tool_fingerprint"
   ],
   "properties": {
+    "clock_time": {
+      "description": "The clip's real-world clock times (time anchoring, 0.3.0): start and end of its planned range, and at, its first decoded sample (actual_start_us); absent when the session has no time anchor. See time-anchor.schema.json.",
+      "$ref": "time-anchor.schema.json#/$defs/clock_time"
+    },
     "evidence_id": { "type": "string", "pattern": "^evd_[a-z0-9]{16,64}$" },
     "source_id": { "type": "string", "pattern": "^src_sha256_[0-9a-f]{64}$" },
     "stream_index": { "type": "integer", "minimum": 0, "maximum": 4294967295 },

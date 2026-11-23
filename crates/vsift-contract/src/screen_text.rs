@@ -48,7 +48,7 @@ pub const FRAMES_FAILED_REASON: &str = "frames_failed";
 pub const SCREEN_TEXT_PARTIAL_WARNING: &str = "Not every planned frame of the range has been read: coverage counts the frames read, failed and still pending, and says whether the range's candidates are all known. Run ocr again for the same range to continue; it reads only what is pending.";
 
 /// Remediation when no OCR runner is given, configured or found.
-pub const OCR_RUNNER_REMEDIATION: &str = "On-screen text is read by the OCR runner, vsift-ocr-runner, with its ONNX Runtime library and models beside it; it is optional and nothing else needs it. Nothing was changed. Install it, or register a working one with setup configure ocr-runner --executable <path>, then run ocr again. No need to search folders: ask the user where it is.";
+pub const OCR_RUNNER_REMEDIATION: &str = "On-screen text is read by the OCR runner, vsift-ocr-runner, with its ONNX Runtime library and models beside it; it is optional and nothing else needs it. Nothing was changed. Ask the user first, then install it with setup plan --profile desktop --include ocr --json and accept that plan (a person can run vsift setup --include on-screen-text), or register a working one with setup configure ocr-runner --executable <path>, then run ocr again. No need to search folders: ask the user where it is.";
 
 /// Remediation when the OCR runner could not run, load its models or answer.
 pub const OCR_FAILED_REMEDIATION: &str = "The OCR runner could not read the frames: it did not start, could not load its runtime or models, did not answer in its protocol, or its files changed during the call. Nothing was committed. Check that its onnxruntime folder and models sit beside it, or register another build with setup configure ocr-runner --executable <path>; after an update, run ocr again: the new build starts its own index.";
@@ -93,7 +93,7 @@ struct EngineData {
 
 /// One revision of a session's screen-text index, as published.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct IndexData {
+pub(crate) struct IndexData {
     index_id: String,
     revision: u32,
     engine: EngineData,
@@ -102,7 +102,7 @@ struct IndexData {
 }
 
 impl IndexData {
-    fn new(index: &ScreenTextIndex) -> Self {
+    pub(crate) fn new(index: &ScreenTextIndex) -> Self {
         let scope = index.scope();
         Self {
             index_id: index.id().as_str().to_owned(),
@@ -123,7 +123,7 @@ impl IndexData {
 
 /// How much of a range's plan an index has read.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-struct CoverageData {
+pub(crate) struct CoverageData {
     scope: &'static str,
     period_us: Option<u64>,
     planned: usize,
@@ -136,7 +136,7 @@ struct CoverageData {
 }
 
 impl CoverageData {
-    const fn new(
+    pub(crate) const fn new(
         coverage: ScreenTextCoverage,
         period_micros: Option<u64>,
         candidates_complete: bool,
@@ -333,7 +333,7 @@ struct FrameData {
 
 /// One occurrence of the query in on-screen text.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-struct HitData {
+pub struct ScreenTextHitData {
     line_id: String,
     #[serde(rename = "match")]
     tier: &'static str,
@@ -347,8 +347,10 @@ struct HitData {
     candidate_ids: Vec<String>,
 }
 
-impl HitData {
-    fn new(hit: &ScreenTextHitPresentation<'_>) -> Self {
+impl ScreenTextHitData {
+    /// Presents one occurrence.
+    #[must_use]
+    pub fn new(hit: &ScreenTextHitPresentation<'_>) -> Self {
         let text = hit.line.text.as_str().to_owned();
         Self {
             line_id: hit.line.id.as_str().to_owned(),
@@ -460,7 +462,7 @@ pub struct ScreenTextSearchData {
     #[serde(skip_serializing_if = "Option::is_none")]
     unavailable: Option<UnavailableData>,
     index: Option<IndexData>,
-    hits: Vec<HitData>,
+    hits: Vec<ScreenTextHitData>,
     total_hits: usize,
     coverage: CoverageData,
 }
@@ -490,7 +492,7 @@ impl ScreenTextSearchData {
                 reason: unavailable.reason.identifier(),
             }),
             index: part.index.map(IndexData::new),
-            hits: part.hits.iter().map(HitData::new).collect(),
+            hits: part.hits.iter().map(ScreenTextHitData::new).collect(),
             total_hits: part.total_hits,
             coverage,
         }
@@ -533,7 +535,7 @@ pub struct ScreenTextSearchPageData {
     range: Option<RangeData>,
     state: &'static str,
     index: Option<IndexData>,
-    hits: Vec<HitData>,
+    hits: Vec<ScreenTextHitData>,
     total_hits: usize,
     next_cursor: Option<String>,
     coverage: CoverageData,

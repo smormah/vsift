@@ -3,8 +3,12 @@
 #![forbid(unsafe_code)]
 
 mod admission;
+mod agent_skill;
 mod asr;
 mod checkpoint;
+mod clock_face;
+mod clock_register;
+mod clock_track;
 mod evidence;
 mod failure;
 mod identity;
@@ -14,14 +18,19 @@ mod pagination;
 mod progress;
 mod provisioning;
 mod retry;
+mod screen_change;
 mod screen_text;
 mod search;
 mod session;
+mod source_origin;
 mod spans;
+mod speakers;
 mod storage;
+mod time_anchor;
 mod timeline;
 mod transcript;
 mod visual;
+mod watch;
 mod worker;
 
 use std::time::Duration;
@@ -31,6 +40,11 @@ pub use admission::{
     MAX_ADMISSION_WAIT, MAX_RECOGNIZER_THREADS, QUEUED_ADMISSION_POLL, QUEUED_YIELD_POLL,
     QUEUED_YIELD_WAIT, RecognitionShare, SINGLE_STAGE_WEIGHT, VISUAL_WINDOW_WEIGHT,
     leaving_one_free, recognizer_threads,
+};
+pub use agent_skill::{
+    AgentClient, ReplacePolicy, SKILL_FOLDER_NAME, SKILL_MAIN_FILE, SkillBundle, SkillBundleError,
+    SkillEntryName, SkillEntryNameError, SkillFile, SkillFolderState, SkillInstallRefusal,
+    SkillInstallStep, SkillLayout, SkillScope, install_step, names_the_vsift_skill,
 };
 pub use asr::{
     AsrChunkOutcome, AsrChunkRecord, AsrDecodingProfile, AsrModel, AsrModelProfile, AsrProvider,
@@ -47,6 +61,20 @@ pub use asr::{
     settled_merge, unusable_chunks_end_the_run, validate_chunk_output,
 };
 pub use checkpoint::{CheckpointOutcome, ChunkCheckpoint, RecognitionKey};
+pub use clock_face::{
+    ClockFace, ClockFaceRefusal, ClockFormat, ClockUnit, MAX_CLOCK_LINE_BYTES,
+    MIN_CLOCK_LINE_BASIS_POINTS, read_clock_face,
+};
+pub use clock_register::{
+    ClockConflict, ClockRegister, ClockStatementError, OffsetObservation, RegisteredClock,
+};
+pub use clock_track::{
+    CLOCK_RULES_VERSION, ClockAnalysis, ClockExcursion, ClockFreeze, ClockJump, ClockJumpKind,
+    ClockKind, ClockRate, ClockRead, ClockRefusals, ClockRun, MAX_CLOCK_PLACES,
+    MAX_ROLLOVER_FRAMES, MIN_JUMP_MICROS, MIN_OTHER_CLOCK_JUMP_MICROS, MIN_RUN_READS,
+    OffsetInterval, PAINT_SLACK_MICROS, ROLLOVER_BRACKET_MICROS, ScreenClock, analyse_clocks,
+    analyse_reads, clock_reads, rollover_frames,
+};
 pub use evidence::{
     AUDIO_CLIP_SAMPLE_RATE, AudioRange, BurstCount, BurstExtent, BurstPlan, BurstRange, Confidence,
     ConfidenceError, ConfidenceOrigin, CropRegion, EvidenceDetail, EvidenceItem, EvidenceItemParts,
@@ -61,9 +89,9 @@ pub use evidence::{
 };
 pub use failure::{FailureClass, FailureCode, OperationStatus};
 pub use identity::{
-    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, ScreenTextIndexId,
-    ScreenTextLineId, SessionId, SourceId, SourceSegmentId, TranscriptRevisionId,
-    TranscriptSegmentId, VisualCandidateId, VisualIndexId,
+    ArtifactId, EvidenceId, IdentifierError, JobId, OperationId, OperationKey, ScreenChangeId,
+    ScreenTextIndexId, ScreenTextLineId, SessionId, SourceId, SourceSegmentId, SpeakerRecordId,
+    TranscriptRevisionId, TranscriptSegmentId, VisualCandidateId, VisualIndexId,
 };
 pub use job::{
     JobKind, JobMode, JobState, JobTransitionError, MAX_FIRST_WINDOW_MICROS, PrepareStream,
@@ -86,6 +114,12 @@ pub use retry::{
     AttemptFailure, Jitter, MAX_AUTOMATIC_RETRIES, MAX_JOB_ATTEMPTS, POISON_THRESHOLD,
     RETRY_BASE_DELAY, RETRY_MAX_DELAY, RetryClass, RetryDecision, RetryPolicy, poisoned_chunk,
 };
+pub use screen_change::{
+    ChangeRegion, FrameComparison, MAX_CHANGE_REGIONS, MotionPart, PlannedScreenChange,
+    RegionComparison, RgbPixels, SCREEN_CHANGE_JOIN_DISTANCE, SCREEN_CHANGE_PIXEL_LEVEL,
+    SCREEN_CHANGE_TILE, SCREEN_CHANGE_TILE_PIXELS, ScreenChangeError, ScreenChangeKind,
+    ScreenChangeProfile, compare_frames, plan_screen_changes,
+};
 pub use screen_text::{
     DEFAULT_READ_PERIOD_MICROS, MAX_PROVIDER_LABEL_BYTES, MAX_READ_PERIOD_MICROS,
     MAX_SCREEN_TEXT_CHARS, MAX_SCREEN_TEXT_FRAMES, MAX_SCREEN_TEXT_LINES,
@@ -96,18 +130,42 @@ pub use screen_text::{
     plan_reads_in_analysed_windows,
 };
 pub use search::{
-    CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice,
-    SearchCoverage, SearchHit, SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection,
-    SearchSlice, normalise_search_text, screen_text_occurrences, search_revision,
-    search_screen_text,
+    BundleHitKey, BundleHitKind, BundleHitPosition, CoverageBasis, MAX_SEARCH_QUERY_BYTES,
+    MAX_SEARCH_TERMS, ScreenTextOccurrence, ScreenTextSlice, SearchCoverage, SearchHit,
+    SearchMatch, SearchPosition, SearchQuery, SearchQueryRejection, SearchSlice,
+    normalise_search_text, rank_bundle_hits, screen_text_occurrences, search_hits, search_revision,
+    search_revision_among, search_screen_text,
 };
 pub use session::{
     MAX_TRANSCRIPT_PARTS, SessionArtifactKind, SessionLifetime, SessionLifetimePolicy,
     SessionPhase, SessionTransitionError, WorkspacePolicy, WorkspacePolicyError,
     WorkspaceRetention,
 };
+pub use source_origin::{
+    AddressCheck, DEFAULT_DOWNLOAD_BYTES, DEFAULT_DOWNLOAD_SECONDS, DirectLinkOrigin,
+    DownloadLimits, DownloadLimitsError, HostName, HostNameError, MAX_DOWNLOAD_BYTES,
+    MAX_DOWNLOAD_SECONDS, MAX_HOST_NAME_BYTES, MAX_PAGE_PROVIDER_BYTES,
+    MAX_PAGE_TOOL_VERSION_BYTES, MAX_PAGE_VIDEO_ID_BYTES, MAX_SOURCE_LINK_BYTES,
+    MAX_SOURCE_REDIRECTS, PageJoin, PageOrigin, PageProvider, PageToolRecord, PageToolVersion,
+    PageVideoId, SourceFetchReason, SourceLink, SourceOrigin, SourceOriginError,
+};
+pub use speakers::{
+    DiarizationEngine, DiarizationError, DiarizationProvenance, DiarizedTurn, EngineSpeaker,
+    LabelledTurn, MAX_DIARIZED_SPEAKERS, MAX_DIARIZED_TURNS, MAX_GIVEN_SPEAKERS,
+    MAX_VERIFIED_NAME_BYTES, MAX_VERIFIED_NAMES, NoConfidentSpeaker, SegmentAttribution,
+    SegmentSpeaker, SpeakerCount, SpeakerCountError, SpeakerCountShortfall, SpeakerCoverage,
+    SpeakerLabellingProfile, SpeakerRecord, SpeakerRecordParts, SpeakerSummary, SpeakerTag,
+    SpeakerTagError, VerifiedName, VerifiedNameError, label_turns, segment_speaker,
+};
 pub use storage::{
     DurabilityRequirement, GenerationError, PublicationGuarantee, StorageGeneration,
+};
+pub use time_anchor::{
+    ANCHOR_AGREEMENT_MICROS, AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime,
+    ClockGap, ClockId, ClockReading, ClockTime, EARLIEST_TAGGED_RECORDING_UNIX_SECONDS, GapId,
+    GapState, MAX_CLOCK_GAPS, MAX_CLOCK_TEXT_BYTES, MAX_SCREEN_CLOCKS, MAX_TIME_ANCHORS,
+    ScreenAnchor, TAG_FUTURE_ALLOWANCE_SECONDS, TimeAnchor, TimeAnchorError, TimeAnchors,
+    UtcOffset,
 };
 pub use timeline::{
     CropParseError, CropRect, FrameDimensions, FrameTiming, GeometryError, MediaTime, StreamTime,
@@ -133,6 +191,11 @@ pub use visual::{
     VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexParts,
     VisualIndexProfile, VisualIndexWindow, VisualSample, VisualWindow, VisualWindowOutcome,
     WindowAnalysis, analyse_window, visual_window_count,
+};
+pub use watch::{
+    EVIDENCE_ARTIFACTS_PER_FRAME, MAX_OUTPUT_NAME_BYTES, MAX_WATCH_FRAMES, OutputNameError,
+    SETTLED_SCREEN_SPACING_MICROS, WatchOutputNames, frame_file_name, frames_that_fit,
+    one_line_text, readable_time, settled_screens, spread_evenly, subrip_cue_text, subrip_time,
 };
 pub use worker::{
     MIN_STEP_BUDGET, RecordedRequest, RequestAdmission, StepRetry, admit_request, ends_request,

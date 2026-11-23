@@ -163,6 +163,69 @@ pub(crate) struct TranscriptSegment {
     pub(crate) cue: Option<Cue>,
     #[serde(default)]
     pub(crate) carried_from: Option<CarriedFrom>,
+    #[serde(default)]
+    pub(crate) clock_time: Option<ClockTime>,
+    /// The segment's label under the revision's speaker record (ADR 0031).
+    #[serde(default)]
+    pub(crate) speaker_label: Option<SegmentSpeakerLabel>,
+}
+
+/// A segment's speaker label: how it reads. A verified name in it is the user's
+/// text, so it is printed as untrusted text.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SegmentSpeakerLabel {
+    pub(crate) display: DisplayText,
+}
+
+/// The `speakers` block (ADR 0031).
+#[derive(Debug, Deserialize)]
+pub(crate) struct Speakers {
+    pub(crate) record_id: String,
+    pub(crate) precision: String,
+    pub(crate) given_speaker_count: Option<u8>,
+    /// `sealed` or `stopped` (ADR 0033): a stopped revision's labels cover only its
+    /// own segments.
+    pub(crate) revision_state: String,
+    #[serde(default)]
+    pub(crate) count_shortfall: Option<SpeakerCountShortfall>,
+    pub(crate) diarized_range: Range,
+    pub(crate) labels: Vec<SpeakerLabelSummary>,
+    pub(crate) coverage: SpeakerCoverage,
+    pub(crate) statement: String,
+}
+
+/// A given speaker count the engine did not keep, with what to do about it.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SpeakerCountShortfall {
+    pub(crate) warning: String,
+    pub(crate) remediation: String,
+}
+
+/// One label of a speaker record.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SpeakerLabelSummary {
+    pub(crate) display: DisplayText,
+    pub(crate) labelled_segments: u64,
+    pub(crate) speech_us: u64,
+}
+
+/// What a speaker record covers: segment counts, named as the JSON names them.
+#[derive(Debug, Deserialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The fields mirror the published JSON members"
+)]
+pub(crate) struct SpeakerCoverage {
+    pub(crate) labelled_segments: u64,
+    pub(crate) no_confident_speaker_segments: u64,
+    pub(crate) not_diarized_segments: u64,
+}
+
+/// `transcript.speakers` and `transcript.name-speaker` data.
+#[derive(Debug, Deserialize)]
+pub(crate) struct SpeakersResult {
+    pub(crate) session_id: String,
+    pub(crate) speakers: Speakers,
 }
 
 /// Whether markup was removed from a segment's text.
@@ -211,6 +274,9 @@ pub(crate) struct TranscriptPage {
     /// result written before it, which no command now writes.
     #[serde(default)]
     pub(crate) transcript_coverage: Option<TranscriptCoverage>,
+    /// The revision's speaker labels (ADR 0031), when it has them.
+    #[serde(default)]
+    pub(crate) speakers: Option<Speakers>,
     /// What to read on from, over an open revision (ADR 0033).
     #[serde(default)]
     pub(crate) since: Option<Since>,
@@ -259,6 +325,9 @@ pub(crate) struct Search {
     pub(crate) hits: Vec<SearchHit>,
     pub(crate) next_cursor: Option<String>,
     pub(crate) transcript_coverage: TranscriptCoverage,
+    /// The revision's speaker labels (ADR 0031), when it has them.
+    #[serde(default)]
+    pub(crate) speakers: Option<Speakers>,
     /// The on-screen text part of a first page (ADR 0030).
     #[serde(default)]
     pub(crate) screen_text: Option<SearchScreenText>,
@@ -276,6 +345,77 @@ pub(crate) struct OcrSearch {
     pub(crate) next_cursor: Option<String>,
     #[serde(flatten)]
     pub(crate) part: SearchScreenText,
+}
+
+/// `bundle search` data (`bundle-search-data.schema.json`): one page of hits
+/// across retained bundles, with what each recording could give.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearch {
+    pub(crate) query: SearchQuery,
+    pub(crate) hits: Vec<BundleSearchHit>,
+    pub(crate) total_hits: u64,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) bundles: BundleSearchCounts,
+    pub(crate) sessions: Vec<BundleSearchSession>,
+    pub(crate) not_searched: Vec<BundleNotSearched>,
+}
+
+/// One hit of a `bundle search` page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchHit {
+    pub(crate) kind: String,
+    #[serde(rename = "match")]
+    pub(crate) tier: String,
+    pub(crate) bundle: String,
+    pub(crate) session_id: String,
+    pub(crate) evidence_id: String,
+    pub(crate) time_us: u64,
+    #[serde(default)]
+    pub(crate) segment: Option<BundleHitText>,
+    #[serde(default)]
+    pub(crate) line: Option<BundleHitText>,
+}
+
+/// The one member of a hit's evidence that a renderer may quote.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleHitText {
+    pub(crate) display_text: DisplayText,
+}
+
+/// The counts of a `bundle search`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchCounts {
+    pub(crate) searched: u64,
+    pub(crate) unavailable: u64,
+    pub(crate) not_searched: u64,
+    pub(crate) duplicates: u64,
+    pub(crate) skipped_entries: u64,
+    pub(crate) screen_text_incomplete: u64,
+}
+
+/// What a `bundle search` saw of one bundle.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchSession {
+    pub(crate) bundle: String,
+    pub(crate) state: String,
+    #[serde(default)]
+    pub(crate) reason: Option<String>,
+    pub(crate) hits: u64,
+    pub(crate) transcript: Option<BundleSearchPart>,
+    pub(crate) screen_text: Option<BundleSearchPart>,
+}
+
+/// The state of one part of a bundle.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleSearchPart {
+    pub(crate) state: String,
+}
+
+/// A bundle found and not searched.
+#[derive(Debug, Deserialize)]
+pub(crate) struct BundleNotSearched {
+    pub(crate) bundle: String,
+    pub(crate) reason: String,
 }
 
 /// The on-screen text part of a `search` first page.
@@ -339,6 +479,118 @@ pub(crate) struct ScreenTextCoverage {
     #[serde(default)]
     pub(crate) awaiting_analysis: u64,
     pub(crate) candidates_complete: bool,
+}
+
+/// `clocks` data (`clocks-data.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClocksResult {
+    pub(crate) session_id: String,
+    pub(crate) state: String,
+    pub(crate) read_now: u64,
+    pub(crate) stopped: Option<String>,
+    pub(crate) reads_pending: u64,
+    pub(crate) clocks: Vec<ScreenClockView>,
+    pub(crate) observations: Vec<ClockObservation>,
+    pub(crate) conflicts: Vec<ClockConflictView>,
+    pub(crate) refused: ClockRefusedView,
+}
+
+/// One clock of a `clocks` result.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenClockView {
+    pub(crate) clock_id: Option<String>,
+    pub(crate) kind: String,
+    pub(crate) format: String,
+    pub(crate) reads: u64,
+    pub(crate) first_us: Option<u64>,
+    pub(crate) last_us: Option<u64>,
+    pub(crate) offset: Option<ClockOffsetView>,
+    pub(crate) confirmed_utc_offset: Option<String>,
+    pub(crate) rate: Option<ClockRateView>,
+    pub(crate) excursions: Vec<ClockExcursionView>,
+    pub(crate) excursions_total: u64,
+    pub(crate) stopped_brackets: Vec<ClockBracketView>,
+    pub(crate) freezes: Vec<ClockFreezeView>,
+    pub(crate) jumps: Vec<ClockJumpView>,
+}
+
+/// A clock's offset interval.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockOffsetView {
+    pub(crate) precision_us: u64,
+}
+
+/// A clock's rate over its longest stretch.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockRateView {
+    pub(crate) drift_us: i64,
+    pub(crate) differs: bool,
+}
+
+/// Reads that left a clock and returned.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockExcursionView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) reads: u64,
+}
+
+/// A rollover whose search an excursion or a freeze ended.
+#[derive(Debug, Deserialize)]
+#[allow(
+    clippy::struct_field_names,
+    reason = "The names are the published JSON"
+)]
+pub(crate) struct ClockBracketView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+    pub(crate) width_us: u64,
+}
+
+/// A stretch a clock stood still.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockFreezeView {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+}
+
+/// A jump in a clock's offset.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockJumpView {
+    pub(crate) kind: String,
+    pub(crate) gap_id: Option<String>,
+    pub(crate) before: ClockProofView,
+    pub(crate) after: ClockProofView,
+    pub(crate) jump_us: i64,
+}
+
+/// A frame that proves a claim.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockProofView {
+    pub(crate) time_us: u64,
+}
+
+/// An offset observation: an inference.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockObservation {
+    pub(crate) clock_id: String,
+    pub(crate) anchor: String,
+    pub(crate) fits: Vec<String>,
+}
+
+/// Something the clocks disagree about.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockConflictView {
+    pub(crate) kind: String,
+    pub(crate) clock_id: Option<String>,
+    pub(crate) other_clock_id: Option<String>,
+}
+
+/// Lines set aside.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockRefusedView {
+    pub(crate) stood_still: u64,
+    pub(crate) irregular: u64,
 }
 
 /// `ocr` data (`screen-text-data.schema.json`).
@@ -427,6 +679,75 @@ pub(crate) struct Opened {
     pub(crate) publication: String,
     #[serde(default)]
     pub(crate) transcript: Option<TranscriptRevision>,
+    #[serde(default)]
+    pub(crate) time_anchor: Option<TimeAnchor>,
+    #[serde(default)]
+    pub(crate) origin: Option<Origin>,
+}
+
+/// A session's `time_anchor` summary (ADR 0029), without its anchor list.
+#[derive(Debug, Deserialize)]
+pub(crate) struct TimeAnchor {
+    pub(crate) consistency: String,
+    pub(crate) source: String,
+    pub(crate) confidence: String,
+    pub(crate) recording_start: Clock,
+}
+
+/// One clock reading, in the contract's fixed forms.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Clock {
+    pub(crate) utc: Option<String>,
+    pub(crate) local: Option<String>,
+    pub(crate) utc_offset: Option<String>,
+}
+
+/// An item's `clock_time`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ClockTime {
+    pub(crate) source: String,
+    pub(crate) confidence: String,
+    #[serde(default)]
+    pub(crate) start: Option<Clock>,
+    #[serde(default)]
+    pub(crate) end: Option<Clock>,
+}
+
+/// Where a fetched source came from (ADR 0028), never the link.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum Origin {
+    /// A direct link: hosts and a digest.
+    Direct(DirectOrigin),
+    /// A public page fetched through yt-dlp.
+    Page(PageOrigin),
+}
+
+/// The origin of a direct link.
+#[derive(Debug, Deserialize)]
+pub(crate) struct DirectOrigin {
+    pub(crate) requested_host: String,
+    pub(crate) final_host: String,
+    pub(crate) redirects: u64,
+    pub(crate) address_check: String,
+    pub(crate) retrieved_at: String,
+}
+
+/// The origin of a page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PageOrigin {
+    pub(crate) provider: String,
+    pub(crate) yt_dlp: PageTool,
+    pub(crate) joined: String,
+    pub(crate) retrieved_at: String,
+    #[serde(default)]
+    pub(crate) address_check: Option<String>,
+}
+
+/// Which tool fetched a page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct PageTool {
+    pub(crate) source: String,
 }
 
 /// A session's committed status (`session status`, `renew`, `close`).
@@ -445,6 +766,10 @@ pub(crate) struct SessionStatus {
     pub(crate) jobs: Option<Vec<SessionJob>>,
     #[serde(default)]
     pub(crate) jobs_truncated: bool,
+    #[serde(default)]
+    pub(crate) time_anchor: Option<TimeAnchor>,
+    #[serde(default)]
+    pub(crate) origin: Option<Origin>,
 }
 
 /// One job of `session status`.
@@ -962,6 +1287,85 @@ pub(crate) struct CandidatesPage {
     pub(crate) next_cursor: Option<String>,
 }
 
+/// `changes` data (`changes-data.schema.json`, ADR 0034).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesPage {
+    pub(crate) session_id: String,
+    pub(crate) range: Range,
+    pub(crate) index: VisualIndex,
+    pub(crate) profile: ChangesProfile,
+    pub(crate) coverage: CandidatesCoverage,
+    pub(crate) changes: Vec<ScreenChange>,
+    pub(crate) files: Vec<DeliveredFile>,
+    pub(crate) partial_reason: Option<String>,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) resume: Option<ChangesResume>,
+    /// Present only with `--crops`.
+    #[serde(default)]
+    pub(crate) crops: Option<ChangesCrops>,
+}
+
+/// What a `changes --crops` call's cropping made.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesCrops {
+    pub(crate) limit: u64,
+    pub(crate) made: u64,
+    pub(crate) regions_without_crop: u64,
+    pub(crate) stop: Option<String>,
+}
+
+/// The region rule of a `changes` page.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesProfile {
+    pub(crate) identifier: String,
+    pub(crate) pixel_level: u64,
+    pub(crate) tile: u64,
+    pub(crate) tile_pixels: u64,
+}
+
+/// Where a fresh `changes` call continues.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangesResume {
+    pub(crate) from_us: u64,
+    pub(crate) reason: String,
+}
+
+/// One screen change (`screen-change.schema.json`).
+#[derive(Debug, Deserialize)]
+pub(crate) struct ScreenChange {
+    pub(crate) kind: String,
+    pub(crate) motion: Option<String>,
+    pub(crate) settled: Option<bool>,
+    pub(crate) change_window: Range,
+    pub(crate) before: ChangeFrame,
+    pub(crate) after: ChangeFrame,
+    pub(crate) comparison: String,
+    pub(crate) regions: Vec<ChangeRegionView>,
+    pub(crate) regions_left_out: u64,
+    pub(crate) no_region_at_threshold: bool,
+}
+
+/// One of a change's two frames.
+#[derive(Debug, Deserialize)]
+pub(crate) struct ChangeFrame {
+    pub(crate) evidence_id: String,
+    pub(crate) time_us: u64,
+}
+
+/// A rectangle where a change's two frames differ, and with `--crops` the
+/// crops of it.
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct ChangeRegionView {
+    pub(crate) x: u64,
+    pub(crate) y: u64,
+    pub(crate) width: u64,
+    pub(crate) height: u64,
+    #[serde(default)]
+    pub(crate) before_crop: Option<String>,
+    #[serde(default)]
+    pub(crate) after_crop: Option<String>,
+}
+
 /// The candidates a page left out, by reason, over its whole range.
 #[derive(Debug, Deserialize)]
 pub(crate) struct CandidatesOmitted {
@@ -1250,4 +1654,50 @@ pub(crate) struct BatchItem {
     pub(crate) status: String,
     pub(crate) code: Option<String>,
     pub(crate) rejection: Option<String>,
+}
+
+/// One output of `watch` (ADR 0037).
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchOutput {
+    pub(crate) name: String,
+}
+
+/// The outputs of `watch`.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchOutputs {
+    pub(crate) transcript: WatchOutput,
+    #[serde(default)]
+    pub(crate) subtitles: Option<WatchOutput>,
+    pub(crate) folder: WatchOutput,
+}
+
+/// A range `watch` did not transcribe.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchRange {
+    pub(crate) from_us: u64,
+    pub(crate) to_us: u64,
+}
+
+/// `watch` data: what the finish screen needs of it.
+#[derive(Debug, Deserialize)]
+pub(crate) struct Watched {
+    pub(crate) session_id: String,
+    pub(crate) duration_us: u64,
+    pub(crate) not_transcribed: Vec<WatchRange>,
+    pub(crate) screen_changes_beyond_bound: bool,
+    pub(crate) frames_stopped_for_room: bool,
+    pub(crate) frames_skipped_for_capacity: u64,
+    pub(crate) names_shortened: bool,
+    pub(crate) outputs: WatchOutputs,
+    pub(crate) changes_found: u64,
+    pub(crate) changes_listed: u64,
+    pub(crate) frames: Vec<serde_json::Value>,
+    pub(crate) kept: Option<WatchKept>,
+}
+
+/// The bundle `--keep` asked for.
+#[derive(Debug, Deserialize)]
+pub(crate) struct WatchKept {
+    pub(crate) name: String,
+    pub(crate) failure_code: Option<String>,
 }

@@ -9,8 +9,9 @@
 # written with a dash so Git Bash does not take it for a path), Linux on Ubuntu
 # 22.04 so the binary runs on newer glibc. The folder around it is assembled by
 # the OCR story's own stage tool (`tools/p16_ocr_runner.py stage`), which fetches
-# Microsoft's ONNX Runtime 1.31.0 archive and the two PP-OCRv5 models by their
-# pinned sizes and SHA-256 and writes them unchanged, so the pins have one home.
+# Microsoft's ONNX Runtime 1.31.0 NuGet package (nuget.org) and the two PP-OCRv5
+# models by their pinned sizes and SHA-256 and writes them unchanged, so the pins
+# have one home.
 # The runner's own licences join them, and the runner must then describe
 # itself with the pinned runtime and models.
 set -euo pipefail

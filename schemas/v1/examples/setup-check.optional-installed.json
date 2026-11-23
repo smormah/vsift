@@ -50,10 +50,12 @@
       "components": [
         {
           "component": "js_runtime_deno",
+          "source": "managed",
           "version": "deno-2.9.7-x86_64-linux-gnu"
         },
         {
           "component": "yt_dlp",
+          "source": "managed",
           "version": "yt-dlp-2026.08.19-linux-x86_64"
         }
       ],

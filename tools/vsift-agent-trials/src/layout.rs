@@ -253,6 +253,10 @@ pub struct TrialManifest {
     /// setting, whose only restriction is the container's sandbox.
     #[serde(default)]
     pub cold_variant: Option<crate::cold::ColdVariant>,
+    /// What a value-measurement trial adds (`crate::value`); `None` for
+    /// skill and cold trials and in manifests written before it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<crate::value::prepare::ValueManifest>,
 }
 
 /// Where a trial's skill copy came from.

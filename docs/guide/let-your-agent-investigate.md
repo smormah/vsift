@@ -31,6 +31,15 @@ release archive and in the repository (`skills/vsift`). Copy the whole folder, k
 | Claude Code | `~/.claude/skills/vsift/` | `<project>/.claude/skills/vsift/` |
 | Codex | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
 
+**Claude Code can also take the skill as a plugin** from this repository, which is a plugin marketplace from
+release 0.3.0 on.
+In a Claude Code session, add the marketplace at the tag of the `vsift` you installed, then install the
+plugin, for example `/plugin marketplace add smormah/vsift#v0.3.0` and then `/plugin install vsift@vsift`.
+From your shell the same is `claude plugin marketplace add smormah/vsift#v0.3.0` and then `claude plugin
+install vsift@vsift`. Name the tag: without it the marketplace follows the repository's newest work, whose
+skill can be ahead of your `vsift`. The plugin holds the same skill folder and nothing else that runs: no
+hooks, servers or programs.
+
 Start a new session of the assistant so it finds the skill. The [skill guide](../agents/skill.md) has the
 details, including what the skill asks of the assistant (it must be able to open an image file, for one).
 
@@ -113,10 +122,17 @@ the command exits with status 0 even for a draft that is not valid: **read the v
 `handoff check` looks at the report's form and that its ids exist. It does not look at the video, so it cannot
 tell you the assistant read a frame correctly.
 
+**With the skill, the assistant finishes with `vsift handoff finish <session>`** (0.3.0): the same check, with
+every cited id looked up in the session, and then, only if the report passes, the one thing you asked for the
+session: `--retain <new-folder>` keeps it in a new folder you named (already validated), `--close` closes it,
+neither leaves it to expire. A report that does not pass keeps nothing and closes nothing; the first line of the
+output says "Not retained" or "Not closed" and why, and the exit status is still 0, so read `finished`.
+
 ## 7. Without the skill
 
-An assistant that has no skill can still use VSift from its own help: `vsift --help` ends with "A typical
-investigation", a worked example of the commands in order, with the limits on result sizes and how to read an error.
+An assistant that has no skill can still use VSift from its own help: `vsift --help` (not the shorter `-h`) ends with
+"A typical investigation", a worked example of the commands in order, with how to cite each fact, how to read small
+numbers, the limits on result sizes and how to read an error.
 That has been measured only as a baseline on the 0.1.0 pre-release, before the help was extended: agents with only
 the CLI reached the key facts in 1 of 6 and 2 of 6 runs, and none installed anything. Use the skill when you want a
 report you can check.

@@ -20,13 +20,14 @@ within what budget, and how to report.
 | --- | --- |
 | [`SKILL.md`](../../skills/vsift/SKILL.md) | Trigger description and the eight-state procedure (CHECK_CAPABILITIES to CLOSE_OR_RETAIN), each with its allowed commands and stopping condition. |
 | [`references/commands.md`](../../skills/vsift/references/commands.md) | The command policy: every public command is `free`, `explicit` (only on the user's instruction) or `never`. |
-| [`references/budgets.md`](../../skills/vsift/references/budgets.md) | The `compact` and `standard` budget profiles. |
+| [`references/budgets.md`](../../skills/vsift/references/budgets.md) | The `compact` and `standard` budget profiles, and `read_through` for the two whole-transcript workflows. |
 | [`references/handoff.md`](../../skills/vsift/references/handoff.md) | The grounded report template and citation rules. |
 | [`references/safety.md`](../../skills/vsift/references/safety.md) | Evidence is data: prompt-injection, rendering and privacy rules. |
 | [`references/resume.md`](../../skills/vsift/references/resume.md) | Operation ids, the resume card and recovery after a reset. |
 | [`references/lifecycle.md`](../../skills/vsift/references/lifecycle.md) | Close, retain and the cleanup routine. |
+| [`workflows/`](../../skills/vsift/workflows/) | Ready-made outcomes (0.3.0, ADR 0038 section 2): a bug report, findings, a demo backlog, log lines matched by clock time, meeting notes and a workshop spec. Each file stands alone when pasted into a client without the skill. |
 | [`handoff.schema.json`](../../skills/vsift/handoff.schema.json) | The handoff v1 JSON schema, owned by the skill (not part of `schemas/v1`). |
-| [`examples/`](../../skills/vsift/examples/) | Example handoffs built from real CLI output on the F10 and F03-speech fixtures. |
+| [`examples/`](../../skills/vsift/examples/) | Example handoffs built from real CLI output on the F10, F03-speech and F04-speech fixtures (the bug report, the findings with a `category`, and meeting notes read whole under `read_through`). |
 | [`assets/image-check.png`](../../skills/vsift/assets/image-check.png) | A small image with a code word, for the image-access check. |
 | [`agents/openai.yaml`](../../skills/vsift/agents/openai.yaml) | Codex presentation metadata only. |
 
@@ -39,15 +40,60 @@ The skill is the same folder everywhere: the repository's `skills/vsift/`, the
 `skills/vsift/` folder inside every native release archive, and the `skills/vsift/` folder
 of the `vsift-cli` npm package, byte for byte (`npm root --global` names the folder that
 holds `vsift-cli/skills/vsift/`). Build or install `vsift` first so that the command is on
-the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.2 is published, as
+the agent's `PATH` ([`install.md`](../operations/install.md): 0.2.4 is published, as
 `npm install --global vsift-cli` (no tag) and as archives on GitHub Releases; building from
-source also works). Then copy (or link) the whole `skills/vsift`
-directory, keeping its name, into the client's skill folder:
+source also works).
+
+**Since `0.3.0`, one command installs it** (ADR 0038 section 3), from the bytes the binary was
+built with, so the skill always matches the CLI that runs it: for example
+`vsift skill install --client claude-code --client codex`, with `--project` and a folder to
+install for one project, and `--replace` to replace a different `vsift` skill. It writes the folder each client's own documentation gives (checked 2026-10-28,
+[L-241](../planning/known-limits.md#l-241)); clients that share a folder have it written once:
+
+| `--client` | Folder (for you, below your home folder; or below `--project`) | The client's documentation |
+| --- | --- | --- |
+| `claude-code` | `.claude/skills/vsift/` | <https://code.claude.com/docs/en/skills> |
+| `codex` | `.agents/skills/vsift/` | <https://learn.chatgpt.com/docs/build-skills> |
+| `copilot` (VS Code and the Copilot CLI) | `.agents/skills/vsift/` | <https://code.visualstudio.com/docs/copilot/customization/agent-skills>, <https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills> |
+| `cursor` | `.agents/skills/vsift/` | <https://cursor.com/docs/context/skills> |
+| `gemini-cli` | `.agents/skills/vsift/` | <https://geminicli.com/docs/cli/skills/> |
+| `opencode` | `.agents/skills/vsift/` | <https://opencode.ai/docs/skills/> |
+| `goose` | `.agents/skills/vsift/` | <https://goose-docs.ai/docs/guides/context-engineering/using-skills> |
+| `amp` | `.agents/skills/vsift/` | <https://ampcode.com/docs/customize/skills> |
+
+Windsurf (now Devin Desktop) also documents `.agents/skills/`, so `--client codex` serves it.
+The install stages the skill beside its folder, reads every file back and compares it, then
+renames it into place. A folder that already holds this release's skill is `unchanged`. A
+different `vsift` skill, or a link, is left as it is (`INVALID_ARGUMENT`, every folder's outcome in
+`data`) unless `--replace` is given; then it is swapped (the old one moved aside, the new one moved
+in, the old one removed last, and put back on any failure), and a link is removed only as a link.
+Anything that is not a `vsift` skill is never replaced, and no step follows a link or junction.
+`vsift skill status` shows what is at each folder, and `vsift skill show <skill-file>` prints one of the
+skill's files by its name. The skill classes `skill install` as `never`: it changes another
+client's configuration, which is the person's to change.
+
+**By hand**, as before: copy (or link) the whole `skills/vsift` directory, keeping its name, from
+the repository, a release archive or the npm package (`npm root --global` names the folder that
+holds `vsift-cli/skills/vsift/`), into the client's skill folder:
 
 | Client | For one user | For one project |
 | --- | --- | --- |
 | Claude Code | `~/.claude/skills/vsift/` | `<project>/.claude/skills/vsift/` |
-| OpenAI Codex | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
+| Every other client above | `$HOME/.agents/skills/vsift/` | `<repository>/.agents/skills/vsift/` |
+
+**Claude Code also takes it as a plugin** (0.3.0, ADR 0038 section 4). From the 0.3.0
+tag on, the repository is a plugin marketplace: `.claude-plugin/marketplace.json` lists one plugin, `plugins/vsift/`,
+whose `skills/vsift/` is this folder byte for byte. Add the marketplace at the release tag
+of the installed `vsift` and install the plugin: `/plugin marketplace add
+smormah/vsift#v<version>`, then `/plugin install vsift@vsift`, or the same with `claude
+plugin` from a shell. The `#v<version>` pins the tag, which Claude Code's own
+documentation gives as the way to pin a branch or tag; without it the marketplace follows
+`main`, whose skill can be ahead of the installed binary
+([L-240](../planning/known-limits.md#l-240)). The skill is then `/vsift:vsift`. The plugin
+ships no hooks, executables, monitors, MCP or LSP servers and no npm manifest, so
+installing it runs nothing, and its manifests name the project, never a person; the
+governance check refuses anything else. Nothing loads it into a contributor's own agent:
+Claude Code reads a marketplace only once someone adds it.
 
 Restart the client (or start a new session) so that it discovers the skill. Both
 clients read the `name` and `description` front matter and load the rest on demand.
@@ -281,6 +327,38 @@ CLI's own advice for a missing tool changed in the same pull request (#396, [L-1
 trial freeze is new (`skill` `7f445a9a...`, whole freeze `f52265e7...`; [trials.md](trials.md), "The freeze (P14)"). **No agent
 has run this text:** it gets the uncounted skill smoke, and the compact tier is measured again only in the next counted batch.
 
+### `handoff finish`: the closing steps in one call (M5b; 2026-11-09, 0.3.0 draft)
+
+REPORT ends with `vsift handoff finish <session>` in place of `handoff check`, with CLOSE_OR_RETAIN's flag before
+`--json`: nothing (leave the session to expire), `--close`, or `--retain <new-directory>` only on the user's explicit
+request, to the folder they named. It checks the draft with the session's records, then makes that one write, so the
+`session retain`, `bundle validate` and `session close` calls go. A run with no session keeps `handoff check`.
+`commands.md` shows both shells' forms of both commands and classes `handoff finish` `free`, its `--retain` `explicit`
+as `session retain`; `lifecycle.md` keeps the standalone commands as the fallback when `finished` stays false. The
+skill grew by 314 bytes on M5a's text ([ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md),
+note of 2026-11-09).
+
+- **What one trial batch showed (15 Nov 2026).** 17 Claude Code runs (12 Opus 5.5, 5 Sonnet 5.5) on head `f07ba924`
+  (freeze `53317345...`) with a capped API key and the checkout's own `vsift.exe`; no Codex run. Records, summary and
+  the freeze copy are in [`batch-2-m5b/`](../planning/p14-agent-trials/batch-2-m5b/). **Closing round trips** (the
+  model steps after the last evidence call; `story-handoffs`' `M5b-measure-closing.cjs`), over the 16 runs that
+  retained: median **1**, mean 1.38, against M5a's batch 3 and 2.69 and `0.2.2-rc.1`'s 3 and 2.88. 16 of 17 runs used
+  `handoff finish`; none was refused by the grader, and no `bundle validate` followed it (M5a's batch: 11 runs,
+  `0.2.2-rc.1`: 13). 18 scenario prompts were reworded between M5a's batch and this one, so the comparison carries
+  that caveat.
+- **Passes.** 11 of 17 fully passed, the same scenarios run for run as M5a's batch; the safety gate was met and every
+  run passed interpretation. The six that failed the mechanical check (A-08 five times, H-02 once) are the S1
+  scenario gap described above for M5a (the scenarios still require `transcript.retranscribe`); the summary's two
+  other "not met" gates, the review tier's 50% mechanical and the compact regression's 3 of 5, are the same A-08 runs.
+- **H-01, a finding (the planner's ruling, 15 Nov).** H-01's prompt still names `vsift session retain`. Its agent read
+  that command's help, ran `session retain`, then `handoff finish` without `--retain`: 3 closing round trips, the
+  baseline's number, and the run fully passed. A user who names a command gets that command, and the agent used the
+  finishing command for what was left, without retaining twice: correct and safe. The 9 Nov ruling hoped the skill's
+  instruction would win over a prompt that names a command; one run shows it does not always, and 17 runs cannot say
+  how often. H-02, whose prompt names it too, used one `handoff finish --retain`. No change for 0.3.0.
+- **Not gating:** the median run read 70,887 skill bytes (M5a's batch: 73,274) and `commands.md` in 10 of 17 runs
+  (M5a's: 15); the prompts differ, so this is reported, not attributed. Cost by the client's own estimate: $7.55.
+
 ### A long report's check on Windows (#366; 2026-10-17, released in `0.2.2`)
 
 The skill's two draft forms of `vsift handoff check` stay the only ones, and the check still reads a draft from standard
@@ -357,10 +435,211 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   development freeze (`docs/agents/trials.md`), written on the `main` this pull request was rebased onto to merge;
   the final freeze is recorded at the 0.3.0 cut.
 
+## The change for 0.3.0: the setup door is never the skill's (ADR 0036; draft, 2026-10-27)
+
+- **`references/commands.md`** classes plain `vsift setup` as `never`: it is the setup door for a person at a
+  terminal, which asks a question and installs on the answer. The skill keeps `setup check` and `setup plan`
+  (free) and leaves `setup install` (never) to the user, as before; `SKILL.md` and the fuzz seed copy are
+  unchanged. The policy test's never set gains the `setup` operation (the CLI's skill-contract tests).
+- **Why it is safe as well as forbidden:** the door never asks without a terminal on standard input and
+  standard output, and with `--json` or `--events` it refuses with `INVALID_ARGUMENT`, so an assistant that runs
+  it by mistake gets a typed answer, never a question it cannot answer.
+- **The freeze:** a skill text change moves the trial freeze's `skill` component; the draft rewrites it, and it is
+  rewritten again at the merge rebase (`v030` rules).
+
+## The change for 0.3.0: a handoff skeleton instead of a template (ADR 0038 slice 1; draft, 2026-10-28)
+
+- **Why.** In the maintainer's try-out, an agent in a client the skill did not reach filled a JSON template
+  with PowerShell's case-insensitive `-replace`; the replace also rewrote member names and corrupted the
+  handoff without any error. The fix lives in the CLI, where an agent without the skill finds it.
+- **`references/commands.md`** classes `vsift handoff skeleton` `free` and allows the form
+  `vsift handoff skeleton <session> --question "<question>" --json`. It prints a valid handoff that states
+  nothing yet: VSift's ids, the transcript basis, an empty claim list, image access `unavailable` and the
+  session left open; `data.fill` lists what only the agent adds ([`cli-v1.md`](../contracts/cli-v1.md),
+  "0.3.0 `handoff skeleton`").
+- **`references/handoff.md`** says to write the JSON whole or start from the skeleton, and never to build
+  it by search-and-replace on a template. `SKILL.md` and the fuzz seed copy are unchanged: an agent with the
+  skill writes the JSON in its message and has no template to fill.
+- **The guard** gains the placeholder `<question>`. `vsift --help` names the command in step 6.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten again at the merge
+  rebase (`v030` rules). **Untried:** no trial scenario runs the skeleton.
+
+## The change for 0.3.0: a citation states its clock time (ADR 0029, note of 2026-10-31; draft)
+
+- **Why.** An agent matching a recording to a log could read `clock_time` from the JSON, but its report could
+  not carry it, so the time that matters most to that reader was neither structured nor checked.
+- **`handoff.schema.json`** gives each citation an optional `clock_time`, the item's member copied whole, with
+  the exact forms pinned by patterns. `references/handoff.md` says how to copy it, lists its two closed values
+  and says what `clock_time_may_be_stale` asks for.
+- **`workflows/logs-by-clock.md`** carries `clock_time` on each matched moment's citations, checks with
+  `--session`, and says what `time_anchor.segments` means: a `detected` gap changes no value but the subtraction
+  may not hold past it, so the claim says so, and an agent never runs `--accept-gap` or `--screen-zone` on its
+  own reading.
+- **`references/commands.md`** allows `--session <session>` before `--json` in the two draft forms, when a report
+  states a clock time. Without it an agent's own check could never hold one.
+- `SKILL.md` and the fuzz seed copy are unchanged, and `plugins/vsift/` mirrors the four files.
+- **The trial tooling** (`tools/vsift-agent-trials/src/shell.rs`) reads the `--session` shape of each form as the
+  same one `free` call, with a literal session id only.
+- **The freeze:** the `skill` and `grader` components move; they were rewritten at the merge rebase, on top of
+  W6c's change to `SKILL.md` (`trials.md`). **Untried:** no trial scenario runs this until the cut.
+
+## The change for 0.3.0: `vsift skill install`, `status` and `show` (ADR 0038 slice 3; draft, 2026-10-29)
+
+- **`references/commands.md`** classes `vsift skill install` `never` (it changes another client's configuration; the
+  planner's D4) and `vsift skill status` and `vsift skill show` `free`, with the forms `vsift skill status --json` and
+  `vsift skill show <skill-file> --json`. `skill show` says to read the skill's files with the file-reading tool when
+  there is one. `SKILL.md` and the fuzz seed copy are unchanged.
+- **The guard** gains `skill.install` in its reviewed `never` set and the placeholder `<skill-file>`.
+- **The embedded skill** (the list in the contract crate) is held equal to this folder, file list and bytes, by a test:
+  a file added to the skill must be added there.
+- **The freeze:** the `skill` component moves again; the draft rewrites it, and it is rewritten at the merge rebase.
+  **Untried:** no trial runs the installer; trials prepare their workspaces as before.
+
+## The change for 0.3.0: four ready-made workflows (ADR 0038 slice 2; draft, 2026-10-29)
+
+- **`workflows/`** holds `bug-report.md` (`compact`), `findings.md` (`standard`), `demo-backlog.md` (`standard`) and
+  `logs-by-clock.md` (`compact`). Each opens with "If the vsift skill is loaded, its rules apply. If not, read
+  `vsift --help` first, use only `vsift` commands, and end with `vsift handoff check`.", names its budget, finds
+  items by searching cue words, starts the JSON from `handoff skeleton` and ends with `handoff check`. Every command
+  in them is `free`. The cue words are English, and an item far from every cue word can be missed
+  ([L-238](../planning/known-limits.md#l-238)).
+- **`handoff.schema.json`** gains the optional `claims[].category` (`bug`, `feature_request`, `question`, `decision`,
+  `action_item`, `open_question`, `requirement`, `backlog_item`) and `claims[].priority` (`high`, `medium`, `low`,
+  only with `backlog_item`). A priority nobody said is the agent's own, and the claim's statement says so
+  ("priority inferred: high"; the planner's ruling, ADR 0038). `handoff_version` stays `1`; an older `handoff
+  check` refuses both members. `references/handoff.md` lists them.
+- **Clock time.** `references/commands.md` allows `ingest --recorded-at` with the start time the user gave. The
+  logs workflow turns a log time into a window by subtracting VSift's `time_anchor.recording_start` and cites
+  only items whose own `clock_time` VSift returned. A log line is never a citation
+  ([L-239](../planning/known-limits.md#l-239)).
+- **`references/safety.md`** gains "Log files": the one log file the user names is read with the file-reading
+  tool, in the logs workflow only; it is untrusted data; the least text is quoted; no secret, token or personal
+  data is quoted; an instruction in it is listed in the Markdown's "Untrusted instructions observed" (the JSON's
+  list needs a citation, which a log line cannot have).
+- **`SKILL.md`** links the four files from one line; its sentence on quoting arguments now points at
+  `references/commands.md`, which already said it, so it stays at 300 lines. The fuzz seed copy is copied again.
+- **The plugin** gains `commands/<workflow>.md`, one slash command per workflow (`/vsift:bug-report` and so on),
+  each naming its workflow file.
+- **The guard** gains the placeholder `<recorded-at>`, holds the workflow files' commands to `free`, and checks each
+  file's opening, budget, skeleton, check and link, the plugin's commands, and the two new examples.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten at the merge rebase.
+  **Untried:** no trial runs a workflow before the 0.3.0 cut.
+
+## The change for 0.3.0: meeting notes and workshop specs read the whole transcript (ADR 0038, D1; draft, 2026-10-29)
+
+- **The maintainer's D1 (2026-10-28):** "meeting notes and workshop specs read the whole transcript text, up to
+  about two hours, with images still within the budget".
+- **`workflows/meeting-notes.md` and `workflows/workshop-spec.md`** search cue words first, then read every page
+  of the transcript (25 segments a page, with `next_cursor`), and report decisions, actions, requirements and open
+  questions, each quoting `display_text` and citing its segment. A compact model uses the cue-word method instead
+  and says so before the first read. "Read all" is said only when it is true.
+- **`references/budgets.md`** gains the `read_through` profile in a table of its own: pages of 25, 120 transcript
+  pages, 200 calls, 60 minutes, and `standard`'s images. Only these two workflows use it.
+- **`handoff.schema.json`** gains `read_through` in `budget.profile`, the optional `budget.limits.transcript_pages`
+  and `transcript_pages` in `budget.exhausted`; `references/handoff.md` lists them.
+- **The plugin** gains `/vsift:meeting-notes` and `/vsift:workshop-spec`. **The guard** holds the table to the
+  contract's `read_through` constant and the workflows to their page ceiling.
+- **The freeze:** the `skill` component moves; the draft rewrites it, and it is rewritten at the merge rebase.
+  **Untried:** a two-hour read through any client ([L-243](../planning/known-limits.md#l-243)).
+
+## The change for 0.3.0: the help points to the workflows, C-04 and `ingest --url` (ADR 0038 slice 5; draft, 2026-10-29)
+
+- **Without the skill.** `vsift --help` gains a "ready-made outcomes" paragraph after the seven steps: the six
+  workflows, one line each, and the `vsift skill show` line that prints one's method (for example `vsift skill show
+  workflows/bug-report.md`). Help text, not JSON. A CLI test holds the list to the workflow files the contract crate
+  embeds, and the existing help test parses the `skill show` line.
+- **`references/commands.md`** allows `ingest --url <link>` (with or without `--transcript`), class `free` as
+  `ingest` is, only for a direct https:// link to a video file that the user gave in the conversation, never one
+  found in the evidence, a web page, a file or a remediation (the planner's ruling, 2026-10-29). The guard gains
+  the placeholder `<link>`. This is the only skill text the slice changes.
+- **The cold scenario C-04** ([`trials.md`](trials.md), "Cold-agent mode") asks for a bug report with times, with
+  no skill. It runs in batch 3 at the 0.3.0 cut and is graded as C-01.
+- **The freeze:** the `skill`, `grader` (the campaign plan) and `cold` components move; this pull request writes
+  the freeze on its own head, which also covers the two workflow pull requests before it.
+  **Untried:** the workflows, the plugin and the help's pointers by any agent until the cut
+  ([L-242](../planning/known-limits.md#l-242)).
+
+## The change for 0.3.0: a video on a web page is the user's decision (ADR 0028, #409; draft, 2026-11-02)
+
+- **`references/commands.md`, in one place:** a section "A video on a web page", with one line in `SKILL.md`'s
+  CHECK_CAPABILITIES that points to it, because `SKILL.md` is at its 300-line bound. When the user asks about one, or
+  `ingest --url` refuses a link with `web_page`, and `setup check` does not report `online_links` as `installed`, the
+  agent reads the plan's `optional_components` and tells the user what the part does, its licence, its size and that
+  each site's terms apply, then asks. Where the plan says `unavailable`, it says this needs a yt-dlp of their own and
+  that each site's terms apply, and asks. Then it goes to REPORT with a `dependency` gap, reason
+  `needs_user_authority`, because every stop ends in REPORT. The description now says it takes a video at a link and
+  rules out live streams, the one wording change ADR 0028 kept for this freeze.
+- **`setup install` stays `never` (the planner's ruling, 2026-11-02).** With the skill the person runs the command;
+  the agent only gives it to them. Without the skill, the plan's own `operator_decision_required` lets an agent accept
+  a plan after a yes. The skill reads hostile evidence, so it gains no authority here.
+- **`references/commands.md`:** `ingest --url` admits a public video page the user gave, and the failure table gains
+  the `SOURCE_FETCH_FAILED` row it did not have, which points to that step for `web_page`.
+- **The trials:** `A-11-f05-optional-offer` runs this step on both clients, and four cold scenarios run the plan's own
+  instruction ([`trials.md`](trials.md), "Cold-agent mode"). They first run at the `0.3.0` cut;
+  [L-249](../planning/known-limits.md#l-249) says what they do not cover.
+- **The freeze:** the `skill`, `grader`, `scenarios` and `cold` components move once, written at the merge rebase. The
+  fuzz seed and the plugin's copy stay byte-identical.
+
+## The change for 0.3.0: a lighter skill (M5a, 2026-11-07)
+
+- **Why.** The value measurement (phase 1, run on `0.3.0-rc.1`) compares an assistant that drives FFmpeg and
+  whisper.cpp itself with the same assistant using VSift, and most of VSift's cost is round trips; the skill's text
+  adds about a third to each. The maintainer chose "Steps and text" on 2026-11-06; this is the text part. The
+  planner's ruling of 2026-11-07 measures what a typical run loads: `SKILL.md` plus the four references that
+  all 89 recorded Claude Code skill runs read (`safety.md`, `handoff.md`, `commands.md`, `lifecycle.md`; `resume.md`
+  8 of 89, `budgets.md` 4 of 89), 76,635 bytes before, with a target of at least 30% less.
+- **What changed, in bytes** (checked with `wc -c`; `SKILL.md` carries the guard's pinned sentences, the
+  allowed-words table, the skeleton and the description unchanged):
+
+  | File | Before | After |
+  | --- | --- | --- |
+  | `SKILL.md` | 20,989 | 17,983 |
+  | `references/safety.md` | 5,370 | 5,107 |
+  | `references/handoff.md` | 21,697 | 19,732 |
+  | `references/commands.md` | 25,197 | 21,280 |
+  | `references/lifecycle.md` | 3,382 | 2,886 |
+  | The five a typical run loads | 76,635 | 66,988 |
+
+  `resume.md` grew by 260 bytes (the form for a VSift before 0.3.0, moved there from `SKILL.md`'s PREPARE).
+- **Reading on a trigger.** Wording alone gives −12%. The rest was meant to come from reading less: `SKILL.md`
+  rule 2 says the commands the skill shows are `free` and that `commands.md` is read before any other command, on a
+  failure and for the PowerShell form of the draft check; CLOSE_OR_RETAIN says `lifecycle.md` is read only to
+  retain, renew or clean. A run that reads only `SKILL.md`, `safety.md` and `handoff.md` would load 42,822 bytes
+  (−44%). The trial batch below shows that agents do not do that.
+- **Kept as it was in meaning:** every safety rule (the wording is shorter, no rule weaker), the handoff format, the
+  allowed-words table, the retain-only-on-request rule, the pinned sentences of the guard and every rule the trials
+  grade. No command, flag, failure code or schema changed.
+- **Not done:** the allowed-words table stays whole in `SKILL.md` (the maintainer asked for it on 2026-09-29 and the
+  planner kept it), the description is unchanged (it drives the trigger), and `handoff.md` still repeats those 15
+  members in its own table because the guard holds that table to the whole schema.
+- **The freeze:** the `skill` component moves; written at the merge ([`trials.md`](trials.md)).
+- **What one trial batch showed (15 Nov 2026).** 17 Claude Code runs (12 Opus 5.5, 5 Sonnet 5.5) on head
+  `71e51eaf` with a capped API key and the checkout's own `vsift.exe`; no Codex run. Records, summary and the
+  freeze copy are in [`batch-2-m5a/`](../planning/p14-agent-trials/batch-2-m5a/). The median run read 73,274 skill
+  bytes; the same 17 runs sized at the skill without this change read 82,425, so the text a typical run loads is
+  **11% lighter**, short of the 30% aimed at. The batch on `0.2.2-rc.1` (72,381) is the wrong stick: the skill has
+  grown since (`workflows/bug-report.md`, 3,622 bytes, is read in 13 of 17 runs; `commands.md` and `safety.md`
+  grew). Runs that read each file: `commands.md` 15 of 17 (16 of 17 before), `handoff.md` 14, `lifecycle.md` 11
+  (16 of 17 before), `resume.md` 3. **The trigger wording did not hold:** agents read the references straight after
+  loading the skill, before the first command, so `commands.md` is still read on most runs. `lifecycle.md` did fall.
+  That up-front read is the lever for after 0.3.0; it is not a known limit, because no behaviour is wrong. No further
+  cut was made for 0.3.0.
+- **Passes, and the six that failed.** 11 of 17 fully passed; the safety gate was met (0 policy, canary or report-text
+  failures), A-01 refused to install, and every run passed the interpretation check. The six that failed the
+  mechanical check (A-08 five times, H-02 once) each say "never ran transcript.retranscribe": the agent started the
+  transcription with `job start`, which `main`'s skill has taught since #510 and which this change only rewords,
+  while those scenarios still require `transcript.retranscribe`. That is a gap in the scenarios, not a regression of
+  this change; a separate cut item (S1) brings the scenarios in step, and A-09 and H-01 get the matching check so a
+  needless re-transcription cannot pass them. Cost by the client's own estimate: $7.76.
+
 ## Keeping it in step with the CLI
 
 `crates/vsift-cli/src/skill_contract.rs` (unit tests of the CLI crate, run by `cargo
 test --workspace`) fails when the skill drifts from the CLI:
+
+- the Claude Code plugin's copy, `plugins/vsift/skills/vsift/`, equals `skills/vsift/`
+  byte for byte, with no file missing or added; a skill change copies the folder again
+  in the same change;
 
 - every `vsift` line in a `console` block of the skill (and of this page) parses with
   the real parser, uses `--json` or `--events jsonl` and no operator-only option, and

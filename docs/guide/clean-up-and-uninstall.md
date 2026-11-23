@@ -106,7 +106,10 @@ The install guide has the full procedure, with the folder list for each system
 ([section 8](../operations/install.md#8-uninstall)). In short, in this order:
 
 1. If you used the managed tools (Ubuntu 24.04 only), remove them while `vsift` still exists:
-   `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup remove whisper_model`.
+   `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup remove whisper_model`, and,
+   if you added web videos, `vsift setup remove yt_dlp` and `vsift setup remove js_runtime_deno`, and, if you added
+   on-screen text, `vsift setup remove ocr_runner`, and, if you added speaker labels, `vsift setup remove
+   speaker_diarizer`, `vsift setup remove speaker_segmentation_model` and `vsift setup remove speaker_embedding_model`.
 2. Remove the package: `npm uninstall --global vsift-cli` (or the same with pnpm, Bun or Yarn), or delete the
    folder you extracted the archive into.
 3. Delete VSift's own folders if you want them gone: the configuration folder, the sessions folder and, on

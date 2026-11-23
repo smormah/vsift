@@ -9,6 +9,9 @@ library) and are fetched and pinned; five are Wikimedia files with no copy elsew
 and the tool pins against the Commons SHA-1 (`pin --from-file`). Every hosted run fetches from the project's own test-media
 release, never from Wikimedia; the release is prepared for the maintainer's review, not created by a tool. A private local set
 of the maintainer's own recordings is supported for local runs only, reported by measurements alone (section 13).
+**2026-10-21:** RM11 (NASA, an in-flight interview: a controller, an interviewer and an astronaut) joins for speaker labels, so the set is
+**nine approved items (489,354,989 bytes)**; the item limit is nine, following the maintainer's approval of that day to add
+a recording of two or three speakers (section 10, decision 11).
 Issue: [#363](https://github.com/smormah/vsift/issues/363). Register: [L-180](known-limits.md#l-180).
 
 ## 1. Why
@@ -28,7 +31,7 @@ reports.
 
 ## 2. What the set must cover, and what each shape settles
 
-Five to eight items, a few hundred MB in all, each short where it can be. One item may cover several shapes.
+Five to nine items, a few hundred MB in all, each short where it can be. One item may cover several shapes.
 
 | Shape (`covers` in the manifest) | What it exercises | Findings it should help settle |
 | --- | --- | --- |
@@ -39,6 +42,7 @@ Five to eight items, a few hundred MB in all, each short where it can be. One it
 | `non-english-or-accented` | A non-English speaker, or a strong accent | L-022 |
 | `leading-silence` | Silence or a title card before the first word | #174 (L-024, a segment that starts at the audio's start) |
 | `lecture-or-meeting` | A lecture or meeting of 15 to 30 minutes | L-022 (long recordings), #380 to #384 at scale, timings |
+| `two-or-three-speakers` | A conversation of two or three people taking turns | #108 (speaker labels, ADR 0031), L-206 (evidence on real recordings), L-207 (similar voices) |
 | `vertical-variable-frame-rate` (optional) | A phone video: vertical, variable frame rate | #363's list; rotation and VFR paths on real files |
 
 The set does not replace the synthetic corpus: the corpus has exact, frozen truth; the real set has realistic signal and
@@ -109,8 +113,8 @@ pins:
 - the **author and the attribution text**, the media's duration, container and codecs, the shapes it covers and the issues
   it should help settle;
 - its **status**: `proposed` (listed for review, never fetched), `approved` (the maintainer approved it on a recorded date),
-  `withdrawn` (kept for the record, never fetched, not counted). **The set is its approved items: at most eight, and
-  500,000,000 bytes together** (the maintainer's limits of 2026-10-19, enforced by the tool);
+  `withdrawn` (kept for the record, never fetched, not counted). **The set is its approved items: at most nine, and
+  500,000,000 bytes together** (the maintainer's limits of 2026-10-19, nine items since 2026-10-21, enforced by the tool);
 - later, hand-made **labels** (section 6).
 
 **The tool:** `node tools/p14-campaigns/real-media.cjs` (Node.js 22, no dependency), with its rules in
@@ -213,6 +217,7 @@ property checks are pure functions in `lib/real-media-checks.cjs`, tested on han
 | Evidence | `frame get` at three candidates, `crop` of the top-left 480x120 of a frame (the labelled small-text region once labels exist), `audio` around the worst seam loss (or the first seam) | The frames' requested and actual times; the crop's size; the clip, copied to `<item>/listen/` for a listener and never uploaded |
 | Handoff | `handoff check` of a mechanical draft citing the run's own ids | `data.valid` |
 | Close | `session close`, then `session clean --expired` | That the session closes and its folder, with VSift's copy of the recording, is removed |
+| `vsift <video>` (ADR 0037, from 2026-10-28; public items only) | the bare form on a copy of the item in `<item>/watch/`, with a session root of its own | The wall time and real-time factor, the outcome, the screen changes and frames written. Check `watch`: the three outputs are beside the copy and are the bytes the answer hashed, the transcript's header names the item's pinned SHA-256, the frames are min(changes, 180) and each is the bytes its SHA-256 says and is in the list, and the session was closed. A private item is not watched: its files would hold the recording's words in the work folder |
 
 **What it checks are properties, not exact words** (an item has no frozen transcript):
 
@@ -292,6 +297,18 @@ the SHA-256 of its text, so two runs can be compared segment by segment from the
   With `-f mode=visual` it runs, instead of the campaign, the measurement of the visual change rule on the fetched items
   (#175: `crates/vsift-infrastructure/tests/p08_real_media_visual.rs`, which decodes each item twice and keeps numbers only,
   as `visual-measurement.json` in the report artifact); `-f mode=both` runs the two.
+  With `-f mode=progress` (0.3.0 readiness item 5, ADR 0033 sections 6 and 9; [`progress-measurement.cjs`](../../tools/p14-campaigns/progress-measurement.cjs))
+  it runs, instead of the campaign, the measurement of the quick/watched threshold and of the progress estimate's error: for
+  RM03 and RM09 (the default when `items` is empty) and for prefixes of RM03 of 5, 10 and 15 minutes that the runner cuts with
+  FFmpeg (stream copy, so the audio is untouched; one re-encode of the video only if the container does not allow it, and the
+  report says so), it makes a fresh session for each of `job start --mode quick` and `--mode watched`, the order of the two
+  alternating from one medium to the next. A watched run is followed with `job status` about every ten seconds (every two until a
+  part is readable, every second in the last fifth). It writes `progress.json` (every figure and every status sample) and
+  `progress.md` (the tables) to the artifact: wall time to the sealed revision, time to the first readable part and to each part,
+  real-time factor and recogniser threads, the estimate's signed and relative error when the run is 10, 25, 50 and 75 percent
+  done, when the estimate first appears, and the quick revision against the watched one (segments, text, where they differ and
+  how near a chunk seam). **Public items only:** the tool refuses `--private-manifest` and any private item (tests drive both),
+  and keeps at most 120 characters of each side of a difference, from a public item.
   With `-f keep_segments="RM09:915-940"` (#485; whole seconds, at most four ranges and 120 s an item) the campaign also keeps,
   as text, the transcript segments of both revisions that overlap each range, with their chunk, its audio window and the
   recogniser's own times, in `kept-segments/<item>/segments.json` of the artifact beside the item's attribution, so a person can
@@ -324,7 +341,7 @@ the SHA-256 of its text, so two runs can be compared segment by segment from the
   It is not a gate: one or two items are not a sample, and a gate stays for #150's fixture set.
 - **A defect found** is an issue first, then one re-run; its fix leaves a regression fixture that does not need the recording.
 
-## 10. The maintainer's decisions (2026-10-18 and 2026-10-19, recorded on #363)
+## 10. The maintainer's decisions (2026-10-18 to 2026-10-21, recorded on #363 and #108)
 
 1. **Approved:** RM01, RM03 (the original, not the 480p transcode), RM04, RM05, RM06 and RM07, about 382 MB; each may be
    fetched by the hosted workflow and placed on the maintainer's machine, outside every repository, for local runs.
@@ -347,6 +364,10 @@ the SHA-256 of its text, so two runs can be compared segment by segment from the
     licensed items for a person to judge legibility; a private item's crops are never kept. Built as at most 4 crops an
     item and 12 a run, the crops with the smallest text, with the item's attribution
     ([`small-text-real-media.md`](small-text-real-media.md) section 4).
+11. **2026-10-21 (recorded for speaker labels, #108): a ninth item.** Following the maintainer's approval of that day to
+    add one public-domain recording of two or three speakers, RM11 is approved and the item limit is nine; the 500 MB
+    cap stays. Its reference is read from a hosted labelled transcript and confirmed by the maintainer listening
+    ([`speaker-labels-evaluation.md`](speaker-labels-evaluation.md)).
 
 ## 11. What the set must never contain
 
@@ -458,11 +479,15 @@ three quarters of the set's budget, so it is not used.
 | RM07 | Introduction to Wikidata Lexeme Forms, Lexicodays 2024 (480p transcode) | CC BY-SA 4.0 | Commons, by hand (ETag compared as MD5) | 21,315,686 | `afd19162...` |
 | RM09 | NASA's SpaceX Crew-8 Crew Arrival at Kennedy Space Center | Public domain | [NASA Image and Video Library](https://images.nasa.gov/details/KSC-20240225-MH-JBS01-0001-CCP_SpaceX_Crew_8_Arrival_KSC-M4585) (no checksum published: trust on first use, cross-checked hosted) | 72,873,726 | `ee5501f1...` |
 | RM10 | How to Create a Map from a Table Using data.census.gov (U.S. Census Bureau) | Public domain | [Internet Archive](https://archive.org/details/yt_wJJiJfJpK0o) mirror of the Bureau's channel; SHA-1 checked | 10,796,931 | `a035daeb...` |
+| RM11 | Expedition 70 Astronaut Loral O’Hara Talks with KAKE-TV, Wichita, Kansas (NASA, 2 January 2024) | Public domain | [NASA Image and Video Library](https://images.nasa.gov/details/iss070m260021459_Expedition_70_Astronaut_Loral_O%E2%80%99Hara_Talks_with_KAKE-TV_Wichita_Kansas_240102) (no checksum published: trust on first use, cross-checked hosted) | 48,513,285 | `e765f9c7...` |
 
 RM09 adds about five minutes of arrival with no speech before the first word (leading silence; the noise is to be heard),
 outdoor remarks (noisy speech) and 28 minutes of length; RM10 is a real screen recording of a data site with small text and
 burned-in captions. Both were looked at frame by frame for private persons' data before use (none). RM02 (held) and RM08
-(withdrawn) are not in the set.
+(withdrawn) are not in the set. RM11 (2026-10-21) is an in-flight interview from the space station, 18:36: a television
+station's interviewer on the ground and the astronaut on board, with Mission Control opening and closing it, in their
+public roles, for speaker labels (the first 9:26 are music); the coordinator
+fetched it from NASA's library over HTTPS with the neutral user agent and added it to the release.
 
 **Hand downloads for the maintainer** (Commons serves a browser; the tool never contacts it). Save each file under any name,
 then pin it, which checks the exact size and the Commons SHA-1 and copies it into `C:\dev\vsift-real-media\<id>\`:
@@ -718,3 +743,128 @@ Hosted run 39486605862 kept the same range on the fixed branch:
   the maintainer's decision of 2026-10-20 (#486) a before-and-after comparison counts only a pair on the same CPU model. The
   shifted runs started at different points (283 s before, 66 s after), which happens on different CPUs (section 14.4), so the
   rest of the two reports is not compared. The seam above is read from the kept segments themselves.
+
+### 14.6 RM03's three seam findings (#539, hosted, 2026-10-28)
+
+RM03's first campaign runs fail on three seam findings. Two hosted runs of RM03 give **the same three, at the same times and
+with the same word counts**: run 40654763827 on `35a991f6` (`main` before the progress stack, #508 to #513; both revisions sealed
+at the end, AMD EPYC 9V45) and run 40595722898 on `98565a40` (both revisions published as they go, which `transcript
+retranscribe` does on `main`; AMD EPYC 7763). So the progress stack did not cause them, and they are not the variation by CPU of
+section 14.4. The first run kept the segments over 65 to 95 s, 752 to 790 s and 815 to 842 s (`kept-segments/RM03/segments.json`;
+RM03 is CC BY-SA 3.0).
+
+1. **The whole run's seam at 75 to 80 s, 15 words (about 76.9 to 82.7 s): a chunk heard as another language, looping.** Chunk 3
+   (audio 75 to 105 s) wrote one segment over its whole window, 75.00 to 105.00 s: 56 Turkish words, 50 of them one word
+   repeated. whisper.cpp detects the language per chunk (`-l auto`), and this chunk of English speech came out as Turkish; the
+   whole revision's `language` is `null` (VSift's value when the chunks disagree) and the shifted revision's `en`. The loop owns
+   the time of chunk 2's last words in the overlap, so chunk 2 is kept only up to 76.68 s, and the guard sees no hole because the
+   loop covers it. The shifted run heard those words mid-chunk ("administrative measure taken by the government and then it was
+   backed up with a judicial one"). The same loop is behind a 7-word run at the next seam (about 97.1 to 99.9 s). In all, about 25 s
+   of English has no English text in the whole revision. **This is L-188's limit with the loop L-201 leaves**, not a new fault of
+   the merge. The campaign named it as neither: the language check compares writing systems, and Turkish is in Latin script like
+   English (`language_flips` 0); the run is classified `loss` because the loop is in the revision that lacks the words.
+2. **The whole run's seam at 825 to 830 s, 10 words (about 825.7 to 829.7 s): the same speech worded differently.** Chunk 32
+   (audio 800 to 830 s) wrote its last segment over 825.00 to 829.88 s, in the final five seconds of its window, and chunk 33
+   starts at 829.96 s. The shifted run heard the stretch mid-chunk with other words ("cities" where the whole run has
+   "universities", "1,000" where it has "1000"), which break the word triples the check matches. Both revisions have text over
+   the whole stretch.
+3. **The shifted run's seam at 761.08 to 766.08 s, 10 words (about 760.9 to 763.9 s): the same, the other way.** Chunk 28 of the
+   shifted run (audio 736.08 to 766.08 s) wrote its last full segment over 761.28 to 765.76 s with other words than the whole run
+   heard there mid-chunk.
+
+**Over the recording, seams lose no more than two cuts of one chunk disagree anyway:** the whole run's seam recall is 0.897
+against 0.894 at the control stretches inside one chunk, and the shifted run's 0.933 (explained runs counted as found) against
+0.877. Which wording of findings 2 and 3 is right needs a listener. **For the maintainer's decision (#539):** L-188's design for
+`1.0.0` would remove finding 1; a narrow merge rule of L-201's kind (a segment whose own words loop claims no time) would keep chunk
+2's last 3.3 s beside the loop; and the campaign could report each chunk's detected language (to see a flip in the same script)
+and classify a run as `repetition` when the revision lacking it holds a loop there. The check's threshold is unchanged.
+
+### 14.7 The loop rule on RM03 and RM09 (#539, hosted, 2026-10-28)
+
+Run 40761586962 on `138d7cc5` (the loop rule of ADR 0017's 2026-10-28 note; both revisions published as they go; AMD EPYC
+9V74), items RM03 and RM09, mode `campaign`, kept segments over 60 to 120 s of RM03 and 900 to 960 s of RM09.
+
+- **RM03, the seam at 75 to 80 s: no longer a finding.** Chunk 3 still writes its loop over 75.00 to 105.00 s (56 words, 50 of them
+  one Turkish word), and it is still kept. Chunk 2's segments after 76.68 s are now kept beside it: "administrative measure taken
+  by the government." (76.68 to 78.96 s) and "And then it was" (78.96 to 80.00 s), which the shifted run heard mid-chunk. The
+  English the loop covers after 80 s is L-188's limit and stays.
+- **RM03's other two findings are unchanged:** 10 words each at 825 to 830 s (whole run) and 761.08 to 766.08 s (shifted run), the
+  same speech worded differently (section 14.6). Seam recall 0.906 against 0.894 at the controls (0.897 in section 14.6, without the rule).
+- **RM09 is unchanged by the rule:** its seam at 925 to 930 s still lacks 8 words (9 in section 14.5, on another CPU), the stretch
+  chunk 36 heard in Russian (L-188); chunk 37's segment over 925.00 to 927.96 s is kept as since #485. The language check reports 9
+  stretches heard in another writing system by the two plans. Seam recall 0.903 against 0.886.
+- **The campaign still exits 1** on these advisory findings; the check's threshold is unchanged. `vsift <video>` ended `partial`
+  for both items (frames for 180 of 589 and 297 changes; L-234), exit 0.
+
+### 14.8 Quick against watched, and the estimate (ADR 0033 sections 6 and 9, hosted, 2026-11-11)
+
+Run 43036639892 on `89abe00d` (46 minutes; mode `progress`, items RM03 and RM09; AMD EPYC 9V74, 4 logical CPUs, `base`; quick
+recognised with 4 threads, watched with 3). A first run, 43035185042, failed every ingest in 5 s with `STORAGE_IO`: the tool
+had made the session roots itself and VSift refuses a root it did not create private; the tool no longer does. Each medium ran
+both modes on fresh sessions, the order alternating (`order` in the table). The prefixes of RM03 were cut by stream copy
+(300, 600 and 900 s). Wall time includes the visual stream both modes run first (9 to 28 s on RM03, 6 s on RM09).
+Estimate error is the estimate minus the time that really remained to the seal, at the first sample at or after the point, signed
+(positive: pessimistic); "no estimate" means the estimate had not appeared at that point.
+
+| Media | Mode (order) | Sealed after | First part | Real-time factor | Threads | Estimate error at 10% | 25% | 50% | 75% |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RM03, first 5 min | quick (1st) | 97.9 s | - | 0.326 | 4 | - | - | - | - |
+| RM03, first 5 min | watched (2nd) | 103.5 s | none before the seal | 0.345 | 3 | no estimate | no estimate | +17.3 s (+50.8%) | +6.3 s (+39.0%) |
+| RM03, first 10 min | watched (1st) | 183.8 s | none before the seal | 0.306 | 3 | no estimate | +47.2 s (+42.8%) | +14.1 s (+18.9%) | +4.8 s (+13.3%) |
+| RM03, first 10 min | quick (2nd) | 180.2 s | - | 0.300 | 4 | - | - | - | - |
+| RM03, first 15 min | quick (1st) | 264.1 s | - | 0.293 | 4 | - | - | - | - |
+| RM03, first 15 min | watched (2nd) | 268.3 s | 238 s (12:48 published) | 0.298 | 3 | +123.7 s (+61.6%) | +42.4 s (+24.8%) | +11.0 s (+9.6%) | +4.3 s (+7.7%) |
+| RM03, 19:16 | watched (1st) | 343.9 s | 244.3 s (12:48 published) | 0.297 | 3 | +121.9 s (+46.1%) | +32.8 s (+14.8%) | +9.1 s (+6.0%) | +6.0 s (+8.7%) |
+| RM03, 19:16 | quick (2nd) | 336.0 s | - | 0.291 | 4 | - | - | - | - |
+| RM09, 28:02 | quick (1st) | 397.4 s | - | 0.236 | 4 | - | - | - | - |
+| RM09, 28:02 | watched (2nd) | 405.3 s | 27.3 s (20 s published) | 0.241 | 3 | -47.6 s (-13.3%) | -69.3 s (-22.5%) | -17.2 s (-8.7%) | +1.9 s (+2.2%) |
+
+- **The estimate first appears** 48.2 s (5-minute prefix, 35% done), 44.2 s (10-minute prefix, 17.5%; 15-minute prefix, 11.7%; the
+  whole talk, 9.1%) into the transcription of RM03 and 20.2 s (4.8%) into RM09's, all with 3 or 4 fresh chunks.
+- **Parts.** RM03 published 5 parts in all (to 12:48 at 244 s, 15:19 at 284 s, 15:50 at 297 s, 18:38 at 336 s, the seal at 344 s);
+  the 15-minute prefix 2; the 10- and 5-minute prefixes one each, the seal. RM09 published 24 parts, the first to 0:20 at 7 s and
+  the second to 1:10 at 27 s, then one every 10 to 40 s. (Times are first seen by a sample every 2 s before the first part, then
+  10 s, then 1 s in the last fifth.) L-256 is the finding.
+- **Sealed revisions agree.** For all five pairs the quick and the watched revision have the same segments (272 and 369 for the
+  two whole items; 53, 106 and 199 for the prefixes) and the same text, word distance 0, despite 4 and 3 threads.
+- **Watched costs 1.6 to 5.7% of wall time** (5.7, 2.0, 1.6, 2.4, 2.0% from the shortest to the longest); no difference follows
+  the order. The transcription itself ran at 3.4 to 3.75 media seconds a second on RM03 (3.3 to 3.7 with 3 threads), 4.3 on RM09.
+- **Reading.** ADR 0033's note of 2026-11-11 holds the proposal (keep ten minutes); [L-256](known-limits.md#l-256) and
+  [L-257](known-limits.md#l-257) the two findings. One run on one runner class: the figures are this CPU's, and a laptop's speed
+  moves every wall time in the table.
+
+### 14.9 The bounded settled cut on real speech (L-256, H8, hosted, 2026-11-11)
+
+Run 43084227851 on `af504315` (the fix's branch; 50 minutes; mode `progress`, items RM03 and RM09 with RM03's 5, 10 and
+15 minute prefixes; AMD EPYC 7763, 4 logical CPUs, `base`; quick with 4 threads, watched with 3). The same measurement as
+14.8, on a slower runner class (real-time factors 0.31 to 0.38 on RM03 against 0.29 to 0.35), after the bounded cut of
+ADR 0033 section 2 (amendment of 2026-11-11). **Trail** is the recognised audio in `job status` less `published_until_us`,
+at every sample from the first part to the seal (every 10 s, every 1 s in the last fifth); the recognised audio there can
+lag a part's commit by up to one chunk, so a few samples read negative.
+
+| Watched run | First part, into the transcription (14.8) | Parts (14.8) | Trail: median | 90th percentile | largest |
+| --- | --- | --- | --- | --- | --- |
+| RM03, first 5 min | 22.1 s (none before the seal) | 6 (1) | 23.0 s | 48.0 s | 61.0 s |
+| RM03, first 10 min | 18.1 s (none before the seal) | 12 (1) | 21.0 s | 46.0 s | 61.0 s |
+| RM03, first 15 min | 18.1 s (238 s after the start) | 18 (2) | 19.8 s | 42.7 s | 61.0 s |
+| RM03, 19:16 | 20.1 s (215 s) | 24 (5) | 20.0 s | 42.6 s | 61.0 s |
+| RM09, 28:02 | 40.4 s (20 s) | 31 (24) | 30.0 s | 55.0 s | 110.0 s |
+
+- **RM03 publishes as it goes.** Its first readable part came 20.1 s into the transcription with 1:06 published; the next
+  came 40 s later (the recognised audio stood at 1:20 for about 30 s, probably the chunk from 75 to 105 s, whose recognition loops, 14.7; not traced), and from then on a part
+  every 10 to 20 s (to 2:15, 3:04, 3:52, ...); the prefixes alike. The trail's median is 20 to 23 s and its 90th
+  percentile 43 to 48 s; the largest, 61 s, is the sample just before a part, when a chunk has finished and the next part
+  is not yet due. Before the fix the talk trailed by up to about 12 minutes (14.8).
+- **RM09** has pauses and published as it went before too. Its first part (to 0:20, no words) came 2 s into the
+  transcription and its second (to 1:06) 40 s in, against 20 s in 14.8: the recognised audio itself stood at 0:30 from 9 s
+  to 39 s of this run, so the wait is the recognition's on this runner, not the cut's (the bounded cut never settles less
+  than the stretch cut did for the same finished chunks). Its largest trail, 110 s, is one sample at 4:57 published while
+  6:45 was recognised, with the next part 10 s later.
+- **Sealed revisions agree.** For all five pairs the quick and the watched revision have the same segments (52, 105, 199,
+  267 and 369) and the same text, word distance 0. Segment counts differ from 14.8's on RM03 (267 against 272): another
+  CPU recognises differently (14.4).
+- **The estimate** (L-257) behaves as in 14.8: +67 to +73 percent at 10 percent done on the talk, within 15 percent from half
+  way on runs of 15 minutes or more.
+- **Reading.** [L-256](known-limits.md#l-256) is amended to what is left (low): the trail on continuous speech is now about 20 s
+  at the median and up to about a minute just before a part, and a single segment as long as a window would still hold its
+  stretch back.

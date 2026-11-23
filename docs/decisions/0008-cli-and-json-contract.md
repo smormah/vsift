@@ -235,3 +235,9 @@ Both are additive within v1 and the version stays `0.2.1`.
 schemas `transcript-get-brief-data`, `search-brief-data`, `candidates-brief-data`,
 `transcript-segment-brief` and `visual-candidate-brief`, and the contract and CLI tests
 named in the C-08 row state and test this.
+
+
+*Note, 2026-10-27 ([ADR 0036](0036-the-setup-door.md)):* plain `vsift setup` no longer prints help: it is the setup
+door, which talks to a person at a terminal and only reports without one. `vsift setup --help` prints the help. With
+`--json` or `--events` the door answers `INVALID_ARGUMENT` under the new operation identifier `setup` (additive). No
+other command reads standard input as an answer, and none prompts.

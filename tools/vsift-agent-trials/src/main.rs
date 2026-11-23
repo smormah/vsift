@@ -27,6 +27,10 @@ use vsift_agent_trials::{
     summary::summarize,
     trace::ClientKind,
     truth::CorpusTruth,
+    value::{
+        checkability as value_checkability, freeze as value_freeze, grade as value_grade,
+        prepare as value_prepare, summary as value_summary, task as value_task,
+    },
 };
 
 /// The exit code of `run` when the client stopped at its usage limit: the
@@ -186,6 +190,163 @@ enum FreezeStep {
         /// `grader,cold,settings,truth` between the cold rounds.
         #[arg(long, value_delimiter = ',')]
         only: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ValueFreezeStep {
+    /// Records the value freeze of the repository.
+    Write {
+        /// The commit under test, as the operator names it.
+        #[arg(long)]
+        commit: String,
+        /// The freeze file to write.
+        #[arg(long)]
+        output: PathBuf,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
+    },
+    /// Fails when anything frozen has changed since the freeze file.
+    Check {
+        /// The freeze file.
+        #[arg(long)]
+        file: PathBuf,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Parsed once per process; boxing the preparation flags would only obscure the clap derive"
+)]
+enum ValueStep {
+    /// Prepares one run of a task in one arm.
+    Prepare {
+        /// The neutral trial root.
+        #[arg(long)]
+        root: PathBuf,
+        /// The task file (tools/vsift-agent-trials/value/tasks/<task>.json).
+        #[arg(long)]
+        task: PathBuf,
+        /// The arm: r0, r1, v0 or v1.
+        #[arg(long)]
+        arm: String,
+        /// Which run of the cell this is, from 1 (run pairs are by index).
+        #[arg(long)]
+        run_index: u32,
+        /// A pilot: never counted; a task whose truth is pending may run.
+        #[arg(long)]
+        pilot: bool,
+        /// The vsift executable (absolute), for V arms built from a commit.
+        #[arg(long)]
+        vsift: Option<PathBuf>,
+        /// An install proof, for V arms on a published version.
+        #[arg(long)]
+        install_proof: Option<PathBuf>,
+        /// The `VSift` commit under test.
+        #[arg(long)]
+        vsift_commit: String,
+        /// The ffmpeg executable (absolute).
+        #[arg(long)]
+        ffmpeg: PathBuf,
+        /// The ffprobe executable (absolute).
+        #[arg(long)]
+        ffprobe: PathBuf,
+        /// whisper-cli (absolute).
+        #[arg(long)]
+        whisper: PathBuf,
+        /// The ggml model (absolute).
+        #[arg(long)]
+        model: PathBuf,
+        /// The recording, for a task from the test-media release (absolute).
+        #[arg(long)]
+        media: Option<PathBuf>,
+        /// The transcript file, for a task that supplies one (absolute).
+        #[arg(long)]
+        transcript: Option<PathBuf>,
+        /// The frozen raw guide's folder (default: the repository's).
+        #[arg(long)]
+        guide: Option<PathBuf>,
+        /// The value freeze file the run is under.
+        #[arg(long)]
+        freeze: Option<PathBuf>,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
+    },
+    /// Grades one phase of a value trial into value-grade.json.
+    Grade {
+        /// The trial directory.
+        #[arg(long)]
+        trial: PathBuf,
+        /// The phase, from 1.
+        #[arg(long, default_value_t = 1)]
+        phase: usize,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
+    },
+    /// Writes the bounded record of a graded value phase.
+    Record {
+        /// The trial directory.
+        #[arg(long)]
+        trial: PathBuf,
+        /// The phase, from 1.
+        #[arg(long, default_value_t = 1)]
+        phase: usize,
+        /// The record file (.json).
+        #[arg(long)]
+        output: PathBuf,
+        /// The client home to redact from the record.
+        #[arg(long)]
+        client_home: Option<PathBuf>,
+    },
+    /// Summarises a folder of value records: cells, verdicts, thresholds.
+    Summarize {
+        /// The folder of value records.
+        #[arg(long)]
+        records: PathBuf,
+        /// Where to write summary.json.
+        #[arg(long)]
+        output_json: PathBuf,
+        /// Where to write SUMMARY.md.
+        #[arg(long)]
+        output_markdown: PathBuf,
+    },
+    /// Records or checks the value freeze (tasks, raw guide, settings,
+    /// grader, method note, skill, corpus truth).
+    Freeze {
+        #[command(subcommand)]
+        step: ValueFreezeStep,
+    },
+    /// The checkability demonstration (method section 8): invented
+    /// citations added to a finished V1 and R1 run, and what a check says.
+    Checkability {
+        /// A finished V1 trial of the task.
+        #[arg(long)]
+        v1_trial: PathBuf,
+        /// A finished R1 trial of the same task.
+        #[arg(long)]
+        r1_trial: PathBuf,
+        /// The vsift executable the V1 run used (absolute).
+        #[arg(long)]
+        vsift: PathBuf,
+        /// Where to write checkability.md (its JSON goes beside it).
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Checks every value task file against the corpus truth.
+    CheckTasks {
+        /// Refuse a task whose truth is still pending (before a counted batch).
+        #[arg(long)]
+        counted: bool,
+        /// The repository checkout (default: this crate's).
+        #[arg(long)]
+        repository: Option<PathBuf>,
     },
 }
 
@@ -364,6 +525,12 @@ enum Step {
         #[command(subcommand)]
         step: CampaignStep,
     },
+    /// The value measurement (method in docs/planning/value-measurement):
+    /// raw arms against `VSift` arms, graded the same way.
+    Value {
+        #[command(subcommand)]
+        step: ValueStep,
+    },
     /// Summarises a batch: the gates of the plan, results and usage.
     Summarize {
         /// A campaign state file (repeat for each client).
@@ -439,6 +606,7 @@ impl Done {
 )]
 async fn execute(step: Step) -> Result<Done, TrialError> {
     match step {
+        Step::Value { step } => value(step),
         Step::Install {
             version,
             prefix,
@@ -747,6 +915,185 @@ async fn execute(step: Step) -> Result<Done, TrialError> {
                 "summarised {} counted run(s) against {} gate(s)",
                 summary.runs.len(),
                 summary.gates.len()
+            )))
+        }
+    }
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "One match over the value steps keeps each step next to its flags"
+)]
+fn value(step: ValueStep) -> Result<Done, TrialError> {
+    use value_freeze::{RAW_GUIDE, VALUE_TASKS};
+    match step {
+        ValueStep::Freeze { step } => match step {
+            ValueFreezeStep::Write {
+                commit,
+                output,
+                repository,
+            } => {
+                let freeze = value_freeze::write(
+                    &repository.unwrap_or_else(default_repository),
+                    &commit,
+                    &output,
+                )?;
+                Ok(Done::ok(format!(
+                    "value freeze {} written to {}",
+                    freeze.freeze_sha256,
+                    output.display()
+                )))
+            }
+            ValueFreezeStep::Check { file, repository } => {
+                let problems =
+                    value_freeze::check(&repository.unwrap_or_else(default_repository), &file)?;
+                if problems.is_empty() {
+                    Ok(Done::ok("nothing in the value freeze has changed"))
+                } else {
+                    Err(TrialError::Refused(problems.join("; ")))
+                }
+            }
+        },
+        ValueStep::Checkability {
+            v1_trial,
+            r1_trial,
+            vsift,
+            output,
+        } => {
+            let demonstration = value_checkability::write(&v1_trial, &r1_trial, &vsift, &output)?;
+            Ok(Done::ok(format!(
+                "{}: {} case(s) written to {}",
+                demonstration.task,
+                demonstration.cases.len(),
+                output.display()
+            )))
+        }
+        ValueStep::Prepare {
+            root,
+            task,
+            arm,
+            run_index,
+            pilot,
+            vsift,
+            install_proof,
+            vsift_commit,
+            ffmpeg,
+            ffprobe,
+            whisper,
+            model,
+            media,
+            transcript,
+            guide,
+            freeze,
+            repository,
+        } => {
+            let repository = repository.unwrap_or_else(default_repository);
+            let freeze_sha256 = freeze
+                .as_deref()
+                .map(vsift_agent_trials::skill::file_digest)
+                .transpose()?;
+            let layout = value_prepare::prepare(&value_prepare::ValuePrepareRequest {
+                root,
+                guide: guide.unwrap_or_else(|| repository.join(RAW_GUIDE)),
+                repository,
+                task,
+                arm: value_task::Arm::parse(&arm)?,
+                run_index,
+                pilot,
+                vsift,
+                install: install_proof
+                    .as_deref()
+                    .map(InstallProof::load)
+                    .transpose()?,
+                vsift_commit,
+                ffmpeg,
+                ffprobe,
+                whisper,
+                model,
+                media,
+                transcript,
+                freeze_sha256,
+                root_policy: RootPolicy::from_environment(),
+                cold_scan_stop: None,
+            })?;
+            Ok(Done::ok(layout.trial().display().to_string()))
+        }
+        ValueStep::Grade {
+            trial,
+            phase,
+            repository,
+        } => {
+            let repository = repository.unwrap_or_else(default_repository);
+            let grade = value_grade::grade_phase(&TrialLayout::new(&trial), phase, &repository)?;
+            let score = grade.claims.as_ref().map_or_else(
+                || "truth pending".to_owned(),
+                |claims| format!("score {:.2}, {} wrong", claims.score, claims.wrong.len()),
+            );
+            let counted = if grade.counted { "counted" } else { "EXCLUDED" };
+            Ok(Done::ok(format!(
+                "{} {} phase {phase}: {counted}; {score}; {} round trips; {} safety finding(s)",
+                grade.value.task_id,
+                grade.value.arm.name(),
+                grade.measures.round_trips,
+                grade.safety.len()
+            )))
+        }
+        ValueStep::Record {
+            trial,
+            phase,
+            output,
+            client_home,
+        } => {
+            value_summary::write_record(
+                &TrialLayout::new(&trial),
+                phase,
+                &output,
+                client_home.as_deref(),
+                &environment_user_names(),
+            )?;
+            Ok(Done::ok(format!("wrote {}", output.display())))
+        }
+        ValueStep::Summarize {
+            records,
+            output_json,
+            output_markdown,
+        } => {
+            let summary =
+                value_summary::summarize_folder(&records, &output_json, &output_markdown)?;
+            Ok(Done::ok(format!(
+                "{} cell(s), {} verdict(s), {} excluded run(s), {} pilot(s)",
+                summary.cells.len(),
+                summary.comparisons.len(),
+                summary.excluded.len(),
+                summary.pilots
+            )))
+        }
+        ValueStep::CheckTasks {
+            counted,
+            repository,
+        } => {
+            let repository = repository.unwrap_or_else(default_repository);
+            let corpus = CorpusTruth::load(&repository.join("fixtures").join("corpus"))?;
+            let folder = repository.join(VALUE_TASKS);
+            let mut files: Vec<PathBuf> = std::fs::read_dir(&folder)
+                .map_err(|error| TrialError::io_at(&folder, error))?
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.extension()
+                        .is_some_and(|extension| extension == "json")
+                })
+                .collect();
+            files.sort();
+            let mut pending = 0;
+            for file in &files {
+                let task = value_task::Task::load(file)?;
+                task.validate(&corpus, counted)?;
+                pending += usize::from(task.truth_pending());
+            }
+            Ok(Done::ok(format!(
+                "{} value task file(s) valid; {pending} wait for M2's truth",
+                files.len()
             )))
         }
     }

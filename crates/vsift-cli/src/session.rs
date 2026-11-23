@@ -10,26 +10,30 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use vsift::{
     BundleSummary, Cancellation, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest,
-    CleanScope, DurabilityRequirement, Engine, FailureCode, IngestRequest, ProgressObserver,
-    RetranscribeOutcome, RetranscribeRange, RetranscribeRequest, SessionJobs, SessionLifetime,
-    SessionLifetimePolicy, SessionListEntry, SessionPage, SessionSnapshot, SourceRetention,
-    SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery, WorkspaceInitRequest,
-    WorkspacePolicy, WorkspaceRetention,
+    CleanScope, ClockReading, DiarizerSelection, DownloadLimits, DurabilityRequirement, Engine,
+    EngineError, FailureCode, IngestOutcome, IngestRequest, LinkIngestRequest, NameSpeakerRequest,
+    OpenSessionError, ProgressObserver, RetranscribeOutcome, RetranscribeRange,
+    RetranscribeRequest, SessionJobs, SessionLifetime, SessionLifetimePolicy, SessionListEntry,
+    SessionPage, SessionSnapshot, SourceFetchReason, SourceLink, SourceRetention, SpeakersRange,
+    SpeakersRequest, SpeakersView, SuppliedTranscriptRequest, TranscriptExcerpt, TranscriptQuery,
+    WorkspaceInitRequest, WorkspacePolicy, WorkspaceRetention,
 };
 use vsift_contract::{
     BundleData, BundleSourceInclusion, CleanData, CleanItem, CleanItemOutcome, CommandName,
-    LifecycleResponse, ListedSession, OpenData, OperationResponse, PageData, RequestDurability,
-    ResultView, RetranscribeJob, SessionJobData, SessionState, SessionStatusData, StatusData,
-    TranscriptEvidenceStream, TranscriptPresentation, TranscriptRetranscribeData, WorkspaceData,
-    WorkspaceInitOutcome, finish_retranscription, job_warning_messages, transcript_get_response,
-    transcript_warning_messages,
+    LifecycleResponse, ListedSession, OpenData, OperationResponse, OriginData, PageData,
+    RequestDurability, ResultView, RetranscribeJob, SessionJobData, SessionState,
+    SessionStatusData, SpeakersPresentation, StatusData, TimeAnchorData, TranscriptEvidenceStream,
+    TranscriptPresentation, TranscriptRetranscribeData, WorkspaceData, WorkspaceInitOutcome,
+    finish_retranscription, job_warning_messages, speakers_response,
+    transcript_get_response_with_speakers, transcript_warning_messages,
 };
 
 use crate::{
     CommandFailure,
     command::{
         IngestArguments, SessionCommand, SessionInitWorkspaceArguments, TranscriptGetArguments,
-        TranscriptRetranscribeArguments,
+        TranscriptNameSpeakerArguments, TranscriptRetranscribeArguments,
+        TranscriptSpeakersArguments,
     },
 };
 
@@ -61,7 +65,7 @@ pub(crate) fn session_lifecycle(
     })
 }
 
-fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
+pub(crate) fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
     Ok(StatusData {
         session_id: snapshot.session_id().as_str().to_owned(),
         state: SessionState::observed(
@@ -75,6 +79,8 @@ fn status_data(snapshot: &SessionSnapshot) -> Result<StatusData, FailureCode> {
         artifact_bytes: snapshot.artifact_bytes(),
         generation: snapshot.generation().value(),
         expires_at: rfc3339(snapshot.lifetime().expires_at_unix_seconds())?,
+        time_anchor: TimeAnchorData::new(snapshot.time_anchors()),
+        origin: snapshot.origin().and_then(OriginData::new),
     })
 }
 
@@ -124,7 +130,7 @@ fn session_status_response(
     Ok(response(CommandName::SessionStatus, &data)?.with_lifecycle(lifecycle))
 }
 
-fn bundle_data(bundle: &BundleSummary) -> BundleData {
+pub(crate) fn bundle_data(bundle: &BundleSummary) -> BundleData {
     let source = match bundle.source_retention() {
         SourceRetention::EvidenceOnly => BundleSourceInclusion::EvidenceOnly,
         SourceRetention::IncludeSource => BundleSourceInclusion::SourceIncluded,
@@ -222,14 +228,34 @@ pub(crate) async fn ingest(
         path,
         offset_micros: arguments.transcript_offset.unwrap_or(0),
     });
-    let outcome = engine
-        .ingest(IngestRequest {
-            source: arguments.source,
-            transcript,
-            cancellation: cancellation.clone(),
-            durability: vsift::DurabilityRequirement::Ephemeral,
-        })
-        .await?;
+    let outcome = match (arguments.source, arguments.url) {
+        (Some(source), None) => {
+            engine
+                .ingest_recorded_at(
+                    IngestRequest {
+                        source,
+                        transcript,
+                        cancellation: cancellation.clone(),
+                        durability: vsift::DurabilityRequirement::Ephemeral,
+                    },
+                    arguments.recorded_at,
+                )
+                .await?
+        }
+        (None, Some(link)) => {
+            ingest_link(
+                engine,
+                &link,
+                (arguments.max_download_bytes, arguments.max_download_seconds),
+                arguments.recorded_at,
+                transcript,
+                cancellation,
+            )
+            .await?
+        }
+        // The argument group requires exactly one.
+        _ => return Err(CommandFailure::from(FailureCode::InvalidArgument)),
+    };
     let expires_at = rfc3339(outcome.session.lifetime.expires_at_unix_seconds())?;
     let mut data = OpenData::new(&outcome.session, expires_at);
     let mut warnings = Vec::new();
@@ -240,6 +266,53 @@ pub(crate) async fn ingest(
     Ok(response(CommandName::Ingest, &data)?
         .with_lifecycle(session_lifecycle(outcome.session.lifetime)?)
         .with_warnings(&warnings))
+}
+
+/// The most bytes `--url -` reads from standard input: the longest link
+/// and a line ending.
+const MAX_STDIN_LINK_BYTES: u64 = 2_050;
+
+/// `ingest --url`: reads the link (from standard input for `-`), checks its
+/// shape and fetches it (ADR 0028). The link is never echoed: a malformed
+/// one is `SOURCE_FETCH_FAILED` with the reason `not_https` and nothing else.
+async fn ingest_link(
+    engine: &Engine,
+    argument: &str,
+    (max_bytes, max_seconds): (Option<u64>, Option<u32>),
+    recorded_at: Option<ClockReading>,
+    transcript: Option<SuppliedTranscriptRequest>,
+    cancellation: &Cancellation,
+) -> Result<IngestOutcome, CommandFailure> {
+    let text = if argument == "-" {
+        let mut text = String::new();
+        std::io::Read::read_to_string(
+            &mut std::io::Read::take(std::io::stdin().lock(), MAX_STDIN_LINK_BYTES),
+            &mut text,
+        )
+        .map_err(|_| fetch_failure(SourceFetchReason::NotHttps))?;
+        text.trim_end_matches(['\r', '\n']).to_owned()
+    } else {
+        argument.to_owned()
+    };
+    let link = SourceLink::parse(&text).map_err(fetch_failure)?;
+    let limits = DownloadLimits::new(max_bytes, max_seconds)
+        .map_err(|_| CommandFailure::from(FailureCode::InvalidArgument))?;
+    Ok(engine
+        .ingest_link(LinkIngestRequest {
+            link,
+            limits,
+            transcript,
+            recorded_at,
+            cancellation: cancellation.clone(),
+            durability: DurabilityRequirement::Ephemeral,
+        })
+        .await?)
+}
+
+fn fetch_failure(reason: SourceFetchReason) -> CommandFailure {
+    CommandFailure::from(EngineError::OpenSession(OpenSessionError::SourceFetch(
+        reason,
+    )))
 }
 
 fn read_transcript(
@@ -360,6 +433,7 @@ fn presentation(excerpt: &TranscriptExcerpt) -> TranscriptPresentation<'_> {
         next_cursor: excerpt.next_cursor(),
         coverage: excerpt.coverage(),
         growth: read_growth(excerpt.growth()),
+        time_anchors: excerpt.session().time_anchors(),
     }
 }
 
@@ -388,8 +462,80 @@ pub(crate) fn transcript_get(
 ) -> Result<Response, CommandFailure> {
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    transcript_get_response(&presentation(&excerpt), lifecycle, view)
-        .map_err(|_| CommandFailure::from(FailureCode::Internal))
+    transcript_get_response_with_speakers(
+        &presentation(&excerpt),
+        excerpt.speakers(),
+        lifecycle,
+        view,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
+}
+
+/// Labels a transcript revision's segments by voice (ADR 0031) and commits the new
+/// speaker record. A first Ctrl-C or `SIGTERM` stops it before its commit.
+///
+/// The result is `partial` when some segment has no confident speaker, a success
+/// that exits 0: the speakers block lists those segments.
+pub(crate) async fn transcript_speakers(
+    engine: &Engine,
+    arguments: TranscriptSpeakersArguments,
+    cancellation: &Cancellation,
+) -> Result<Response, CommandFailure> {
+    let range = arguments
+        .from
+        .zip(arguments.to)
+        .map(|(from_micros, to_micros)| SpeakersRange {
+            from_micros,
+            to_micros,
+        });
+    let view = engine
+        .label_speakers(SpeakersRequest {
+            session: arguments.session,
+            revision: arguments.revision,
+            range,
+            speakers: arguments.speakers,
+            diarizer: DiarizerSelection {
+                executable: arguments.diarizer,
+                segmentation_model: arguments.segmentation_model,
+                embedding_model: arguments.embedding_model,
+            },
+            cancellation: cancellation.clone(),
+        })
+        .await?;
+    speakers_result(CommandName::TranscriptSpeakers, &view)
+}
+
+/// Records or clears the user's verified name for a speaker label (ADR 0031).
+pub(crate) fn transcript_name_speaker(
+    engine: &Engine,
+    arguments: TranscriptNameSpeakerArguments,
+) -> Result<Response, CommandFailure> {
+    let view = engine.name_speaker(NameSpeakerRequest {
+        session: arguments.session,
+        revision: arguments.revision,
+        label: arguments.label,
+        name: if arguments.clear {
+            None
+        } else {
+            arguments.name
+        },
+    })?;
+    speakers_result(CommandName::TranscriptNameSpeaker, &view)
+}
+
+fn speakers_result(command: CommandName, view: &SpeakersView) -> Result<Response, CommandFailure> {
+    let lifecycle = session_lifecycle(view.session().lifetime())?;
+    speakers_response(
+        command,
+        &SpeakersPresentation {
+            session_id: view.session().session_id(),
+            revision: view.revision(),
+            record: view.record(),
+            records: view.records(),
+        },
+        lifecycle,
+    )
+    .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 
 /// Reads one bounded page of a session's transcript as an evidence stream:
@@ -404,7 +550,7 @@ pub(crate) fn transcript_stream(
     crate::read_view::refuse_brief_stream(arguments.view)?;
     let excerpt = read_transcript(engine, arguments)?;
     let lifecycle = session_lifecycle(excerpt.session().lifetime())?;
-    TranscriptEvidenceStream::new(&presentation(&excerpt), lifecycle)
+    TranscriptEvidenceStream::with_speakers(&presentation(&excerpt), excerpt.speakers(), lifecycle)
         .map_err(|_| CommandFailure::from(FailureCode::Internal))
 }
 

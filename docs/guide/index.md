@@ -1,6 +1,6 @@
 # VSift user guide
 
-<!-- guide-version: 0.2.3 -->
+<!-- guide-version: 0.2.4 -->
 
 VSift turns a video on your machine into **timestamped speech**, **the moments the screen changed** and
 **the exact frames and audio that prove them**, each with an id you can cite. You use it yourself, from a
@@ -8,11 +8,13 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.2.3**: the release candidate `0.2.3-rc.1` and the release that follows it are built from
+**Checked against vsift 0.2.4**: the release `0.2.4` and the release candidate `0.2.4-rc.1` it was built from have
 the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
-code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.2`, which `npm install vsift-cli` installs until
-`0.2.3` is published, and the candidate `0.2.2-rc.1` it was built from have the same commands and options as `0.2.3`
+code changes ([how](#how-this-guide-is-kept-true)). The release `0.2.3`, which `npm install vsift-cli` installed before `0.2.4`, and the candidate `0.2.3-rc.1` it was built
+from have the same commands and options as `0.2.4`; `0.2.4` is the hot fix that moves the FFmpeg a new managed install gets to a newer reviewed build (n9.0.2-39, the 9.0 line), and
+raises two archive size bounds for it. The release `0.2.2`, which `npm install vsift-cli` installed before
+`0.2.3`, and the candidate `0.2.2-rc.1` it was built from have the same commands and options as `0.2.3`
 and fewer fixes: on Windows a long per-user folder or session root made every media command fail with
 `MISSING_CAPABILITY`; a recogniser's repeated sentence could hide the next chunk's words where two chunks meet, and the
 rule that removes repeated words at a join could keep a word twice or leave a stretch with no segment; a recogniser
@@ -80,6 +82,8 @@ FFmpeg and FFprobe, the optional speech tools, upgrading and uninstalling. Insta
 
 - [Investigate a recording](investigate-a-recording.md): the whole route for your own video.
 - [Use an existing transcript](use-an-existing-transcript.md): subtitles you already have, and fixing their timing.
+- [Online videos](online-videos.md): a video from a link, what works with nothing extra, the optional part for web pages, and how to add or remove it.
+- [Who said what: speaker labels](speaker-labels.md): labelling the voices of a recording, searching by speaker, recording names (`0.3.0`).
 - [Keep and share evidence](keep-and-share-evidence.md): saving a bundle that outlives the session, and checking one.
 - [Let your agent investigate](let-your-agent-investigate.md): setting up an AI assistant and reading its report.
 - [Clean up and uninstall](clean-up-and-uninstall.md): closing sessions, removing what VSift stored, removing VSift.

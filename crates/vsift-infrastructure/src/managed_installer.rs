@@ -14,17 +14,18 @@
 use std::{fmt, path::PathBuf};
 
 use vsift_application::{
-    ActivationFailure, ComponentInstallFailure, DownloadFailureReason, InstallFailureReason,
-    InstallStep, ManagedComponentInstaller, ManagedSetupAction, ProgressSink,
-    ReviewedCompatibilityPolicy, StageFailure,
+    ActivationFailure, ComponentInstallFailure, DownloadFailureReason, DownloadKeeping,
+    InstallFailureReason, InstallStep, ManagedComponentInstaller, ManagedSetupAction, ProgressSink,
+    ReviewedCompatibilityPolicy, StageDisposal, StageFailure, StagedManagedComponent,
 };
+use vsift_domain::{ManagedComponent, ProgressStage, ProgressUpdate};
 
 use crate::{
     ArtifactTransferError, HostIsolation, ManagedArtifactError, ManagedArtifactStore,
     ManagedCandidateError, ManagedCandidateFailure, ManagedInstallGuard, ManagedPayloadError,
     ManagedRuntimeIdentity, ManagedRuntimeLayoutError, ManagedRuntimePublicationError,
     ProcessCancellation, PublisherTransferError, ReviewedUbuntuAction, SmokeCompanions,
-    SmokeFixtureVerifiers, StagedCompatibilitySmoke, StagedManagedCandidate,
+    SmokeFixtureVerifiers, StagedCompatibilitySmoke, StagedManagedArtifact, StagedManagedCandidate,
     download_reviewed_publisher_artifact,
     offline_artifact_import::{ArtifactImportError, import_reviewed_artifact},
 };
@@ -97,11 +98,35 @@ pub struct ManagedInstallerConfig<V, C> {
     pub cancellation: ProcessCancellation,
 }
 
+/// One component's verified bytes in a private stage, not yet unpacked.
+pub struct VerifiedManagedDownload {
+    component: ManagedComponent,
+    artifact: StagedManagedArtifact,
+}
+
+impl fmt::Debug for VerifiedManagedDownload {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("VerifiedManagedDownload")
+            .field("component", &self.component)
+            .finish_non_exhaustive()
+    }
+}
+
+impl StagedManagedComponent for VerifiedManagedDownload {
+    fn component(&self) -> ManagedComponent {
+        self.component
+    }
+
+    fn discard(self) -> StageDisposal {
+        self.artifact.dispose()
+    }
+}
+
 /// The production [`ManagedComponentInstaller`].
 pub struct ReviewedManagedInstaller<'run, V, C> {
     config: ManagedInstallerConfig<V, C>,
     guard: &'run ManagedInstallGuard,
-    progress: &'run dyn ProgressSink,
 }
 
 impl<V, C> fmt::Debug for ReviewedManagedInstaller<'_, V, C> {
@@ -116,19 +141,14 @@ impl<V, C> fmt::Debug for ReviewedManagedInstaller<'_, V, C> {
 
 impl<'run, V, C> ReviewedManagedInstaller<'run, V, C> {
     /// An installer over `config` that publishes under `guard`, which must
-    /// be the install guard of `config.store`, and reports fetch progress
-    /// to `progress`.
+    /// be the install guard of `config.store`. Each fetch reports its
+    /// progress to the port the transaction gives it.
     #[must_use]
     pub const fn new(
         config: ManagedInstallerConfig<V, C>,
         guard: &'run ManagedInstallGuard,
-        progress: &'run dyn ProgressSink,
     ) -> Self {
-        Self {
-            config,
-            guard,
-            progress,
-        }
+        Self { config, guard }
     }
 
     const fn fetch_step(&self) -> InstallStep {
@@ -144,6 +164,7 @@ where
     V: SmokeFixtureVerifiers + Clone,
     C: SmokeCompanionSource,
 {
+    type Download = VerifiedManagedDownload;
     type Candidate = StagedManagedCandidate;
     type Smoke = StagedCompatibilitySmoke<V>;
 
@@ -159,10 +180,11 @@ where
         )
     }
 
-    async fn stage(
+    async fn fetch(
         &self,
         action: &ManagedSetupAction,
-    ) -> Result<StagedManagedCandidate, StageFailure> {
+        progress: &dyn ProgressSink,
+    ) -> Result<VerifiedManagedDownload, StageFailure> {
         let step = self.fetch_step();
         let fetch_failure = |reason| StageFailure {
             failure: ComponentInstallFailure::at(step, reason),
@@ -172,12 +194,26 @@ where
             return Err(fetch_failure(InstallFailureReason::ReviewMismatch));
         };
         let integrity = route.publisher_source().integrity();
-        let staged = match &self.config.source {
+        let component = action.artifact.component;
+        // A download an earlier run kept is used only once it verifies again.
+        if let Some(artifact) = self.config.store.take_kept_download(self.guard, integrity) {
+            progress.report(ProgressUpdate {
+                stage: ProgressStage::FetchingArtifact,
+                completed: integrity.bytes(),
+                total: Some(integrity.bytes()),
+                media: None,
+            });
+            return Ok(VerifiedManagedDownload {
+                component,
+                artifact,
+            });
+        }
+        let artifact = match &self.config.source {
             ManagedArtifactSource::Publisher => download_reviewed_publisher_artifact(
                 &self.config.store,
                 route.publisher_source(),
                 &self.config.cancellation,
-                self.progress,
+                progress,
             )
             .await
             .map_err(|error| fetch_failure(transfer_reason(&error)))?,
@@ -191,14 +227,34 @@ where
                     file_name,
                     integrity,
                     &self.config.cancellation,
-                    self.progress,
+                    progress,
                 )
                 .await
                 .map_err(|error| fetch_failure(import_reason(&error)))?
             }
         };
+        Ok(VerifiedManagedDownload {
+            component,
+            artifact,
+        })
+    }
+
+    fn stage(
+        &self,
+        download: VerifiedManagedDownload,
+        action: &ManagedSetupAction,
+    ) -> Result<StagedManagedCandidate, StageFailure> {
+        let Some(route) = self.config.authority.resolve(action) else {
+            return Err(StageFailure {
+                failure: ComponentInstallFailure::at(
+                    InstallStep::Stage,
+                    InstallFailureReason::ReviewMismatch,
+                ),
+                stage: Some(download.discard()),
+            });
+        };
         route
-            .stage_candidate(staged)
+            .stage_candidate(download.artifact)
             .map_err(|error: ManagedCandidateError| StageFailure {
                 failure: ComponentInstallFailure::at(
                     InstallStep::Stage,
@@ -206,6 +262,21 @@ where
                 ),
                 stage: Some(error.stage),
             })
+    }
+
+    fn keep(
+        &self,
+        download: VerifiedManagedDownload,
+        _action: &ManagedSetupAction,
+    ) -> DownloadKeeping {
+        match download.artifact.keep() {
+            Ok(()) => DownloadKeeping::Kept,
+            Err(refused) => DownloadKeeping::NotKept(refused.0.dispose()),
+        }
+    }
+
+    fn has_media_tools(&self) -> bool {
+        self.config.companions.companions().media.is_some()
     }
 
     fn smoke(&self) -> StagedCompatibilitySmoke<V> {

@@ -120,12 +120,28 @@ impl ForegroundSessionPort for ContainedSourceStore {
         .map_err(open_session_error)
     }
 
+    /// A worker request names a file inside the input root, never a link:
+    /// the strict worker allows no network (ADR 0028), so this is refused.
+    fn stage_link(
+        &self,
+        _session_id: &SessionId,
+        _operation_id: &OperationId,
+        _link: &vsift_domain::SourceLink,
+        _limits: vsift_domain::DownloadLimits,
+        _cancellation: &dyn StageCancellation,
+    ) -> impl Future<Output = Result<Self::Snapshot, OpenSessionError>> + Send {
+        std::future::ready(Err(OpenSessionError::SourceFetch(
+            vsift_domain::SourceFetchReason::StrictIsolation,
+        )))
+    }
+
     fn activate(
         &self,
         snapshot: &Self::Snapshot,
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
     ) -> Result<StorageGeneration, OpenSessionError> {
         ForegroundSessionPort::activate(
             &self.store,
@@ -133,6 +149,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
         )
     }
 
@@ -142,6 +159,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
         transcript: &TranscriptRevision,
     ) -> Result<StorageGeneration, OpenSessionError> {
         ForegroundSessionPort::activate_with_transcript(
@@ -150,6 +168,7 @@ impl ForegroundSessionPort for ContainedSourceStore {
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
             transcript,
         )
     }

@@ -1,0 +1,14 @@
+{
+  "command": "skill.show",
+  "coverage": null,
+  "data": {
+    "entry": "references/budgets.md",
+    "text": "# Budgets\n\nThe compact profile ...\n"
+  },
+  "error": null,
+  "lifecycle": null,
+  "operation_id": null,
+  "schema_version": "1",
+  "status": "complete",
+  "warnings": []
+}

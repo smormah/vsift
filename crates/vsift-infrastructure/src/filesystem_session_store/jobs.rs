@@ -78,6 +78,10 @@ const CHUNKS_DIRECTORY: &str = "chunks";
 const PROGRESS_FILE: &str = "progress.json";
 const PROGRESS_STAGED_FILE: &str = "progress.json.tmp";
 const JOB_INDEX_DIRECTORY: &str = "job-index";
+/// The names a `watch` run claimed (ADR 0037 section 8). No `VSift` reads a
+/// job directory's entries, so one that predates it never sees it.
+const WATCH_CLAIM_FILE: &str = "watch-outputs.json";
+const WATCH_CLAIM_STAGED_FILE: &str = "watch-outputs.json.tmp";
 /// Most operation bindings one session keeps.
 const MAX_SESSION_BINDINGS: usize = 256;
 /// Most entries a scan of `jobs/` or `chunks/` reads before it gives up.
@@ -488,7 +492,10 @@ impl vsift_application::JobProgressLog for FilesystemSessionStore {
             .open_dir_nofollow(job_id.as_str())
             .map_err(map_committed_io)?;
         let bytes = super::job_records::encode_progress(progress)?;
-        // Advisory and rewritten every second: never synchronised to disk.
+        // Advisory and rewritten at most once a second, by rename: the new
+        // file's contents are synchronised to disk (`replace_file` always
+        // does), but not the directory that holds it (ephemeral), so a power
+        // loss can leave the previous record, never a torn one.
         replace_file(
             &job,
             PROGRESS_FILE,
@@ -529,6 +536,68 @@ impl vsift_application::JobProgressLog for FilesystemSessionStore {
         };
         // A damaged record is read as none: progress is advisory.
         Ok(super::job_records::decode_progress(&bytes).ok())
+    }
+}
+
+impl vsift_application::WatchClaimLog for FilesystemSessionStore {
+    fn record_watch_claim(
+        &self,
+        session_id: &SessionId,
+        job_id: &JobId,
+        claimed: &vsift_application::ClaimedOutputs,
+    ) -> Result<(), SessionStorageError> {
+        let opened = self
+            .session_jobs_directory(session_id, false)
+            .map_err(job_storage_error)?
+            .ok_or(SessionStorageError::StateConflict)?;
+        let jobs = opened.jobs.ok_or(SessionStorageError::StateConflict)?;
+        let job = jobs
+            .open_dir_nofollow(job_id.as_str())
+            .map_err(map_committed_io)?;
+        let bytes = super::job_records::encode_watch_claim(claimed)?;
+        let durability = self.open_session_durability(&opened.session, session_id, None)?;
+        replace_file(
+            &job,
+            WATCH_CLAIM_FILE,
+            WATCH_CLAIM_STAGED_FILE,
+            &bytes,
+            durability,
+            None,
+        )
+    }
+
+    fn watch_claims(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<Vec<(JobId, vsift_application::ClaimedOutputs)>, SessionStorageError> {
+        let Some(opened) = self
+            .session_jobs_directory(session_id, false)
+            .map_err(job_storage_error)?
+        else {
+            return Ok(Vec::new());
+        };
+        let Some(jobs) = &opened.jobs else {
+            return Ok(Vec::new());
+        };
+        let mut claims = Vec::new();
+        for name in job_names(jobs)? {
+            let job_id =
+                JobId::parse(name.as_str()).map_err(|_| SessionStorageError::IntegrityFailure)?;
+            let job = jobs
+                .open_dir_nofollow(job_id.as_str())
+                .map_err(map_committed_io)?;
+            let Ok(file) = open_replaced_file(&job, WATCH_CLAIM_FILE, false) else {
+                continue;
+            };
+            // A record that cannot be read is never misread as a claim.
+            let claimed = super::read_bounded_to(file, super::job_records::MAX_WATCH_CLAIM_BYTES)
+                .ok()
+                .and_then(|bytes| super::job_records::decode_watch_claim(&bytes).ok());
+            if let Some(claimed) = claimed {
+                claims.push((job_id, claimed));
+            }
+        }
+        Ok(claims)
     }
 }
 
@@ -808,7 +877,8 @@ impl JobOwner for FilesystemJobOwner {
                 | JobChange::Fail(_)
                 | JobChange::RequestCancel
                 | JobChange::Cancel
-                | JobChange::Restart => {}
+                | JobChange::Restart
+                | JobChange::Requeue => {}
             }
             Ok(next)
         })?;
@@ -1011,6 +1081,7 @@ impl RevisionStore for FilesystemSessionStore {
         part: std::num::NonZeroU32,
         first: usize,
         now: u64,
+        admission: vsift_application::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         // A part continues the open revision exactly, or begins one over the
         // newest sealed revision; anything else would leave parts that cannot
@@ -1033,13 +1104,15 @@ impl RevisionStore for FilesystemSessionStore {
             return Err(SessionStorageError::StateConflict);
         }
         let bytes = crate::encode_transcript_part(open, job, part, first, MERGE_RULES_VERSION)?;
-        self.publish_artifact(
+        self.publish_artifact_as(
             session_id,
             operation_id,
             expected,
             SessionArtifactKind::TranscriptPart,
             &bytes,
             now,
+            ArtifactCommit::Add,
+            admission,
         )
     }
 
@@ -1067,6 +1140,7 @@ impl RevisionStore for FilesystemSessionStore {
             &record,
             now,
             commit,
+            vsift_application::CommitAdmission::Ordinary,
         )
     }
 }

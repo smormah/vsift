@@ -149,26 +149,57 @@ impl Drop for LocalSecurityDescriptor {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, error::Error, fmt::Write as _, fs, io, path::PathBuf};
+    use std::{
+        env,
+        error::Error,
+        fmt::Write as _,
+        fs, io,
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+    };
 
     use super::{LocalSecurityDescriptor, create_directory, nul_terminated};
     use crate::PrivateDirectoryDescriptor;
+
+    /// Counts the folders this test process has made, so that no two share a
+    /// name. The clock alone cannot promise that: two tests running in parallel
+    /// threads of one process can read the same Windows clock tick, and then
+    /// drew the same name (`AlreadyExists`, os error 183, at the first step of
+    /// `a_directory_is_created_once` on a hosted run). It only numbers test
+    /// folders; it holds no state the crate's code reads.
+    static SCRATCH_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    /// The name of a scratch folder made at `stamp_nanos` as number `sequence`
+    /// of the process `process_id`: the same stamp with another sequence number
+    /// is another name.
+    fn scratch_name(
+        stamp_nanos: u128,
+        process_id: u32,
+        sequence: u64,
+    ) -> Result<String, Box<dyn Error>> {
+        let mut random = [0_u8; 8];
+        random.copy_from_slice(&stamp_nanos.to_le_bytes()[..8]);
+        let mut name = String::from("vsift-windows-security-");
+        for byte in random {
+            write!(&mut name, "{byte:02x}")?;
+        }
+        write!(&mut name, "-{process_id}-{sequence}")?;
+        Ok(name)
+    }
 
     /// A folder under the temporary folder, removed when it drops.
     struct Scratch(PathBuf);
 
     impl Scratch {
         fn new() -> Result<Self, Box<dyn Error>> {
-            let mut random = [0_u8; 8];
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_nanos();
-            random.copy_from_slice(&stamp.to_le_bytes()[..8]);
-            let mut name = String::from("vsift-windows-security-");
-            for byte in random {
-                write!(&mut name, "{byte:02x}")?;
-            }
-            write!(&mut name, "-{}", std::process::id())?;
+            let name = scratch_name(
+                stamp,
+                std::process::id(),
+                SCRATCH_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+            )?;
             let path = env::temp_dir().join(name);
             fs::create_dir(&path)?;
             Ok(Self(fs::canonicalize(path)?))
@@ -267,6 +298,18 @@ mod tests {
         let wide = nul_terminated(std::ffi::OsStr::new("D:P(A;OICI;NOT-A-RIGHT;;;SY)"))?;
         assert!(LocalSecurityDescriptor::from_sddl(&wide).is_err());
         assert!(LocalSecurityDescriptor::from_sddl(&[u16::from(b'D')]).is_err());
+        Ok(())
+    }
+
+    /// Folders made at the same clock tick by the same process still get
+    /// different names, which is what the parallel tests of this crate need.
+    #[test]
+    fn scratch_folders_made_at_the_same_tick_get_different_names() -> Result<(), Box<dyn Error>> {
+        let tick = 133_000_000_000_000_000_u128;
+        assert_ne!(scratch_name(tick, 4242, 0)?, scratch_name(tick, 4242, 1)?);
+        let first = Scratch::new()?;
+        let second = Scratch::new()?;
+        assert_ne!(first.0, second.0);
         Ok(())
     }
 

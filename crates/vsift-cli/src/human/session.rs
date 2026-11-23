@@ -3,9 +3,12 @@
 use vsift_contract::CommandName;
 
 use super::{
-    push_outcome,
+    clock, push_outcome,
     text::{RenderedText, TerminalText, TooLarge},
-    view::{Bundle, CleanPage, Envelope, Opened, SessionPage, SessionStatus, Workspace},
+    view::{
+        Bundle, CleanPage, DirectOrigin, Envelope, Opened, Origin, PageOrigin, SessionPage,
+        SessionStatus, Workspace,
+    },
 };
 
 /// `ingest`: the newly opened session and any imported transcript.
@@ -47,6 +50,8 @@ pub(super) fn ingest(envelope: &Envelope<Opened>) -> Result<RenderedText, TooLar
             text.push_fixed("Transcript: none imported").end_line();
         }
     }
+    clock::push_recording_time(&mut text, data.time_anchor.as_ref());
+    push_origin(&mut text, data.origin.as_ref());
     push_outcome(&mut text, envelope);
     text.finish()
 }
@@ -236,6 +241,59 @@ fn push_status_lines(text: &mut TerminalText, status: &SessionStatus) {
     text.push_fixed("Generation: ")
         .push_unsigned(status.generation)
         .end_line();
+    clock::push_recording_time(text, status.time_anchor.as_ref());
+    push_origin(text, status.origin.as_ref());
+}
+
+/// The `Fetched from:` line of a source fetched from a link (ADR 0028):
+/// hosts and the time only, never the link.
+fn push_origin(text: &mut TerminalText, origin: Option<&Origin>) {
+    match origin {
+        Some(Origin::Direct(origin)) => push_direct_origin(text, origin),
+        Some(Origin::Page(origin)) => push_page_origin(text, origin),
+        None => {}
+    }
+}
+
+/// A page's line: the site as yt-dlp names it, and whose yt-dlp it was.
+fn push_page_origin(text: &mut TerminalText, origin: &PageOrigin) {
+    text.push_fixed("Fetched from: a page yt-dlp read as ")
+        .push_value(&origin.provider)
+        .push_fixed(" at ")
+        .push_value(&origin.retrieved_at)
+        .push_fixed(if origin.yt_dlp.source == "user_managed" {
+            ", with the yt-dlp you supplied"
+        } else {
+            ", with the reviewed yt-dlp"
+        });
+    if origin.joined == "audio_video" {
+        text.push_fixed(", joined from separate audio and video");
+    }
+    if origin.address_check.as_deref() == Some("proxy_resolved") {
+        text.push_fixed(", through a proxy");
+    }
+    text.end_line();
+}
+
+fn push_direct_origin(text: &mut TerminalText, origin: &DirectOrigin) {
+    text.push_fixed("Fetched from: ")
+        .push_value(&origin.final_host);
+    if origin.final_host != origin.requested_host {
+        text.push_fixed(" (link to ")
+            .push_value(&origin.requested_host)
+            .push_fixed(", ")
+            .push_unsigned(origin.redirects)
+            .push_fixed(if origin.redirects == 1 {
+                " redirect)"
+            } else {
+                " redirects)"
+            });
+    }
+    text.push_fixed(" at ").push_value(&origin.retrieved_at);
+    if origin.address_check == "proxy_resolved" {
+        text.push_fixed(", through a proxy that resolved the name");
+    }
+    text.end_line();
 }
 
 /// Writes a source identity and its size.

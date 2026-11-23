@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" role="img" aria-labelledby="title desc" xml:space="preserve">
-<title id="title">VSift: your videos in, searchable, cited evidence out</title>
-<desc id="desc">The VSift logo and wordmark. Three frames of a recording pass through a sieve and come out as three cited evidence cards: speech from 0 to 7 seconds, a screen change at 10 seconds, and the frame showing order 1017 failed.</desc>
+<title id="title">VSift: a video evidence engine</title>
+<desc id="desc">The VSift logo and wordmark, with the words a video evidence engine. Three frames of a recording pass through a sieve and come out as three cited evidence cards: speech from 0 to 7 seconds, a screen change at 10 seconds, and the frame showing order 1017 failed.</desc>
 <style>
 .s{font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif} .m{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
 .t{fill:#e8eef6} .mu{fill:#9fb2c8} .di{fill:#62799a}
@@ -26,10 +26,10 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <circle cx="56" cy="78.5" r="2.4" fill="#0e1a2b"/>
 </g>
 <text x="186" y="146" font-size="80" class="s t bb" text-anchor="start" letter-spacing="-1.5">VSift</text>
-<text x="74" y="232" font-size="36" class="s t b" text-anchor="start" >Your videos in.</text>
-<text x="74" y="278" font-size="36" class="s b" text-anchor="start" fill="#2dd4bf">Searchable, cited evidence out.</text>
+<text x="74" y="232" font-size="36" class="s t b" text-anchor="start" >A video evidence engine.</text>
+<text x="74" y="278" font-size="36" class="s b" text-anchor="start" fill="#2dd4bf">Evidence you can cite and check.</text>
 <text x="74" y="330" font-size="19" class="s mu" text-anchor="start" >Timestamped speech, screen changes and the exact frames,</text>
-<text x="74" y="356" font-size="19" class="s mu" text-anchor="start" >for you or your AI assistant. Local and disposable.</text>
+<text x="74" y="356" font-size="19" class="s mu" text-anchor="start" >for you or your AI assistant, on your own machine.</text>
 <g transform="translate(730,82)" opacity="0.55">
 <rect width="168" height="105.0" rx="6" fill="#0f1a2e" stroke="#25405f" stroke-width="1.5"/>
 <rect x="0" y="0" width="168" height="8.2" rx="6" fill="#1e2f4c"/>
@@ -62,17 +62,17 @@ text{white-space:pre} .b{font-weight:600} .bb{font-weight:700}
 <circle cx="1078" cy="135" r="4" fill="#2dd4bf"/>
 <text x="1088" y="139" font-size="11" class="s b" text-anchor="start" fill="#2dd4bf" letter-spacing="0.8">SPEECH</text>
 <text x="1076" y="157" font-size="12" class="s t" text-anchor="start" >0.0 – 7.0 s</text>
-<text x="1230" y="157" font-size="10.5" class="m mu" text-anchor="end" >tsg_f5a4c0cb…</text>
+<text x="1230" y="157" font-size="10.5" class="m mu" text-anchor="end" >tsg_2d12cbeb…</text>
 <path d="M1044 220 C1052 220 1052 220 1062 220" fill="none" stroke="#62799a" stroke-width="1.5"/>
 <rect x="1062" y="196" width="176" height="50" rx="10" fill="#172a44" stroke="#f5b942" stroke-opacity="0.65" stroke-width="1.5"/>
 <circle cx="1078" cy="213" r="4" fill="#f5b942"/>
 <text x="1088" y="217" font-size="11" class="s b" text-anchor="start" fill="#f5b942" letter-spacing="0.8">SCREEN CHANGE</text>
 <text x="1076" y="235" font-size="12" class="s t" text-anchor="start" >at 10.0 s</text>
-<text x="1230" y="235" font-size="10.5" class="m mu" text-anchor="end" >vcd_6d9d6bdc…</text>
+<text x="1230" y="235" font-size="10.5" class="m mu" text-anchor="end" >vcd_d80c7914…</text>
 <path d="M1044 220 C1052 220 1052 298 1062 298" fill="none" stroke="#62799a" stroke-width="1.5"/>
 <rect x="1062" y="274" width="176" height="50" rx="10" fill="#172a44" stroke="#e5535a" stroke-opacity="0.65" stroke-width="1.5"/>
 <circle cx="1078" cy="291" r="4" fill="#e5535a"/>
 <text x="1088" y="295" font-size="11" class="s b" text-anchor="start" fill="#e5535a" letter-spacing="0.8">FRAME</text>
 <text x="1076" y="313" font-size="12" class="s t" text-anchor="start" >1017 FAILED</text>
-<text x="1230" y="313" font-size="10.5" class="m mu" text-anchor="end" >evd_dac79c65…</text>
+<text x="1230" y="313" font-size="10.5" class="m mu" text-anchor="end" >evd_2243ab20…</text>
 </svg>

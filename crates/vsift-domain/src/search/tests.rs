@@ -1547,7 +1547,7 @@ proptest! {
 
 /// The parts of an open (or stopped) revision of a 100 s source: one chunk's
 /// segment at 2-4 s, the run's outcomes `outcomes`.
-fn growth_parts(outcomes: &[AsrChunkOutcome]) -> Built<TranscriptRevisionParts> {
+pub(crate) fn growth_parts(outcomes: &[AsrChunkOutcome]) -> Built<TranscriptRevisionParts> {
     let covered = range(0, 100 * SECOND)?;
     Ok(TranscriptRevisionParts {
         id: TranscriptRevisionId::parse("trv_0123456789abcdef")?,
@@ -1581,7 +1581,7 @@ fn growth_parts(outcomes: &[AsrChunkOutcome]) -> Built<TranscriptRevisionParts> 
 
 /// The outcomes of a 100 s run whose first chunk transcribed and whose other
 /// three are `rest`.
-fn first_transcribed(rest: AsrChunkOutcome) -> Built<Vec<AsrChunkOutcome>> {
+pub(crate) fn first_transcribed(rest: AsrChunkOutcome) -> Built<Vec<AsrChunkOutcome>> {
     Ok(vec![
         AsrChunkOutcome::Transcribed {
             audio: range(0, 30 * SECOND)?,

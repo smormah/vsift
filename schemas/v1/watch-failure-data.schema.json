@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/watch-failure-data.schema.json",
+  "title": "vsift watch failure data",
+  "description": "The data member of a failed watch result, only when the run was given --keep and failed after its job sealed, a final write refused for example (0.3.0, ADR 0037, amendment of 2026-10-30). The error says what failed, as for any failed watch; this says what became of the bundle, because the transcript exists and the person asked to keep it. kept.state is kept when the bundle was written anyway, and session_closed is then true; it is not_kept with failure_code when that failed too, and the session is then left open (session_closed false) so that session retain can still export it. Every other failed watch has a null data member. Validate the envelope with operation-response.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "session_closed", "kept"],
+  "properties": {
+    "session_id": { "type": "string", "pattern": "^ses_[a-z0-9]{16,64}$" },
+    "session_closed": { "type": "boolean" },
+    "kept": { "$ref": "watch-data.schema.json#/$defs/kept" }
+  },
+  "if": {
+    "properties": {
+      "kept": { "properties": { "state": { "const": "not_kept" } } }
+    }
+  },
+  "then": { "properties": { "session_closed": { "const": false } } }
+}

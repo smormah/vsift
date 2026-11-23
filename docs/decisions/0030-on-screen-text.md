@@ -168,6 +168,11 @@ first-page member stay as they are. The use case (`page_screen_text` in `vsift-a
 session's index and nothing else, so the search across kept sessions planned for 0.3.0's second wave
 calls it once per session.
 
+**Note of 2026-10-30 (ADR 0035).** The search across kept sessions does not call `page_screen_text`
+once per session, as this decision expected: that use case pages with a cursor of its own for one
+session, while a search across bundles ranks every hit together under one cursor. It calls the domain
+function beneath it, `screen_text_occurrences`, so matching and grouping stay in one place.
+
 ## Note of 2026-10-21: a call bounded to analysed windows (for ADR 0033)
 
 ADR 0033's background `prepare` job runs OCR as one of its streams after its visual stream has
@@ -252,6 +257,34 @@ that fails without it. Protocol 1 has not shipped, so it is changed in place, no
   runtime and the models in `onnxruntime/` and `models/`, or flat beside its executable, as the
   managed store keeps a component's files; every basename is unique. The digests are of the files
   the run loads, in either layout.
+
+## Note of 2026-11-18: the runtime comes from Microsoft's NuGet package (decision 1; L-254)
+
+Microsoft's GitHub release archives of ONNX Runtime 1.31.0, which the runner's stage tool pinned,
+began to answer 404 on 2026-11-18, the repository with them, and no official address serves them.
+The planner ruled for Microsoft's own package of the same release commit: `Microsoft.ML.OnnxRuntime`
+1.31.0 at nuget.org (MIT). `tools/p16_ocr_runner.py` pins the package by size and SHA-256, holds it to
+the SHA-512 nuget.org publishes, and pins each library and licence member it takes; a hosted job
+runs `dotnet nuget verify --all` on it (Microsoft's author signature, NuGet.org's repository
+signature). The decision is otherwise unchanged: the same version, the same runner, the same
+models. Its Linux and Windows libraries are byte for byte the archives'; its macOS library is a
+different file of the same release, whose digest `KNOWN_RUNTIMES` names as 1.31.0 beside the
+archive's. The parity and labels were measured again on all three systems (hosted `P16 OCR runner`, run
+44370591117) and equal the recorded figures exactly: 99.3 to 99.7% text agreement on the synthetic
+lines, 93.1, 88.6 and 90.4% on RM01, RM04 and RM10, the labels 30/34, 18/20 and 25/29, and Windows
+and macOS identical to Linux ([L-254](../planning/known-limits.md#l-254)).
+
+## Note of 2026-11-20: the managed install (decision 2; ADR 0032, W5b; L-225)
+
+The runner is published (`ocr-runner-v0.1.0-r1`, one archive per system, with ONNX Runtime and the two models inside)
+and the managed catalogues of Ubuntu 24.04 x86-64, Windows x86-64 and macOS arm64 install it as the optional group
+`ocr` (`vsift setup plan --include ocr`, or the door's `--include on-screen-text`): one component, `ocr_runner`,
+installed flat (the layout of the note of 2026-10-22). `vsift ocr` resolves the runner as `--runner`, then the one
+registered with `setup configure ocr-runner`, then the managed one, then `PATH`; the runner's per-read proof of its own
+build (RV-2 finding 3) is unchanged and is what the install's hosted check reads back, in the index's `engine` digests.
+Decision 2's "until the managed install exists a user registers a runner" is therefore no longer the only way; it
+remains one ([ADR 0032](0032-managed-installs-on-every-platform-and-the-engine-release-workflow.md), its note of the
+same date).
 
 ## Consequences
 

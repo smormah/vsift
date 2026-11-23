@@ -13,14 +13,15 @@
 //! same stream for the same page.
 
 use serde::Serialize;
-use vsift_domain::{TranscriptRevision, TranscriptSegment};
+use vsift_domain::{SpeakerRecord, TimeAnchors, TranscriptRevision, TranscriptSegment};
 
 use crate::growth::SinceData;
 use crate::{
     AudioEvidenceData, CONTRACT_VERSION, CommandName, FrameEvidenceData, LifecycleResponse,
-    OperationResponse, TerminalEventResponse, TranscriptRevisionData, TranscriptSegmentData,
-    VisualCandidateData,
+    OperationResponse, ScreenChangeData, TerminalEventResponse, TranscriptRevisionData,
+    TranscriptSegmentData, VisualCandidateData,
     search::TranscriptCoverageData,
+    speakers::{SpeakersData, with_unlabelled_warning},
     transcript::{RangeData, TranscriptPresentation, finish_transcript_read},
 };
 
@@ -119,6 +120,9 @@ pub enum EvidenceRecordType {
     /// An audio clip (`audio-evidence.schema.json`, P09); its key is the
     /// item's `evidence_id`.
     AudioEvidence,
+    /// A change of screen between two frames (`screen-change.schema.json`,
+    /// `changes`, ADR 0034); its key is the change's `change_id`.
+    ScreenChange,
 }
 
 impl EvidenceRecordType {
@@ -126,11 +130,12 @@ impl EvidenceRecordType {
     ///
     /// Contract tests compare this list with the `record_type` enum of
     /// `evidence-event.schema.json`.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::TranscriptSegment,
         Self::VisualCandidate,
         Self::FrameEvidence,
         Self::AudioEvidence,
+        Self::ScreenChange,
     ];
 
     /// Returns the stable identifier written to the `record_type` field.
@@ -141,6 +146,7 @@ impl EvidenceRecordType {
             Self::VisualCandidate => "visual_candidate",
             Self::FrameEvidence => "frame_evidence",
             Self::AudioEvidence => "audio_evidence",
+            Self::ScreenChange => "screen_change",
         }
     }
 
@@ -152,6 +158,7 @@ impl EvidenceRecordType {
             Self::VisualCandidate => 1,
             Self::FrameEvidence => 2,
             Self::AudioEvidence => 3,
+            Self::ScreenChange => 4,
         }
     }
 }
@@ -176,6 +183,7 @@ enum EvidenceRecord {
     VisualCandidate(Box<VisualCandidateData>),
     FrameEvidence(Box<FrameEvidenceData>),
     AudioEvidence(Box<AudioEvidenceData>),
+    ScreenChange(Box<ScreenChangeData>),
 }
 
 /// One evidence record event: a single self-describing JSON Lines record.
@@ -196,11 +204,15 @@ pub struct EvidenceEventResponse {
 }
 
 impl EvidenceEventResponse {
+    /// A segment's evidence event with its speaker label under `speakers`, the
+    /// revision's newest speaker record, when there is one (ADR 0031).
     pub(crate) fn transcript_segment(
         sequence: u64,
         command: CommandName,
         revision: &TranscriptRevision,
         segment: &TranscriptSegment,
+        anchors: &TimeAnchors,
+        speakers: Option<&SpeakerRecord>,
     ) -> Self {
         Self {
             schema_version: CONTRACT_VERSION,
@@ -210,9 +222,10 @@ impl EvidenceEventResponse {
             operation_id: None,
             record_type: EvidenceRecordType::TranscriptSegment.identifier(),
             key: segment.id().as_str().to_owned(),
-            record: EvidenceRecord::TranscriptSegment(Box::new(TranscriptSegmentData::new(
-                revision, segment,
-            ))),
+            record: EvidenceRecord::TranscriptSegment(Box::new(
+                TranscriptSegmentData::labelled(revision, segment, speakers)
+                    .with_clock_time(anchors),
+            )),
         }
     }
 }
@@ -274,12 +287,31 @@ impl EvidenceEventResponse {
     }
 }
 
+impl EvidenceEventResponse {
+    pub(crate) fn screen_change(
+        sequence: u64,
+        command: CommandName,
+        change: ScreenChangeData,
+    ) -> Self {
+        Self {
+            schema_version: CONTRACT_VERSION,
+            event: EventKind::Evidence.identifier(),
+            sequence,
+            command: command.identifier(),
+            operation_id: None,
+            record_type: EvidenceRecordType::ScreenChange.identifier(),
+            key: change.change_id().to_owned(),
+            record: EvidenceRecord::ScreenChange(Box::new(change)),
+        }
+    }
+}
+
 /// A finite JSON Lines evidence stream: its evidence events, then the one
 /// terminal event that ends it.
 ///
 /// Hosts write any stream through this one view, so every command that
-/// streams evidence (`transcript get`, `search`, `candidates`, the frame
-/// commands, `crop` and `audio`) is written identically.
+/// streams evidence (`transcript get`, `search`, `candidates`, `changes`,
+/// the frame commands, `crop` and `audio`) is written identically.
 pub trait EvidenceStream {
     /// The evidence events, in stream order.
     fn records(&self) -> &[EvidenceEventResponse];
@@ -305,6 +337,9 @@ pub struct TranscriptStreamData {
     transcript_coverage: TranscriptCoverageData,
     #[serde(skip_serializing_if = "Option::is_none")]
     since: Option<SinceData>,
+    /// The revision's newest speaker record (ADR 0031); absent when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speakers: Option<SpeakersData>,
 }
 
 /// One `transcript.get` page as a JSON Lines evidence stream.
@@ -334,11 +369,34 @@ impl TranscriptEvidenceStream {
         page: &TranscriptPresentation<'_>,
         lifecycle: LifecycleResponse,
     ) -> Result<Self, serde_json::Error> {
+        Self::with_speakers(page, None, lifecycle)
+    }
+
+    /// [`Self::new`] with the revision's speaker labels (ADR 0031): each record's
+    /// `speaker_label` and the terminal data's `speakers`, from `speakers`, the
+    /// revision's newest speaker record.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serialization error when the terminal data cannot be
+    /// represented as JSON.
+    pub fn with_speakers(
+        page: &TranscriptPresentation<'_>,
+        speakers: Option<&SpeakerRecord>,
+        lifecycle: LifecycleResponse,
+    ) -> Result<Self, serde_json::Error> {
         let command = CommandName::TranscriptGet;
         let records: Vec<_> = (0_u64..)
             .zip(page.segments)
             .map(|(sequence, segment)| {
-                EvidenceEventResponse::transcript_segment(sequence, command, page.revision, segment)
+                EvidenceEventResponse::transcript_segment(
+                    sequence,
+                    command,
+                    page.revision,
+                    segment,
+                    page.time_anchors,
+                    speakers,
+                )
             })
             .collect();
         let data = TranscriptStreamData {
@@ -349,10 +407,14 @@ impl TranscriptEvidenceStream {
             next_cursor: page.next_cursor.map(str::to_owned),
             transcript_coverage: TranscriptCoverageData::with_growth(page.coverage, page.growth),
             since: page.growth.since.map(SinceData::new),
+            speakers: speakers.map(SpeakersData::new),
         };
-        let result = finish_transcript_read(
-            OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
-            page.coverage,
+        let result = with_unlabelled_warning(
+            finish_transcript_read(
+                OperationResponse::complete(command.identifier(), &data)?.with_lifecycle(lifecycle),
+                page.coverage,
+            ),
+            speakers,
         );
         let terminal_sequence = u64::try_from(records.len()).unwrap_or(u64::MAX);
         Ok(Self {

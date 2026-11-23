@@ -60,6 +60,12 @@ pub enum FailureCode {
     /// result's data; bytes that arrive but differ from the reviewed digest
     /// are [`FailureCode::IntegrityFailure`].
     DownloadFailed,
+    /// A video link given to `ingest --url` could not be fetched into a
+    /// session (ADR 0028): the link, its address, the transfer or its body
+    /// was refused or failed. The typed reason is in the remediation; local
+    /// files are unaffected. Not [`FailureCode::DownloadFailed`], whose
+    /// meaning is a managed installation's publisher download.
+    SourceFetchFailed,
 }
 
 impl FailureCode {
@@ -68,7 +74,7 @@ impl FailureCode {
     /// Contract tests iterate this list to prove each identifier is published in
     /// the v1 schemas. An exhaustive private `ordinal` match and a compile-time
     /// assertion keep it in step with the variants.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Internal,
         Self::InvalidArgument,
         Self::UnsupportedSchema,
@@ -84,6 +90,7 @@ impl FailureCode {
         Self::IntegrityFailure,
         Self::IdempotencyConflict,
         Self::DownloadFailed,
+        Self::SourceFetchFailed,
     ];
 
     /// Returns the variant's position in [`FailureCode::ALL`].
@@ -111,6 +118,7 @@ impl FailureCode {
             Self::IntegrityFailure => 12,
             Self::IdempotencyConflict => 13,
             Self::DownloadFailed => 14,
+            Self::SourceFetchFailed => 15,
         }
     }
 
@@ -133,6 +141,7 @@ impl FailureCode {
             Self::IntegrityFailure => "INTEGRITY_FAILURE",
             Self::IdempotencyConflict => "IDEMPOTENCY_CONFLICT",
             Self::DownloadFailed => "DOWNLOAD_FAILED",
+            Self::SourceFetchFailed => "SOURCE_FETCH_FAILED",
         }
     }
 
@@ -147,7 +156,7 @@ impl FailureCode {
             | Self::IsolationUnavailable
             | Self::CommandNotImplemented
             | Self::IdempotencyConflict => FailureClass::UsageOrCapability,
-            Self::InvalidSource => FailureClass::Source,
+            Self::InvalidSource | Self::SourceFetchFailed => FailureClass::Source,
             Self::Busy => FailureClass::Retryable,
             Self::DeadlineExceeded | Self::ResourceLimit => FailureClass::Limit,
             Self::Cancelled => FailureClass::Cancelled,
@@ -233,6 +242,11 @@ mod tests {
             FailureClass::StorageOrIo
         );
         assert_eq!(FailureCode::DownloadFailed.identifier(), "DOWNLOAD_FAILED");
+        assert_eq!(FailureCode::SourceFetchFailed.class(), FailureClass::Source);
+        assert_eq!(
+            FailureCode::SourceFetchFailed.identifier(),
+            "SOURCE_FETCH_FAILED"
+        );
     }
 
     #[test]

@@ -43,6 +43,7 @@ mod filesystem_session_store;
 mod gzip_tar_inventory;
 mod host_attestation;
 mod input_root;
+mod link_acquisition;
 mod local_asr_verification;
 mod managed_artifact_store;
 mod managed_catalogue;
@@ -53,6 +54,8 @@ mod media_tool_verification;
 mod media_tool_verification_cache;
 mod ocr_runner;
 mod offline_artifact_import;
+mod page_acquisition;
+mod page_source_store;
 mod private_user_root;
 mod process_dependency_probe;
 mod process_supervisor;
@@ -62,9 +65,12 @@ mod request_timing;
 mod retry_timer;
 mod screen_text_index_record;
 mod session_root;
+mod sherpa_diarizer;
+mod skill_folders;
 mod source_binding;
 mod source_duration_probe;
 mod source_snapshot;
+mod speaker_record;
 mod speech_audio;
 mod system_clock;
 #[cfg(test)]
@@ -73,12 +79,16 @@ mod transcript_record;
 mod transcript_sidecar;
 mod transient_rename;
 mod user_dependency_config;
+mod user_online_tool;
 mod verified_artifact_transfer;
 mod visual_index_record;
 mod visual_sampler;
+mod watch_output;
 mod whisper_build;
 mod whisper_cli;
 mod xz_tar_inventory;
+mod ytdlp_info;
+mod ytdlp_refusal;
 
 pub use archive_inventory::{
     ArchiveEntry, ArchiveEntryKind, ArchiveInventoryBounds, ArchiveInventoryError,
@@ -121,19 +131,21 @@ pub use ffmpeg_media::{
     ImageRegion, MAX_AUDIO_BYTES, MAX_DIAGNOSTIC_BYTES, MAX_FRAME_BYTES, MAX_IMAGES_PER_RUN,
     MAX_LISTING_DIAGNOSTIC_BYTES, MAX_LISTING_RANGE_MICROS, MAX_PROBE_BYTES, MAX_SPEECH_PCM_BYTES,
     MAX_SPEECH_PCM_MICROS, MAX_VISUAL_DIAGNOSTIC_BYTES, MAX_VISUAL_SAMPLE_BYTES,
-    MAX_WAV_CLIP_MICROS, MediaError, MediaProviderConformance, ObservedFrameTime, RawGrayFrame,
-    VisualSamplingWindow, WAV_HEADER_BYTES, WAV_SAMPLE_RATE, max_frames_per_run,
-    parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing, parse_frame_showinfo,
-    parse_png_sequence, parse_visual_samples, wav_from_pcm_s16le_mono,
+    MAX_WAV_CLIP_MICROS, MediaError, MediaProviderConformance, ObservedFrameTime, PngPixelsError,
+    RawGrayFrame, VisualSamplingWindow, WAV_HEADER_BYTES, WAV_SAMPLE_RATE, decode_png_pixels,
+    max_frames_per_run, parse_ashowinfo_start, parse_ffprobe_metadata, parse_frame_listing,
+    parse_frame_showinfo, parse_png_sequence, parse_visual_samples, read_png_pixels,
+    wav_from_pcm_s16le_mono,
 };
 pub use filesystem_session_store::{
-    BundleSourcePolicy, BundleStatus, CleanOutcome, DEFAULT_ADMISSION_CAPACITY, EvidenceInventory,
-    EvidenceMediaFile, ExclusiveSessionLifetimeHold, FREE_SPACE_RESERVE_BYTES,
-    FilesystemAdmissionPermit, FilesystemJobOwner, FilesystemSessionStore, FreeSpaceCheck,
-    JOB_CANCEL_POLL, MAX_QUEUED_JOBS, MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS,
-    MAX_REQUEST_RECORD_BYTES, MAX_REQUEST_RECORDS, QueueTurn, QueuedEntry, RecordedRequestResult,
-    RequestRecordWrite, SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus,
-    SessionStoreOpenError, SessionWorkDirectory, WorkerRequestClaim, WorkerRequestOwner,
+    BundleDestinationRefusal, BundleSourcePolicy, BundleStatus, CleanOutcome,
+    DEFAULT_ADMISSION_CAPACITY, EvidenceInventory, EvidenceMediaFile, ExclusiveSessionLifetimeHold,
+    FREE_SPACE_RESERVE_BYTES, FilesystemAdmissionPermit, FilesystemJobOwner,
+    FilesystemSessionStore, FreeSpaceCheck, JOB_CANCEL_POLL, MAX_QUEUED_JOBS,
+    MAX_RECORDED_DOCUMENT_BYTES, MAX_RECORDED_STEPS, MAX_REQUEST_RECORD_BYTES, MAX_REQUEST_RECORDS,
+    QueueTurn, QueuedEntry, RecordedRequestResult, RequestRecordWrite, SearchableBundle,
+    SessionIndexPage, SessionReadHold, SessionRegistration, SessionStatus, SessionStoreOpenError,
+    SessionWorkDirectory, SpeakerRecordRead, WorkerRequestClaim, WorkerRequestOwner,
     WorkerRequestRecord, decode_chunk_checkpoint, decode_job_record, decode_request_record,
     encode_chunk_checkpoint, encode_job_record, encode_request_record,
 };
@@ -151,6 +163,9 @@ pub use input_root::{
     ContainedFile, ContainedPathError, InputRoot, InputRootError, MAX_INPUT_PATH_BYTES,
     MAX_INPUT_PATH_COMPONENTS,
 };
+#[cfg(any(test, feature = "install-test-hooks"))]
+pub use link_acquisition::{LinkTestRoute, TestAnswers};
+pub use link_acquisition::{is_internal_name, is_public_address};
 pub use local_asr_verification::{
     FixtureAsrVerifier, LOCAL_ASR_VERIFICATION_PROFILE, LocalAsrFiles, local_asr_fingerprint,
     local_asr_fixture_sha256, run_within_budget,
@@ -171,7 +186,7 @@ pub use managed_catalogue::{
 };
 pub use managed_installer::{
     ActionAuthority, ManagedArtifactSource, ManagedInstallerConfig, ReviewedManagedInstaller,
-    SmokeCompanionSource,
+    SmokeCompanionSource, VerifiedManagedDownload,
 };
 pub use managed_smoke::{
     MediaSmokeRequest, ReviewedFixtureVerifiers, SmokeCompanions, SmokeFixtureVerifiers,
@@ -194,6 +209,8 @@ pub use ocr_runner::{
     parse_runner_description, parse_runner_output,
 };
 pub use offline_artifact_import::{ArtifactImportError, import_reviewed_artifact};
+pub use page_acquisition::{PageTool, PageTools, ProxyVariables};
+pub use page_source_store::{PageSourceStore, PageToolSource};
 pub use process_dependency_probe::{
     DEFAULT_PROBE_TIMEOUT, ExplicitProbePaths, ProcessDependencyProbe,
 };
@@ -218,10 +235,19 @@ pub use session_root::{
     PROVISIONING_WAIT, SessionRootError, SessionRootProvisioning, open_session_root,
     open_session_root_within, platform_session_root,
 };
+pub use sherpa_diarizer::{
+    AUTOMATIC_CLUSTER_THRESHOLD, DIARIZER_STDERR_LIMIT, DIARIZER_STDOUT_LIMIT, DiarizationWav,
+    DiarizerError, DiarizerOutputError, FfmpegSherpaDiarizer, MAX_DIARIZER_FILE_BYTES,
+    MIN_DIARIZATION_DEADLINE, SherpaOnnxDiarizer, diarization_deadline, parse_diarizer_output,
+};
+pub use skill_folders::{FilesystemSkillFolders, SkillBaseError};
 pub use source_binding::{BoundSource, EvidenceSourceCheck, SourceBinding, VerifiedSourceIdentity};
 pub use source_duration_probe::FfprobeSourceDuration;
 pub use source_snapshot::{
     MAX_SOURCE_BYTES, MAX_SOURCE_READ_DURATION, SourceContainer, SourceError, SourceSnapshot,
+};
+pub use speaker_record::{
+    MAX_SPEAKER_RECORD_BYTES, MAX_SPEAKER_RECORDS, decode_speaker_record, encode_speaker_record,
 };
 pub use speech_audio::FfmpegSpeechAudio;
 pub use system_clock::{MonotonicStopwatch, SystemClock};
@@ -237,12 +263,20 @@ pub use transcript_sidecar::{
     read_supplied_transcript_contained,
 };
 pub use user_dependency_config::{UserDependencyConfigError, UserDependencyConfigStore};
+pub use user_online_tool::{
+    UserOnlineTool, UserOnlineToolFacts, UserOnlineToolFault, identify_user_online_tool,
+};
 pub use verified_artifact_transfer::{ArtifactTransferError, transfer_verified};
 pub use visual_index_record::{
     MAX_VISUAL_INDEX_RECORD_BYTES, MAX_VISUAL_INDEX_RECORDS, decode_visual_index_record,
     encode_visual_index_record,
 };
 pub use visual_sampler::FfmpegVisualSampler;
+pub use watch_output::{
+    FolderWatchOutputs, HELD_FILE_WAIT, SCREEN_CHANGES_FILE, WatchClaim, file_sha256,
+    render_screen_changes, render_subrip, render_subrip_snapshot, render_transcript,
+    render_transcript_snapshot, replace_claimed, resolve_configured_path,
+};
 pub use whisper_build::{
     MAX_WHISPER_EXECUTABLE_BYTES, WhisperBuildError, WhisperBuildIdentity, WhisperBuildRecognition,
     identify_whisper_build,
@@ -255,4 +289,10 @@ pub use whisper_cli::{
 pub use xz_tar_inventory::{
     MAX_XZ_ARCHIVE_BYTES, XzTarInventoryError, inspect_xz_tar_inventory,
     inspect_xz_tar_selected_files, stage_xz_tar_selected_files,
+};
+pub use ytdlp_info::{
+    MAX_YTDLP_INFO_BYTES, SelectedFormat, YtDlpVideo, is_safe_format_id, parse_ytdlp_info,
+};
+pub use ytdlp_refusal::{
+    MAX_YTDLP_STDERR_BYTES, SITE_PHRASES, YTDLP_PHRASES, classify_ytdlp_failure,
 };

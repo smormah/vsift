@@ -19,7 +19,15 @@
 //!    control characters.
 //!
 //! [`HandoffCheck::resolve_in_session`] then optionally resolves the cited
-//! identities against one session's records, which a host reads.
+//! identities against one session's records, which a host reads, and holds
+//! each stated clock time to what `VSift` returns for that item now.
+//!
+//! `handoff finish` (0.3.0, M5b) runs the same check with the session's
+//! records, then lets a host make at most one write: [`HandoffFinishRequest`].
+//!
+//! `handoff skeleton` (ADR 0038) uses the same checker the other way round:
+//! [`HandoffChecker::skeleton`] writes a valid handoff that states nothing
+//! yet, so an agent never builds the JSON from a text template.
 //!
 //! **Nothing of the draft is repeated** in a finding (SEC-16): the draft can
 //! carry hostile evidence text. A finding is a JSON pointer made of the
@@ -29,22 +37,34 @@
 mod block;
 mod budget;
 mod case;
+mod finish;
 mod report_text;
 mod rule;
 mod rules;
 mod schema;
 mod session;
+mod skeleton;
 
 use serde::Serialize;
 use serde_json::Value;
 
-pub use budget::{COMPACT_BUDGET, HandoffBudgetLimits, STANDARD_BUDGET, budget_profile};
+pub use budget::{
+    COMPACT_BUDGET, HandoffBudgetLimits, READ_THROUGH_BUDGET, STANDARD_BUDGET, budget_profile,
+};
 pub use case::{HandoffVocabulary, handoff_vocabulary};
+pub use finish::{
+    HandoffFinishData, HandoffFinishDecision, HandoffFinishLifecycle, HandoffFinishRequest,
+    HandoffFinishStop, HandoffLifecycleAction,
+};
 pub use rule::{HandoffFinding, HandoffRule, HandoffRuleScope};
 pub use rules::{MAX_RESUME_CARD_BYTES, handoff_is_cut_short};
 pub use schema::HandoffSchemaError;
 pub use session::{
     HandoffEvidenceKind, HandoffSessionCheck, HandoffSessionGap, HandoffSessionRecords,
+};
+pub use skeleton::{
+    HANDOFF_SKELETON_FILL, HANDOFF_SKELETON_QUESTION_REMEDIATION, HandoffSkeletonData,
+    HandoffSkeletonError, HandoffSkeletonFacts, HandoffTranscriptBasis,
 };
 
 use schema::CompiledSchema;
@@ -251,8 +271,8 @@ impl HandoffCheck {
         self.session.as_ref()
     }
 
-    /// Resolves the cited identities against `records` of `session_id`.
-    /// Without a readable handoff nothing is cited, so nothing is checked.
+    /// Resolves the cited identities against `records` of `session_id` and
+    /// compares the clock times stated for them. Without a readable handoff nothing is cited, so nothing is checked.
     pub fn resolve_in_session(&mut self, session_id: &str, records: &HandoffSessionRecords) {
         let (check, findings) = session::resolve(
             self.handoff.as_ref().unwrap_or(&Value::Null),

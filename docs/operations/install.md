@@ -1,22 +1,20 @@
 # Installing VSift
 
-Status: user guide, updated 2026-10-27 (the upgrade notes moved here from the README: section 7.1) and 2026-10-22 (the cut of the first release candidate of 0.2.3, `0.2.3-rc.1`: the candidates of 0.2.3) and 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
+Status: user guide, updated 2026-11-04 (the release 0.2.4, built from the candidate 0.2.4-rc.1) and 2026-11-04 (the cut of the first release candidate of the hot fix 0.2.4, `0.2.4-rc.1`: the candidates of 0.2.4) and 2026-10-27 (the upgrade notes moved here from the README: section 7.1) and 2026-10-25 (the release 0.2.3, built from the candidate 0.2.3-rc.1) and 2026-10-22 (the cut of the first release candidate of 0.2.3, `0.2.3-rc.1`: the candidates of 0.2.3) and 2026-10-18 (the release 0.2.2) and 2026-10-17 (the cut of the first release candidate of 0.2.2, `0.2.2-rc.1`: the candidates of 0.2.2 and the fix of #404) and 2026-10-16 (0.2.1 is published; its known issues and what was run against it) and 2026-10-15 (the release 0.2.1) and 2026-10-10 (section 7 on upgrading from a candidate of a later release: the cut of the patch release's candidate) and 2026-10-09 (P14 PR 12, the release 0.2.0; P14 PR 10 repeated again, the third candidate; P14 PR 11c;
 P14 PR 9a; written by P13 PR 11 and PR 12 for the published pre-release;
 [ADR 0023](../decisions/0023-r0-distribution-managed-installation-and-handoff-check.md)).
-**VSift 0.2.2 is the patch release after 0.2.1**, and `npm install vsift-cli` with no tag installs it (it
-replaces 0.2.1 under npm's `latest` dist-tag). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
-attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest` and 0.2.1 (2026-10-15) the one before this; before 0.2.0, `latest` was an empty `0.0.0` placeholder, a package with no command. The
-pre-release 0.1.0 (2026-10-01) and the release candidates of 0.2.0, 0.2.1 and 0.2.2 were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1 and 0.2.1-rc.2
-are deprecated (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.2-rc.1, the source of 0.2.2; you do not need it. 0.2.2 is not announced. The release candidates of the next patch release, 0.2.3 (the first is 0.2.3-rc.1, cut on 2026-10-22), go to `next` when they are published and are never `latest`; you do not need them.
-**0.2.2 is built from the same source as its release candidate, 0.2.2-rc.1**, and differs from it only in its version
+**VSift 0.2.4 is the hot fix of 0.2.3**, and `npm install vsift-cli` with no tag installs it (it
+replaces 0.2.3 under npm's `latest` dist-tag). The npm packages carry npm provenance, and the native archives on its GitHub release carry a Sigstore build-provenance
+attestation, as every file of the release does. 0.2.0 (2026-10-09) was the first release under `latest`, and 0.2.1 (2026-10-15), 0.2.2 (2026-10-18) and 0.2.3 (2026-10-27) the ones before this; before 0.2.0, `latest` was an empty `0.0.0` placeholder, a package with no command. The
+pre-release 0.1.0 (2026-10-01) and the release candidates of 0.2.0, 0.2.1, 0.2.2, 0.2.3 and 0.2.4 were installed with `vsift-cli@next`; they stay published, and 0.2.0-rc.1, 0.2.0-rc.2, 0.2.1-rc.1, 0.2.1-rc.2, 0.2.1-rc.3 and 0.2.2-rc.1
+are deprecated, and so are 0.2.3-rc.1 and 0.2.4-rc.1 since 2026-11-06 (npm warns on an install of any of them and names the release that replaced it). `next` still names 0.2.4-rc.1, the source of 0.2.4; you do not need it. 0.2.4 is not announced. Release candidates of later releases go to `next` when they are published and are never `latest`; you do not need them.
+**0.2.4 is built from the same source as its release candidate, 0.2.4-rc.1**, and differs from it only in its version
 numbers, this guide, the npm package's README and the project's work record (a mechanical check enforces that:
-[`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source, and it is recorded in the release evidence ledger: the installs, the archives, the offline install, the upgrades,
-the managed install, **the worker-host journeys on all three systems (the stage that failed twice on hosted Windows on 0.2.1, [#404](https://github.com/smormah/vsift/issues/404), passed)**, the campaigns and the checks of the publish passed. The executable carries the
-new version number and commit, so the hosted checks are run again on the published 0.2.2 after its publish.
-**What 0.2.2 changes for you** since 0.2.1 is in the [changelog](../../CHANGELOG.md): a worker host that is stopped while it recognises speech records the
-stopped request as cancelled and resumable, never as a failure that says a tool is missing; on Windows the free space is checked before a video is copied; a copy that clearly
-cannot finish in time stops early; a named pipe, a device or a socket given as the video is refused without being opened; refusals and the advice for a missing tool say why; and
-`candidates --omit periodic` is a new, opt-in option. A worker's request record that 0.2.2 writes can be read as damaged by 0.2.1. Section 12 has the notes on 0.2.1 and 0.2.0.
+[`release.md`](release.md) section 6.8). What was tried on that candidate was tried on that source, and it is recorded in the release evidence ledger. **Because 0.2.4 is a hot fix, no long runs were made before its publish (`release.md` 6.18); these checks were run on it:** the installs and the archives, the offline install (the first with the new FFmpeg archive), the upgrades from 0.2.3 and from 0.2.3-rc.1, the managed install and the move of a managed install made by 0.2.2 to the new FFmpeg, the test with 99 deliberately malformed and malicious files (no finding), the local speech recognition accuracy set on Ubuntu and Windows, the dependency scan and the checks of the publish passed; the worker-host journeys passed on all three systems (macOS through a run with a newer test driver, [#520](https://github.com/smormah/vsift/issues/520), [#576](https://github.com/smormah/vsift/issues/576)). **Seven of the twenty evidence items were waived by the maintainer for 0.2.4 only, and none of them is a pass:** the fuzzing hour, the stress run (one repetition in 20,100 gave the right answer too slowly under load on Windows in 0.2.3, [#519](https://github.com/smormah/vsift/issues/519), [L-231](../planning/known-limits.md#l-231)), the load run, the power-loss and durability runs, the runbook walk and both agent-trial batches (the skill did not change) were not made; they run in the next release window. Two standing waivers carry: the worker's adversarial isolation evidence and the try-outs of section 4. The executable carries the
+new version number and commit, so the hosted checks are run again on the published 0.2.4 after its publish.
+**What 0.2.4 changes for you** since 0.2.3 is in the [changelog](../../CHANGELOG.md): a new managed install on Ubuntu gets FFmpeg 9.0.2 plus 39 commits, the month-end build of 2026-10-31 (136 MB), in place of the build of 2026-08-31, which carries the upstream memory-safety fixes made since in code VSift runs (the VP8, VP9, H.264, Opus and AAC decoders, the MP4 key atom and a Matroska duration overflow). A machine set up by 0.2.3 or earlier keeps its FFmpeg, and `vsift setup check` says it is older than the reviewed one until you run `vsift setup plan` and `vsift setup install` again (section 7).
+**One flaw is not fixed** ([#351](https://github.com/smormah/vsift/issues/351), [L-144](../planning/known-limits.md#l-144)): an MP4 with very many `pssh` boxes (CVE-2026-107678) keeps FFmpeg busy, and the fix is on FFmpeg's development line only; VSift's own time bound ends the work after about 15 seconds without fixing the flaw. Five other FFmpeg records of 2026-11-01 are not fixed by the pinned build either ([L-227](../planning/known-limits.md#l-227)). No command or JSON field changed. Section 12 has the notes on 0.2.1 and 0.2.0.
+Known issues of this release concern the tests and the build tooling, not what you run: the noisy-speech accuracy set is not run on hosted macOS runners (a limit of the project's tests, L-230) and a timing bound in one stress test (L-231).
 The machines in section 1 are R0 targets, not yet a supported platform. The
 evidence gathered so far, with its gaps, is recorded in the release evidence ledger
 ([`p14-evidence-ledger.json`](../planning/p14-evidence-ledger.json)). **What was not tried before this release, and it ships
@@ -25,7 +23,7 @@ without them:** Windows Smart App Control and SmartScreen, a true clean-machine 
 from hosted runners only. **What has been run against these steps.** In P13 they ran on
 hosted runners against a local registry. Since 2026-10-02 (P14) the published packages have also
 been installed from the real registry with npm, pnpm, Yarn and Bun on hosted Windows, macOS and
-Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.2-rc.1 on 2026-10-18), 0.2.0 itself on 2026-10-09 and 0.2.1 itself on 2026-10-15; the three archives have been
+Ubuntu runners, first 0.1.0, then each release candidate (the last being 0.2.4-rc.1 on 2026-11-04), 0.2.0 itself on 2026-10-09, 0.2.1 itself on 2026-10-15 and 0.2.2 itself on 2026-10-18; the three archives have been
 downloaded, checked, extracted and run, the offline
 install of the managed tools has been run with the real files, the upgrade and uninstall steps
 (sections 7 and 8) have been walked, and the same bytes have run the supplied-transcript and
@@ -40,9 +38,9 @@ source ([`development.md`](../development.md)) also works.
 
 | Machine | Status today | What has been shown (hosted runners, on the published versions) | Notes |
 | --- | --- | --- | --- |
-| Windows 11 x64 | R0 target | Installs with all four package managers, the archive runs and both journeys ran, on a hosted Windows Server 2025 image; the project's Windows 11 development machine ran the agent trials | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2). Smart App Control is untried (section 4) |
-| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); VSift has not been run on a Mac by the people who build it | `@vsift/darwin-arm64`. Bring your own tools (section 5.2). Gatekeeper is untried (section 4) |
-| Ubuntu 24.04 on x64 | R0 target, and the only machine where VSift installs its own tools | The same checks passed, with the managed tools installed by the binary itself, also offline from the real files | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
+| Windows 11 x64 | R0 target | Installs with all four package managers, the archive runs and both journeys ran, on a hosted Windows Server 2025 image; the project's Windows 11 development machine ran the agent trials | npm package `@vsift/win32-x64`. Bring your own FFmpeg, FFprobe and whisper.cpp (section 5.2), or, since `0.3.0`, let VSift install them (section 5.1b). Smart App Control is untried (section 4) |
+| macOS 15 on Apple silicon | R0 target | The same checks passed on a hosted macOS 15 image with Homebrew's tools, which VSift does not review ([L-114](../planning/known-limits.md#l-114)); VSift has not been run on a Mac by the people who build it | `@vsift/darwin-arm64`. Bring your own tools (section 5.2), or, since `0.3.0`, let VSift install them (section 5.1b). Gatekeeper is untried (section 4) |
+| Ubuntu 24.04 on x64 | R0 target, and the only machine where 0.2.4 installs its own tools | The same checks passed, with the managed tools installed by the binary itself, also offline from the real files | `@vsift/linux-x64`; needs glibc 2.35 or later and OpenSSL 3 (`libssl.so.3`), which Ubuntu 22.04 and 24.04 have. The managed whisper.cpp build also needs the OpenMP runtime `libgomp.so.1` (Ubuntu package `libgomp1`, which a minimal container image lacks; section 5.1) |
 | Another Linux on x64 with glibc 2.35 or later and OpenSSL 3 | not a target | Nothing | The binary is built on Ubuntu 22.04 and may run; it has not been tested |
 | Linux on Arm, Intel Macs, Windows on Arm, Windows 10, Alpine and other musl Linux | not supported | Nothing | The launcher says so and exits 127 (section 10) |
 
@@ -52,17 +50,21 @@ source ([`development.md`](../development.md)) also works.
   machine has shown and what is still missing ([L-035](../planning/known-limits.md#l-035)).
   What was run where is in [`p13-distribution.md`](../planning/p13-distribution.md) and the P14
   plan.
-- **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu
-  24.04 x64 only (ADR 0023 decision E). On Windows and macOS you install FFmpeg,
-  FFprobe, whisper.cpp and the speech model yourself and tell VSift where they are
-  (section 5.2).
-- **What 0.2.2 promises** (as 0.2.0 and 0.2.1 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON
+- **Managed installation** (`vsift setup install`, section 5.1) is qualified on Ubuntu 24.04 x64 only
+  (ADR 0023 decision E). Since `0.3.0` it also installs the tools on Windows x64 and macOS on
+  Apple silicon (section 5.1b, ADR 0032); hosted runners have shown those installs, with no
+  power-loss campaign there ([L-215](../planning/known-limits.md#l-215)). With 0.2.4 and earlier, on Windows and macOS
+  you install FFmpeg, FFprobe, whisper.cpp and the speech model yourself and tell VSift
+  where they are (section 5.2).
+- **What 0.2.4 promises** (as 0.2.0, 0.2.1, 0.2.2 and 0.2.3 did) is the `vsift` command-line grammar, its exit codes and its v1 JSON
   contracts ([`cli-v1.md`](../contracts/cli-v1.md)). They change only by addition: new commands,
   fields and failure codes may appear, and what exists keeps its meaning. Nothing else is
   promised: the readable text that commands print without `--json` is for people and may
   change, and the accuracy figures were measured on a synthetic corpus. The release
-  qualification of 0.2.2 is recorded in the release evidence ledger, with three items waived and none failed
-  (the adversarial isolation evidence of the worker host, the trials of an AI assistant without the skill, and the try-outs of section 4).
+  qualification of 0.2.4 is recorded in the release evidence ledger, with seven items waived for 0.2.4 only, two standing waivers carried, and two of the long runs of a tenth waived, none of them a pass, and none failed
+  (the fuzzing hour, the stress, load, power-loss, durability and runbook-walk runs, which a hot fix does not run before its publish and which run in the next release window,
+  the agent trials of the skill and of an AI assistant without it, which were not run again because the skill did not change,
+  and, carried, the adversarial isolation evidence of the worker host and the try-outs of section 4).
 - **Not signed.** The Windows and macOS executables carry no Authenticode signature and
   no Apple notarization. Section 4 says what that means for you and how to check a
   download instead.
@@ -73,13 +75,13 @@ to run the small launcher. Installing from a native archive needs neither.
 ## 2. Install with a package manager
 
 The npm package is `vsift-cli`; the command it installs is `vsift`. **Ask for it without a
-tag:** 0.2.2 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
-The dist-tag `next` is for release candidates and you do not need it; it names `0.2.2-rc.1`,
-the candidate 0.2.2 was built from, or a later candidate or release. The empty `0.0.0`
+tag:** 0.2.4 is published under the dist-tag `latest`, which is what a plain `vsift-cli` means.
+The dist-tag `next` is for release candidates and you do not need it; it names `0.2.4-rc.1`,
+the candidate 0.2.4 was built from, or a later candidate or release. The empty `0.0.0`
 placeholder that was `latest` before 0.2.0 has no command: if `vsift` is not found after an
 install and your package manager reports `vsift-cli` at `0.0.0`, it resolved the placeholder
 (for example a registry mirror that has not caught up; Yarn's one-day hold below may do the same,
-which was not tried), and asking for the exact version, `vsift-cli@0.2.2`, installs the
+which was not tried), and asking for the exact version, `vsift-cli@0.2.4`, installs the
 release. Install globally, so the
 `vsift` command is on your `PATH`:
 
@@ -97,7 +99,7 @@ yarn vsift --version
 ```
 
 Recent Yarn 4 releases (4.18.1 checked) hold back any version published less than a day
-ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.2 (as they did 0.2.0 and 0.2.1) a day after it was
+ago (`npmMinimalAgeGate`, default one day), so Yarn users get 0.2.4 (as they did 0.2.0, 0.2.1, 0.2.2 and 0.2.3) a day after it was
 published, and every later release a day after its publish. Until then Yarn
 reports that the versions of `vsift-cli` or `@vsift/...` "are quarantined" (seen with the exact
 version of 0.1.0, 6.5 hours after its publish). Wait a day, or exempt VSift in the project's
@@ -175,9 +177,14 @@ wrote that way.
 - **AI agents on Windows** should run `vsift` from PowerShell, Git Bash or the native
   `vsift.exe`, not through `cmd.exe`.
 
-**Where the skill is.** Under the global package folder: `npm root --global` (or `pnpm
-root --global`) names the folder that holds `vsift-cli/skills/vsift/`. Copy it as
-[`../agents/skill.md`](../agents/skill.md) describes.
+**Where the skill is.** Since `0.3.0`, `vsift skill install --client <name>` copies the skill
+this release was built with into the folder that client reads (`claude-code` for
+`.claude/skills/`; `codex`, `copilot`, `cursor`, `gemini-cli`, `opencode`, `goose` or `amp` for
+`.agents/skills/`), for you or, with `--project <folder>`, for one project; `vsift skill status`
+shows what is there. It never replaces anything without `--replace`, and never anything that is
+not a vsift skill ([`../agents/skill.md`](../agents/skill.md)). The package itself runs no install
+script. The folder is also under the global package folder: `npm root --global` (or `pnpm root
+--global`) names the folder that holds `vsift-cli/skills/vsift/`, to copy by hand.
 
 **Registries and lockfiles.** A registry mirror must serve both `vsift-cli` and the
 `@vsift` scope. If an install from a lockfile made on another kind of machine leaves this
@@ -340,6 +347,12 @@ every version before `0.2.1` is different, see [section 12](#12-problems)).
 
 ### 5.1 Ubuntu 24.04 x64: let VSift install them
 
+To install without a question, for example from a script, name the parts:
+`vsift setup --unattended --install video,speech` (add `--json` for a result a script reads,
+and `--accept-plan <digest>` to install only the exact plan you reviewed). Naming the parts is
+the yes; every download is still pinned and checked. It reports pass, fail or error and never
+asks anything.
+
 `vsift setup install` applies a plan you have read and accepted. It works per user, needs no
 `sudo`, never elevates and never prompts.
 
@@ -353,13 +366,15 @@ vsift setup check                                  # video and speech now say re
 
 - **The plan** is read-only and lists, for each component still needed, the publisher, the
   exact address, the exact size, the SHA-256, the licence and notice link, and every file
-  it will install. The three components are the FFmpeg and FFprobe build from BtbN
-  FFmpeg-Builds (113 MB), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
+  it will install. The three components are the FFmpeg and FFprobe build from
+  FFmpeg-Builds, BtbN's builds repository (136 MB; FFmpeg 9.0.2 plus 39 commits, the
+  month-end build of 2026-10-31), the whisper.cpp v1.9.5 command-line build (10.4 MB; the
   release's binaries are under its build release `b5454`) and the multilingual `base`
-  model from the whisper.cpp model repository (148 MB): about 272 MB in three downloads.
-  `0.2.2` and earlier install whisper.cpp v1.9.2; after an upgrade, a managed install
-  keeps the version it has until you run `setup plan` and `setup install` again, which
-  then installs v1.9.5 and selects it. Keep at least 1 GB of disk free while installing (a cautious figure,
+  model from the whisper.cpp model repository (148 MB): about 295 MB in three downloads.
+  `0.2.3` and earlier install the FFmpeg build of 2026-08-31, and `0.2.2` and earlier
+  whisper.cpp v1.9.2; after an upgrade, a managed install keeps the version it has, and
+  `setup check` says it is older than the reviewed one, until you run `setup plan` and
+  `setup install` again, which then install the reviewed version and select it. Keep at least 1 GB of disk free while installing (a cautious figure,
   not a measurement; the plan has the exact sizes). Licence information is disclosure, not
   legal clearance.
 - **The digest** is the plan's own fingerprint: copy the `Plan digest:` line of the plan
@@ -394,6 +409,19 @@ vsift setup check                                  # video and speech now say re
   folder and run `vsift setup install --plan plan.json --accept-plan <digest>
   --artifact-dir /absolute/path/to/folder`. The files go through the same size and SHA-256
   check as a download; you supply only the folder, never an address or a checksum.
+- **If `setup install` stops with `download_failed` and the reason `redirect_policy` on FFmpeg (`0.2.3`, `0.2.4`
+  and earlier; until `0.3.0`).** On 2026-11-07 the repository these versions download FFmpeg from moved to a new
+  owner, and they refuse the redirect on purpose. `0.3.0` points at the new address; until then use one of two
+  ways, both tried with the published `0.2.4` binary on a hosted Ubuntu 24.04 runner:
+  1. Take the three files by hand. Download each file the plan names, with the FFmpeg address changed from
+     `https://github.com/BtbN/FFmpeg-Builds/releases/download/...` to
+     `https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/...` (the rest of the address and the file
+     name stay the same), put the three files in one folder and run
+     `vsift setup install --plan plan.json --accept-plan <digest> --artifact-dir /absolute/path/to/folder`.
+     VSift checks each file's size and SHA-256 against its own pins, as for a download.
+  2. Install FFmpeg and FFprobe with your distribution (`sudo apt-get install ffmpeg`). VSift finds tools on the
+     `PATH`, so `vsift setup plan` then offers only whisper.cpp and the model, and `setup check` ends `ready`.
+     VSift has not reviewed the distribution's FFmpeg (section 5.2).
 - **Managing what is installed.** VSift keeps each component's current and previous
   version, and never removes one that a running job holds.
 
@@ -416,12 +444,42 @@ vsift setup check                                  # video and speech now say re
 If a download fails, section 9 lists each reason. VSift also falls back to section 5.2
 whenever it cannot install safely.
 
-### 5.1b Windows x64 (since `0.3.0`)
+### 5.1b Windows x64 and macOS on Apple silicon (since `0.3.0`)
 
-`vsift setup plan` and `vsift setup install` work the same way on Windows x64, with the managed folder under
-`%LOCALAPPDATA%\vsift\managed-v1`. For now they install FFmpeg and FFprobe (BtbN's LGPL build of the same version
-as on Ubuntu, a 147 MB zip) and, when a whisper.cpp already works on the machine, the speech model; whisper.cpp
-itself is still yours to install or register (section 5.2) until VSift's own Windows build of it joins the plan.
+`vsift setup plan` and `vsift setup install` work the same way on Windows x64 and on macOS arm64, and install the
+same three things: FFmpeg with FFprobe, whisper.cpp v1.9.5 and the same `base` speech model. The managed folder
+is `%LOCALAPPDATA%\vsift\managed-v1` on Windows and `~/Library/Application Support/vsift/managed-v1` on
+macOS.
+
+| | Windows x64 | macOS arm64 |
+| --- | --- | --- |
+| FFmpeg and FFprobe | The FFmpeg-Builds LGPL build of the same version as on Ubuntu (`n9.0.2-39`), a 169 MB zip | VSift's own LGPL build of the same FFmpeg commit, a 21 MB archive; its source is published beside it |
+| whisper.cpp | VSift's own build of v1.9.5, one executable that needs no Visual C++ runtime, a 0.9 MB archive | VSift's own build of v1.9.5, one executable, a 2.1 MB archive |
+| Speech model | `ggml-base.bin`, 148 MB, from the same pinned address as on Ubuntu | the same |
+
+VSift builds the Windows whisper.cpp and both macOS tools itself because no publisher offers what VSift needs there
+(upstream's Windows whisper.cpp needs the Visual C++ runtime; nobody publishes an LGPL static FFmpeg or a
+whisper.cpp command line for macOS). Each is built twice and compared, carries a build attestation, and is
+published as a VSift engine release ([`engines.md`](engines.md)); VSift pins each archive by size and SHA-256
+and checks it before use, exactly as it does the other publishers' files.
+
+- **Windows:** the whisper.cpp build needs a processor with AVX2, FMA and F16C, which every processor Windows 11
+  accepts has; on an older one the install's smoke test fails and whisper.cpp is not installed
+  ([L-216](../planning/known-limits.md#l-216)).
+- **macOS:** the whisper.cpp build can use Metal, but VSift always runs it on the processor (`-ng`), so it
+  transcribes the same way on every Mac and on a machine without Metal. The FFmpeg build has no software AV1
+  decoder, so AV1 video plays only where VideoToolbox decodes it (Apple M3 and later; L-216). Nothing is
+  notarized: VSift downloads and runs these files itself, so Gatekeeper does not check them (section 4).
+- **What has been shown:** both systems' installs, the check after them and a transcription ran on GitHub's hosted
+  Windows Server 2025 and macOS 15 runners ([L-224](../planning/known-limits.md#l-224)); no person has run them on a
+  Windows PC or a Mac yet, and no kill or power-loss test runs there (L-215).
+- **On-screen text:** the optional `ocr` group (section 5.1a) is offered on both systems and on Ubuntu: VSift's
+  own OCR runner for the system, 18 MB on Windows and 25 MB on macOS, installed after the core only when you ask
+  for it. The group's install smoke ran on the same hosted runners ([L-225](../planning/known-limits.md#l-225)).
+- **Speaker labels:** the optional `speakers` group (section 5.1a) is offered on both systems and on Ubuntu:
+  sherpa-onnx's speaker-diarization tool with its ONNX Runtime library and two speaker models, 72 MB on Windows and
+  67 MB on macOS in three downloads, installed after the core only when you ask for it. sherpa-onnx's Windows libraries
+  do not need the Visual C++ Redistributable ([L-225](../planning/known-limits.md#l-225)).
 
 ### 5.1a Optional components (since `0.3.0`)
 
@@ -435,23 +493,78 @@ vsift setup plan --profile desktop --include online_links --json > plan.json
 vsift setup install --plan plan.json --accept-plan <the plan digest>
 ```
 
+`--include` is repeatable and takes the group's name below. A person at a terminal adds the same groups with the
+setup door instead, by their plain names: `vsift setup --include web-videos`,
+`vsift setup --include on-screen-text` or `vsift setup --include speaker-labels` (the door's table lists each one as
+added, not added or not available).
+
 - **`online_links`** is what fetching a video from a public web page (YouTube and other sites) needs: yt-dlp and
-  the Deno runtime it runs (the fetching itself, `ingest --url`, comes with its own change, #409), about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
+  the Deno runtime it runs, so `ingest --url` can read a public video page, about 83 MB in two downloads, on Ubuntu 24.04 x64 only. yt-dlp's build is GPL-3.0-or-later,
   Deno is MIT, and downloading from a site is subject to that site's terms. Direct HTTPS video links do not need it.
+- **`ocr`** is what reading the text shown on screen needs (`vsift ocr` and `vsift ocr search`): VSift's own OCR
+  runner with ONNX Runtime 1.31.0 and the two PP-OCRv5 text models, **one download of about 18 to 25 MB** (23 MB
+  on Ubuntu 24.04 x64, 18 MB on Windows x64, 25 MB on macOS on Apple silicon; `setup plan` states the next whole
+  megabyte, 24, 19 and 25). It is offered on all three systems. The
+  runner is MIT OR Apache-2.0, ONNX Runtime is MIT and the models are Apache-2.0 (PaddleOCR's, converted to ONNX
+  by RapidOCR); the archive carries every licence file beside them. Everything runs on your machine and nothing is
+  sent anywhere. The archive is one of VSift's own engine releases (`ocr-runner-v0.1.0-r1`), built twice and
+  compared byte for byte and attested like the other engines
+  ([`engines.md`](engines.md)); the ONNX Runtime library is already inside it (taken from Microsoft's NuGet
+  package since the GitHub archives went away, [L-254](../planning/known-limits.md#l-254)), so the group pins
+  VSift's own release and nothing else. The install smoke starts the runner with `describe`, which hashes the
+  library and the models beside it and names the build; `vsift ocr` then uses it with no setting, after a runner
+  you registered with `setup configure ocr-runner` and before one on `PATH`.
+- **`speakers`** is what labelling who speaks in a transcript needs (`vsift transcript speakers`, and
+  `search --speaker` and the labels in `transcript get` after it): **three downloads of about 67 to 75 MB** (75 MB on
+  Ubuntu 24.04 x64, 72 MB on Windows x64, 67 MB on macOS on Apple silicon; `setup plan` states the next whole
+  megabyte). It is offered on all three systems. The pieces are sherpa-onnx's speaker-diarization tool with the ONNX
+  Runtime library it loads (Apache-2.0 and MIT, two files of sherpa-onnx's own release archive), the pyannote
+  segmentation 3.0 model (MIT) and NVIDIA's NeMo TitaNet small speaker-embedding model (Apache-2.0, attributed under
+  Creative Commons Attribution 4.0 as TitaNet's model card requires; `setup plan` carries the full notice). Everything
+  runs on your machine and nothing is sent anywhere. The three files come from their publishers' releases (sherpa-onnx
+  v1.13.8 and Hugging Face) and are checked by the sizes and SHA-256 pinned in VSift; sherpa-onnx publishes no
+  checksum for the archive, so VSift's pin is the anchor ([L-217](../planning/known-limits.md#l-217)). The release
+  archives hold no licence file, so none is installed beside them ([L-226](../planning/known-limits.md#l-226)). The
+  install test starts the tool on a three-second tone with both models; `vsift transcript speakers` then uses them
+  with no setting, unless you give `--diarizer`, `--segmentation-model` or `--embedding-model`.
 - **Installed after the core.** `setup install` installs FFmpeg, whisper.cpp and the model first, then each
   optional component on its own. If an optional component cannot be installed (a proxy that blocks its download,
   say), the core stays installed, the result is `partial` (exit 0) with a warning, and its line says what failed and
   what to try; run the same command again to retry it.
 - **`setup check`** lists each optional component as `installed`, `not_installed` or `unavailable` on this machine,
-  apart from the status of local investigation.
+  apart from the status of local investigation. A component row says where it came from (`source`: `managed`, or
+  `user_managed` for a tool you supplied, shown with the first line of its own version output and its SHA-256).
+- **On Windows, `ocr` needs Microsoft's Visual C++ Redistributable for x64.** ONNX Runtime's Windows library depends on it (it imports `MSVCP140.dll` and `VCRUNTIME140.dll`; read from the installed copy on a hosted Windows runner, [L-225](../planning/known-limits.md#l-225)). Most PCs have it already, because many programs install it. If yours does not, the `ocr` group's install test fails, the core stays installed and VSift says so: install the Redistributable from <https://aka.ms/vs/17/release/vc_redist.x64.exe> and run the same command again. VSift does not install it for you.
+- **Your own OCR runner.** To use a runner you built or were given, register it once with an absolute path:
+  `vsift setup configure ocr-runner --executable /absolute/path/to/vsift-ocr-runner`. Its ONNX Runtime library
+  and its two models must sit beside it (in `onnxruntime/` and `models/`, or flat); `vsift ocr` checks the build when
+  it runs. `setup check` does not look at a registered runner: its `ocr` row says `not_installed` until you add the
+  managed group ([L-225](../planning/known-limits.md#l-225)).
+- **Your own yt-dlp (any system).** A managed yt-dlp is offered on Ubuntu 24.04 x64 only. On Windows and macOS, or
+  to use a yt-dlp of your own anywhere, install one yourself and register it once, with absolute paths, as with the
+  other tools in section 5.2. Also register the JavaScript runtime it needs (Deno); without one, YouTube may
+  refuse:
 
-### 5.2 Windows, macOS and other machines: bring your own
+  ```console
+  vsift setup configure yt-dlp --executable /absolute/path/to/yt-dlp
+  vsift setup configure js-runtime --executable /absolute/path/to/deno
+  vsift setup check
+  ```
 
-Install FFmpeg and FFprobe with whatever you normally use, and, for local speech
+  Registering only records the paths; `setup check` runs each file once, with a fixed version request and a private
+  temporary folder, and reports it as user-managed. A yt-dlp you register is used instead of a managed one, and
+  your runtime only with your yt-dlp, never with the managed one (the pinned pair is only ever run together).
+  Nothing reviews a file you supply: keeping it current is yours, sites change, and yt-dlp's own builds are
+  GPL-3.0-or-later. Downloading from a site is subject to that site's terms.
+
+### 5.2 Any machine: bring your own
+
+On a machine without a catalogue (section 1), with a release before `0.3.0` on Windows and macOS, or whenever you
+prefer your own tools, install FFmpeg and FFprobe with whatever you normally use, and, for local speech
 recognition, whisper.cpp's `whisper-cli` and a model. VSift does not review, pin or
 redistribute these builds. whisper.cpp publishes no macOS command-line build (v1.9.5 has only a
 library framework for Apple systems), so there you
-build it from its source or take it from a package manager. Tools on your `PATH` are found
+build it from its source, take it from a package manager, or let VSift install its own (section 5.1b). Tools on your `PATH` are found
 automatically; tools elsewhere are registered once, with absolute paths:
 
 ```console
@@ -510,7 +623,7 @@ folder.
 
 - **npm:** install again: `npm install --global vsift-cli` (likewise for
   pnpm and Bun; Yarn: `yarn add vsift-cli` again in the project). Someone who installed a
-  release candidate of 0.2.0, 0.2.1 or 0.2.2 with `@next` is moved to 0.2.2 the same way, because `latest` is the higher
+  release candidate of 0.2.0, 0.2.1, 0.2.2, 0.2.3 or 0.2.4 with `@next` is moved to 0.2.4 the same way, because `latest` is the higher
   version. A candidate of a later release is newer than `latest`, so the same command installs the older
   `latest` until that release is published: ask for the exact version to stay on the candidate
   (`vsift-cli@<version>`). `@next` is not the way to get releases. The launcher and the
@@ -523,15 +636,16 @@ folder.
   `Update available (security fixes): whisper_cli is on whisper.cpp-v1.9.2-ubuntu-x64`
   (`[update, security] whisper_cli: ...` in `0.2.3` itself; and `managed_updates` in its JSON), with `security` when the new pin carries security fixes
   the old version lacks. `0.2.3` is such a case: a managed install made by `0.2.2` or earlier has
-  whisper.cpp v1.9.2, and `0.2.3` pins v1.9.5. To move to the new pins:
+  whisper.cpp v1.9.2, and `0.2.3` pins v1.9.5. `0.2.4` is another: a managed install made by `0.2.3` or earlier has the FFmpeg build of 2026-08-31, and `0.2.4`
+  pins the build of 2026-10-31 (FFmpeg 9.0.2 plus 39 commits, with upstream's memory-safety fixes; the older build is marked superseded for security fixes). To move to the new pins:
 
   ```console
   vsift setup plan --profile desktop --json > plan.json   # read it; components already current are skipped
   vsift setup install --plan plan.json --accept-plan <the plan digest>
-  vsift setup check                                        # the update line is gone
+  vsift setup check                                        # no update line is left for a tool that has a newer reviewed version
   ```
 
-  Only what changed is downloaded (for `0.2.3`, the 10.4 MB whisper.cpp build). The old version
+  Only what changed is downloaded (for `0.2.3`, the 10.4 MB whisper.cpp build; for `0.2.4`, the 136 MB FFmpeg build). The old version
   stays installed as the previous version: `vsift setup rollback whisper_cli` selects it again,
   and `vsift setup remove whisper_cli --version <the old key>` deletes it.
 - **Sessions, configuration and managed tools** are kept. Going back to an older VSift is
@@ -548,7 +662,7 @@ folder.
   published 0.2.0-rc.1 to the published 0.2.0-rc.2 on the three systems with the same result (runs 37602931887 and
   37611381117), and on 2026-10-08 the published 0.1.0 and the published 0.2.0-rc.2 to the published 0.2.0-rc.3 (runs
   37748859247 and 37752825599). On 2026-10-09, after its publish, the same run upgraded the published 0.1.0 and the published
-  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). On 2026-10-15, after its publish, the same run upgraded the published 0.2.0 and the published 0.2.1-rc.3 to the published 0.2.1 on the three systems with the same result (runs 38765075608 and 38765697122). On 2026-10-18, after its publish, the same run upgraded the published 0.2.1 and the published 0.2.1-rc.3 to the published 0.2.2-rc.1 (runs 39082002714 and 39086086198); the runs for 0.2.2 itself happen after its publish.
+  0.2.0-rc.3 to the published 0.2.0 on the three systems with the same result (runs 37999883603 and 38000209110). On 2026-10-15, after its publish, the same run upgraded the published 0.2.0 and the published 0.2.1-rc.3 to the published 0.2.1 on the three systems with the same result (runs 38765075608 and 38765697122). On 2026-10-18, after its publish, the same run upgraded the published 0.2.1 and the published 0.2.1-rc.3 to the published 0.2.2-rc.1 (runs 39082002714 and 39086086198), and after its publish the published 0.2.1 and the published 0.2.2-rc.1 to the published 0.2.2 (runs 39139010023 and 39139382067). On 2026-10-24 the same run upgraded the published 0.2.2 and the published 0.2.2-rc.1 to the published 0.2.3-rc.1 (runs 40050562861 and 40050843508). On 2026-11-04 the same run upgraded the published 0.2.3 and the published 0.2.3-rc.1 to the published 0.2.4-rc.1 (runs 41827276819 and 41827851878); the runs for 0.2.4 itself happen after its publish.
 
 ### 7.1 Upgrading from 0.2.1 or earlier
 
@@ -577,7 +691,11 @@ deleting them left no trace; the evidence bundle, the registered tools and the s
 
 1. **Managed tools first, if you used them** (you need the `vsift` command for this):
    `vsift setup remove ffmpeg_ffprobe`, `vsift setup remove whisper_cli`, `vsift setup
-   remove whisper_model`, then `vsift setup remove --stale-stages`. Content VSift cannot
+   remove whisper_model`, then, if you added web videos, `vsift setup remove yt_dlp` and
+   `vsift setup remove js_runtime_deno`, then, if you added on-screen text, `vsift setup remove ocr_runner`,
+   if you added speaker labels, `vsift setup remove speaker_diarizer`, `vsift setup remove speaker_segmentation_model`
+   and `vsift setup remove speaker_embedding_model`,
+   then `vsift setup remove --stale-stages`. Content VSift cannot
    prove is its own (a link, an unknown file) is kept and `vsift setup repair` names it; delete
    the managed folder by hand in that case ([L-090](../planning/known-limits.md#l-090)).
 2. **The package:**
@@ -602,7 +720,7 @@ deleting them left no trace; the evidence bundle, the registered tools and the s
    | --- | --- | --- | --- |
    | Configuration (registered tool paths, and the record of the media-tool check) | `%LOCALAPPDATA%\vsift` | `~/Library/Application Support/vsift` | `$XDG_CONFIG_HOME/vsift` or `~/.config/vsift` |
    | Disposable sessions (private copies of videos you ingested) | `%LOCALAPPDATA%\VSift-sessions` | `~/Library/Caches/VSift-sessions` | `$XDG_CACHE_HOME/vsift-sessions` or `~/.cache/vsift-sessions` |
-   | Managed tools | not installed | not installed | `$XDG_DATA_HOME/vsift/managed-v1` or `~/.local/share/vsift/managed-v1` (the `vsift` folder above it holds nothing else: delete it too) |
+   | Managed tools | `%LOCALAPPDATA%\vsift\managed-v1` (since `0.3.0`) | `~/Library/Application Support/vsift/managed-v1` (since `0.3.0`) | `$XDG_DATA_HOME/vsift/managed-v1` or `~/.local/share/vsift/managed-v1` (the `vsift` folder above it holds nothing else: delete it too) |
 
    `vsift session clean --expired` removes expired sessions first, if you prefer.
 4. **What VSift never deletes:** your original videos and transcripts (it works on private

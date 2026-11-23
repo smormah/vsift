@@ -6,5 +6,5 @@ VSift setup check
   Web videos  none added  yt-dlp       web page videos (optional)
 
 Setup complete: video and speech both work.
-Optional extra: web videos. To see what it would add: vsift setup plan --include online_links
+Optional extras: web videos. Add one with: vsift setup --include web-videos
 Next: vsift ingest ./your-video.mp4

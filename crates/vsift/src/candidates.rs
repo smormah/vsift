@@ -206,6 +206,20 @@ pub(crate) struct VisualBatch {
     pub(crate) duration: MediaTime,
 }
 
+/// The index a range is read from, after any analysis of the call.
+pub(crate) struct IndexedRange {
+    /// The newest committed index.
+    pub(crate) index: VisualIndex,
+    /// The session as the call left it.
+    pub(crate) status: SessionStatus,
+    /// Why analysis stopped early, if it did.
+    pub(crate) stop: Option<VisualExtensionStop>,
+    /// Windows this call analysed.
+    pub(crate) analysed_now: usize,
+    /// The call's time, in Unix seconds.
+    pub(crate) now: u64,
+}
+
 /// What the analysis part of a call produced.
 struct Analysis {
     newest: VisualIndex,
@@ -254,22 +268,52 @@ impl Engine {
             .limit
             .map_or(Ok(PageLimit::DEFAULT), PageLimit::new)
             .map_err(|_| EngineError::InvalidPageLimit)?;
+        let indexed = self
+            .indexed_range(
+                &request.session,
+                requested,
+                request.cursor.is_some(),
+                &request.cancellation,
+            )
+            .await?;
+        page_results(
+            &request,
+            requested,
+            limit,
+            indexed.index,
+            &indexed.status,
+            indexed.stop,
+            indexed.analysed_now,
+            indexed.now,
+        )
+    }
+
+    /// Steps 1-4 for a range: the session's newest index, extended first
+    /// unless the call continues pages (`continuation`) or every window of
+    /// the range is recorded. Shared by `candidates` and `changes` (ADR 0034),
+    /// so both analyse a range the same way.
+    pub(crate) async fn indexed_range(
+        &self,
+        session: &SessionId,
+        requested: TimeRange,
+        continuation: bool,
+        cancellation: &Cancellation,
+    ) -> Result<IndexedRange, EngineError> {
         let (store, now) = self.existing_store()?;
         let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
-        let (newest, status) = match store.read_visual_index(&request.session, now)? {
+        let (newest, status) = match store.read_visual_index(session, now)? {
             Some((index, status)) => (Some(index), status),
-            None => (None, open_status(&store, &request.session, now)?),
+            None => (None, open_status(&store, session, now)?),
         };
         let warm = match &newest {
             Some(index) => {
                 clip_to_source(requested, index.duration())
                     .map_err(|_| EngineError::RangeOutsideSource)?;
-                request.cursor.is_some()
-                    || missing_windows(Some(index), index.duration(), requested).is_empty()
+                continuation || missing_windows(Some(index), index.duration(), requested).is_empty()
             }
             // Without an index no cursor can be valid, and analysing on a
             // continuation call would change the pages it continues.
-            None if request.cursor.is_some() => {
+            None if continuation => {
                 return Err(EngineError::CandidateCursorWithoutIndex);
             }
             None => false,
@@ -280,8 +324,8 @@ impl Engine {
                 let analysis = self
                     .analyse_missing(
                         &store,
-                        &request.session,
-                        &request.cancellation,
+                        session,
+                        cancellation,
                         requested,
                         newest,
                         status,
@@ -297,16 +341,13 @@ impl Engine {
                 )
             }
         };
-        page_results(
-            &request,
-            requested,
-            limit,
+        Ok(IndexedRange {
             index,
-            &status,
+            status,
             stop,
             analysed_now,
             now,
-        )
+        })
     }
 
     /// Analyses the range's missing windows and commits them (steps 2-4).

@@ -67,7 +67,7 @@ pub struct SpeechSpan {
 }
 
 /// The corpus truth the grader and the preparer read.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CorpusTruth {
     fixtures: BTreeMap<String, Fixture>,
     speech: BTreeMap<String, SpeechSpan>,

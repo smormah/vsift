@@ -9,12 +9,12 @@
 use std::{error::Error, fmt};
 
 use vsift_application::{
-    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, EvidenceMediaError,
-    IdentifierGenerationError, JobRunError, JobStoreError, LIVE_JOB_RETRY_AFTER,
-    LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
+    AsrFailure, AsrFailureReason, AsrStage, CandidateQueryError, ClockError, DiarizationRunError,
+    EvidenceMediaError, IdentifierGenerationError, JobRunError, JobStoreError,
+    LIVE_JOB_RETRY_AFTER, LocalAsrVerificationFailure, ManagedLifecycleRefusal, MediaToolFailure,
     MediaToolPreflightFailure, OpenSessionError, PlanAcceptanceError, SessionStorageError,
-    SourcePathFault, SourceProbeError, SpecialFileKind, TranscriptBuildError, TranscriptQueryError,
-    VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
+    SourcePathFault, SourceProbeError, SpeakerLabelError, SpecialFileKind, TranscriptBuildError,
+    TranscriptQueryError, VisualExtensionStop, VisualIndexBuildError, VisualSamplingError,
 };
 use vsift_contract::PrivateFolder;
 
@@ -26,8 +26,8 @@ use crate::isolation::IsolationGaps;
 /// retry would only find it busy again.
 pub const MANAGED_INSTALL_RETRY_AFTER_MS: u64 = 30_000;
 use vsift_domain::{
-    FailureCode, FrameSelectionError, JobId, JobState, NavigationError, RuntimeDependency,
-    SearchQueryRejection, SessionId, TranscriptImportError,
+    DiarizationError, FailureCode, FrameSelectionError, JobId, JobState, NavigationError,
+    RuntimeDependency, SearchQueryRejection, SessionId, TranscriptImportError,
 };
 use vsift_infrastructure::{
     ExecutableResolutionError, SessionRootError as InfrastructureSessionRootError,
@@ -120,6 +120,11 @@ pub enum EngineError {
     ArtifactDirectoryNotAbsolute,
     /// The injected clock could not report the current time.
     Clock(ClockError),
+    /// `vsift <video>` could not write its outputs (ADR 0037).
+    Watch(crate::WatchFailure),
+    /// `vsift <video> --keep` failed after its job sealed; the bundle was
+    /// still written, or tried (ADR 0037, amendment of 2026-10-30).
+    WatchFailedAfterKeep(Box<crate::WatchFailedAfterKeep>),
     /// The injected identifier source could not issue a fresh identifier.
     Identifier(IdentifierGenerationError),
     /// The automatic preflight could not verify the selected `FFmpeg` and
@@ -157,6 +162,20 @@ pub enum EngineError {
     SourceProbe(SourceProbeError),
     /// The session holds no transcript revision with the requested identity.
     TranscriptRevisionNotFound,
+    /// The speaker-diarization tool, or one of its two model files, was neither given
+    /// nor found (ADR 0031); the tool is looked up on the filtered `PATH`, the models
+    /// never are.
+    DiarizerUnavailable,
+    /// A speaker count was not a whole number from 1 to 16.
+    InvalidSpeakerCount,
+    /// A speaker label was not `S` and a number from 1 to 64.
+    InvalidSpeakerLabel,
+    /// A speaker name was empty, longer than 128 bytes, or held a control character.
+    InvalidSpeakerName,
+    /// The revision has no speaker record to name a label in; label its speakers first.
+    SpeakerRecordNotFound,
+    /// Speaker labels could not be made or named; nothing was committed.
+    SpeakerLabels(SpeakerLabelError),
     /// A completed recognition run could not be assembled into a revision;
     /// this is an internal fault.
     TranscriptAssembly(TranscriptBuildError),
@@ -175,11 +194,19 @@ pub enum EngineError {
     /// A cursor was supplied for a session that has no visual index yet, so
     /// it cannot belong to any page of this session.
     CandidateCursorWithoutIndex,
+    /// A screen-change page request, usually its cursor, was rejected
+    /// (`changes`, ADR 0034).
+    ScreenChangeQuery(vsift_application::ScreenChangeQueryError),
     /// Visual analysis stopped (deadline, busy admission or cancellation)
     /// before it indexed anything of the requested range.
     VisualAnalysisStopped(VisualExtensionStop),
     /// Reading on-screen text failed (`ocr`, ADR 0030); nothing was committed.
     Ocr(crate::screen_text::OcrError),
+    /// A search over retained bundles was refused or cancelled (ADR 0035).
+    BundleSearch(vsift_application::BundleSearchError),
+    /// A `clocks` statement named a clock or gap the session does not have, or
+    /// a zone that cannot apply (ADR 0029 decisions 13 and 16).
+    Clocks(vsift_domain::ClockStatementError),
     /// Building the visual index failed; nothing was committed.
     VisualIndexBuild(VisualIndexBuildError),
     /// No displayed frame satisfies the requested time, policy and tolerance
@@ -250,13 +277,25 @@ pub enum EngineError {
         /// The ended job whose revision it is.
         job: JobId,
     },
+    /// `transcript speakers` was asked to label a revision that is still open (ADR
+    /// 0033): `job`'s run is publishing it, so labels made now would be stale as it
+    /// grows (ADR 0031 note of 2026-11-18). The answer is `BUSY` and names the job to
+    /// follow until the revision is sealed.
+    SpeakersRevisionOpen {
+        /// The session whose open revision was to be labelled.
+        session: SessionId,
+        /// The job whose run publishes the revision.
+        job: JobId,
+    },
     /// The operation id was used earlier in the session for a different
     /// request, whose result is kept (maintainer decision D-4).
     IdempotencyConflict {
         /// The job the operation id is bound to.
         job: JobId,
     },
-    /// The job was cancelled through its job id before it committed.
+    /// The job was cancelled through its job id before it finished. A run
+    /// that had published part of its revision sealed it as `stopped`,
+    /// keeping every published segment (ADR 0033).
     JobCancelled {
         /// The cancelled job.
         job: JobId,
@@ -285,9 +324,10 @@ pub enum EngineError {
         state: JobState,
     },
     /// The caller cancelled the run (Ctrl-C, `SIGTERM` or a library
-    /// [`crate::Cancellation`]) before it committed. Nothing was committed;
-    /// the job is `interrupted` and `job resume` (or the same request)
-    /// continues it from its checkpoints.
+    /// [`crate::Cancellation`]) before it finished. What the run had
+    /// published stays committed in its open revision (ADR 0033); a run that
+    /// published nothing committed nothing. The job is `interrupted` and
+    /// `job resume` (or the same request) continues it from its checkpoints.
     JobInterrupted {
         /// The session the job belongs to.
         session: SessionId,
@@ -438,9 +478,16 @@ impl EngineError {
     /// The mapping is the single authority for every host, so the same failure
     /// is reported with the same code by the CLI and by any later host.
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One exhaustive mapping is the single authority for every code"
+    )]
     pub const fn failure_code(&self) -> FailureCode {
         match self {
             Self::SessionRoot(error) => error.failure_code(),
+            Self::BundleSearch(vsift_application::BundleSearchError::Cancelled) => {
+                FailureCode::Cancelled
+            }
             Self::Storage(error) => storage_failure_code(*error),
             Self::OpenSession(error) => open_session_failure_code(*error),
             // The code the lookup answered before the typed error existed (L-127).
@@ -465,6 +512,7 @@ impl EngineError {
             )
             | Self::Executable(ExecutableRejection::Uninspectable) => FailureCode::StorageIo,
             Self::UnrestrictedCleanRejected
+            | Self::Clocks(_)
             | Self::ArtifactDirectoryNotAbsolute
             | Self::JobNotResumable { .. }
             | Self::JobSessionNotOpen { .. }
@@ -474,14 +522,20 @@ impl EngineError {
             | Self::TranscriptPending { .. }
             | Self::InvalidTimeRange
             | Self::InvalidPageLimit
+            | Self::BundleSearch(_)
             | Self::TranscriptQuery(_)
             | Self::NoAudioStream
             | Self::RangeOutsideSource
             | Self::TranscriptRevisionNotFound
+            | Self::InvalidSpeakerCount
+            | Self::InvalidSpeakerLabel
+            | Self::InvalidSpeakerName
+            | Self::SpeakerRecordNotFound
             | Self::SearchQueryRejected(_)
             | Self::NoVideoStream
             | Self::CandidateQuery(_)
             | Self::CandidateCursorWithoutIndex
+            | Self::ScreenChangeQuery(_)
             | Self::FrameNotSelected(_)
             | Self::EvidenceNotFound
             | Self::EvidenceKindMismatch
@@ -503,10 +557,14 @@ impl EngineError {
             | Self::LocalAsrModelUnavailable
             | Self::LocalAsrModelNotPinned
             | Self::VisualToolUnavailable(_)
+            | Self::DiarizerUnavailable
             | Self::Executable(ExecutableRejection::NotFound) => FailureCode::MissingCapability,
+            Self::SpeakerLabels(error) => speaker_label_failure_code(*error),
             Self::VisualAnalysisStopped(stop) => visual_stop_failure_code(*stop),
             Self::VisualIndexBuild(error) => visual_index_failure_code(*error),
             Self::Ocr(error) => error.failure_code(),
+            Self::Watch(failure) => failure.failure_code(),
+            Self::WatchFailedAfterKeep(failed) => failed.error.failure_code(),
             Self::SessionIndexInconsistent
             | Self::ReviewedPolicyInvalid
             | Self::Clock(_)
@@ -520,6 +578,7 @@ impl EngineError {
             Self::JobBusy { .. }
             | Self::TranscriptionRunning { .. }
             | Self::RevisionLeftOpen { .. }
+            | Self::SpeakersRevisionOpen { .. }
             | Self::RetranscriptionSuperseded { .. }
             | Self::AdmissionBusy { .. }
             | Self::ManagedInstallBusy => FailureCode::Busy,
@@ -634,6 +693,48 @@ pub(crate) const fn asr_failure_code(failure: AsrFailure) -> FailureCode {
             | AsrStage::Assembly => FailureCode::MissingCapability,
         },
         AsrFailureReason::InvalidRun(_) => FailureCode::Internal,
+    }
+}
+
+/// Public code for speaker labels that could not be made or named (ADR 0031): the
+/// codes a transcription uses for the same failures, and `RESOURCE_LIMIT` for a range
+/// longer than the duration cap.
+pub(crate) const fn speaker_label_failure_code(error: SpeakerLabelError) -> FailureCode {
+    match error {
+        SpeakerLabelError::RangeOutsideSource
+        | SpeakerLabelError::RangeTooShort
+        | SpeakerLabelError::Record(DiarizationError::NameForUnknownLabel) => {
+            FailureCode::InvalidArgument
+        }
+        SpeakerLabelError::RangeTooLong { .. }
+        | SpeakerLabelError::Diarization(
+            DiarizationRunError::ResourceLimit | DiarizationRunError::AbnormalTermination,
+        )
+        | SpeakerLabelError::Record(
+            DiarizationError::TooManyTurns | DiarizationError::TooManySpeakers,
+        ) => FailureCode::ResourceLimit,
+        SpeakerLabelError::Diarization(
+            DiarizationRunError::EngineUnavailable
+            | DiarizationRunError::EngineFailed
+            | DiarizationRunError::UnparseableOutput,
+        )
+        | SpeakerLabelError::EngineChanged
+        | SpeakerLabelError::Record(DiarizationError::TurnOutsideAudio) => {
+            FailureCode::MissingCapability
+        }
+        SpeakerLabelError::Diarization(DiarizationRunError::Deadline) => {
+            FailureCode::DeadlineExceeded
+        }
+        SpeakerLabelError::Diarization(DiarizationRunError::Cancelled) => FailureCode::Cancelled,
+        SpeakerLabelError::Diarization(DiarizationRunError::Busy)
+        | SpeakerLabelError::Record(DiarizationError::RevisionOpen) => FailureCode::Busy,
+        SpeakerLabelError::Diarization(DiarizationRunError::NoAudio) => FailureCode::InvalidSource,
+        SpeakerLabelError::Diarization(DiarizationRunError::Source) => {
+            FailureCode::IntegrityFailure
+        }
+        SpeakerLabelError::Diarization(DiarizationRunError::Workspace) => FailureCode::StorageIo,
+        SpeakerLabelError::Record(DiarizationError::OtherRevision)
+        | SpeakerLabelError::Identity => FailureCode::Internal,
     }
 }
 
@@ -809,6 +910,8 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the artifact directory must be an absolute path")
             }
             Self::Clock(error) => error.fmt(formatter),
+            Self::Watch(failure) => failure.fmt(formatter),
+            Self::WatchFailedAfterKeep(failed) => failed.error.fmt(formatter),
             Self::Identifier(error) => error.fmt(formatter),
             Self::MediaToolVerificationFailed(failure) => write!(
                 formatter,
@@ -851,6 +954,20 @@ impl fmt::Display for EngineError {
             Self::TranscriptRevisionNotFound => {
                 formatter.write_str("the session has no transcript revision with that identity")
             }
+            Self::DiarizerUnavailable => formatter
+                .write_str("the speaker-diarization tool or one of its two models was not found"),
+            Self::InvalidSpeakerCount => {
+                formatter.write_str("a speaker count is a whole number from 1 to 16")
+            }
+            Self::InvalidSpeakerLabel => {
+                formatter.write_str("a speaker label is S followed by a number, such as S2")
+            }
+            Self::InvalidSpeakerName => formatter
+                .write_str("a speaker name is 1 to 128 bytes and holds no control character"),
+            Self::SpeakerRecordNotFound => {
+                formatter.write_str("the transcript revision has no speaker labels yet")
+            }
+            Self::SpeakerLabels(error) => error.fmt(formatter),
             Self::TranscriptAssembly(error) => error.fmt(formatter),
             Self::SearchQueryRejected(rejection) => rejection.fmt(formatter),
             Self::VisualToolUnavailable(dependency) => write!(
@@ -863,6 +980,7 @@ impl fmt::Display for EngineError {
                 formatter.write_str("the source has no video stream the media tools decode")
             }
             Self::CandidateQuery(error) => error.fmt(formatter),
+            Self::ScreenChangeQuery(error) => error.fmt(formatter),
             Self::CandidateCursorWithoutIndex => {
                 formatter.write_str("the session has no visual candidates this cursor could page")
             }
@@ -882,6 +1000,8 @@ impl fmt::Display for EngineError {
             },
             Self::VisualIndexBuild(error) => error.fmt(formatter),
             Self::Ocr(error) => error.fmt(formatter),
+            Self::BundleSearch(error) => error.fmt(formatter),
+            Self::Clocks(error) => error.fmt(formatter),
             Self::FrameNotSelected(error) => error.fmt(formatter),
             Self::EvidenceNotFound => {
                 formatter.write_str("the session has no evidence item with that identity")
@@ -914,6 +1034,9 @@ impl fmt::Display for EngineError {
             ),
             Self::RevisionLeftOpen { .. } => formatter.write_str(
                 "the session's open revision belongs to a job that has ended without sealing it",
+            ),
+            Self::SpeakersRevisionOpen { .. } => formatter.write_str(
+                "the transcript revision to label is still open: a transcription is publishing it",
             ),
             Self::IdempotencyConflict { .. } => {
                 formatter.write_str("the operation id is bound to a different request")
@@ -965,6 +1088,8 @@ impl Error for EngineError {
             Self::SessionRoot(error) => Some(error),
             Self::Storage(error) => Some(error),
             Self::OpenSession(error) => Some(error),
+            Self::Watch(failure) => Some(failure),
+            Self::WatchFailedAfterKeep(failed) => Some(&failed.error),
             Self::UserConfiguration(error) => Some(error),
             Self::Executable(error) => Some(error),
             Self::Clock(error) => Some(error),
@@ -978,9 +1103,13 @@ impl Error for EngineError {
             Self::SourceProbe(error) => Some(error),
             Self::TranscriptAssembly(error) => Some(error),
             Self::SearchQueryRejected(error) => Some(error),
+            Self::SpeakerLabels(error) => Some(error),
             Self::CandidateQuery(error) => Some(error),
+            Self::ScreenChangeQuery(error) => Some(error),
             Self::VisualIndexBuild(error) => Some(error),
             Self::Ocr(error) => Some(error),
+            Self::BundleSearch(error) => Some(error),
+            Self::Clocks(error) => Some(error),
             Self::FrameNotSelected(error) => Some(error),
             Self::InvalidNavigation(error) => Some(error),
             Self::EvidenceMedia(error) => Some(error),
@@ -1005,6 +1134,11 @@ impl Error for EngineError {
             | Self::NoAudioStream
             | Self::RangeOutsideSource
             | Self::TranscriptRevisionNotFound
+            | Self::DiarizerUnavailable
+            | Self::InvalidSpeakerCount
+            | Self::InvalidSpeakerLabel
+            | Self::InvalidSpeakerName
+            | Self::SpeakerRecordNotFound
             | Self::WorkingDirectoryUnavailable
             | Self::MediaToolUnavailable(_)
             | Self::MediaToolVerificationFailed(_)
@@ -1025,6 +1159,7 @@ impl Error for EngineError {
             | Self::JobBusy { .. }
             | Self::TranscriptionRunning { .. }
             | Self::RevisionLeftOpen { .. }
+            | Self::SpeakersRevisionOpen { .. }
             | Self::IdempotencyConflict { .. }
             | Self::JobCancelled { .. }
             | Self::RetranscriptionSuperseded { .. }
@@ -1053,6 +1188,7 @@ impl EngineError {
             | Self::TranscriptionRunning { job, .. }
             | Self::TranscriptPending { job, .. }
             | Self::RevisionLeftOpen { job, .. }
+            | Self::SpeakersRevisionOpen { job, .. }
             | Self::IdempotencyConflict { job }
             | Self::JobCancelled { job }
             | Self::RetranscriptionSuperseded { job }
@@ -1074,7 +1210,8 @@ impl EngineError {
             | Self::JobSessionNotOpen { session, .. }
             | Self::TranscriptionRunning { session, .. }
             | Self::TranscriptPending { session, .. }
-            | Self::RevisionLeftOpen { session, .. } => Some(session),
+            | Self::RevisionLeftOpen { session, .. }
+            | Self::SpeakersRevisionOpen { session, .. } => Some(session),
             _ => None,
         }
     }
@@ -1241,6 +1378,7 @@ const fn open_session_failure_code(error: OpenSessionError) -> FailureCode {
         OpenSessionError::TranscriptRejected(rejected) => transcript_failure_code(rejected),
         OpenSessionError::TranscriptInvalid(_) => FailureCode::Internal,
         OpenSessionError::Cancelled => FailureCode::Cancelled,
+        OpenSessionError::SourceFetch(_) => FailureCode::SourceFetchFailed,
     }
 }
 

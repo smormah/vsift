@@ -12,6 +12,7 @@ use std::{
 
 use serde::Deserialize;
 
+mod claude_plugin;
 mod command;
 mod npm_packages;
 mod public_claims;
@@ -303,6 +304,7 @@ fn validate(
     validate_fault_injection_features(&mut messages, repository_root);
     workflows::validate_workflows(&mut messages, repository_root);
     npm_packages::validate_npm_packages(&mut messages, repository_root);
+    claude_plugin::validate_claude_plugin(&mut messages, repository_root);
     unsafe_code::validate_unsafe_code(&mut messages, repository_root);
     let repository = repository::DiskRepository::new(repository_root);
     release_evidence::validate_release_evidence(&mut messages, &repository);

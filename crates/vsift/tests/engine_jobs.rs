@@ -935,6 +935,7 @@ async fn reads_with_a_job_at(at: JobAtRead) -> Built<(EngineError, EngineError, 
             limit: None,
             cursor: None,
             since: None,
+            speaker: None,
         })
         .err()
         .ok_or("a search found a transcript in a session with none")?;

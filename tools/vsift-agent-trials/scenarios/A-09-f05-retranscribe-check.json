@@ -37,7 +37,7 @@
   ],
   "phases": [
     {
-      "prompt": "This is a QA walkthrough of submitting an invoice, {{video}}, with its transcript {{transcript}} (offset 0). Write a bug report with the problem, expected and actual result and reproduction steps. Please also double-check the error code with a local re-transcription of that part. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session to a new folder named {{bundle_dir}} in this directory with vsift session retain (without the video), and then leave the session open.",
+      "prompt": "This is a QA walkthrough of submitting an invoice, {{video}}, with its transcript {{transcript}} (offset 0). Write a bug report with the problem, expected and actual result and reproduction steps. Please also double-check the error code with a local re-transcription of that part. Use the VSift skill and the compact budget. When you have written the handoff, keep the evidence: I authorise you to retain the session, without the video, to a new folder named {{bundle_dir}} in this directory, and then leave the session open.",
       "expectations": [
         {
           "kind": "gap",

@@ -8,8 +8,9 @@
 use std::path::PathBuf;
 
 use vsift_application::{
-    MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure, MediaToolPreflightOutcome,
-    MediaToolVerification, MediaToolVerifier, ModelVerification, preflight_media_tools,
+    CachedMediaToolVerification, MediaToolCheck, MediaToolFailure, MediaToolPreflightFailure,
+    MediaToolPreflightOutcome, MediaToolVerification, MediaToolVerificationCache,
+    MediaToolVerifier, ModelVerification, preflight_media_tools,
 };
 use vsift_domain::RuntimeDependency;
 use vsift_infrastructure::{
@@ -265,6 +266,41 @@ impl Engine {
             preflight_media_tools(&verifier, &state, fingerprint.as_ref(), now).await
         };
         outcome.map_err(EngineError::MediaToolVerificationFailed)
+    }
+}
+
+impl Engine {
+    /// The media tools a plain ingest may probe for the recording-time tags
+    /// (time anchoring, ADR 0029): resolved as every media command resolves
+    /// them, and only when a still-valid recorded verification pass exists
+    /// for exactly these tools (`setup check` and every media command record
+    /// one).
+    ///
+    /// A plain ingest never starts a verification itself, so it stays as
+    /// quick as before; and it never fails for want of tools: `None` (tools
+    /// missing, unverified, or anything unreadable) only means the session
+    /// opens without container anchors.
+    pub(crate) fn media_tools_already_verified(&self) -> Option<MediaProviderConformance> {
+        let tools = self.media_tools().ok()?;
+        let policy = reviewed_compatibility_policy().ok()?;
+        let now = self.now_unix_seconds().ok()?;
+        let state = self
+            .user_configuration()
+            .ok()?
+            .existing_media_tool_verification_state()
+            .ok()??;
+        let authority = if self.host_media_tool_verifier().is_some() {
+            MediaToolVerificationAuthority::HostSupplied
+        } else {
+            MediaToolVerificationAuthority::ReviewedFixture
+        };
+        let fingerprint = media_tool_fingerprint(
+            &tools,
+            self.config().host_isolation.into_infrastructure(),
+            &policy,
+            authority,
+        )?;
+        (state.lookup(&fingerprint, now) == CachedMediaToolVerification::Verified).then_some(tools)
     }
 }
 

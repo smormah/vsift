@@ -59,6 +59,7 @@ const { LOCAL_REGISTRY, publishLocal, requireLoopback, startRegistry, stopRegist
 const { npmView, parseVersion } = require('./lib/release.cjs');
 const { describeResolution, namesOf, scrubbedEnvironment } = require('./lib/scrub.cjs');
 const { findVsiftEntries, subsetProblems, vsiftFolders } = require('./lib/upgrade.cjs');
+const { fetchPlanArtifacts, plansAMovedAddress } = require('./lib/plan-artifacts.cjs');
 
 const MODES = ['registry', 'local'];
 
@@ -182,16 +183,28 @@ async function main() {
 
     // ---------------------------------------------------------- tools and configuration
     if (managed) {
-      await recorder.check('managed tools: the installed version plans and installs the reviewed tools (Ubuntu 24.04)', () => {
+      await recorder.check('managed tools: the installed version plans and installs the reviewed tools (Ubuntu 24.04)', async () => {
         const plan = vsift(['setup', 'plan', '--profile', 'desktop', '--json']);
         const document = parseJson(plan);
         expect(document.data.managed_install === 'catalogue_accepted', `managed_install ${document.data.managed_install}`);
         const planFile = path.join(work, 'plan.json');
         fs.writeFileSync(planFile, plan.stdout);
-        const result = vsift(['setup', 'install', '--plan', planFile, '--accept-plan', document.data.plan_digest, '--json'], { timeout: 1_800_000 });
+        // L-254: a published version that pins an address that has since moved refuses its own
+        // download, and it cannot be changed. This scenario needs it only as the starting point,
+        // so it is handed the files its own plan names, fetched here and checked against that plan
+        // (lib/plan-artifacts.cjs). The redirect policy of VSift is not involved.
+        const extra = [];
+        let handedOver = '';
+        if (plansAMovedAddress(document.data.actions)) {
+          const folder = path.join(work, 'plan-files');
+          const notes = await fetchPlanArtifacts({ actions: document.data.actions, folder });
+          extra.push('--artifact-dir', folder);
+          handedOver = ` (the plan's files fetched here and passed with --artifact-dir, L-254: ${notes.join('; ')})`;
+        }
+        const result = vsift(['setup', 'install', '--plan', planFile, '--accept-plan', document.data.plan_digest, ...extra, '--json'], { timeout: 1_800_000 });
         const installedDocument = parseJson(result);
         expect(result.status === 0 && installedDocument.status === 'complete', `${describeStatus(result)} ${JSON.stringify(installedDocument.error)}`);
-        return installedDocument.data.components.map((component) => `${component.component} ${component.status}`).join(', ');
+        return `${installedDocument.data.components.map((component) => `${component.component} ${component.status}`).join(', ')}${handedOver}`;
       });
     } else {
       await recorder.check('tools: ffmpeg and ffprobe registered with setup configure', () => {

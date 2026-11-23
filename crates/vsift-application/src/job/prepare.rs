@@ -367,7 +367,15 @@ where
             });
         }
         JobState::Queued | JobState::Interrupted => {
-            if let Some(mode) = owner.record().request.mode()
+            let mode = owner.record().request.mode();
+            if mode == Some(JobMode::Queued) && owner.record().state == JobState::Interrupted {
+                // The wait for the turn is the queued one: recorded `queued`,
+                // `job cancel` and `session close` stop it as they stop any
+                // job that waits (Fable review C-4). It keeps its attempts and
+                // checkpoints, and continues where it stopped.
+                owner.apply(&JobChange::Requeue, now())?;
+            }
+            if let Some(mode) = mode
                 && let Err(stop) = streams.before_start(mode).await
             {
                 return settle_wait(&mut owner, stop, now()).map(PrepareOutcome::Stopped);

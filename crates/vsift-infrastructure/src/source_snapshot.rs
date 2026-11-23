@@ -15,10 +15,19 @@ use vsift_application::{
     ForegroundSessionPort, NeverCancelled, OpenSessionError, SessionStorageError, SourcePathFault,
     SpecialFileKind, StageCancellation, StagedSessionSource,
 };
-use vsift_domain::{OperationId, SessionId, SourceId};
+use vsift_domain::{
+    DirectLinkOrigin, DownloadLimits, OperationId, PageOrigin, PageVideoId, SessionId,
+    SourceFetchReason, SourceId, SourceLink, SourceOrigin,
+};
 
 use crate::{
-    FilesystemSessionStore, SessionReadHold, SessionRegistration, source_binding::FileIdentity,
+    FilesystemSessionStore, PageTools, SessionReadHold, SessionRegistration,
+    link_acquisition::{
+        LinkFetchError, LinkRoute, LinkSink, LinkSinkError, MAGIC_BYTES, check_page_link,
+        fetch_link,
+    },
+    page_acquisition::{PageFailure, PageFolders, PageRoom, acquire_page, sha256_of},
+    source_binding::FileIdentity,
 };
 
 /// Maximum source size in the accepted desktop profile.
@@ -81,6 +90,9 @@ pub struct SourceSnapshot {
     directory: Dir,
     directory_path: PathBuf,
     _hold: SessionReadHold,
+    /// Where the bytes were fetched from, for a source fetched from a link
+    /// (ADR 0028); `None` for a local file's copy and a reopened copy.
+    origin: Option<SourceOrigin>,
     /// Test seam: how many times this copy's bytes were read whole to verify
     /// them (issue #148 requires exactly two per bound operation).
     #[cfg(test)]
@@ -258,6 +270,7 @@ impl SourceSnapshot {
             directory,
             directory_path,
             _hold: hold,
+            origin: None,
             #[cfg(test)]
             full_hashes: std::sync::atomic::AtomicU32::new(0),
         })
@@ -317,6 +330,7 @@ impl SourceSnapshot {
                 directory: committed.directory,
                 directory_path: committed.directory_path,
                 _hold: committed.hold,
+                origin: None,
                 #[cfg(test)]
                 full_hashes: std::sync::atomic::AtomicU32::new(1),
             },
@@ -383,6 +397,7 @@ impl SourceSnapshot {
                 directory: committed.directory,
                 directory_path: committed.directory_path,
                 _hold: committed.hold,
+                origin: None,
                 #[cfg(test)]
                 full_hashes: std::sync::atomic::AtomicU32::new(u32::from(hashed)),
             },
@@ -411,6 +426,14 @@ impl SourceSnapshot {
 
     pub(crate) fn file_name(&self) -> &str {
         &self.file_name
+    }
+
+    /// Where the bytes were fetched from (ADR 0028); `None` for a local
+    /// file's copy and for a committed copy reopened later (the session's
+    /// status holds the origin).
+    #[must_use]
+    pub const fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
     }
 
     /// Size of the staged source.
@@ -498,6 +521,395 @@ impl StagedSessionSource for SourceSnapshot {
     fn source_bytes(&self) -> u64 {
         self.bytes()
     }
+
+    fn origin(&self) -> Option<&SourceOrigin> {
+        self.origin.as_ref()
+    }
+}
+
+/// The session's source slot while a link's body arrives: the private file
+/// `source-<operation>.media`, created new in the session's artifact
+/// directory, hashed as it is written. A slot that is dropped before
+/// [`SourceSlot::finish`] removes its file, so a failed, refused or
+/// cancelled fetch leaves nothing.
+struct SourceSlot<'store> {
+    store: &'store FilesystemSessionStore,
+    session_id: SessionId,
+    file_name: String,
+    directory: Dir,
+    directory_path: PathBuf,
+    hold: Option<SessionReadHold>,
+    output: Option<File>,
+    hash: Sha256,
+    header: [u8; MAGIC_BYTES],
+    header_count: usize,
+    total: u64,
+    /// The free space the link test route simulates, if any.
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    simulated_free_space: Option<u64>,
+    _admission: crate::FilesystemAdmissionPermit,
+}
+
+impl<'store> SourceSlot<'store> {
+    /// Creates the slot under a weight-1 admission, as a copy takes one.
+    fn create(
+        store: &'store FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+    ) -> Result<Self, SourceError> {
+        let admission = store.try_admit(1).map_err(SourceError::Storage)?;
+        let (directory, directory_path, hold) = store
+            .source_artifact_directory(session_id)
+            .map_err(SourceError::Storage)?;
+        let file_name = format!("source-{}.media", operation_id.as_str());
+        let mut options = OpenOptions::new();
+        options
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .follow(FollowSymlinks::No);
+        let output = directory
+            .open_with(&file_name, &options)
+            .map_err(SourceError::Io)?;
+        Ok(Self {
+            store,
+            session_id: session_id.clone(),
+            file_name,
+            directory,
+            directory_path,
+            hold: Some(hold),
+            output: Some(output),
+            hash: Sha256::new(),
+            header: [0; MAGIC_BYTES],
+            header_count: 0,
+            total: 0,
+            #[cfg(any(test, feature = "install-test-hooks"))]
+            simulated_free_space: None,
+            _admission: admission,
+        })
+    }
+
+    /// Syncs the file and makes it the session's snapshot, with `origin`.
+    fn finish(mut self, origin: SourceOrigin) -> Result<SourceSnapshot, SourceError> {
+        let output = self.output.take().ok_or(SourceError::IdentityFailure)?;
+        output.sync_all().map_err(SourceError::Io)?;
+        drop(output);
+        let container = container_of(self.header.get(..self.header_count).unwrap_or_default())
+            .ok_or(SourceError::UnsupportedContainer)?;
+        let hash = std::mem::take(&mut self.hash);
+        let mut digest = String::with_capacity(64);
+        for byte in hash.finalize() {
+            digest.push(char::from(HEX[usize::from(byte >> 4)]));
+            digest.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+        let id = SourceId::from_sha256(&digest).map_err(|_| SourceError::IdentityFailure)?;
+        let hold = self.hold.take().ok_or(SourceError::IdentityFailure)?;
+        let directory = self.directory.try_clone().map_err(SourceError::Io)?;
+        Ok(SourceSnapshot {
+            session_id: self.session_id.clone(),
+            id,
+            bytes: self.total,
+            container,
+            file_name: self.file_name.clone(),
+            directory,
+            directory_path: self.directory_path.clone(),
+            _hold: hold,
+            origin: Some(origin),
+            #[cfg(test)]
+            full_hashes: std::sync::atomic::AtomicU32::new(0),
+        })
+    }
+}
+
+impl Drop for SourceSlot<'_> {
+    fn drop(&mut self) {
+        if let Some(output) = self.output.take() {
+            drop(output);
+            let _ = self.directory.remove_file(&self.file_name);
+        }
+    }
+}
+
+impl LinkSink for SourceSlot<'_> {
+    fn append(&mut self, chunk: &[u8]) -> Result<(), LinkSinkError> {
+        let output = self
+            .output
+            .as_mut()
+            .ok_or_else(|| LinkSinkError::Write(std::io::Error::other("the slot is closed")))?;
+        output.write_all(chunk).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::StorageFull {
+                LinkSinkError::NoRoom
+            } else {
+                LinkSinkError::Write(error)
+            }
+        })?;
+        self.hash.update(chunk);
+        let take = (MAGIC_BYTES - self.header_count).min(chunk.len());
+        self.header[self.header_count..self.header_count + take].copy_from_slice(&chunk[..take]);
+        self.header_count += take;
+        self.total = self
+            .total
+            .saturating_add(u64::try_from(chunk.len()).unwrap_or(u64::MAX));
+        Ok(())
+    }
+
+    fn header(&self) -> Option<&[u8]> {
+        (self.header_count == MAGIC_BYTES).then_some(&self.header[..])
+    }
+
+    fn ensure_room(&self, bytes: u64) -> Result<(), LinkSinkError> {
+        // Best effort, as for a copy: only a read that shows the space is
+        // short refuses; anything else is found by a failed write.
+        #[cfg(any(test, feature = "install-test-hooks"))]
+        if let Some(available) = self.simulated_free_space {
+            let left = available.saturating_sub(self.total);
+            return match crate::filesystem_session_store::decide_copy_room(Some(left), bytes) {
+                Err(SessionStorageError::CapacityExhausted) => Err(LinkSinkError::NoRoom),
+                _ => Ok(()),
+            };
+        }
+        match self.store.ensure_room_for_copy(bytes) {
+            Err(SessionStorageError::CapacityExhausted) => Err(LinkSinkError::NoRoom),
+            _ => Ok(()),
+        }
+    }
+}
+
+impl SourceSnapshot {
+    /// Fetches one video from a direct HTTPS link into the session's source
+    /// slot (ADR 0028, #407) and makes it the session's snapshot, recording
+    /// its origin. A fetch that fails, is refused or is cancelled removes its
+    /// partial file.
+    ///
+    /// # Errors
+    ///
+    /// [`SourceError::Fetch`] with the typed reason, [`SourceError::Cancelled`],
+    /// [`SourceError::NoRoom`], or the slot's storage or I/O failure.
+    pub async fn stage_link(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        Self::stage_link_through(
+            store,
+            session_id,
+            operation_id,
+            (link, limits),
+            &LinkRoute::production(),
+            cancellation,
+        )
+        .await
+    }
+
+    /// [`Self::stage_link`] through a local HTTPS test server
+    /// (`install-test-hooks`, development builds only).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::stage_link`].
+    #[cfg(any(test, feature = "install-test-hooks"))]
+    pub async fn stage_link_for_tests(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        route: crate::LinkTestRoute,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        Self::stage_link_through(
+            store,
+            session_id,
+            operation_id,
+            (link, limits),
+            &LinkRoute::test(route),
+            cancellation,
+        )
+        .await
+    }
+
+    pub(crate) async fn stage_link_through(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        route: &LinkRoute,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        let mut slot = SourceSlot::create(store, session_id, operation_id)?;
+        #[cfg(any(test, feature = "install-test-hooks"))]
+        {
+            slot.simulated_free_space = route.free_space();
+        }
+        let fetched = fetch_link(link, limits, route, &mut slot, cancellation)
+            .await
+            .map_err(|error| match error {
+                LinkFetchError::Refused(reason) => SourceError::Fetch(reason),
+                LinkFetchError::Cancelled => SourceError::Cancelled,
+                LinkFetchError::Sink(LinkSinkError::NoRoom) => SourceError::NoRoom,
+                LinkFetchError::Sink(LinkSinkError::Write(error)) => SourceError::Io(error),
+            })?;
+        let retrieved_at = vsift_application::Clock::now_unix_seconds(&crate::SystemClock)
+            .map_err(|_| SourceError::IdentityFailure)?;
+        let origin = DirectLinkOrigin::new(
+            fetched.link_sha256,
+            (fetched.requested_host, fetched.final_host),
+            fetched.redirects,
+            fetched.address_check,
+            retrieved_at,
+            fetched.bytes,
+        )
+        .map_err(|_| SourceError::Fetch(SourceFetchReason::Size))?;
+        slot.finish(SourceOrigin::DirectHttps(origin))
+    }
+
+    /// Fetches the video of a public page through yt-dlp into the session's
+    /// source slot (ADR 0028 section 4.7, #409) and makes it the session's
+    /// snapshot. Everything yt-dlp wrote is in a private work folder removed
+    /// here, whatever the outcome; the slot is removed unless this succeeds.
+    ///
+    /// # Errors
+    ///
+    /// [`SourceError::Fetch`] with the typed reason, [`SourceError::Cancelled`],
+    /// [`SourceError::NoRoom`], or a storage or I/O failure.
+    pub async fn stage_page(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        tools: &PageTools,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        Self::stage_page_through(
+            store,
+            session_id,
+            operation_id,
+            (link, limits),
+            (tools, &LinkRoute::production()),
+            cancellation,
+        )
+        .await
+    }
+
+    pub(crate) async fn stage_page_through(
+        store: &FilesystemSessionStore,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        (link, limits): (&SourceLink, DownloadLimits),
+        (tools, route): (&PageTools, &LinkRoute),
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self, SourceError> {
+        let (url, link_sha256) = check_page_link(link, route).map_err(SourceError::Fetch)?;
+        let _admission = store.try_admit(1).map_err(SourceError::Storage)?;
+        let (directory, directory_path, hold) = store
+            .source_artifact_directory(session_id)
+            .map_err(SourceError::Storage)?;
+        let work = store
+            .staging_work_directory(session_id)
+            .map_err(SourceError::Storage)?;
+        let (home, output) = (work.path().join("home"), work.path().join("output"));
+        std::fs::create_dir(&home).map_err(SourceError::Io)?;
+        std::fs::create_dir(&output).map_err(SourceError::Io)?;
+        let file_name = format!("source-{}.media", operation_id.as_str());
+        let slot = directory_path.join(&file_name);
+        let folders = PageFolders {
+            home: &home,
+            output: &output,
+            slot: &slot,
+        };
+        let acquired = acquire_page(
+            &url,
+            limits,
+            tools,
+            folders,
+            (&StoreRoom(store), cancellation),
+        )
+        .await
+        .map_err(|failure| match failure {
+            PageFailure::Refused(reason) => SourceError::Fetch(reason),
+            PageFailure::Cancelled => SourceError::Cancelled,
+            PageFailure::NoRoom => SourceError::NoRoom,
+        });
+        let staged = acquired.and_then(|acquired| {
+            let mut options = OpenOptions::new();
+            options.read(true).follow(FollowSymlinks::No);
+            let mut file = directory
+                .open_with(&file_name, &options)
+                .map_err(SourceError::Io)?;
+            let (id, bytes, container) =
+                copy_bounded(&mut file, &mut std::io::sink(), cancellation).map_err(|error| {
+                    match error {
+                        SourceError::UnsupportedContainer => {
+                            SourceError::Fetch(SourceFetchReason::NotAVideo)
+                        }
+                        other => other,
+                    }
+                })?;
+            let origin = page_origin(acquired, link_sha256, tools, bytes)?;
+            Ok((id, bytes, container, origin))
+        });
+        let (id, bytes, container, origin) = match staged {
+            Ok(staged) => staged,
+            Err(error) => {
+                let _ = directory.remove_file(&file_name);
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            session_id: session_id.clone(),
+            id,
+            bytes,
+            container,
+            file_name,
+            directory,
+            directory_path,
+            _hold: hold,
+            origin: Some(origin),
+            #[cfg(test)]
+            full_hashes: std::sync::atomic::AtomicU32::new(0),
+        })
+    }
+}
+
+/// The record of a fetched page.
+fn page_origin(
+    acquired: crate::page_acquisition::AcquiredPage,
+    link_sha256: vsift_domain::Sha256Hex,
+    tools: &PageTools,
+    bytes: u64,
+) -> Result<SourceOrigin, SourceError> {
+    let retrieved_at = vsift_application::Clock::now_unix_seconds(&crate::SystemClock)
+        .map_err(|_| SourceError::IdentityFailure)?;
+    let video = acquired.video;
+    let digest = sha256_of(&video.video_id).ok_or(SourceError::IdentityFailure)?;
+    let video_id = PageVideoId::recorded(&video.video_id, digest, video.public);
+    PageOrigin::new(
+        (video.provider, video_id),
+        link_sha256,
+        (
+            tools.yt_dlp.record.clone(),
+            tools.js_runtime.as_ref().map(|tool| tool.record.clone()),
+        ),
+        acquired.through_proxy,
+        retrieved_at,
+        (bytes, acquired.join),
+    )
+    .map(|page| SourceOrigin::PlatformPage(Box::new(page)))
+    .map_err(|_| SourceError::Fetch(SourceFetchReason::Size))
+}
+
+/// The store's free-space rule, for a page's fetch: best effort, as for a
+/// copy; only a read that shows the space is short refuses.
+struct StoreRoom<'store>(&'store FilesystemSessionStore);
+
+impl PageRoom for StoreRoom<'_> {
+    fn has_room_for(&self, bytes: u64) -> bool {
+        !matches!(
+            self.0.ensure_room_for_copy(bytes),
+            Err(SessionStorageError::CapacityExhausted)
+        )
+    }
 }
 
 impl ForegroundSessionPort for FilesystemSessionStore {
@@ -529,18 +941,33 @@ impl ForegroundSessionPort for FilesystemSessionStore {
             .map_err(open_session_error)
     }
 
+    async fn stage_link(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        link: &SourceLink,
+        limits: DownloadLimits,
+        cancellation: &dyn StageCancellation,
+    ) -> Result<Self::Snapshot, OpenSessionError> {
+        SourceSnapshot::stage_link(self, session_id, operation_id, (link, limits), cancellation)
+            .await
+            .map_err(open_session_error)
+    }
+
     fn activate(
         &self,
         snapshot: &Self::Snapshot,
         operation_id: &OperationId,
         expected_generation: vsift_domain::StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
     ) -> Result<vsift_domain::StorageGeneration, OpenSessionError> {
-        self.activate_source(
+        self.activate_anchored_source(
             snapshot,
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
         )
         .map_err(OpenSessionError::Storage)
     }
@@ -551,6 +978,7 @@ impl ForegroundSessionPort for FilesystemSessionStore {
         operation_id: &OperationId,
         expected_generation: vsift_domain::StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &vsift_domain::TimeAnchors,
         transcript: &vsift_domain::TranscriptRevision,
     ) -> Result<vsift_domain::StorageGeneration, OpenSessionError> {
         let record =
@@ -560,6 +988,7 @@ impl ForegroundSessionPort for FilesystemSessionStore {
             operation_id,
             expected_generation,
             now_unix_seconds,
+            time_anchors,
             vsift_domain::SessionArtifactKind::TranscriptRecord,
             &record,
         )
@@ -587,6 +1016,8 @@ pub(crate) fn open_session_error(error: SourceError) -> OpenSessionError {
             OpenSessionError::SourceNoRoom
         }
         SourceError::Io(_) => OpenSessionError::SourceIo,
+        SourceError::NoRoom => OpenSessionError::SourceNoRoom,
+        SourceError::Fetch(reason) => OpenSessionError::SourceFetch(reason),
         SourceError::Path(fault) => OpenSessionError::SourcePath(fault),
         SourceError::SymbolicLink => OpenSessionError::SourceIsLink,
         SourceError::SpecialFile(kind) => OpenSessionError::SourceSpecialFile(kind),
@@ -858,7 +1289,7 @@ fn read_identified(
 }
 
 /// The admitted container family a file's first bytes announce.
-fn container_of(header: &[u8]) -> Option<SourceContainer> {
+pub(crate) fn container_of(header: &[u8]) -> Option<SourceContainer> {
     if header.get(4..8) == Some(b"ftyp".as_slice()) {
         Some(SourceContainer::IsoMedia)
     } else if header.get(..4) == Some([0x1a, 0x45, 0xdf, 0xa3].as_slice()) {
@@ -1123,6 +1554,11 @@ pub enum SourceError {
     Path(SourcePathFault),
     /// The caller cancelled the copy; its partial private file was removed.
     Cancelled,
+    /// A link could not be fetched (ADR 0028), for the typed reason; the
+    /// partial private file was removed.
+    Fetch(SourceFetchReason),
+    /// The session root's filesystem has no room for the fetched body.
+    NoRoom,
 }
 
 impl fmt::Display for SourceError {
@@ -1149,6 +1585,8 @@ impl fmt::Display for SourceError {
             Self::Io(_) => formatter.write_str("source filesystem operation failed"),
             Self::Path(fault) => fault.fmt(formatter),
             Self::Cancelled => formatter.write_str("source staging was cancelled"),
+            Self::Fetch(reason) => reason.fmt(formatter),
+            Self::NoRoom => formatter.write_str("the session root has no room for the source"),
         }
     }
 }

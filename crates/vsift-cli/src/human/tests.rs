@@ -34,7 +34,7 @@ fn repository(relative: &str) -> PathBuf {
         .join(relative)
 }
 
-fn example(name: &str) -> Result<Value, Box<dyn std::error::Error>> {
+pub(crate) fn example(name: &str) -> Result<Value, Box<dyn std::error::Error>> {
     Ok(serde_json::from_str(&fs::read_to_string(repository(
         &format!("schemas/v1/examples/{name}"),
     ))?)?)
@@ -173,6 +173,18 @@ fn many_unplaced_stretches_are_cut_where_a_search_cuts_its_ranges() -> TestResul
 fn frozen_examples_render_as_readable_text() -> TestResult {
     for (command, file, snapshot) in [
         (CommandName::Ingest, "ingest.transcript.json", "ingest"),
+        (CommandName::Ingest, "ingest.url.json", "ingest-url"),
+        (CommandName::Ingest, "ingest.page.json", "ingest-page"),
+        (
+            CommandName::Ingest,
+            "ingest.time-anchor.json",
+            "ingest-time-anchor",
+        ),
+        (
+            CommandName::TranscriptGet,
+            "transcript-get.clock-time.json",
+            "transcript-get-clock-time",
+        ),
         (
             CommandName::TranscriptGet,
             "transcript-get.json",
@@ -413,6 +425,76 @@ fn tools_found_without_a_model_is_not_ready_to_transcribe() -> TestResult {
         "{text}"
     );
     assert!(!text.contains("Setup complete"), "{text}");
+    Ok(())
+}
+
+/// The optional rows' words on a host that is and is not offered managed
+/// installs, whatever machine runs the test (the host-dependent snapshot
+/// replaces these rows with placeholders): an extra the host cannot offer is
+/// "not available", one it offers but nothing has installed is "none added".
+#[test]
+fn every_optional_row_reads_not_available_or_none_added_by_host() -> TestResult {
+    let row_of =
+        |capability: vsift::OptionalCapability| -> Result<[String; 3], Box<dyn std::error::Error>> {
+            let diagnosis = RuntimeDiagnosis {
+                readiness: RuntimeReadiness::Degraded,
+                dependencies: RuntimeDependency::ALL
+                    .into_iter()
+                    .map(|dependency| DependencyStatus {
+                        dependency,
+                        state: DependencyState::Missing,
+                    })
+                    .collect(),
+            };
+            let optional: Vec<_> = vsift::OptionalComponent::ALL
+                .into_iter()
+                .map(|component| (component, capability.clone()))
+                .collect();
+            let rendered = setup_check(
+                &diagnosis,
+                LocalAsrSetupStatus {
+                    model: LocalAsrModelStatus::NotSelected,
+                    verification: LocalAsrCheckOutcome::NotRun(
+                        LocalAsrNotRunReason::MediaToolsUnavailable,
+                    ),
+                },
+                crate::setup::ManagedSetupFacts {
+                    availability: ManagedPlanAvailability::Qualified,
+                    by_dependency: [ManagedPlanAvailability::Qualified; 3],
+                    updates: &[],
+                    optional: &optional,
+                },
+                ExecutionProfile::Desktop,
+                &|_| DependencyLookup::FilteredPath,
+            )
+            .map_err(|_| "the setup check is too large to render")?;
+            let text = rendered.as_str().to_owned();
+            let find = |part: &str| -> Result<String, Box<dyn std::error::Error>> {
+                text.lines()
+                    .find(|line| line.trim_start().starts_with(part))
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("no {part} row in {text}").into())
+            };
+            Ok([
+                find("Web videos")?,
+                find("On-screen text")?,
+                find("Speaker labels")?,
+            ])
+        };
+    for (capability, status) in [
+        (vsift::OptionalCapability::Unavailable, "not available"),
+        (vsift::OptionalCapability::NotInstalled, "none added"),
+    ] {
+        for row in row_of(capability)? {
+            assert!(row.contains(status), "{status}: {row}");
+        }
+    }
+    let speakers = row_of(vsift::OptionalCapability::Unavailable)?;
+    assert!(
+        speakers[2].contains("sherpa-onnx") && speakers[2].contains("labelling who speaks"),
+        "{}",
+        speakers[2]
+    );
     Ok(())
 }
 
@@ -741,7 +823,7 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
                 RuntimeReadiness::Degraded,
                 ManagedPlanAvailability::Qualified,
             )?;
-            assert!(text.contains("Next: vsift setup plan"), "{text}");
+            assert!(text.ends_with("Next: vsift setup\n"), "{text}");
             assert!(!text.contains("--timeout-seconds"), "{text}");
         }
     }
@@ -751,20 +833,16 @@ fn each_tool_and_each_kind_of_timeout_gets_the_timeout_advice_only() -> TestResu
 /// Issue #396: the advice for a missing tool once said "install or locate
 /// this trusted tool", and a cold agent read "locate" as leave to search the
 /// machine. The readable view is for a person and says none of that: for each
-/// tool, missing or found and failing, it sends them to `setup plan` where
-/// `VSift` can install the tool, and otherwise to the one `setup configure`
-/// command that registers it, with the installation guide above. The advice
-/// for an assistant stays in the JSON.
+/// tool, missing or found and failing, it sends them to the setup door (ADR
+/// 0036), with the installation guide above where `VSift` cannot install the
+/// tool; the door then gives the one `setup configure` command
+/// (`door::tests`). The advice for an assistant stays in the JSON.
 #[test]
 fn a_missing_tool_is_sent_to_the_plan_or_to_its_one_registration_command() -> TestResult {
     let available = || DependencyState::Available {
         version: String::from("fixture 1"),
     };
-    for (index, (dependency, placeholder)) in RuntimeDependency::ALL
-        .into_iter()
-        .zip(["ffmpeg", "ffprobe", "whisper-cli"])
-        .enumerate()
-    {
+    for (index, dependency) in RuntimeDependency::ALL.into_iter().enumerate() {
         let identifier = dependency.identifier();
         for state in [
             DependencyState::Missing,
@@ -780,14 +858,12 @@ fn a_missing_tool_is_sent_to_the_plan_or_to_its_one_registration_command() -> Te
                 states[index] = state.clone();
                 let text = setup_check_text(states, RuntimeReadiness::Degraded, managed_install)?;
                 let expected_end = if managed_install == ManagedPlanAvailability::Qualified {
-                    "\nNext: vsift setup plan   (shows what VSift can install for you, and changes nothing)\n".to_owned()
+                    "\nNext: vsift setup\n"
                 } else {
-                    format!(
-                        "\nThe installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md\nNext: vsift setup configure {identifier} --executable <full-path-to-{placeholder}>\n"
-                    )
+                    "\nThe installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md\nNext: vsift setup\n"
                 };
                 assert!(
-                    text.ends_with(&expected_end),
+                    text.ends_with(expected_end),
                     "{identifier} {managed_install:?}: {text}"
                 );
                 for agent_only in [
@@ -948,7 +1024,7 @@ fn setup_install_lists_each_component_and_its_outcome() -> TestResult {
     assert!(
         complete
             .as_str()
-            .contains("[activated] ffmpeg_ffprobe n9.0.1-11-ge47273f4d9-20260831")
+            .contains("[activated] ffmpeg_ffprobe n9.0.2-39-g7adfbe40dc-20261031")
     );
 
     let failed_value = example("setup-install.failed.json")?;
@@ -998,7 +1074,7 @@ fn setup_lifecycle_results_render() -> TestResult {
             CommandName::SetupList,
             "setup-list.json",
             "setup-list",
-            "  [verified] n9.0.1-11-ge47273f4d9-20260831, selected",
+            "  [verified] n9.0.2-39-g7adfbe40dc-20261031, selected",
         ),
         (
             CommandName::SetupRollback,
@@ -1062,6 +1138,10 @@ fn frozen_failures_render_as_message_remediation_and_command() -> TestResult {
         ("storage-not-private.json", "failure-storage-not-private"),
         ("session-root-unowned.json", "failure-session-root-unowned"),
         ("ingest-copy-too-slow.json", "failure-ingest-copy-too-slow"),
+        (
+            "ingest-url-address-refused.json",
+            "failure-ingest-url-address-refused",
+        ),
         (
             "ingest-source-not-found.json",
             "failure-ingest-source-not-found",
@@ -1237,6 +1317,13 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "candidates.partial.json",
             "candidates-partial",
         ),
+        (CommandName::Changes, "changes.json", "changes"),
+        (
+            CommandName::Changes,
+            "changes.partial.json",
+            "changes-partial",
+        ),
+        (CommandName::Changes, "changes.crops.json", "changes-crops"),
         (CommandName::FrameGet, "frame-get.json", "frame-get"),
         (
             CommandName::FrameNeighbours,
@@ -1270,8 +1357,15 @@ fn part_two_examples_render_as_readable_text() -> TestResult {
             "job-run-replayed",
         ),
         (CommandName::JobBatch, "job-batch.json", "job-batch"),
+        (CommandName::Clocks, "clocks.json", "clocks"),
+        (CommandName::Clocks, "clocks.not-run.json", "clocks-not-run"),
         (CommandName::Ocr, "ocr.json", "ocr"),
         (CommandName::Ocr, "ocr.partial.json", "ocr-partial"),
+        (
+            CommandName::BundleSearch,
+            "bundle-search.json",
+            "bundle-search",
+        ),
         (CommandName::OcrSearch, "ocr-search.json", "ocr-search"),
         (
             CommandName::OcrSearch,
@@ -1351,14 +1445,17 @@ fn only_setup_check_and_rejected_command_lines_have_no_result_renderer() -> Test
         CommandName::SetupRemove,
         CommandName::SetupRepair,
         CommandName::Candidates,
+        CommandName::Changes,
         CommandName::FrameGet,
         CommandName::Crop,
         CommandName::Audio,
         CommandName::JobStatus,
         CommandName::JobRun,
         CommandName::JobBatch,
+        CommandName::Clocks,
         CommandName::Ocr,
         CommandName::OcrSearch,
+        CommandName::BundleSearch,
     ] {
         assert!(render_value(command, &json!({})).is_err(), "{command:?}");
     }

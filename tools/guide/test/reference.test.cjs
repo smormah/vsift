@@ -6,16 +6,19 @@ const help = require('../lib/help.cjs');
 const jsonReference = require('../lib/json-reference.cjs');
 
 const ROOT_HELP = [
-  'Sift technical video into agent-ready evidence',
+  'VSift: point it at a video',
   '',
-  'Usage: vsift.exe [OPTIONS] [COMMAND]',
+  'Usage: vsift <video> [--output <folder>]',
+  '       vsift <command> [options]',
   '',
-  'Commands:',
+  'Get started',
   '  setup   Inspect and manage the local `VSift` setup',
+  '',
+  'Explore a video step by step',
   '  ingest  Prepare a local video investigation session',
   '',
   'Options:',
-  '      --json  Emit one versioned JSON terminal result',
+  '      --json  Machine-readable output: one versioned JSON result',
   '',
   'A typical investigation (every command takes --json):',
   '  1. vsift setup check --json',
@@ -40,7 +43,7 @@ test('a help text loses the program name of the machine, trailing spaces and ext
   assert.equal(text, 'Inspect dependencies\n\nUsage: vsift setup check [OPTIONS]');
 });
 
-test('the commands a help lists are read from its Commands section, without the implicit help command', () => {
+test('the commands a help lists are read from its Commands section or its groups, without the implicit help command', () => {
   assert.deepEqual(help.listedCommands(help.normaliseHelp(ROOT_HELP)), [
     { name: 'setup', summary: 'Inspect and manage the local `VSift` setup' },
     { name: 'ingest', summary: 'Prepare a local video investigation session' },
@@ -49,6 +52,7 @@ test('the commands a help lists are read from its Commands section, without the 
     { name: 'check', summary: 'Inspect dependencies without changing the machine' },
   ]);
   assert.deepEqual(help.listedCommands('No commands here'), []);
+  assert.deepEqual(help.listedCommands('Usage: vsift x\n\nArguments:\n  <A>  A thing'), []);
 });
 
 test('a candidate and its stable release are the same release, so the stable cut changes no guide page', () => {

@@ -155,8 +155,12 @@ impl StreamData {
 }
 
 /// Remediation when a run was cancelled by its caller (Ctrl-C or
-/// `SIGTERM`) before it committed: the job is interrupted and resumable.
-pub const JOB_INTERRUPTED_REMEDIATION: &str = "The run was cancelled before it committed, so nothing was committed; affected_ids names its session and job. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again.";
+/// `SIGTERM`) before it finished: the job is interrupted and resumable.
+///
+/// Since ADR 0033 a run publishes its revision as it goes, so what it had
+/// published is committed and stays readable; only a run that published
+/// nothing committed nothing.
+pub const JOB_INTERRUPTED_REMEDIATION: &str = "The run was cancelled before it finished; affected_ids names its session and job. What it had already published stays committed and citable: its revision stays open, and transcript get reads it, listing the rest as pending. A run that published nothing committed nothing. The job is interrupted and keeps the chunks it finished: resume it with job resume <job>, or run the same command again.";
 
 /// Remediation when a job's session is closed or expired.
 ///
@@ -176,7 +180,11 @@ pub const UNKNOWN_JOB_REMEDIATION: &str = "No session of this session root holds
 pub const JOB_NOT_RESUMABLE_REMEDIATION: &str = "The job has ended (succeeded, failed or cancelled), so job resume has nothing to continue; affected_ids names it. Read its result with job status, or run the original command again to start it afresh.";
 
 /// Remediation when a job was cancelled through `job cancel` while it ran.
-pub const JOB_CANCELLED_REMEDIATION: &str = "The job was cancelled with job cancel before it committed; affected_ids names it. Nothing was committed and its checkpoints were removed. Run the original command again to start it afresh.";
+///
+/// Since ADR 0033 a cancelled run that had published part of its revision
+/// seals it as `stopped`, keeping every published segment; only a run that
+/// published nothing committed nothing.
+pub const JOB_CANCELLED_REMEDIATION: &str = "The job was cancelled with job cancel before it finished; affected_ids names it. What it had already published stays: its revision is sealed as stopped, and transcript get reads it, listing the part it did not reach as untranscribed. A run that published nothing committed nothing. A cancelled job cannot be resumed: transcribe the rest with transcript retranscribe and --from and --to, or run the original command again to start it afresh.";
 
 /// A job as the host read it, in plain values.
 #[derive(Clone, Copy, Debug)]

@@ -942,6 +942,23 @@ fn cleanup_removes_jobs_and_their_index_and_retain_never_exports_them() -> TestR
     }
     fs::remove_dir_all(&bundle)?;
 
+    // The record of a `watch` run's claimed names goes with its session.
+    vsift_application::WatchClaimLog::record_watch_claim(
+        &store,
+        &session_id()?,
+        &job,
+        &vsift_application::ClaimedOutputs {
+            transcript: fs::canonicalize(&fixture.path)?.join("meeting.txt"),
+            subtitles: fs::canonicalize(&fixture.path)?.join("meeting.srt"),
+            folder: fs::canonicalize(&fixture.path)?.join("meeting-vsift"),
+        },
+    )?;
+    assert!(
+        job_path(&fixture, &job)
+            .join("watch-outputs.json")
+            .is_file()
+    );
+
     let status = store.session_status(&session_id()?)?;
     store.close_session(
         &session_id()?,
@@ -954,6 +971,70 @@ fn cleanup_removes_jobs_and_their_index_and_retain_never_exports_them() -> TestR
     );
     assert_eq!(store.job_session(&job)?, None);
     assert!(!session_path(&fixture).exists());
+    Ok(())
+}
+
+/// The names a `watch` run claimed read back exactly from the record beside
+/// its job (ADR 0037 section 8). A damaged, forged or newer record is never a
+/// claim, and the job's own reads, which predate the record, ignore it.
+#[test]
+fn a_watch_claim_reads_back_strictly_and_older_reads_ignore_it() -> TestResult {
+    use vsift_application::{ClaimedOutputs, WatchClaimLog};
+    use vsift_domain::JobMode;
+
+    let fixture = Fixture::new()?;
+    let store = open_session(&fixture, StoredDurability::Ephemeral)?;
+    let session = session_id()?;
+    let spec = vsift_application::prepare_spec(&session, JobMode::Watched, None, None)?;
+    let job = spec.job_id.clone();
+    drop(store.open_or_create(&spec, now()?)?);
+    let folder = fs::canonicalize(&fixture.path)?;
+    let claimed = ClaimedOutputs {
+        transcript: folder.join("meeting.txt"),
+        subtitles: folder.join("meeting.srt"),
+        folder: folder.join("meeting-vsift"),
+    };
+    store.record_watch_claim(&session, &job, &claimed)?;
+    assert_eq!(store.watch_claims(&session)?, vec![(job.clone(), claimed)]);
+    assert_eq!(store.session_jobs(&session)?.len(), 1);
+    assert!(store.job(&session, &job)?.is_some());
+
+    let path = job_path(&fixture, &job).join("watch-outputs.json");
+    let original = fs::read_to_string(&path)?;
+    for (label, damaged) in [
+        (
+            "a newer record",
+            original.replace("\"schema_version\":1", "\"schema_version\":99"),
+        ),
+        (
+            "another format",
+            original.replace("vsift.watch_claim", "vsift.other"),
+        ),
+        (
+            "a name with a folder",
+            original.replace("\"meeting.srt\"", "\"../meeting.srt\""),
+        ),
+        (
+            "a relative folder",
+            original.replace(
+                &format!(
+                    "\"folder\":{}",
+                    serde_json::to_string(folder.to_str().ok_or("unicode")?)?
+                ),
+                "\"folder\":\"relative\"",
+            ),
+        ),
+        (
+            "an unknown field",
+            original.replacen('{', "{\"extra\":1,", 1),
+        ),
+        ("not a record", "not json".to_owned()),
+    ] {
+        assert_ne!(damaged, original, "{label}: the record was changed");
+        fs::write(&path, damaged)?;
+        assert!(store.watch_claims(&session)?.is_empty(), "{label}");
+        assert_eq!(store.session_jobs(&session)?.len(), 1, "{label}");
+    }
     Ok(())
 }
 

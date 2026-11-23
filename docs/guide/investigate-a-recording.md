@@ -14,8 +14,10 @@ image itself, so you can show someone else exactly where you got it.
 - For the words, either a transcript you already have (then use
   [use an existing transcript](use-an-existing-transcript.md) and skip step 3) or **speech
   recognition**: whisper.cpp and a speech model. `vsift setup check` says whether they are in place. On
-  Ubuntu 24.04 VSift can install them after you accept a plan; on Windows and macOS you install and
-  register them yourself ([install guide, section 5.2](../operations/install.md#52-windows-macos-and-other-machines-bring-your-own)).
+  Ubuntu 24.04, and since `0.3.0` on Windows x64 and macOS on Apple silicon
+  ([install guide, section 5.1b](../operations/install.md#51b-windows-x64-and-macos-on-apple-silicon-since-030)),
+  VSift can install them after you accept a plan; anywhere you can also install and register them yourself
+  ([section 5.2](../operations/install.md#52-any-machine-bring-your-own)).
 
 The loop is always the same: **ask a small question, list the candidates, look at one thing, note its id.**
 Ask for small pages (20 results at a time) and look at a handful of pictures; that is almost always enough,
@@ -37,6 +39,18 @@ Lifecycle: ephemeral, expires 2026-10-05T17:21:00Z
 `ingest` only copies the video into a private session and records what it is. It does not look inside.
 Your original is never changed, and the path can be relative. Keep the session id: every later command
 takes it as `<session>`.
+
+**A video from a link (from 0.3.0).** If you have a direct `https://` link to the video file (it ends in
+`.mp4`, `.mov`, `.mkv` or `.webm`, or downloads a video when you open it), give it instead of the path:
+`vsift ingest --url <link>`. VSift downloads it once into the session, with a limit of 4 GiB and 30 minutes
+(`--max-download-bytes` and `--max-download-seconds` raise them), and everything after that works offline, as
+for a file. `--url -` reads the link from standard input, so a link with a private token stays out of your shell
+history. The link is never stored: the session keeps only the host and a fingerprint of it (`Fetched from:`).
+
+A public video page, such as a video site's page, needs an optional part first, and each site's terms apply:
+[online videos](online-videos.md) says what to add and how. If a download fails, the answer says why
+([troubleshooting](troubleshooting.md#source_fetch_failed-a-video-link-could-not-be-fetched)), and your local files are
+not affected.
 
 ## 2. Check the video opens
 
@@ -193,6 +207,50 @@ analysed, those lines say which part and why.
 
 To narrow down, ask for a smaller window with `--from` and `--to`, or page with `--limit` and `--cursor`
 as for the transcript.
+
+### What changed between two times
+
+New in 0.3.0: `vsift changes` answers "what changed on the screen between these two times?" in one call. For
+each moment the screen changed in the range it gives the exact frame before and the exact frame after (ordinary
+evidence, the same as `frame get` gives), and the rectangles where those two frames differ, largest first:
+
+```console
+$ vsift changes <session> --from 0 --to 14000000
+Screen changes of session ses_4ad48dbf…
+…
+Changes on this page: 2
+
+00:00:07.000000  change  regions 0,64 1440x772
+  Changed after 00:00:06.500000 and at or before 00:00:07.000000
+  Before: evd_7a5a3538… at 00:00:06.500000
+  File (image/png):
+    …/artifact-a68ff83a….png
+  After: evd_e76b0ba2… at 00:00:07.000000
+  File (image/png):
+    …/artifact-ec355f93….png
+
+00:00:10.000000  change  regions 1008,384 400x48; 224,608 32x16
+  …
+
+Cite a change by its before and after evidence ids (evd_...), never by its change id: those frames are what a reader checks.
+```
+
+A region is written `x,y widthxheight` in the frame's own pixels, the same space `crop --rect` takes, so you can
+cut it out of either frame. Open the two files to see what changed; VSift says only which pixels differ, never what
+the change means. Small differences are not reported: a pixel counts when a colour moves 32 levels or more, and a
+16 by 16 tile only with 4 such pixels, so a moving cursor or one changed character may not show. The index looks at
+the screen twice a second, so something that came and went in under half a second may be missing.
+
+Add `--crops` to have VSift cut each change's two largest regions out of both frames for you, at full size, so
+you can look at just the part that changed. Each crop is evidence of its own (`evd_…`, with its file), listed under
+its change; a call makes at most 16, and the rest of the regions keep their rectangle. The second region is often a
+few pixels of compression noise around the first, so its crop can look almost empty.
+
+A page holds 10 changes (`--limit` takes 1 to 20); page on with `--cursor` as for `candidates`. Every frame takes
+room in the session (it holds 384 evidence items, about 95 to 190 changes with their frames, or about 50 to 110
+with `--crops` on every page). When the session is
+full the page stops, says `session_evidence_budget`, and tells you the `--from` to continue with in a new session.
+When you report a change, cite its two `evd_` ids.
 
 ## 6. Look closer
 

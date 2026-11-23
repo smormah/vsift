@@ -183,6 +183,7 @@ impl Harness {
             limit: None,
             cursor: None,
             since: None,
+            speaker: None,
         }
     }
 }
@@ -256,6 +257,7 @@ async fn seed(
         &OperationId::parse("op_2222222222222222")?,
         StorageGeneration::INITIAL,
         T0,
+        &vsift_domain::TimeAnchors::none(),
         &revision,
     )?;
     Ok(session_id)
@@ -344,6 +346,7 @@ async fn queries_are_rejected_before_any_read() -> TestResult {
                 limit: None,
                 cursor: None,
                 since: None,
+                speaker: None,
             })
             .err()
             .ok_or("a rejected query was accepted")?;

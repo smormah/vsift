@@ -1,0 +1,29 @@
+Screen changes of session ses_0123456789abcdef0123456789abcdef
+Index: vix_5278827a5eb80d85a88983f2e69a5cba (revision 1, r0-visual-v1, video length 00:02:30.000000)
+Range: 00:00:00.000000 to 00:02:30.000000 (--from 0 --to 150000000)
+Searched: 00:00:00.000000 to 00:02:30.000000 (--from 0 --to 150000000)
+Analysed:
+  00:00:00.000000 to 00:01:00.000000 (--from 0 --to 60000000)
+Not covered (no changes listed there):
+  00:01:00.000000 to 00:02:00.000000 (--from 60000000 --to 120000000): undecodable
+  00:02:00.000000 to 00:02:30.000000 (--from 120000000 --to 150000000): not_analyzed
+Regions: screen-change-regions-v1 (a pixel differs when a colour moves 32 levels or more; a 16x16 tile differs with 4 such pixels)
+Changes on this page: 1
+
+00:00:05.000000  change  regions 400,260 640x380
+  Changed after 00:00:04.500000 and at or before 00:00:05.000000
+  Before: evd_19f028101801357fd7d3e82e830615e3 at 00:00:04.500000
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-8ba126c63bb4441558622336853364d3653e6dfbceef02abc6fc2509b830c5fb.png
+  After: evd_b1c55458c576b1ef8a331e41bc416154 at 00:00:05.000000
+  File (image/png):
+    /vsift-session-root/sessions/ses_0123456789abcdef0123456789abcdef/artifacts/artifact-c503b56c9c080ec908bc33ad80e25543c48ea6f978499d51c0396f5ba4bbd504.png
+
+Cite a change by its before and after evidence ids (evd_...), never by its change id: those frames are what a reader checks.
+Stopped early: session_evidence_budget (the changes above are complete; their frames are committed evidence)
+Continue with a new call without --cursor, from --from 9000000 (session_evidence_budget)
+
+Status: partial (the warnings below say what is missing)
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Part of the requested range has no screen changes listed because it is not analysed yet, could not be analysed, or changed more often than the index keeps; coverage lists each gap and its reason. Run changes again without --cursor (from resume.from_us when it is set) to continue not_analyzed and deadline_exceeded parts.
+Warning: The page stopped before its last change (partial_reason says why): the changes listed are complete and their frames are committed evidence, but there is no next_cursor. resume.from_us is where a fresh call without --cursor continues; after session_evidence_budget, keep this session with session retain and continue in a new session opened with ingest.

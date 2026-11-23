@@ -1,8 +1,8 @@
 use vsift_domain::{ListingTail, MAX_LISTED_FRAMES, MediaTime, TimeRange};
 
 use super::{
-    FrameListingWindow, ObservedFrameTime, parse_ashowinfo_start, parse_frame_listing,
-    parse_frame_showinfo,
+    FrameListingWindow, LISTING_OVERRUN_SLACK, ObservedFrameTime, parse_ashowinfo_start,
+    parse_frame_listing, parse_frame_showinfo,
 };
 use crate::MediaError;
 
@@ -160,7 +160,38 @@ fn a_listing_beyond_its_frame_bound_is_cut_before_the_first_unlisted_frame() -> 
     assert_eq!(listing.tail(), ListingTail::MoreMayFollow);
     // A 40 fps stream: the 1,201st frame is at 30 s.
     assert_eq!(listing.covered().end().as_micros(), 30_000_000);
-    text.push_str(&frame_line(MAX_LISTED_FRAMES + 1, pts));
-    assert!(parse_frame_listing(text.as_bytes(), &window).is_err());
+    Ok(())
+}
+
+/// `FFmpeg` applies `-frames:v` after the filter graph, so frames queued behind
+/// the limit are logged as well (one more on `FFmpeg` 9.0, measured on a
+/// 30 fps, 70 s file). That is a dense range to cut, never a damaged file.
+#[test]
+fn frames_logged_after_the_listing_limit_are_cut_not_rejected() -> TestResult {
+    let window = f01_window(0, 60_000_000, ListingTail::EndOfStream)?;
+    let logged = |count: usize| {
+        let mut text = String::from(CONFIG);
+        for number in 0..count {
+            text.push_str(&frame_line(
+                number,
+                i64::try_from(number * 256).unwrap_or(0),
+            ));
+        }
+        text
+    };
+    for count in [
+        MAX_LISTED_FRAMES + 2,
+        MAX_LISTED_FRAMES + 1 + LISTING_OVERRUN_SLACK,
+    ] {
+        let listing = parse_frame_listing(logged(count).as_bytes(), &window)?;
+        assert_eq!(listing.frames().len(), MAX_LISTED_FRAMES, "{count} lines");
+        assert_eq!(listing.tail(), ListingTail::MoreMayFollow);
+        assert_eq!(listing.covered().end().as_micros(), 30_000_000);
+    }
+    let beyond = logged(MAX_LISTED_FRAMES + 2 + LISTING_OVERRUN_SLACK);
+    assert!(matches!(
+        parse_frame_listing(beyond.as_bytes(), &window),
+        Err(MediaError::InvalidDecodedOutput)
+    ));
     Ok(())
 }

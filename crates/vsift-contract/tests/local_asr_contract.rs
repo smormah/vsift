@@ -379,6 +379,7 @@ fn page_response(revision: &TranscriptRevision) -> Built<OperationResponse<Value
             next_cursor: None,
             coverage: &coverage,
             growth: vsift_contract::ReadGrowth::default(),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         }),
     )?
     .with_lifecycle(LifecycleResponse::ephemeral(EXPIRES_AT.to_owned())))
@@ -511,6 +512,7 @@ fn a_spliced_revision_streams_schema_valid_evidence() -> TestResult {
             next_cursor: None,
             coverage: &coverage,
             growth: vsift_contract::ReadGrowth::default(),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -546,6 +548,7 @@ fn local_asr_revisions_and_segments_satisfy_their_schemas() -> TestResult {
             next_cursor: None,
             coverage: &coverage,
             growth: vsift_contract::ReadGrowth::default(),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         }),
     )?)?;
     let item = &response["data"]["items"][0];
@@ -1692,6 +1695,21 @@ fn every_job_state_and_reason_is_schema_valid() -> TestResult {
     // `session renew`, which would be refused.
     assert!(!JOB_SESSION_NOT_OPEN_REMEDIATION.contains("session renew"));
     assert!(JOB_SESSION_NOT_OPEN_REMEDIATION.contains("ingest"));
+    // Fable review P-1: since ADR 0033 a stopped run keeps what it had
+    // published (an open revision after Ctrl-C, a stopped one after job
+    // cancel), so neither text may tell an agent that nothing was committed
+    // without saying which run that is, and each names how to read the rest.
+    for prose in [JOB_INTERRUPTED_REMEDIATION, JOB_CANCELLED_REMEDIATION] {
+        assert!(prose.contains("What it had already published stays"));
+        assert!(prose.contains("A run that published nothing committed nothing."));
+        assert!(prose.contains("transcript get"));
+        assert!(!prose.contains("so nothing was committed"));
+        assert!(!prose.contains("Nothing was committed"));
+    }
+    assert!(JOB_INTERRUPTED_REMEDIATION.contains("its revision stays open"));
+    assert!(JOB_INTERRUPTED_REMEDIATION.contains("job resume <job>"));
+    assert!(JOB_CANCELLED_REMEDIATION.contains("sealed as stopped"));
+    assert!(!JOB_CANCELLED_REMEDIATION.contains("job resume"));
     Ok(())
 }
 
@@ -1708,6 +1726,8 @@ fn session_status_lists_jobs_additively() -> TestResult {
         artifact_bytes: 3,
         generation: 3,
         expires_at: EXPIRES_AT.to_owned(),
+        time_anchor: None,
+        origin: None,
     };
     let plain = serde_json::to_value(&status)?;
     let job = SessionJobData::new(
@@ -1796,6 +1816,7 @@ fn get(revision: &TranscriptRevision, window: TimeRange, view: ResultView) -> Bu
             next_cursor: None,
             coverage: &coverage,
             growth: vsift_contract::ReadGrowth::default(),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         view,
@@ -2005,6 +2026,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             next_cursor: None,
             coverage: &coverage,
             growth: vsift_contract::ReadGrowth::default(),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?;
@@ -2044,6 +2066,7 @@ async fn a_read_over_a_gap_is_partial_and_names_the_gap() -> TestResult {
             coverage: &search_coverage,
             screen_text: None,
             growth: vsift_contract::ReadGrowth::default(),
+            time_anchors: &vsift_domain::TimeAnchors::none(),
         },
         LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
     )?)?;
@@ -2381,6 +2404,7 @@ async fn a_read_and_a_search_agree_on_every_range() -> TestResult {
                 coverage: &coverage,
                 screen_text: None,
                 growth: vsift_contract::ReadGrowth::default(),
+                time_anchors: &vsift_domain::TimeAnchors::none(),
             },
             LifecycleResponse::ephemeral(EXPIRES_AT.to_owned()),
         )?)?;

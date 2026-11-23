@@ -91,7 +91,7 @@ enum Stage {
 }
 
 /// Walks one image at the start of `bytes` and returns its length.
-fn image_length(bytes: &[u8], dimensions: FrameDimensions) -> Result<usize, MediaError> {
+pub(super) fn image_length(bytes: &[u8], dimensions: FrameDimensions) -> Result<usize, MediaError> {
     if !bytes.starts_with(SIGNATURE) {
         return Err(invalid());
     }
@@ -127,7 +127,7 @@ fn image_length(bytes: &[u8], dimensions: FrameDimensions) -> Result<usize, Medi
 }
 
 /// Reads the chunk at `offset`: its type, its data and the offset after it.
-fn chunk_at(bytes: &[u8], offset: usize) -> Result<([u8; 4], &[u8], usize), MediaError> {
+pub(super) fn chunk_at(bytes: &[u8], offset: usize) -> Result<([u8; 4], &[u8], usize), MediaError> {
     let header = bytes
         .get(offset..offset.checked_add(8).ok_or_else(invalid)?)
         .ok_or_else(invalid)?;

@@ -145,7 +145,8 @@ impl JobStatusReport {
     /// see (reconciled, or its state replaced by [`observed_state`]).
     fn from_view(view: JobView, state: JobState, session_open: bool) -> Self {
         let live = view.liveness == JobLiveness::Owned;
-        let resumability = Resumability::of(state, view.liveness, session_open);
+        let resumability =
+            Resumability::of(state, view.liveness, session_open, view.record.attempt);
         let record = view.record;
         let range = record.request.range();
         let succeeded = record
@@ -679,7 +680,7 @@ impl Engine {
                     kind: view.record.request.kind(),
                     state,
                     live: view.liveness == JobLiveness::Owned,
-                    resumability: Resumability::of(state, view.liveness, open),
+                    resumability: Resumability::of(state, view.liveness, open, view.record.attempt),
                 })
             })
             .collect::<Result<Vec<_>, EngineError>>()?;

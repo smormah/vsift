@@ -152,8 +152,11 @@ pub(crate) fn parse_failure(error: &clap::Error, arguments: &[OsString]) -> Comm
     let mut grammar = Cli::command();
     grammar.build();
     let command = deepest_command(&grammar, arguments);
+    // clap's `help` has no help of its own: the words after it name commands.
+    let mut command_path = command.path;
+    command_path.retain(|word| word != "help");
     let location = GrammarLocation {
-        command_path: command.path,
+        command_path,
         argument: blamed_argument(error, ContextKind::InvalidArg, command.definition),
         other_argument: blamed_argument(error, ContextKind::PriorArg, command.definition),
         comma_separated: comma_separated_argument(command.definition),

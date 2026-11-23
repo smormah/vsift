@@ -54,7 +54,7 @@ pub(crate) struct ManagedModel {
 /// opened, verified and held at most once, on first use.
 pub(crate) struct ManagedLookup<'engine> {
     engine: &'engine Engine,
-    opened: [Opened; 5],
+    opened: [Opened; 9],
 }
 
 /// What one lookup found for one component.
@@ -75,6 +75,10 @@ const fn slot(component: ManagedComponent) -> usize {
         ManagedComponent::WhisperModel => 2,
         ManagedComponent::JsRuntimeDeno => 3,
         ManagedComponent::YtDlp => 4,
+        ManagedComponent::OcrRunner => 5,
+        ManagedComponent::SpeakerDiarizer => 6,
+        ManagedComponent::SpeakerSegmentationModel => 7,
+        ManagedComponent::SpeakerEmbeddingModel => 8,
     }
 }
 
@@ -93,6 +97,11 @@ impl ManagedLookup<'_> {
         }
     }
 
+    /// The selected version of `component`, verified and held.
+    pub(crate) fn held(&mut self, component: ManagedComponent) -> Option<ManagedRuntimeHold> {
+        self.hold(component)
+    }
+
     /// The managed executable for `dependency`, carrying its version's hold.
     pub(crate) fn executable(
         &mut self,
@@ -101,6 +110,45 @@ impl ManagedLookup<'_> {
         let (component, role) = managed_source(dependency);
         let hold = self.hold(component)?;
         TrustedExecutable::managed_in(&hold, &managed_executable_name(role)?).ok()
+    }
+
+    /// The managed OCR runner, carrying its version's hold; the runtime
+    /// library and the models it finds beside itself are that version's
+    /// own verified files (ADR 0032).
+    pub(crate) fn ocr_runner(&mut self) -> Option<TrustedExecutable> {
+        let hold = self.hold(ManagedComponent::OcrRunner)?;
+        TrustedExecutable::managed_in(
+            &hold,
+            &managed_executable_name(ManagedRuntimeRole::OcrRunner)?,
+        )
+        .ok()
+    }
+
+    /// The managed speaker-diarization tool, carrying its version's hold; the
+    /// ONNX Runtime library it loads from beside itself is that version's own
+    /// verified file (ADR 0032).
+    pub(crate) fn speaker_tool(&mut self) -> Option<TrustedExecutable> {
+        let hold = self.hold(ManagedComponent::SpeakerDiarizer)?;
+        TrustedExecutable::managed_in(
+            &hold,
+            &managed_executable_name(ManagedRuntimeRole::SpeakerDiarizer)?,
+        )
+        .ok()
+    }
+
+    /// One managed speaker model's file (`component` is the segmentation or
+    /// the embedding model), with its version's hold.
+    pub(crate) fn speaker_model(&mut self, component: ManagedComponent) -> Option<ManagedModel> {
+        let hold = self.hold(component)?;
+        let path = {
+            let runtime = hold.runtime();
+            let names = runtime.reviewed_names();
+            let [name] = names.as_slice() else {
+                return None;
+            };
+            runtime.file_path(name)?
+        };
+        Some(ManagedModel { path, hold })
     }
 
     /// The version selected for `component` now, when it is verified.
@@ -153,6 +201,10 @@ impl Engine {
         ManagedLookup {
             engine: self,
             opened: [
+                Opened::NotYet,
+                Opened::NotYet,
+                Opened::NotYet,
+                Opened::NotYet,
                 Opened::NotYet,
                 Opened::NotYet,
                 Opened::NotYet,

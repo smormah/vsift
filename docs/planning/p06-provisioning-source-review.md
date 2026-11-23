@@ -2,7 +2,11 @@
 
 Status: **Ubuntu 24.04 x86-64 catalogue and digest-bound compatibility policy
 accepted for read-only plans; compatibility execution, managed installation and
-complete P06 qualification remain open**.
+complete P06 qualification remain open** as of the dated sections below. **Later
+position (2026-11-01):** P06 closed on the scope that ADR 0015 narrowed it to (detect,
+select, verify and guide) and is complete in the [delivery ledger](delivery-ledger.json);
+managed installation moved to P13 and shipped. A statement below that something "remains
+open" describes its own date.
 The sections below record the source investigation as it stood at their dated
 checkpoints. They are not installation or D-01..D-10 implementation evidence. Reviewed
 protected-main predecessor: `777bc3e56788d43cd9a647dba54c287390c2998d`.

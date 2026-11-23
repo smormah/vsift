@@ -88,6 +88,11 @@ pub(super) struct CommitHooks<'a> {
     failing_at: Option<FaultPoint>,
     #[cfg(test)]
     trace: Option<&'a std::cell::RefCell<Vec<FsOp>>>,
+    /// Called each time the session's writer lock is found held, before the
+    /// wait for it goes on ([`super::take_writer_lock`]): a unit test
+    /// releases the lock there, the window the wait exists for. `None`
+    /// outside the unit tests.
+    writer_busy: Option<&'a dyn Fn()>,
     /// The crash campaign's negative control: skip the session directory
     /// synchronisation after the pointer rename.
     #[cfg(feature = "durability-campaign")]
@@ -104,10 +109,18 @@ impl CommitHooks<'_> {
             failing_at: None,
             #[cfg(test)]
             trace: None,
+            writer_busy: None,
             #[cfg(feature = "durability-campaign")]
             negative_control: std::env::var_os(NEGATIVE_CONTROL_VARIABLE)
                 .is_some_and(|value| value == "1"),
             lifetime: PhantomData,
+        }
+    }
+
+    /// The session's writer lock was just found held: the unit tests' seam.
+    pub(super) fn writer_busy(&self) {
+        if let Some(busy) = self.writer_busy {
+            busy();
         }
     }
 
@@ -133,6 +146,13 @@ impl<'a> CommitHooks<'a> {
     /// These hooks, also failing the commit with a storage error at `point`.
     pub(super) const fn failing(mut self, point: FaultPoint) -> Self {
         self.failing_at = Some(point);
+        self
+    }
+
+    /// These hooks, also calling `busy` each time the session's writer lock
+    /// is found held.
+    pub(super) const fn on_writer_busy(mut self, busy: &'a dyn Fn()) -> Self {
+        self.writer_busy = Some(busy);
         self
     }
 

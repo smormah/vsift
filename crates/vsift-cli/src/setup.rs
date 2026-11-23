@@ -7,9 +7,10 @@
 use std::{io::Write, path::Path};
 
 use vsift::{
-    Cancellation, Engine, FailureCode, LocalAsrSetupStatus, MANAGED_INSTALL_RETRY_AFTER_MS,
-    ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate, OptionalCapability,
-    OptionalComponent, ProgressObserver, RuntimeDependency, RuntimeDiagnosis, SetupInstallRequest,
+    Cancellation, CorePartSet, Engine, FailureCode, LocalAsrSetupStatus,
+    MANAGED_INSTALL_RETRY_AFTER_MS, ManagedPlanAvailability, ManagedRemovalTarget, ManagedUpdate,
+    OptionalCapability, OptionalComponent, ProgressObserver, RuntimeDependency, RuntimeDiagnosis,
+    SetupInstallRequest,
 };
 use vsift_contract::{
     CommandName, DependencyLookup, JsonLimits, OperationResponse, STALE_PLAN_REMEDIATION,
@@ -150,17 +151,32 @@ pub(crate) async fn install(
         &HostPolicy::local_r0(),
     )
     .map_err(|_| CommandFailure::from(FailureCode::InvalidArgument))?;
+    install_saved(
+        engine,
+        SetupInstallRequest {
+            saved_plan: saved,
+            accepted_digest: arguments.accept_plan,
+            artifact_directory: arguments.artifact_dir,
+            probe_timeout: config.probe_timeout,
+            parts: CorePartSet::ALL,
+        },
+        cancellation,
+        progress,
+    )
+    .await
+}
+
+/// Installs a saved plan accepted by its digest: the one install path,
+/// shared by `setup install` and the setup door (ADR 0036), which accepts
+/// the plan it showed by that plan's own digest.
+pub(crate) async fn install_saved(
+    engine: &Engine,
+    request: SetupInstallRequest,
+    cancellation: &Cancellation,
+    progress: ProgressObserver,
+) -> Result<OperationResponse<serde_json::Value>, CommandFailure> {
     let outcome = engine
-        .install_setup(
-            SetupInstallRequest {
-                saved_plan: saved,
-                accepted_digest: arguments.accept_plan,
-                artifact_directory: arguments.artifact_dir,
-                probe_timeout: config.probe_timeout,
-            },
-            cancellation,
-            progress,
-        )
+        .install_setup(request, cancellation, progress)
         .await?;
     let data = SetupInstallResponse::new(
         outcome.catalogue_revision().map(str::to_owned),

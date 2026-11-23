@@ -16,7 +16,8 @@ name: P14 scan reading
 #
 # The GitHub alerts (CodeQL, Dependabot, secret scanning) and the advisories of
 # the pinned actions and the native tools are read with read-only `gh api` calls
-# and public pages by the packet owner; they are in the written reading. This
+# and public pages by the packet owner; they are in the written reading. FFmpeg's
+# scope there includes the `mp4` and `matroska` muxers (ADR 0028 section 4.7). This
 # workflow reads, it never changes a setting or dismisses an alert. It cannot
 # publish anything: it has `contents: read` only and uses no secret.
 #

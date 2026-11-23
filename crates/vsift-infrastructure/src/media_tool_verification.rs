@@ -712,6 +712,7 @@ mod tests {
                 stream(0, MediaStreamKind::Video, Some((F01_WIDTH, F01_HEIGHT)))?,
                 stream(1, MediaStreamKind::Audio, None)?,
             ],
+            clock_tags: Vec::new(),
         })
     }
 

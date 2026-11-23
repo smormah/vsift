@@ -70,6 +70,11 @@
               }
             }
           ]
+        },
+        "recorded_at": {
+          "description": "When the recording started, as ingest --recorded-at takes it: RFC 3339, with an offset, Z, or no zone for a local time whose zone is unknown. Clock times need it or the file's own tags. Since 0.3.0 (ADR 0029 decision 20); a request without it keeps its digest.",
+          "type": "string",
+          "maxLength": 40
         }
       }
     },

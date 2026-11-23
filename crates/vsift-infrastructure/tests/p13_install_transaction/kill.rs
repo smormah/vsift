@@ -170,7 +170,6 @@ async fn install(store: &ManagedArtifactStore, base: &str, version: u8) -> TestR
             cancellation: ProcessCancellation::new(),
         },
         &guard,
-        &NoProgress,
     );
     let report = install_managed_components(&installer, &actions, &NoProgress).await;
     drop(installer);
@@ -1273,19 +1272,25 @@ fn wait_for(child: &mut Child, ready: impl Fn() -> bool, what: &str) -> TestResu
     Ok(())
 }
 
-/// The bytes of the first stage's artifact so far.
+/// The bytes of the largest stage's artifact so far: speech downloads beside
+/// video (ADR 0036 section 4), so the stalled download need not be the
+/// first stage.
 fn staged_artifact_bytes(root: &TestRoot) -> u64 {
     root.stages()
         .ok()
-        .and_then(|stages| stages.into_iter().next())
-        .and_then(|stage| fs::metadata(stage.join("artifact.pending")).ok())
-        .map_or(0, |metadata| metadata.len())
+        .into_iter()
+        .flatten()
+        .filter_map(|stage| fs::metadata(stage.join("artifact.pending")).ok())
+        .map(|metadata| metadata.len())
+        .max()
+        .unwrap_or(0)
 }
 
 /// D-03: a download killed by the operating system (`SIGKILL` on Unix,
-/// `TerminateProcess` on Windows) while its body stalls leaves one
-/// abandoned stage, nothing selected and a free guard; repair names the
-/// sweep; the next accepted install sweeps the stage and completes.
+/// `TerminateProcess` on Windows) while its body stalls leaves its
+/// abandoned stages (video's, and those of the speech downloads made beside
+/// it), nothing selected and a free guard; repair names the sweep; the next
+/// accepted install sweeps every stage and completes.
 #[tokio::test]
 async fn a_download_killed_by_the_operating_system_leaves_a_stage_the_next_install_sweeps()
 -> TestResult {
@@ -1323,7 +1328,8 @@ async fn a_download_killed_by_the_operating_system_leaves_a_stage_the_next_insta
         },
     ];
     let plan = assert_consistent(&root, &allowed, "killed download")?;
-    assert_eq!(Facts::observe(&root)?.stages, 1);
+    let stages = Facts::observe(&root)?.stages;
+    assert!((1..=3).contains(&stages), "{stages} stages");
     assert!(
         plan.findings
             .iter()
@@ -1332,7 +1338,10 @@ async fn a_download_killed_by_the_operating_system_leaves_a_stage_the_next_insta
 
     server.route(&format!("/{MEDIA_FILE}"), vec![Reply::Body(media)]);
     let done = install(&root.store()?, &server.base(), 1).await?;
-    assert_eq!(done.sweep.removed, 1, "the abandoned stage was not swept");
+    assert_eq!(
+        done.sweep.removed, stages,
+        "the abandoned stages were not swept"
+    );
     assert_eq!(done.statuses, ["activated"; 3]);
     assert_healthy(
         &root,

@@ -1,0 +1,234 @@
+name: Online links live
+
+# ADR 0028 (#407): `vsift ingest --url` against the internet, on a disposable
+# hosted runner, with public-domain NASA video only (the real-media set's RM09
+# on images-assets.nasa.gov and RM06 on the Internet Archive, pinned by size
+# and SHA-256, RM09's NASA page, which must be refused as a web page with no
+# yt-dlp set up, and RM06's Internet Archive page through a real managed yt-dlp
+# installed by the test into its own folder, ADR 0028 section 4.9).
+# A dispatch also sends that page through the pinned yt-dlp a user would supply
+# on Windows and macOS, and, when asked with `youtube`, tries one NASA video on
+# YouTube after everything else has passed. Neither runs on a pull request.
+# The ordinary tests never reach the network; this manual workflow is the one
+# place the fetch meets real servers. It needs no secret and no token, and
+# keeps no credentials from the checkout.
+#
+# Triggers: a manual dispatch, and a pull request that changes this workflow or
+# its test (so a change to the check is run once against the real servers).
+# `qualify` and `candidates` each run one job and skip the rest.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/online-links-live.yml
+      - crates/vsift-cli/tests/link_live.rs
+  workflow_dispatch:
+    inputs:
+      youtube:
+        description: Also try one NASA video on YouTube (once for a change to page fetching, and at each re-pin).
+        type: boolean
+        default: false
+      qualify:
+        description: Run the platform qualification (docs/operations/online-video-qualification.md) and keep its record as an artifact (once for a change to page fetching, and at each re-pin).
+        type: boolean
+        default: false
+      candidates:
+        description: Information phase only, nothing is downloaded. Up to eight public https video page links, separated by spaces; runs nothing else.
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: online-links-live-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  live:
+    name: Fetch public-domain NASA video (Ubuntu 24.04)
+    if: github.event_name != 'workflow_dispatch' || (inputs.candidates == '' && !inputs.qualify)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Show toolchain and host
+        run: |
+          rustup show active-toolchain
+          python3 -c "import platform, os; print(platform.platform(), os.cpu_count())"
+
+      - name: Fetch the pinned files, refuse a page, fetch a page (release build)
+        run: >-
+          cargo test --release --locked -p vsift-cli --test link_live --
+          --ignored --skip a_nasa_youtube_page --skip the_listed_videos --nocapture
+
+  # ADR 0028 section 4.6: a yt-dlp the user supplies is the only way to use
+  # public pages on Windows and macOS. The pinned publisher files (2026.08.19,
+  # the sizes and SHA-256 of ADR 0028 section 4.1) are fetched by the runner and
+  # size-checked here; the test registers them and checks the recorded digest.
+  # No runtime is registered, and this page needs none. The requests carry no
+  # credentials or personal details.
+  page-windows:
+    name: A public page through a user-supplied yt-dlp (Windows x64)
+    if: github.event_name == 'workflow_dispatch' && inputs.candidates == '' && !inputs.qualify
+    runs-on: windows-2025
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp.exe and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/yt-dlp.exe" \
+            "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp.exe")" -eq 17840399
+
+      - name: Fetch the page through it (release build)
+        run: |
+          VSIFT_LIVE_USER_YT_DLP="$(cygpath -w "$RUNNER_TEMP/yt-dlp.exe")"
+          export VSIFT_LIVE_USER_YT_DLP
+          cargo test --release --locked -p vsift-cli --test link_live \
+            a_public_page_is_fetched_through_a_registered_yt_dlp \
+            -- --ignored --exact --nocapture
+
+  page-macos:
+    name: A public page through a user-supplied yt-dlp (macOS arm64)
+    if: github.event_name == 'workflow_dispatch' && inputs.candidates == '' && !inputs.qualify
+    runs-on: macos-15
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp_macos and check its size
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "$RUNNER_TEMP/yt-dlp_macos" \
+            "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp_macos" | tr -d ' ')" -eq 37146048
+          chmod 755 "$RUNNER_TEMP/yt-dlp_macos"
+
+      - name: Fetch the page through it (release build)
+        run: |
+          export VSIFT_LIVE_USER_YT_DLP="$RUNNER_TEMP/yt-dlp_macos"
+          cargo test --release --locked -p vsift-cli --test link_live \
+            a_public_page_is_fetched_through_a_registered_yt_dlp \
+            -- --ignored --exact --nocapture
+
+  # ADR 0028 section 4.9, the planner's ruling on #561: dispatch-only, after the
+  # Generic and Internet Archive runs. A bot wall is expected from a hosted
+  # runner: the typed `bot_check` passes, and so does a real pair of streams
+  # joined. Anything else fails and goes to the planner with the evidence.
+  youtube:
+    name: One NASA video on YouTube (Ubuntu 24.04)
+    needs: [live, page-windows, page-macos]
+    if: github.event_name == 'workflow_dispatch' && inputs.youtube
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the page or meet the typed refusal (release build)
+        run: >-
+          cargo test --release --locked -p vsift-cli --test link_live
+          a_nasa_youtube_page_is_joined_or_refused_as_a_bot_check
+          -- --ignored --exact --nocapture
+
+  # #409's platform qualification, step 1: which sites serve a real pair of
+  # separate https audio and video streams to a hosted runner? The information
+  # phase only: the pinned yt-dlp reads each page with phase 1's selection and
+  # filter (ADR 0028 section 4.7), and nothing is downloaded. Each candidate is
+  # an https page the project may use (public domain or an open licence, named
+  # in docs/operations/online-video-qualification.md). No cookie, token or
+  # sign-in; a bot wall or a login wall is reported, never engineered round.
+  search:
+    name: Which sites serve a real pair of streams (information phase only)
+    if: github.event_name == 'workflow_dispatch' && inputs.candidates != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      CANDIDATES: ${{ inputs.candidates }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the pinned yt-dlp and check its size and digest
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2             --output "$RUNNER_TEMP/yt-dlp"             "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_linux"
+          test "$(wc -c < "$RUNNER_TEMP/yt-dlp")" -eq 40446224
+          echo "58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a  $RUNNER_TEMP/yt-dlp" | sha256sum --check
+          chmod 755 "$RUNNER_TEMP/yt-dlp"
+
+      - name: Check the search script
+        run: python3 -m unittest discover -s tools/online-video-qualification -p 'test_*.py'
+
+      - name: Read each candidate's information
+        run: python3 tools/online-video-qualification/search_formats.py "$RUNNER_TEMP/yt-dlp"
+
+  # #409's platform qualification, step 2: every page of the named list through
+  # the managed pair, and the record of what happened, kept as this run's
+  # artifact for 90 days. The record holds the tool versions, the date and each
+  # outcome, and no link. Only a pair joined counts as a real pair; a bot wall
+  # is a result, never something to get round.
+  qualification:
+    name: Platform qualification (Ubuntu 24.04)
+    if: github.event_name == 'workflow_dispatch' && inputs.qualify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch or meet the typed refusal for each listed page (release build)
+        run: |
+          VSIFT_QUALIFICATION_DATE="$(date -u +%Y-%m-%d)"
+          VSIFT_QUALIFICATION_RECORD="$RUNNER_TEMP/online-video-qualification-record.json"
+          export VSIFT_QUALIFICATION_DATE VSIFT_QUALIFICATION_RECORD
+          cargo test --release --locked -p vsift-cli --test link_live             the_listed_videos_are_fetched_or_refused_and_recorded             -- --ignored --exact --nocapture
+
+      - name: Show the record
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/online-video-qualification-record.json" ]; then
+            { echo '```json'; cat "$RUNNER_TEMP/online-video-qualification-record.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the record
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: online-video-qualification-record
+          path: ${{ runner.temp }}/online-video-qualification-record.json
+          if-no-files-found: warn
+          retention-days: 90

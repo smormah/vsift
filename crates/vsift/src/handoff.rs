@@ -1,16 +1,25 @@
-//! Reading one session's identities for `handoff check --session` (P13 PR 5).
+//! Reading one session's identities for `handoff check --session` (P13 PR 5)
+//! and for `handoff skeleton` (ADR 0038).
 
 use vsift_application::SessionStorageError;
-use vsift_contract::{HandoffEvidenceKind, HandoffSessionGap, HandoffSessionRecords};
-use vsift_domain::{EvidenceSubject, SessionId, SessionPhase};
+use vsift_contract::{
+    ClockItemPosition, HandoffEvidenceKind, HandoffSessionGap, HandoffSessionRecords,
+    HandoffSkeletonFacts, HandoffTranscriptBasis,
+};
+use vsift_domain::{CoverageBasis, EvidenceSubject, SearchCoverage, SessionId, SessionPhase};
 
-use crate::{engine::Engine, error::EngineError};
+use crate::{
+    engine::Engine,
+    error::{EngineError, SessionRootError},
+    sessions::published_status,
+};
 
 /// What a session offers a handoff check.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HandoffSessionLookup {
     /// The session is open: every transcript segment of every committed
-    /// revision, and every committed evidence item with its kind.
+    /// revision, every committed evidence item with its kind, where each lies
+    /// on the timeline, and the session's anchors now.
     Open(HandoffSessionRecords),
     /// The session's records cannot be read now.
     Unavailable(HandoffSessionGap),
@@ -55,10 +64,15 @@ impl Engine {
             ));
         }
         let mut records = HandoffSessionRecords::new();
+        records.set_time_anchors(status.time_anchors().clone());
         let read = store
             .visit_transcript_revisions(session_id, now, |revision| {
                 for segment in revision.segments() {
                     records.add_segment(segment.id().as_str());
+                    records.add_position(
+                        segment.id().as_str(),
+                        ClockItemPosition::Range(segment.range()),
+                    );
                 }
             })
             .and_then(|()| store.read_evidence_records(session_id, now));
@@ -80,14 +94,73 @@ impl Engine {
         };
         for record in inventory.records() {
             for item in record.items() {
-                let kind = match item.subject() {
-                    EvidenceSubject::Frame(_) => HandoffEvidenceKind::Frame,
-                    EvidenceSubject::Crop { .. } => HandoffEvidenceKind::Crop,
-                    EvidenceSubject::Audio { .. } => HandoffEvidenceKind::Audio,
+                let (kind, position) = match item.subject() {
+                    EvidenceSubject::Frame(frame) => (
+                        HandoffEvidenceKind::Frame,
+                        ClockItemPosition::Point(frame.time),
+                    ),
+                    EvidenceSubject::Crop { frame, .. } => (
+                        HandoffEvidenceKind::Crop,
+                        ClockItemPosition::Point(frame.time),
+                    ),
+                    EvidenceSubject::Audio {
+                        range,
+                        actual_start,
+                        ..
+                    } => (
+                        HandoffEvidenceKind::Audio,
+                        ClockItemPosition::RangeWithPoint(*range, *actual_start),
+                    ),
                 };
                 records.add_evidence(item.id().as_str(), kind);
+                records.add_position(item.id().as_str(), position);
             }
         }
         Ok(HandoffSessionLookup::Open(records))
+    }
+}
+
+impl Engine {
+    /// Reads, without renewing or writing anything, what a handoff skeleton
+    /// states about one open session: its identity, its source and how its
+    /// newest transcript revision was made (ADR 0038).
+    ///
+    /// The revision is the one a plain transcript read gives: while a
+    /// background transcription runs, its open revision (ADR 0033 D2), so the
+    /// skeleton names the revision the agent's reads cite.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the root or session is missing, the session is closed or
+    /// expired, or a committed record fails its integrity checks.
+    pub fn handoff_skeleton_facts(
+        &self,
+        session_id: &SessionId,
+    ) -> Result<HandoffSkeletonFacts, EngineError> {
+        let (store, now) = self.existing_store()?;
+        let store = store.ok_or(EngineError::SessionRoot(SessionRootError::Missing))?;
+        if let Some((revision, status)) = store.read_transcript(session_id, now)? {
+            let basis = match SearchCoverage::of(&revision, None).basis() {
+                CoverageBasis::SuppliedTranscript => HandoffTranscriptBasis::SuppliedTranscript,
+                CoverageBasis::LocalAsr => HandoffTranscriptBasis::LocalAsr,
+                CoverageBasis::Mixed => HandoffTranscriptBasis::Mixed,
+            };
+            return Ok(HandoffSkeletonFacts::new(
+                status.session_id().as_str().to_owned(),
+                status.source_id().as_str().to_owned(),
+                Some(revision.id().as_str().to_owned()),
+                basis,
+            ));
+        }
+        // No transcript: this read conflicts exactly as a transcript read
+        // does when the session is closed or expired.
+        store.read_evidence_records(session_id, now)?;
+        let status = published_status(&store, session_id)?;
+        Ok(HandoffSkeletonFacts::new(
+            status.session_id().as_str().to_owned(),
+            status.source_id().as_str().to_owned(),
+            None,
+            HandoffTranscriptBasis::None,
+        ))
     }
 }

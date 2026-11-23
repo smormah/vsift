@@ -2,7 +2,7 @@
 
 use cap_fs_ext::DirExt;
 use vsift_application::{PublishSessionGenerationRequest, SessionStorageError};
-use vsift_domain::{OperationId, SessionArtifactKind, SessionId, StorageGeneration};
+use vsift_domain::{OperationId, SessionArtifactKind, SessionId, StorageGeneration, TimeAnchors};
 
 use super::map_committed_io;
 use super::{
@@ -33,6 +33,29 @@ impl FilesystemSessionStore {
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
     ) -> Result<StorageGeneration, SessionStorageError> {
+        self.activate_anchored_source(
+            snapshot,
+            operation_id,
+            expected_generation,
+            now_unix_seconds,
+            &TimeAnchors::none(),
+        )
+    }
+
+    /// [`Self::activate_source`] that also stores the source's clock-time
+    /// anchors (ADR 0029) in the opening generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed source, conflict, capacity, or storage failure.
+    pub fn activate_anchored_source(
+        &self,
+        snapshot: &SourceSnapshot,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        now_unix_seconds: u64,
+        time_anchors: &TimeAnchors,
+    ) -> Result<StorageGeneration, SessionStorageError> {
         snapshot
             .verify()
             .map_err(|_| SessionStorageError::IntegrityFailure)?;
@@ -54,6 +77,8 @@ impl FilesystemSessionStore {
                 now: now_unix_seconds,
                 artifacts: Vec::new(),
                 lifetime: self.lifetime_policy(),
+                time_anchors: super::time_anchors::encode_time_anchors(time_anchors),
+                origin: snapshot.origin().map(super::origin::encode_origin),
             },
             LifetimeHold::Shared,
             &CommitHooks::new(),
@@ -61,8 +86,8 @@ impl FilesystemSessionStore {
         )
     }
 
-    /// Binds a verified source and publishes one evidence artifact in the same
-    /// generation.
+    /// Binds a verified source, stores its clock-time anchors and publishes
+    /// one evidence artifact in the same generation.
     ///
     /// The artifact is installed by digest in the session's artifact directory
     /// first, under the snapshot's shared lifetime hold; the generation that
@@ -73,12 +98,17 @@ impl FilesystemSessionStore {
     /// # Errors
     ///
     /// Returns a typed source, conflict, capacity, or storage failure.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the opening generation's every input is one explicit argument, as in activate_anchored_source"
+    )]
     pub fn activate_source_with_artifact(
         &self,
         snapshot: &SourceSnapshot,
         operation_id: &OperationId,
         expected_generation: StorageGeneration,
         now_unix_seconds: u64,
+        time_anchors: &TimeAnchors,
         kind: SessionArtifactKind,
         bytes: &[u8],
     ) -> Result<StorageGeneration, SessionStorageError> {
@@ -136,6 +166,8 @@ impl FilesystemSessionStore {
                         .map_err(|_| SessionStorageError::CapacityExhausted)?,
                 }],
                 lifetime: self.lifetime_policy(),
+                time_anchors: super::time_anchors::encode_time_anchors(time_anchors),
+                origin: snapshot.origin().map(super::origin::encode_origin),
             },
             LifetimeHold::Shared,
             &hooks,
@@ -232,7 +264,48 @@ impl FilesystemSessionStore {
         )
     }
 
-    /// Closes a session after claiming its exclusive lifetime lock.
+    /// Records what `clocks` found (ADR 0029 decision 18): the session's anchors
+    /// with those from the screen replaced, and its register of clocks. It waits
+    /// for no reader: a reader sees the generation before or the one after.
+    ///
+    /// # Errors
+    ///
+    /// Stale, closed or expired sessions conflict, contention is busy, and
+    /// anchors that change what the session opened with are refused.
+    pub fn publish_clocks(
+        &self,
+        session_id: &SessionId,
+        operation_id: &OperationId,
+        expected_generation: StorageGeneration,
+        anchors: &TimeAnchors,
+        clocks: &[vsift_domain::RegisteredClock],
+        now_unix_seconds: u64,
+    ) -> Result<StorageGeneration, SessionStorageError> {
+        self.revalidate_root()?;
+        let request = PublishSessionGenerationRequest::new(
+            session_id.clone(),
+            operation_id.clone(),
+            expected_generation,
+            vsift_domain::DurabilityRequirement::Ephemeral,
+        );
+        publish_generation_with_update(
+            &self.root,
+            self.admission_capacity,
+            &request,
+            LifecycleUpdate::SetClocks {
+                time_anchors: super::time_anchors::encode_time_anchors(anchors),
+                screen_clocks: super::time_anchors::encode_screen_clocks(clocks),
+                clock_segments: super::time_anchors::encode_clock_gaps(anchors.gaps()),
+                now: now_unix_seconds,
+            },
+            LifetimeHold::Shared,
+            &CommitHooks::new(),
+            Some(&self.verified_heads),
+        )
+    }
+
+    /// Closes a session after claiming its exclusive lifetime lock, then
+    /// removes its jobs' entries from the root's queue.
     ///
     /// # Errors
     ///
@@ -250,7 +323,7 @@ impl FilesystemSessionStore {
             expected_generation,
             vsift_domain::DurabilityRequirement::Ephemeral,
         );
-        publish_generation_with_update(
+        let closed = publish_generation_with_update(
             &self.root,
             self.admission_capacity,
             &request,
@@ -258,6 +331,10 @@ impl FilesystemSessionStore {
             LifetimeHold::Exclusive,
             &CommitHooks::new(),
             Some(&self.verified_heads),
-        )
+        )?;
+        // Its jobs can never run now: their queue entries go with the close,
+        // not when cleanup removes the session (Fable review C-5).
+        self.dequeue_session(session_id);
+        Ok(closed)
     }
 }

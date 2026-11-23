@@ -460,3 +460,69 @@ fn a_marker_another_remover_holds_is_busy_to_a_second_remover() -> TestResult {
     );
     Ok(())
 }
+
+/// The first regular file under `directory`, at any depth.
+#[cfg(windows)]
+fn a_file_under(directory: &std::path::Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let mut folders = vec![directory.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in fs::read_dir(&folder)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                folders.push(entry.path());
+            } else {
+                return Ok(entry.path());
+            }
+        }
+    }
+    Err("the folder holds no file".into())
+}
+
+/// #604: on Windows a file that another handle holds open without sharing
+/// deletion (a scanner, an indexer, a child process) cannot be deleted until
+/// that handle closes. When that meets the removal after it has renamed the
+/// session into quarantine, the operating system answers a sharing violation
+/// (os error 32), or, for the folder, "directory not empty" (os error 145),
+/// and both used to read as a storage failure (`Io`). The engine's bounded
+/// retry gives up at once on that, so a failed open left its registration
+/// listed as `initializing` (seen once on a hosted Windows runner, run
+/// 43046025085). The refusal is the holder's and goes away when it lets go,
+/// so it is `Busy`, nothing is removed, and once the handle closes the same
+/// call finishes the quarantine and the registration.
+#[cfg(windows)]
+#[test]
+fn a_file_held_open_in_the_quarantine_is_busy_and_then_removable() -> TestResult {
+    use std::os::windows::fs::OpenOptionsExt;
+    /// `FILE_SHARE_READ` alone: the holder lets others read, not delete.
+    const SHARE_READ_ONLY: u32 = 0x0000_0001;
+
+    let fixture = Fixture::new()?;
+    let (store, session) = registered(&fixture)?;
+    p10_tests::initialize_as(
+        &store,
+        super::StoredDurability::Ephemeral,
+        &super::commit::CommitHooks::new(),
+    )?;
+    let sessions = fixture.path.join(SESSIONS_DIRECTORY);
+    let quarantine = sessions.join(format!(".quarantine-{}", session.as_str()));
+    fs::rename(sessions.join(session.as_str()), &quarantine)?;
+    let holder = fs::OpenOptions::new()
+        .read(true)
+        .share_mode(SHARE_READ_ONLY)
+        .open(a_file_under(&quarantine)?)?;
+
+    assert_eq!(
+        store.abandon_unpublished_open(&session, &own()?, p10_tests::now()?),
+        Err(SessionStorageError::Busy)
+    );
+    assert_eq!(registrations(&store, &session)?, 1);
+
+    drop(holder);
+    assert_eq!(
+        store.abandon_unpublished_open(&session, &own()?, p10_tests::now()?)?,
+        CleanOutcome::Removed
+    );
+    assert!(!quarantine.exists());
+    assert_eq!(registrations(&store, &session)?, 0);
+    Ok(())
+}

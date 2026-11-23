@@ -16,15 +16,15 @@ use super::map_committed_io;
 use super::{
     ARTIFACTS_DIRECTORY, BundleManifest, BundleSourcePolicy, BundleStatus, ChainCheck,
     FilesystemSessionStore, MAX_SESSION_ARTIFACT_BYTES, MAX_SESSION_ARTIFACTS, SESSIONS_DIRECTORY,
-    StoredArtifact, StoredArtifactKind,
+    SessionStoreOpenError, StoredArtifact, StoredArtifactKind,
     chain::read_committed_manifest,
     copy_and_hash_bounded, create_regular_file, hash_bounded, map_open_error, map_storage_io,
     open_regular_file,
     publication::evidence_artifact_count,
     read_bounded_manifest,
     reads::{
-        read_evidence_artifact, read_screen_text_index_artifact, read_transcript_artifact,
-        read_visual_index_artifact,
+        read_evidence_artifact, read_screen_text_index_artifact, read_speaker_artifact,
+        read_transcript_artifact, read_visual_index_artifact,
     },
     root::{validate_platform_root_permissions, validate_root_selection, validate_same_object},
     sha256_hex,
@@ -32,7 +32,64 @@ use super::{
 };
 use crate::private_user_root::create_private_child;
 
+/// Why a bundle could not be written at a destination.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BundleDestinationRefusal {
+    /// Something exists at the name, a link included.
+    Taken,
+    /// A bundle's folder may not have that name on any system.
+    NameNotAllowed,
+    /// The path is not one a bundle can be at (a network path).
+    Unusable,
+    /// The folder refused the private directory, or could not keep it
+    /// private.
+    Refused(io::ErrorKind),
+}
+
 impl FilesystemSessionStore {
+    /// Checks, before any work, that [`Self::retain_bundle`] could create a
+    /// bundle at `output_path`.
+    ///
+    /// The real name is created privately, proved private and removed again:
+    /// one step that proves the name free and the folder able to hold a
+    /// private directory, with no second name to clean up. The name is not
+    /// held afterwards; `retain_bundle` creates it exclusively, so whatever
+    /// takes it meanwhile is never replaced.
+    ///
+    /// # Errors
+    ///
+    /// A [`BundleDestinationRefusal`], with nothing left at the name.
+    pub fn check_bundle_destination(output_path: &Path) -> Result<(), BundleDestinationRefusal> {
+        validate_root_selection(output_path).map_err(|error| match error {
+            SessionStoreOpenError::RootNameNotAllowed => BundleDestinationRefusal::NameNotAllowed,
+            _ => BundleDestinationRefusal::Unusable,
+        })?;
+        let refused = |error: io::Error| BundleDestinationRefusal::Refused(error.kind());
+        let (Some(parent_path), Some(name)) = (output_path.parent(), output_path.file_name())
+        else {
+            return Err(BundleDestinationRefusal::Unusable);
+        };
+        let canonical_parent = fs::canonicalize(parent_path).map_err(refused)?;
+        let parent = Dir::open_ambient_dir(&canonical_parent, cap_std::ambient_authority())
+            .map_err(refused)?;
+        create_private_child(&parent, &canonical_parent, Path::new(name)).map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                BundleDestinationRefusal::Taken
+            } else {
+                refused(error)
+            }
+        })?;
+        let private = parent
+            .open_dir_nofollow(Path::new(name))
+            .map_err(refused)
+            .and_then(|bundle| {
+                validate_platform_root_permissions(output_path, &bundle)
+                    .map_err(|_| BundleDestinationRefusal::Refused(io::ErrorKind::PermissionDenied))
+            });
+        let removed = parent.remove_dir(Path::new(name)).map_err(refused);
+        private.and(removed)
+    }
+
     /// Explicitly exports one committed session to a new private data-only directory.
     ///
     /// The destination is created exclusively and is never selected for automatic
@@ -118,6 +175,9 @@ impl FilesystemSessionStore {
                 .identifier()
                 .to_owned(),
             artifacts: record.artifacts.clone(),
+            time_anchors: record.time_anchors.clone(),
+            screen_clocks: record.screen_clocks.clone(),
+            clock_segments: record.clock_segments.clone(),
         };
         let artifacts = session
             .open_dir_nofollow(ARTIFACTS_DIRECTORY)
@@ -193,38 +253,13 @@ impl FilesystemSessionStore {
         reason = "Keep every bundle check and its order visible together"
     )]
     pub fn validate_bundle(path: &Path) -> Result<BundleStatus, SessionStorageError> {
-        validate_root_selection(path).map_err(map_open_error)?;
-        let metadata = fs::symlink_metadata(path).map_err(map_storage_io)?;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(SessionStorageError::IntegrityFailure);
-        }
-        let parent_path = path.parent().ok_or(SessionStorageError::AccessDenied)?;
-        let name = path.file_name().ok_or(SessionStorageError::AccessDenied)?;
-        let parent = Dir::open_ambient_dir(parent_path, cap_std::ambient_authority())
-            .map_err(map_storage_io)?;
-        let bundle = parent
-            .open_dir_nofollow(Path::new(name))
-            .map_err(map_committed_io)?;
-        validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
-        validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
-        let manifest_bytes = open_regular_file(&bundle, "bundle.json", false)
-            .and_then(read_bounded_manifest)
-            .map_err(map_committed_io)?;
-        let manifest: BundleManifest = parse_versioned_json(&manifest_bytes)?;
-        if manifest.format != "vsift.bundle"
-            || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
-            || manifest.source_bytes == 0
-            || manifest.source_bytes > crate::MAX_SOURCE_BYTES
-        {
-            return Err(SessionStorageError::IntegrityFailure);
-        }
-        let session_id = SessionId::parse(&manifest.session_id)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        let source_id = SourceId::parse(&manifest.source_id)
-            .map_err(|_| SessionStorageError::IntegrityFailure)?;
-        if manifest.artifacts.len() > MAX_SESSION_ARTIFACTS {
-            return Err(SessionStorageError::CapacityExhausted);
-        }
+        let bundle = open_selected_bundle(path)?;
+        let ReadManifest {
+            manifest,
+            bytes: manifest_bytes,
+            session_id,
+            source_id,
+        } = read_bundle_manifest(&bundle)?;
         let expected_entries = 1 + manifest.artifacts.len() + usize::from(manifest.source_included);
         let mut entries = 0_usize;
         for entry in bundle.entries().map_err(map_storage_io)? {
@@ -294,6 +329,11 @@ impl FilesystemSessionStore {
                 // The same again for on-screen text (ADR 0030): decoded with
                 // its domain bounds and every identity derived again.
                 read_screen_text_index_artifact(&bundle, artifact, &session_id, &source_id)?;
+            } else if artifact.kind == StoredArtifactKind::SpeakerRecord {
+                // A speaker record is decoded with the identity, bound and value
+                // rules a session read applies (ADR 0031); its labels are derived
+                // from its turns and its revision whenever it is read.
+                read_speaker_artifact(&bundle, artifact, &session_id, &source_id)?;
             } else {
                 let file =
                     open_regular_file(&bundle, &artifact.name, false).map_err(map_committed_io)?;
@@ -326,6 +366,66 @@ impl FilesystemSessionStore {
             manifest_sha256: sha256_hex(&manifest_bytes),
         })
     }
+}
+
+/// Opens a selected bundle folder: an absolute path, a real folder that is no
+/// link, and private to the current user, which is also the rule that a search
+/// never reads another user's bundle (ADR 0035).
+pub(super) fn open_selected_bundle(path: &Path) -> Result<Dir, SessionStorageError> {
+    validate_root_selection(path).map_err(map_open_error)?;
+    let metadata = fs::symlink_metadata(path).map_err(map_storage_io)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let parent_path = path.parent().ok_or(SessionStorageError::AccessDenied)?;
+    let name = path.file_name().ok_or(SessionStorageError::AccessDenied)?;
+    let parent =
+        Dir::open_ambient_dir(parent_path, cap_std::ambient_authority()).map_err(map_storage_io)?;
+    let bundle = parent
+        .open_dir_nofollow(Path::new(name))
+        .map_err(map_committed_io)?;
+    validate_same_object(&metadata, &bundle).map_err(map_open_error)?;
+    validate_platform_root_permissions(path, &bundle).map_err(map_open_error)?;
+    Ok(bundle)
+}
+
+/// A bundle's manifest, strictly parsed, with its identities.
+pub(super) struct ReadManifest {
+    pub(super) manifest: BundleManifest,
+    pub(super) bytes: Vec<u8>,
+    pub(super) session_id: SessionId,
+    pub(super) source_id: SourceId,
+}
+
+/// Reads and checks a bundle's `bundle.json`, bounded.
+pub(super) fn read_bundle_manifest(bundle: &Dir) -> Result<ReadManifest, SessionStorageError> {
+    let bytes = open_regular_file(bundle, "bundle.json", false)
+        .and_then(read_bounded_manifest)
+        .map_err(map_committed_io)?;
+    let manifest: BundleManifest = parse_versioned_json(&bytes)?;
+    if manifest.format != "vsift.bundle"
+        || manifest.publication != PublicationGuarantee::ProcessCrashConsistent.identifier()
+        || manifest.source_bytes == 0
+        || manifest.source_bytes > crate::MAX_SOURCE_BYTES
+    {
+        return Err(SessionStorageError::IntegrityFailure);
+    }
+    let session_id = SessionId::parse(&manifest.session_id)
+        .map_err(|_| SessionStorageError::IntegrityFailure)?;
+    let source_id =
+        SourceId::parse(&manifest.source_id).map_err(|_| SessionStorageError::IntegrityFailure)?;
+    super::time_anchors::decode_time_anchors(&manifest.time_anchors)?;
+    super::time_anchors::decode_screen_clocks(&manifest.screen_clocks)?;
+    super::time_anchors::decode_clock_gaps(&manifest.clock_segments)?;
+    if manifest.artifacts.len() > MAX_SESSION_ARTIFACTS {
+        return Err(SessionStorageError::CapacityExhausted);
+    }
+    Ok(ReadManifest {
+        manifest,
+        bytes,
+        session_id,
+        source_id,
+    })
 }
 
 /// Checks a bundle's evidence records against its media (ADR 0013 note of

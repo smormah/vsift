@@ -108,6 +108,15 @@ impl StoredLifecycle {
             generation: StorageGeneration::from_value(generation),
             artifact_count: self.artifacts.len(),
             artifact_bytes,
+            time_anchors: super::time_anchors::decode_time_anchors(&self.time_anchors)?.with_gaps(
+                super::time_anchors::decode_clock_gaps(&self.clock_segments)?,
+            ),
+            screen_clocks: super::time_anchors::decode_screen_clocks(&self.screen_clocks)?,
+            origin: self
+                .origin
+                .as_ref()
+                .map(|stored| super::origin::decode_origin(stored, self.source_bytes))
+                .transpose()?,
         })
     }
 }

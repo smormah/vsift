@@ -18,7 +18,7 @@
         "stage": null,
         "status": "already_current",
         "step": null,
-        "version": "n9.0.1-11-ge47273f4d9-20260831"
+        "version": "n9.0.2-39-g7adfbe40dc-20261031"
       },
       {
         "component": "whisper_cli",

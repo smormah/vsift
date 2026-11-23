@@ -214,10 +214,14 @@ is release evidence by itself.
 diagnostics of one visual window through `parse_visual_samples` and the window
 analysis; the input is a frame count, a pixel seed and the diagnostics, and the target
 writes the frames itself), `visual_index_record`, `search_query` (query normalisation
-and matching over a query, a line feed and segment text), `frame_showinfo` (the
+and matching over a query, a line feed and segment text), `clock_face` (lines of
+on-screen text through the clock grammar, then the clock model and its rollover
+search), `frame_showinfo` (the
 single-frame and first-audio-sample diagnostics readers), `frame_listing` (a frame
 listing's diagnostics against a fixed 60 s window), `png_sequence` (the PNG sequence
 walker; the input is an image count, a width and height, then the output),
+`png_pixels` (the pixel decoder `changes` compares two stored frames with, ADR 0034;
+the input is a width and height, then one PNG),
 `evidence_record` (the stored evidence record), `crop_rect` (an outer crop against
 a 1440x900 frame, a line feed and an inner crop, parsed and composed), `mountinfo`
 (a `/proc/self/mountinfo` table through the durable-profile check, which must give one
@@ -734,7 +738,7 @@ node --test "tools/p14-campaigns/test/*.test.cjs"
 | Load ladder, 100-request batch, cancel, warm page and soak (RQ-09) | `P14 load` | `gh workflow run p14-load.yml --ref <branch>`; inputs `phases`, `ladder_requests` (24), `batch_requests` (100), `soak_requests` (1000) and `soak_minutes` (270) |
 | Malicious media (RQ-10) | `P14 malicious media` | `gh workflow run p14-malicious-media.yml --ref <branch>` (the pull request's run is already the full set) |
 | The worker runbook walk (RQ-12) | `P14 runbook walk` | `gh workflow run p14-runbook-walk.yml --ref <branch>` |
-| The hosted part of the scan reading (RQ-13) | `P14 scan reading` | `gh workflow run p14-scan-reading.yml --ref <branch>`, then the read-only `gh api` calls listed in the reading |
+| The hosted part of the scan reading (RQ-13) | `P14 scan reading` | `gh workflow run p14-scan-reading.yml --ref <branch>`, then the read-only `gh api` calls listed in the reading; FFmpeg's scope includes the `mp4` and `matroska` muxers (ADR 0028 section 4.7) |
 
 Each workflow is read-only (`contents: read`), uses no secret, installs the **published** `vsift-cli`
 from the real registry (an empty `version` means the one on `next`) and keeps its record for 90 days as an
@@ -788,7 +792,9 @@ page, section 13).
 ## Governance checks, release evidence and public claims
 
 `cargo run --locked -p vsift-governance -- check` is the Governance job. Besides the delivery
-ledger, the fixture corpus, the handoff files, the workflow lint and the npm package rules, it
+ledger, the fixture corpus, the handoff files, the workflow lint, the npm package rules and the
+Claude Code plugin rule (the marketplace and plugin manifests name no person; the plugin ships no
+hooks, executables, monitors, MCP or LSP servers, npm manifest or link; ADR 0038 section 4), it
 checks the structure of the P14 release evidence ledger
 (`docs/planning/p14-evidence-ledger.json`) and the public-claims registry
 (`docs/planning/public-claims.json`) ([delivery governance](planning/delivery-governance.md)).
@@ -810,6 +816,8 @@ entries for `0.2.1` are in each item's `prior`); when `0.2.1`'s records were mad
 Since the cut of `0.2.3-rc.1` (2026-10-22) it also names RQ-16, which is `planned` for that candidate (its waiver for 0.2.2 is
 kept in the item's `prior`, L-179); `--complete-for 0.2.3-rc.1` is the check of the candidate, and `--complete-for 0.2.2` names RQ-16 until
 the candidate's evidence replaces it.
+Since the cut of `0.2.4-rc.1` (2026-11-04) it also names RQ-08, RQ-15 and RQ-16, `planned` for that candidate (their waivers for 0.2.3 are kept in each item's `prior`);
+`--complete-for 0.2.3` names them until the evidence for `0.2.4` replaces them.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -883,8 +891,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   for the first identifier of that kind an earlier command printed on the same page;
   `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
   being guessed.
-- **A version bump re-checks the guide.** The guide names a release (`0.2.3`), not a
-  candidate: `0.2.3-rc.1` and `0.2.3` are the same release to these tools (and `0.2.2-rc.1` and `0.2.2` were another, as `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
+- **A version bump re-checks the guide.** The guide names a release (`0.2.4`), not a
+  candidate: `0.2.4-rc.1` and `0.2.4` are the same release to these tools (and `0.2.3-rc.1` and `0.2.3` were another, as `0.2.2-rc.1` and `0.2.2` were, as `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
   version-string files, shipped documents and the work record, and the generated reference pages,
   which name the release, are in none of them ([release process, 6.8](operations/release.md)).

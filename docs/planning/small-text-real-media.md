@@ -79,9 +79,8 @@ pixel.
    - and treat a number read from text under about 10 px as uncertain unless a second frame or the transcript
      agrees.
 
-   **Documented now** in the user guide's limits page ([`limits.md`](../guide/limits.md), "VSift does not read text in
-   a picture"). The skill and `--help` say it with #454 (help that leads a cold agent), under that cycle's freeze; the
-   skill is not changed here.
+   **Documented** in the user guide's limits page ([`limits.md`](../guide/limits.md), "VSift does not read text in
+   a picture"). Since #454 (0.3.0) the skill and `vsift --help` say it too.
 3. **The hosted run may keep a handful of native crops of public, openly licensed items, for a person to judge
    legibility (check 9). A private item's crops are never kept.** Built with this decision (the pull request of #173):
    - **How many:** at most **4 crops an item and 12 a run.** Four crops of an item's smallest text are enough for a

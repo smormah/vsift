@@ -38,9 +38,10 @@ use vsift_application::{
     ComponentInstallOutcome, DownloadFailureReason, InstallFailureReason, InstallStep,
     LocalAsrVerification, LocalAsrVerifier, ManagedInstallReport, ManagedSetupAction,
     MediaToolCheck, MediaToolFailure, MediaToolVerification, MediaToolVerifier, NoProgress,
-    ProgressSink, ReviewedArchiveLimits, ReviewedArchiveSelection, ReviewedCompatibilityPolicy,
-    ReviewedManagedFile, RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal,
-    install_managed_components, plan_managed_setup,
+    OptionalComponent, OptionalComponentSet, ProgressSink, ReviewedArchiveLimits,
+    ReviewedArchiveSelection, ReviewedBanner, ReviewedCompatibilityPolicy, ReviewedManagedFile,
+    RuntimeDiagnosis, SetupProfile, SetupSelectionState, StageDisposal, install_managed_components,
+    install_managed_plan, plan_managed_setup, plan_managed_setup_including,
 };
 use vsift_domain::{
     ArtifactIntegrity, DependencyState, DependencyStatus, FailureCode, ManagedArtifactFormat,
@@ -117,6 +118,10 @@ struct ServerState {
     routes: BTreeMap<String, VecDeque<Reply>>,
     fallback: Option<Reply>,
     requests: Vec<Recorded>,
+    /// How many replies have reached their stall: the body they declared
+    /// is partly sent and the connection now waits (see
+    /// `TestServer::wait_for_a_stall`).
+    stalls: usize,
 }
 
 struct TestServer {
@@ -166,6 +171,23 @@ impl TestServer {
     fn requests(&self) -> Vec<Recorded> {
         lock(&self.state).requests.clone()
     }
+
+    /// A handle that resolves, once a reply has reached its stall, so that a
+    /// test can cancel at that event instead of after a guessed time. It
+    /// gives up after `limit`, so that a test whose stall never comes still
+    /// goes on to fail on its assertions rather than hang.
+    fn stall_signal(
+        &self,
+        limit: Duration,
+    ) -> impl std::future::Future<Output = ()> + Send + use<> {
+        let state = Arc::clone(&self.state);
+        async move {
+            let started = std::time::Instant::now();
+            while lock(&state).stalls == 0 && started.elapsed() < limit {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    }
 }
 
 fn serve(stream: TcpStream, state: &Mutex<ServerState>) -> std::io::Result<()> {
@@ -210,10 +232,14 @@ fn serve(stream: TcpStream, state: &Mutex<ServerState>) -> std::io::Result<()> {
         });
         routed.or_else(|| state.fallback.clone())
     };
-    write_reply(stream, reply)
+    write_reply(stream, reply, state)
 }
 
-fn write_reply(mut stream: TcpStream, reply: Option<Reply>) -> std::io::Result<()> {
+fn write_reply(
+    mut stream: TcpStream,
+    reply: Option<Reply>,
+    state: &Mutex<ServerState>,
+) -> std::io::Result<()> {
     match reply {
         Some(Reply::Body(body)) => {
             write!(
@@ -240,6 +266,7 @@ fn write_reply(mut stream: TcpStream, reply: Option<Reply>) -> std::io::Result<(
             )?;
             stream.write_all(&body[..sent.min(body.len())])?;
             stream.flush()?;
+            lock(state).stalls += 1;
             thread::sleep(Duration::from_secs(20));
         }
         Some(Reply::Partial(body)) => {
@@ -413,6 +440,8 @@ struct Fixture {
 const MEDIA_FILE: &str = "fixture-media.tar.gz";
 const WHISPER_FILE: &str = "fixture-whisper.tar.gz";
 const MODEL_FILE: &str = "fixture-model.bin";
+const DENO_FILE: &str = "fixture-deno.tar.gz";
+const YT_DLP_FILE: &str = "fixture-yt-dlp.tar.gz";
 
 impl Fixture {
     /// The fixture catalogue; `media_version` names the media tools'
@@ -492,6 +521,93 @@ impl Fixture {
         Ok(Self { catalogue, files })
     }
 
+    /// The diagnosis of a host with none of the tools.
+    fn nothing_installed() -> RuntimeDiagnosis {
+        RuntimeDiagnosis {
+            readiness: RuntimeReadiness::Blocked,
+            dependencies: RuntimeDependency::ALL
+                .into_iter()
+                .map(|dependency| DependencyStatus {
+                    dependency,
+                    state: DependencyState::Missing,
+                })
+                .collect(),
+        }
+    }
+
+    /// The fixture catalogue with the optional online-links group (#409):
+    /// the smoke fixture tool packed as Deno and as yt-dlp under their
+    /// reviewed executable names, and the banners it prints for them.
+    fn with_online_links(mut self) -> TestResult<Self> {
+        let tool = fs::read(FIXTURE_TOOL)?;
+        self.catalogue.compatibility.optional_banners.clear();
+        for (component, role, version, file_name, folder) in [
+            (
+                ManagedComponent::JsRuntimeDeno,
+                ManagedRuntimeRole::Deno,
+                "fixture-deno-1",
+                DENO_FILE,
+                "deno",
+            ),
+            (
+                ManagedComponent::YtDlp,
+                ManagedRuntimeRole::YtDlp,
+                "fixture-yt-dlp-1",
+                YT_DLP_FILE,
+                "yt-dlp",
+            ),
+        ] {
+            let (artifact, bytes) = archive_artifact(
+                component,
+                version,
+                file_name,
+                folder,
+                &[ArchiveFile {
+                    name: role_name(role)?,
+                    bytes: tool.clone(),
+                    executable: true,
+                }],
+            )?;
+            self.catalogue.optional_artifacts.push(artifact);
+            self.catalogue
+                .compatibility
+                .optional_banners
+                .push(ReviewedBanner {
+                    component,
+                    first_line_prefix: format!("{folder} version {FIXTURE_BUILD}"),
+                });
+            self.files.insert(file_name.to_owned(), bytes);
+        }
+        Ok(self)
+    }
+
+    /// The accepted plan's core and optional actions for a host with none
+    /// of the tools, with the online-links group included.
+    fn actions_with_online_links(
+        &self,
+    ) -> TestResult<(Vec<ManagedSetupAction>, Vec<ManagedSetupAction>)> {
+        let plan = plan_managed_setup_including(
+            SetupProfile::Desktop,
+            Self::nothing_installed(),
+            ManagedTarget::Ubuntu2404X86_64,
+            SetupSelectionState::default(),
+            OptionalComponentSet::EMPTY.with(OptionalComponent::OnlineLinks),
+            1_000,
+            Some(self.catalogue.clone()),
+        );
+        let digest = plan
+            .digest
+            .clone()
+            .ok_or("the fixture plan has no digest")?;
+        plan.validate_acceptance(&digest)
+            .map_err(|error| format!("{error:?}"))?;
+        let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
+        if plan.actions.len() != 3 || optional.len() != 2 {
+            return Err("the fixture plan does not install three core and two optional".into());
+        }
+        Ok((plan.actions, optional))
+    }
+
     fn bytes(&self, file: &str) -> TestResult<Vec<u8>> {
         self.files
             .get(file)
@@ -503,16 +619,7 @@ impl Fixture {
     fn actions(&self) -> TestResult<Vec<ManagedSetupAction>> {
         let plan = plan_managed_setup(
             SetupProfile::Desktop,
-            RuntimeDiagnosis {
-                readiness: RuntimeReadiness::Blocked,
-                dependencies: RuntimeDependency::ALL
-                    .into_iter()
-                    .map(|dependency| DependencyStatus {
-                        dependency,
-                        state: DependencyState::Missing,
-                    })
-                    .collect(),
-            },
+            Self::nothing_installed(),
             ManagedTarget::Ubuntu2404X86_64,
             SetupSelectionState::default(),
             1_000,
@@ -627,6 +734,7 @@ impl SmokeCompanionSource for StoreCompanions {
             media,
             whisper: self.executable(WHISPER, ManagedRuntimeRole::WhisperCli),
             model,
+            ..SmokeCompanions::default()
         }
     }
 }
@@ -701,6 +809,9 @@ struct Run<'a> {
     verifiers: FixedVerifiers,
     cancellation: ProcessCancellation,
     progress: &'a dyn ProgressSink,
+    /// The compatibility policy of the install; the fixture's unless a test
+    /// gives its own (the optional tools' banners, say).
+    policy: Option<ReviewedCompatibilityPolicy>,
 }
 
 impl Run<'_> {
@@ -711,10 +822,19 @@ impl Run<'_> {
             verifiers: FixedVerifiers::passing(),
             cancellation: ProcessCancellation::new(),
             progress: &NoProgress,
+            policy: None,
         }
     }
 
     async fn install(self, actions: &[ManagedSetupAction]) -> TestResult<ManagedInstallReport> {
+        self.install_with_optional(actions, &[]).await
+    }
+
+    async fn install_with_optional(
+        self,
+        actions: &[ManagedSetupAction],
+        optional: &[ManagedSetupAction],
+    ) -> TestResult<ManagedInstallReport> {
         let (source, authority) = match self.via {
             Via::Server { base, proxy } => (
                 ManagedArtifactSource::Publisher,
@@ -737,7 +857,10 @@ impl Run<'_> {
                 store: self.store.clone(),
                 source,
                 authority,
-                policy: policy()?,
+                policy: match self.policy {
+                    Some(policy) => policy,
+                    None => policy()?,
+                },
                 host_isolation: HostIsolation::ProcessOnly,
                 verifiers: self.verifiers,
                 companions: StoreCompanions {
@@ -746,10 +869,23 @@ impl Run<'_> {
                 cancellation: self.cancellation,
             },
             &guard,
-            self.progress,
         );
-        Ok(install_managed_components(&installer, actions, &NoProgress).await)
+        Ok(install_managed_plan(&installer, actions, optional, self.progress).await)
     }
+}
+
+/// How many verified downloads the store keeps for a later run.
+fn kept_downloads(root: &TestRoot) -> TestResult<usize> {
+    if !root.root().exists() {
+        return Ok(0);
+    }
+    let mut kept = 0;
+    for entry in fs::read_dir(root.root())? {
+        if entry?.file_name().to_string_lossy().starts_with("kept-") {
+            kept += 1;
+        }
+    }
+    Ok(kept)
 }
 
 fn statuses(report: &ManagedInstallReport) -> Vec<&'static str> {
@@ -995,12 +1131,15 @@ async fn partial_altered_and_wrongly_sized_responses_are_refused() -> TestResult
         assert_eq!(statuses(&report), ["failed"; 3]);
         assert!(root.stages()?.is_empty(), "{reply:?}");
         assert!(!root.root().join("versions-v1").exists(), "{reply:?}");
+        // ADR 0036 section 4: speech downloads beside video, and with no
+        // video tools to test it with, its verified downloads are kept.
         assert!(
             server
                 .requests()
                 .iter()
-                .all(|request| !request.target.ends_with(WHISPER_FILE))
+                .any(|request| request.target.ends_with(WHISPER_FILE))
         );
+        assert_eq!(kept_downloads(&root)?, 2, "{reply:?}");
     }
     Ok(())
 }
@@ -1093,7 +1232,8 @@ async fn a_full_disk_keeps_the_previous_version_selected_and_usable() -> TestRes
 }
 
 /// D-03: cancelling during a download stops it, discards the stage and
-/// reports the component cancelled and the rest blocked.
+/// reports the component cancelled; speech, downloading beside it (ADR 0036
+/// section 4), is cancelled too, and nothing of it is kept.
 #[tokio::test]
 async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
     let fixture = Fixture::new("fixture-media-1")?;
@@ -1110,8 +1250,11 @@ async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
     let root = TestRoot::new()?;
     let cancellation = ProcessCancellation::new();
     let canceller = cancellation.clone();
+    // Cancels when the media download has stalled mid-body, the event the
+    // test is about, not after a guessed time (#596).
+    let stalled = server.stall_signal(Duration::from_secs(30));
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        stalled.await;
         canceller.cancel();
     });
     let mut run = Run::new(
@@ -1128,8 +1271,9 @@ async fn cancellation_during_a_download_discards_the_stage() -> TestResult {
         ComponentInstallFailure::at(InstallStep::Download, InstallFailureReason::Cancelled)
     );
     assert_eq!(report.failure_code(), Some(FailureCode::Cancelled));
-    assert_eq!(failure(&report, 1)?.reason, InstallFailureReason::Blocked);
+    assert_eq!(failure(&report, 1)?.reason, InstallFailureReason::Cancelled);
     assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
+    assert_eq!(kept_downloads(&root)?, 0);
     assert!(!root.root().join("versions-v1").exists());
     Ok(())
 }
@@ -1362,5 +1506,77 @@ async fn an_offline_import_refuses_a_link() -> TestResult {
             InstallFailureReason::ArtifactNotRegularFile
         )
     );
+    Ok(())
+}
+
+/// #409, D-07: `--artifact-dir` installs the optional online-links group
+/// from local files with no request at all, verified like a download and
+/// smoked with the group's reviewed banners; a rerun needs no file; and a
+/// folder that holds the core's files but not the group's leaves the core
+/// installed, the group failed at its import and no stage behind.
+#[tokio::test]
+async fn an_offline_import_installs_the_optional_online_links_group() -> TestResult {
+    let fixture = Fixture::new("fixture-media-1")?.with_online_links()?;
+    let (core, optional) = fixture.actions_with_online_links()?;
+    let deno = ManagedComponent::JsRuntimeDeno.identifier();
+    let yt_dlp = ManagedComponent::YtDlp.identifier();
+    let optional_statuses = |report: &ManagedInstallReport| -> Vec<&'static str> {
+        report
+            .optional
+            .iter()
+            .map(|component| component.outcome.identifier())
+            .collect()
+    };
+
+    let folder = TestRoot::new()?;
+    for (name, bytes) in &fixture.files {
+        fs::write(folder.parent.join(name), bytes)?;
+    }
+    let root = TestRoot::new()?;
+    let mut run = Run::new(root.store()?, Via::Directory(folder.parent.clone()));
+    run.policy = Some(fixture.catalogue.compatibility.clone());
+    let report = run.install_with_optional(&core, &optional).await?;
+    assert_eq!(statuses(&report), ["activated"; 3], "{report:?}");
+    assert_eq!(optional_statuses(&report), ["activated"; 2], "{report:?}");
+    assert_eq!(report.failure_code(), None);
+    assert!(report.optional_installed());
+    assert_eq!(root.selected(deno)?.as_deref(), Some("fixture-deno-1"));
+    assert_eq!(root.selected(yt_dlp)?.as_deref(), Some("fixture-yt-dlp-1"));
+    assert_eq!(root.stages()?, [] as [std::path::PathBuf; 0]);
+
+    // The same accepted plan again, with an empty folder: everything is
+    // current, so no file is needed.
+    let empty = TestRoot::new()?;
+    let mut rerun = Run::new(root.store()?, Via::Directory(empty.parent.clone()));
+    rerun.policy = Some(fixture.catalogue.compatibility.clone());
+    let report = rerun.install_with_optional(&core, &optional).await?;
+    assert_eq!(statuses(&report), ["already_current"; 3], "{report:?}");
+    assert_eq!(
+        optional_statuses(&report),
+        ["already_current"; 2],
+        "{report:?}"
+    );
+
+    let core_only = TestRoot::new()?;
+    for file in [MEDIA_FILE, WHISPER_FILE, MODEL_FILE] {
+        fs::write(core_only.parent.join(file), fixture.bytes(file)?)?;
+    }
+    let fresh = TestRoot::new()?;
+    let mut run = Run::new(fresh.store()?, Via::Directory(core_only.parent.clone()));
+    run.policy = Some(fixture.catalogue.compatibility.clone());
+    let report = run.install_with_optional(&core, &optional).await?;
+    assert_eq!(statuses(&report), ["activated"; 3], "{report:?}");
+    assert_eq!(report.failure_code(), None);
+    assert!(!report.optional_installed());
+    assert_eq!(
+        report.optional_failure(),
+        Some((
+            ManagedComponent::JsRuntimeDeno,
+            ComponentInstallFailure::at(InstallStep::Import, InstallFailureReason::ArtifactMissing)
+        ))
+    );
+    assert_eq!(fresh.selected(deno)?, None);
+    assert_eq!(fresh.selected(yt_dlp)?, None);
+    assert_eq!(fresh.stages()?, [] as [std::path::PathBuf; 0]);
     Ok(())
 }

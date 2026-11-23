@@ -1007,7 +1007,27 @@ fn translate_pattern(source: &str) -> Option<String> {
 }
 
 /// Fixed prose of each pattern of `handoff.schema.json` ([`pattern_message`]).
-const PATTERN_MESSAGES: [(&str, HandoffRule, &str); 17] = [
+const PATTERN_MESSAGES: [(&str, HandoffRule, &str); 21] = [
+    (
+        "^c[1-8]$",
+        HandoffRule::FormMismatch,
+        "Copy the clock_id exactly as VSift printed it: c and a digit from 1 to 8.",
+    ),
+    (
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+        HandoffRule::FormMismatch,
+        "Copy utc exactly as VSift printed it: the date and time with six fraction digits and Z.",
+    ),
+    (
+        "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}$",
+        HandoffRule::FormMismatch,
+        "Copy local exactly as VSift printed it: the date and time with six fraction digits and no zone.",
+    ),
+    (
+        "^[+-][0-9]{2}:[0-9]{2}$",
+        HandoffRule::FormMismatch,
+        "Copy utc_offset exactly as VSift printed it: a sign, two digits, a colon and two digits.",
+    ),
     (
         "^[A-Za-z0-9 -]+$",
         HandoffRule::FormMismatch,

@@ -43,14 +43,14 @@ use vsift_domain::{
 use vsift_fuzz::{
     CROP_FRAME_HEIGHT, CROP_FRAME_WIDTH, EVIDENCE_FUZZ_SESSION, JOB_FUZZ_JOB, JOB_FUZZ_SESSION,
     OCR_FUZZ_IMAGES, REQUEST_FUZZ_OPERATION, SCREEN_TEXT_FUZZ_SESSION, Target, VISUAL_FUZZ_SESSION,
-    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal,
+    bundle_manifest_input, bundle_manifest_is_accepted, bundle_manifest_refusal, png_pixels_input,
     png_sequence_input, visual_samples_input,
 };
 use vsift_infrastructure::{
     ArchiveInventoryBounds, BatchLine as FileLine, BatchLines, FrameListingWindow, MountDevice,
     OsReleaseProfile, SourceContainer, VisualSamplingWindow, WhisperOutputLimits,
     classify_mountinfo, classify_os_release, decode_chunk_checkpoint, decode_evidence_record,
-    decode_job_record, decode_request_record, decode_screen_text_index_record,
+    decode_job_record, decode_png_pixels, decode_request_record, decode_screen_text_index_record,
     decode_transcript_parts, decode_transcript_record, decode_visual_index_record,
     encode_transcript_record, encode_visual_index_record, inspect_bzip2_tar_inventory,
     inspect_gzip_tar_inventory, inspect_tar_inventory, inspect_xz_tar_inventory,
@@ -64,6 +64,9 @@ type TestResult = Result<(), Box<dyn Error>>;
 
 /// Where a committed seed came from.
 enum Origin {
+    /// Written for this target: no fixture holds a clock on a screen, and
+    /// yt-dlp's metadata is not pinned in the repository.
+    Written,
     /// A byte-for-byte copy of this repository file.
     Copy(&'static str),
     /// An inline test document that appears verbatim in this repository file.
@@ -80,6 +83,9 @@ enum Origin {
     /// A `png_sequence` input: this many copies of the recorded 80x80 F01
     /// crop PNG ([`RECORDED_CROP`]), expected as 80x80 images.
     RecordedCrops(u8),
+    /// A `png_pixels` input: the recorded 80x80 F01 crop PNG
+    /// ([`RECORDED_CROP`]), expected as an 80x80 image.
+    RecordedCropPixels,
     /// A `crop_rect` input: an outer rectangle that appears verbatim in the
     /// first file, a line feed, and an inner one that appears in the second.
     CropPair {
@@ -492,6 +498,11 @@ const SEEDS: &[Seed] = &[
         Origin::InlineIn("crates/vsift-infrastructure/src/ffmpeg_media.rs"),
     ),
     seed(
+        Target::FfprobeMetadata,
+        "recorder-tags.json",
+        Origin::InlineIn("crates/vsift-infrastructure/src/ffmpeg_media.rs"),
+    ),
+    seed(
         Target::TranscriptCursor,
         "transcript-get-next-cursor.txt",
         Origin::InlineIn("schemas/v1/examples/transcript-get.json"),
@@ -556,6 +567,19 @@ const SEEDS: &[Seed] = &[
         "F01-crop-x2.bin",
         Origin::RecordedCrops(2),
     ),
+    seed(
+        Target::PngPixels,
+        "F01-crop.bin",
+        Origin::RecordedCropPixels,
+    ),
+    seed(Target::ClockFace, "taskbar-minutes.txt", Origin::Written),
+    seed(
+        Target::ClockFace,
+        "twelve-hour-midnight.txt",
+        Origin::Written,
+    ),
+    seed(Target::ClockFace, "stated-zones.txt", Origin::Written),
+    seed(Target::ClockFace, "refused.txt", Origin::Written),
     seed(
         Target::SearchQuery,
         "f10-r-17.txt",
@@ -821,6 +845,14 @@ const SEEDS: &[Seed] = &[
         "two-parts.bin",
         Origin::Copy(TRANSCRIPT_PART_EXAMPLES),
     ),
+    seed(Target::YtdlpInfoJson, "single.json", Origin::Written),
+    seed(Target::YtdlpInfoJson, "pair.json", Origin::Written),
+    seed(Target::YtdlpInfoJson, "playlist.json", Origin::Written),
+    seed(
+        Target::YtdlpInfoJson,
+        "live-no-format.json",
+        Origin::Written,
+    ),
 ];
 
 /// The part records the infrastructure crate's open-revision test pins to the
@@ -928,8 +960,11 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::TranscriptRecord, "F01-words-no-segment-holds.json"),
         (Target::TranscriptPart, "one-part.json"),
         (Target::TranscriptPart, "two-parts.bin"),
+        (Target::YtdlpInfoJson, "single.json"),
+        (Target::YtdlpInfoJson, "pair.json"),
         (Target::FfprobeMetadata, "two-streams-rotated.json"),
         (Target::FfprobeMetadata, "audio-only-unknown-codec.json"),
+        (Target::FfprobeMetadata, "recorder-tags.json"),
         (Target::TranscriptCursor, "transcript-get-next-cursor.txt"),
         (Target::VisualSamples, "F01-showinfo.bin"),
         (Target::VisualSamples, "F09-showinfo.bin"),
@@ -946,6 +981,7 @@ fn well_formed_seeds_are_accepted() -> TestResult {
         (Target::FrameListing, "forged-title-listing-0-1000000.txt"),
         (Target::PngSequence, "F01-crop-x1.bin"),
         (Target::PngSequence, "F01-crop-x2.bin"),
+        (Target::PngPixels, "F01-crop.bin"),
         (Target::EvidenceRecord, "bundle-evidence-record.json"),
         (Target::CropRect, "whole-frame-then-corner.txt"),
         (Target::Mountinfo, "ext4-and-proc.txt"),
@@ -1064,6 +1100,9 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
     Ok(match target {
         Target::TranscriptSrt | Target::TranscriptWebVtt => parse_supplied_transcript(data).is_ok(),
         Target::WhisperFullJson => parse_whisper_full_json(data, WhisperOutputLimits::R0).is_ok(),
+        Target::ClockFace => std::str::from_utf8(data)?
+            .lines()
+            .any(|line| vsift_domain::read_clock_face(line).is_ok()),
         Target::TranscriptRecord => decode_transcript_record(data).is_ok(),
         Target::TranscriptPart => decode_transcript_parts(
             &data
@@ -1072,6 +1111,10 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
         )
         .is_ok(),
         Target::FfprobeMetadata => parse_ffprobe_metadata(data, SourceContainer::IsoMedia).is_ok(),
+        Target::YtdlpInfoJson => {
+            vsift_infrastructure::parse_ytdlp_info(data, vsift_domain::DownloadLimits::DEFAULT)
+                .is_ok()
+        }
         Target::TranscriptCursor => CursorToken::parse(std::str::from_utf8(data)?).is_ok(),
         Target::VisualSamples => match data {
             [count, _, stderr @ ..] => parse_visual_samples(
@@ -1123,6 +1166,14 @@ fn is_accepted(target: Target, data: &[u8]) -> Result<bool, Box<dyn Error>> {
             [count, _, _, _, _, stdout @ ..] => parse_png_sequence(
                 stdout,
                 usize::from(*count),
+                FrameDimensions::new(u32::from(RECORDED_CROP_SIZE), u32::from(RECORDED_CROP_SIZE))?,
+            )
+            .is_ok(),
+            _ => false,
+        },
+        Target::PngPixels => match data {
+            [_, _, _, _, png @ ..] => decode_png_pixels(
+                png,
                 FrameDimensions::new(u32::from(RECORDED_CROP_SIZE), u32::from(RECORDED_CROP_SIZE))?,
             )
             .is_ok(),
@@ -1290,10 +1341,18 @@ fn seeds_are_listed_and_match_their_fixtures() -> TestResult {
             Origin::InlineIn(path) => {
                 fs::read_to_string(repository(path))?.contains(std::str::from_utf8(&data)?)
             }
-            Origin::EncodedF01LocalAsr
+            Origin::Written
+            | Origin::EncodedF01LocalAsr
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_) => true,
             Origin::RecordedCrops(count) => data == crops_seed(count)?,
+            Origin::RecordedCropPixels => {
+                data == png_pixels_input(
+                    RECORDED_CROP_SIZE,
+                    RECORDED_CROP_SIZE,
+                    &fs::read(repository(RECORDED_CROP))?,
+                )
+            }
             Origin::CropPair {
                 outer,
                 outer_in,
@@ -1540,10 +1599,12 @@ fn the_visual_seeds_derive_from_the_recorded_samples() -> TestResult {
         let derived = match seed.origin {
             Origin::RecordedShowinfo(fixture) => showinfo_seed(fixture)?,
             Origin::RecordedVisualIndex(fixture) => visual_index_seed(fixture)?,
-            Origin::Copy(_)
+            Origin::Written
+            | Origin::Copy(_)
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedCrops(_)
+            | Origin::RecordedCropPixels
             | Origin::CropPair { .. }
             | Origin::SearchPair { .. }
             | Origin::BundleImage(_)
@@ -1778,12 +1839,14 @@ fn the_derived_seeds_are_rebuilt_by_the_harness() -> TestResult {
                 member,
                 value,
             } => edited_example(example, member, value)?,
-            Origin::Copy(_)
+            Origin::Written
+            | Origin::Copy(_)
             | Origin::InlineIn(_)
             | Origin::EncodedF01LocalAsr
             | Origin::RecordedShowinfo(_)
             | Origin::RecordedVisualIndex(_)
             | Origin::RecordedCrops(_)
+            | Origin::RecordedCropPixels
             | Origin::CropPair { .. }
             | Origin::SearchPair { .. } => continue,
         };

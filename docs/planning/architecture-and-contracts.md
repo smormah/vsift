@@ -1,9 +1,12 @@
 # Proposed architecture and public contracts
 
-Status: accepted R0 design, implemented through P06 plus the P07 engine boundary and
-supplied-transcript import (P07 increment 2). Requirement IDs refer
-to [the plan](README.md); later sections still describe future work unless
-the [delivery ledger](delivery-ledger.json) marks their packet complete.
+Status: accepted R0 design. Every R0 packet, P00 to P14, is marked complete in the
+[delivery ledger](delivery-ledger.json) and shipped in the `0.1` and `0.2` releases; the
+sections that name a packet say when it landed. The design has since grown by the
+decisions of the 0.3.0 line (ADRs 0027 to 0038), which are recorded in their ADRs and in
+[the CLI contract](../contracts/cli-v1.md), not rewritten here. Requirement IDs refer to
+[the plan](README.md). Where a later section still describes future work, the ledger and
+the CLI contract say what is implemented.
 
 ## 1. Ownership and module boundaries
 
@@ -391,12 +394,19 @@ job and reuses only verified compatible stage outputs.
 As implemented in P10 PR 2 (`vsift-domain` `JobState`): queued -> running | cancelling
 | cancelled; running -> committing | interrupted | cancelling | failed; committing ->
 succeeded | failed | interrupted (the last only when the chain shows the commit did
-not land); interrupted -> running | cancelled; cancelling -> cancelled | failed. The
+not land); interrupted -> running | cancelled | queued (the last since 0.3.0's Fable
+review C-4: a job of the queued mode, resumed after an interruption, waits its turn
+again as queued, keeping its attempts and checkpoints, so that it can be cancelled
+while it waits); cancelling -> cancelled | failed. The
 job's OS lock is the liveness authority: a job recorded as running whose lock can be
 taken is interrupted; a suspended owner keeps its lock. Every lock is a non-waiting
 try-lock, taken as the session's shared lifetime hold, the job's owner lock, then
 (inside a publication) admission, the lifetime hold and the writer; the state lock is
-held only for a few file operations. Jobs never renew their session.
+held only for a few file operations. Since 0.3.0 (Fable review C-2) a commit that finds
+the session's writer lock held polls it for up to 2 s before answering `BUSY`: the
+writer is the innermost lock, and nothing waits for another lock while holding it. A
+run's transcript parts are committed under the run's own admission permit and take no
+unit of their own. Jobs never renew their session.
 
 Retry only classified transient failures with capped exponential backoff and jitter
 within an overall deadline (at most two retries; P10 PR 2 implements `BUSY` retries

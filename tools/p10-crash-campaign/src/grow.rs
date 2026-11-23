@@ -605,6 +605,7 @@ impl RevisionStore for Acknowledging<'_, '_, '_> {
         part: NonZeroU32,
         first: usize,
         now: u64,
+        admission: vsift_application::CommitAdmission<'_, Self::Permit>,
     ) -> Result<StorageGeneration, SessionStorageError> {
         // A part is an operation of its own on the wire: started before it
         // touches the store, acknowledged once committed, and never a failure
@@ -629,6 +630,7 @@ impl RevisionStore for Acknowledging<'_, '_, '_> {
             part,
             first,
             now,
+            admission,
         )?;
         if let Err(failure) = self.acknowledge(part_seq, session_id, committed, open.id()) {
             self.record_failure(failure);

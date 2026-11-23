@@ -37,6 +37,10 @@ maintainer does for each batch and what it costs, is
 [ADR 0024](../../decisions/0024-r0-qualification-and-release-candidate.md) decision D and its PR 6
 note.
 
+**A development batch for M5a (2026-11-15).** [`batch-2-m5a/`](batch-2-m5a/) holds the records, summary and freeze copy of 17 Claude runs on the lighter skill of `0.3.0` (version label `0.3.0-m5a`, not a candidate); it is evidence for the skill trim, read in [`docs/agents/skill.md`](../../agents/skill.md), and qualifies nothing.
+
+**A development batch for M5b (2026-11-15).** [`batch-2-m5b/`](batch-2-m5b/) holds the records, summary and freeze copy of 17 Claude runs on `vsift handoff finish` of `0.3.0` (version label `0.3.0-m5b`, not a candidate; head `f07ba924`, freeze `53317345...`); it is evidence for the finishing command, read in [`docs/agents/skill.md`](../../agents/skill.md), and qualifies nothing.
+
 ## Layout
 
 ```text

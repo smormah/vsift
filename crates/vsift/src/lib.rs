@@ -98,7 +98,9 @@
 
 mod asr;
 mod batch;
+mod bundle_search;
 mod candidates;
+mod clocks;
 mod engine;
 mod error;
 mod evidence;
@@ -110,14 +112,19 @@ mod jobs;
 mod lifecycle;
 mod local_asr_check;
 mod managed;
+mod pages;
 mod prepare;
 mod progress;
+mod screen_changes;
 mod screen_text;
 mod search;
 mod sessions;
 mod setup;
+mod skill;
+mod speakers;
 mod transcripts;
 mod verification;
+mod watch;
 mod worker;
 mod workspace;
 
@@ -126,7 +133,9 @@ pub use asr::{
     RetranscribePublication, RetranscribeRange, RetranscribeRequest,
 };
 pub use batch::{BatchEvent, BatchLineEnd, BatchProgress, MAX_BATCH_CONCURRENCY, WorkBatchRun};
+pub use bundle_search::{BundleSearchRequest, BundleSearchResults};
 pub use candidates::{CandidatesRange, CandidatesRequest, CandidatesResults};
+pub use clocks::{ClocksRequest, ClocksResults, ClocksState, DEFAULT_CLOCK_FRAMES};
 pub use engine::{
     Engine, EngineConfig, EnginePorts, HostIsolation, MAX_SESSION_ROOT_WAIT, ManagedRootLocation,
     SessionRootLocation, UserConfigurationLocation,
@@ -155,6 +164,7 @@ pub use prepare::{
     RecognitionShare, VISUAL_BATCH_WINDOWS,
 };
 pub use progress::{AdmissionWaitCause, AdmissionWaiting, JobProgress, ProgressObserver};
+pub use screen_changes::{ScreenChangeItem, ScreenChangesRequest, ScreenChangesResults};
 pub use screen_text::{
     DEFAULT_OCR_THREADS, OCR_RUNNER_NAME, OcrError, ScreenTextRange, ScreenTextRequest,
     ScreenTextResults, ScreenTextWindows,
@@ -165,12 +175,17 @@ pub use search::{
 };
 pub use sessions::{
     BundleSummary, CleanDecision, CleanEntry, CleanMode, CleanPage, CleanRequest, CleanScope,
-    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, SESSION_CLOSE_JOB_WAIT, SessionListEntry,
-    SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
+    FreeSpaceReserveCheck, IngestOutcome, IngestRequest, LinkIngestRequest, SESSION_CLOSE_JOB_WAIT,
+    SessionListEntry, SessionPage, SessionSnapshot, SourceRetention, SuppliedTranscriptRequest,
 };
 pub use setup::{
     DEFAULT_PROBE_TIMEOUT, EvaluatedSetupPlan, ExecutableSelections, SetupCheckReport,
     SetupCheckRequest, SetupPlanRequest,
+};
+pub use skill::{SkillError, SkillTarget};
+pub use speakers::{
+    DIARIZER_EXECUTABLE, DiarizerSelection, NameSpeakerRequest, SpeakersRange, SpeakersRequest,
+    SpeakersView,
 };
 pub use transcripts::{TranscriptExcerpt, TranscriptQuery};
 pub use verification::{
@@ -178,9 +193,20 @@ pub use verification::{
 };
 /// Where a stream of a `prepare` job is (`job status`, ADR 0033).
 pub use vsift_application::StreamPhase;
+pub use vsift_application::{DiarizationRunError, MAX_DIARIZATION_MICROS, SpeakerLabelError};
+/// Why a speaker record was refused (ADR 0031), inside [`SpeakerLabelError::Record`].
+pub use vsift_domain::DiarizationError;
+pub use vsift_domain::{AgentClient, ReplacePolicy};
+pub use vsift_domain::{
+    EVIDENCE_ARTIFACTS_PER_FRAME, MAX_WATCH_FRAMES, frames_that_fit, readable_time,
+};
 /// Starting the background runner of `job start` (ADR 0033): the host gives
 /// the executable and its arguments, and the runner outlives it.
 pub use vsift_infrastructure::{DetachedRunner, Detachment, launch_detached};
+pub use watch::{
+    OutputNameError, WatchFailedAfterKeep, WatchFailure, WatchFile, WatchFrame, WatchKept,
+    WatchOutcome, WatchOutputKind, WatchOutputNames, WatchRequest,
+};
 pub use worker::{MAX_CANDIDATE_CALLS, WorkOutcome, WorkRequestRun};
 pub use workspace::{WorkspaceInit, WorkspaceInitOutcome, WorkspaceInitRequest};
 
@@ -195,6 +221,13 @@ pub use vsift_application::{
     SpecialFileKind, SpeechPcm, SpeechRecognitionError, SpeechRecognizer, TranscriptBuildError,
     TranscriptQueryError, UnusableChunk, UnusableChunks,
 };
+/// Screen-change values that appear in this API (ADR 0034).
+pub use vsift_application::{
+    CROPPED_REGIONS_PER_CHANGE, ComparedChange, CropStop, CropSummary, DEFAULT_SCREEN_CHANGE_PAGE,
+    MAX_CROPS_PER_CALL, MAX_SCREEN_CHANGE_PAGE, RegionCrops, ScreenChangeCrops,
+    ScreenChangeQueryError, ScreenChangeResume, ScreenChangeResumeReason, ScreenChangeStop,
+    TakenFrame,
+};
 /// Visual-candidate values that appear in this API.
 pub use vsift_application::{
     CandidateQueryError, MAX_WINDOWS_PER_EXTENSION, VisualExtensionStop, VisualIndexBuildError,
@@ -203,10 +236,11 @@ pub use vsift_application::{
 /// Managed-installation values that appear in this API (P13).
 pub use vsift_application::{
     CompatibilitySmokeCheck, CompatibilitySmokeFailure, CompatibilitySmokeFailureReason,
-    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport,
-    DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
+    ComponentInstallFailure, ComponentInstallOutcome, ComponentInstallReport, CorePart,
+    CorePartSet, DownloadFailureReason, InstallFailureReason, InstallStep, ManagedInstallReport,
     ManagedPlanAvailability, ManagedUpdate, OptionalCapability, OptionalComponent,
-    OptionalComponentSet, StageDisposal, StageRetentionReason, SupersessionReason,
+    OptionalComponentSet, PieceProgress, PieceStage, StageDisposal, StageRetentionReason,
+    SupersessionReason, UserSuppliedKind, UserSuppliedTool,
 };
 /// Managed-lifecycle values that appear in this API (P13 PR 6).
 pub use vsift_application::{
@@ -238,6 +272,12 @@ pub use vsift_domain::{
     RuntimeReadiness, SessionId, SessionLifetime, SessionLifetimePolicy, SessionPhase, SourceId,
     StorageGeneration, WorkspacePolicy, WorkspacePolicyError, WorkspaceRetention,
 };
+/// Online-source values that appear in this API (ADR 0028).
+pub use vsift_domain::{
+    AddressCheck, DirectLinkOrigin, DownloadLimits, DownloadLimitsError, HostName, PageJoin,
+    PageOrigin, PageProvider, PageToolRecord, PageToolVersion, PageVideoId, SourceFetchReason,
+    SourceLink, SourceOrigin,
+};
 /// Transcript evidence values that appear in this API.
 pub use vsift_domain::{
     AlignmentOrigin, CarriedFrom, Confidence, ConfidenceOrigin, CueMarkup, CueSource, CueText,
@@ -247,6 +287,11 @@ pub use vsift_domain::{
     TranscriptProvenance, TranscriptRejection, TranscriptRevision, TranscriptRevisionId,
     TranscriptSegment, TranscriptSegmentId, TranscriptWarning, TranscriptWarningKind,
     TranscriptWarnings,
+};
+/// Time-anchoring values that appear in this API (ADR 0029).
+pub use vsift_domain::{
+    AnchorConfidence, AnchorConsistency, AnchorSource, CivilDateTime, ClockReading, ClockTime,
+    TimeAnchor, TimeAnchorError, TimeAnchors, UtcOffset,
 };
 /// Local-ASR provenance values reachable from [`TranscriptProvenance`], and
 /// the values a host-supplied [`SpeechRecognizer`] works with.
@@ -272,6 +317,13 @@ pub use vsift_domain::{
     VisualCoverageGap, VisualDelta, VisualHash, VisualIndex, VisualIndexError, VisualIndexId,
     VisualIndexProfile, VisualIndexWindow, VisualWindow, VisualWindowOutcome,
 };
+/// Screen-change values that appear in this API (ADR 0034).
+pub use vsift_domain::{
+    ChangeRegion, FrameComparison, MAX_CHANGE_REGIONS, MotionPart, PlannedScreenChange,
+    RegionComparison, SCREEN_CHANGE_JOIN_DISTANCE, SCREEN_CHANGE_PIXEL_LEVEL, SCREEN_CHANGE_TILE,
+    SCREEN_CHANGE_TILE_PIXELS, ScreenChangeId, ScreenChangeKind, ScreenChangeProfile,
+};
+pub use vsift_domain::{ClockId, ClockStatementError, GapId};
 /// Search values that appear in this API.
 pub use vsift_domain::{
     CoverageBasis, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_TERMS, SearchCoverage, SearchMatch,

@@ -1,0 +1,9 @@
+Clocks on the screen of session ses_0123456789abcdef0123456789abcdef
+State: not_run (run vsift ocr first)
+Read by this call: 0 frames, 0 reads still to make
+No clock in the frames read: this says nothing of the frames not read.
+Set aside: 0 times that never moved, 0 that moved unlike a clock
+
+Status: partial (the warnings below say what is missing)
+Lifecycle: ephemeral, expires 2026-09-25T00:00:00Z
+Warning: Not everything is known about this session's clocks yet: frames ocr planned are unread, or the search around a clock's rollovers has reads left. Run ocr, then clocks, again to continue. A clock not listed may simply not have been read.

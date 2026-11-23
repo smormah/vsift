@@ -31,6 +31,7 @@
 //! [`result`] answers `None` only for `setup check` (rendered from its typed
 //! report by [`setup_check`]) and a rejected command line, which only fails.
 
+mod clock;
 mod evidence;
 mod failure;
 mod handoff;
@@ -38,18 +39,33 @@ mod job;
 mod session;
 mod setup;
 mod setup_check;
+mod setup_door;
+mod skill;
 mod text;
 mod time;
 mod transcript;
 mod view;
+mod watch;
+mod watch_progress;
 
 use serde::Deserialize;
 use vsift_contract::{CommandName, OperationResponse};
 
 pub(crate) use failure::{HumanDetail, failure};
-pub(crate) use setup_check::setup_check;
+pub(crate) use setup_check::{Standing, extra_words, setup_check};
+pub(crate) use setup_door::{
+    DoorOffer, door_after_install, door_declined, door_install_results, door_installing,
+    door_no_terminal, door_nothing_to_offer, door_offer, door_opening, door_question,
+    door_unattended_installing, door_unattended_result, piece_bars, piece_finished,
+    piece_finished_line,
+};
 use text::TerminalText;
-pub(crate) use text::{DisplayText, RenderedText};
+pub(crate) use text::{DisplayText, RenderedText, Styling, TooLarge};
+pub(crate) use view::{InstallComponent, SetupInstall, SetupPlan};
+pub(crate) use watch_progress::{
+    StreamFigures, StreamView, WatchPhase, WatchProgressView, WatchStream, watch_progress,
+    watch_stream_finished,
+};
 
 use crate::output::OutputError;
 
@@ -138,9 +154,15 @@ fn render_value(
         CommandName::TranscriptGet => transcript::page(&envelope(value)?),
         CommandName::TranscriptRetranscribe => transcript::retranscription(&envelope(value)?),
         CommandName::Search => transcript::search(&envelope(value)?),
+        CommandName::TranscriptSpeakers | CommandName::TranscriptNameSpeaker => {
+            transcript::speakers(&envelope(value)?)
+        }
         CommandName::Candidates => evidence::candidates(&envelope(value)?),
+        CommandName::Changes => evidence::changes(&envelope(value)?),
         CommandName::Ocr => evidence::screen_text(&envelope(value)?),
+        CommandName::Clocks => evidence::clocks(&envelope(value)?),
         CommandName::OcrSearch => transcript::ocr_search(&envelope(value)?),
+        CommandName::BundleSearch => transcript::bundle_search(&envelope(value)?),
         CommandName::FrameGet
         | CommandName::FrameNeighbours
         | CommandName::FrameBurst
@@ -153,9 +175,16 @@ fn render_value(
         CommandName::JobRun => job::run(&envelope(value)?),
         CommandName::JobBatch => job::batch(&envelope(value)?),
         CommandName::HandoffCheck => handoff::check(&envelope(value)?),
-        // `setup check` renders from its typed report (`setup_check`), and a
+        CommandName::HandoffSkeleton => handoff::skeleton(&envelope(value)?),
+        CommandName::HandoffFinish => handoff::finish(&envelope(value)?),
+        CommandName::SkillInstall => skill::install(&envelope(value)?),
+        CommandName::SkillStatus => skill::status(&envelope(value)?),
+        CommandName::SkillShow => skill::show(&envelope(value)?),
+        CommandName::Watch => watch::finished(&envelope(value)?),
+        // `setup check` renders from its typed report (`setup_check`), the
+        // setup door writes its own conversation (`setup_door`), and a
         // rejected command line only ever fails.
-        CommandName::SetupCheck | CommandName::Parse => return Ok(None),
+        CommandName::SetupCheck | CommandName::Setup | CommandName::Parse => return Ok(None),
     };
     rendered.map(Some).map_err(|_| OutputError::TooLarge)
 }
@@ -210,4 +239,4 @@ where
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -3,7 +3,8 @@
 Status: measured 2026-09-26 on P08 PR 4 (`p08/candidates`, which merges PR 3 and PR 1),
 Windows 11, Xeon E5-2698 v4, FFmpeg 9.0 (gyan.dev full build), release build.
 Design: [ADR 0018](../decisions/0018-visual-candidate-index-and-transcript-search.md)
-(Proposed), decisions 9-14. Verification IDs: V-02..V-05, S-11.
+(Accepted by the maintainer on 2026-09-26; this record was written before the acceptance and
+said "Proposed"), decisions 9-14. Verification IDs: V-02..V-05, S-11.
 
 ## Method
 

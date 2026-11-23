@@ -9,4 +9,4 @@ Your setup isn't complete: speech is missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.
 Video works, so a transcript you already have can still be used.
 The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
-Next: vsift setup configure whisper --executable <full-path-to-whisper-cli>
+Next: vsift setup

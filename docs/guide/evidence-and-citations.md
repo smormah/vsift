@@ -32,6 +32,50 @@ note asks the reader to take your word.
 Always give the **time you got**, not the time you asked for. They differ by up to a frame, and a claim
 about a moment is a claim about the frame VSift really returned.
 
+## When it happened by the clock
+
+Every time above is a time into the video. To match a moment with a server log or a chat, you need the time
+on the clock. From version 0.3.0, VSift gives it when it knows when the recording started: give the start
+yourself when you open the video (`vsift ingest recording.mp4 --recorded-at 2026-10-21T14:03:12+01:00`), or let
+VSift read it from the file, where phone and screen recorders often write it. Each result then has a
+`clock_time`, and `ingest` and `session status` a `time_anchor` that says where the time came from:
+
+- `operator`: the time you gave. VSift takes it as exact.
+- `quicktime_creationdate`: the recording app's own note of when it started, usually with the time zone.
+- `container_creation_time`: when the file was made. Often that is when it was converted or copied, not
+  when it was recorded, so check it.
+
+If the sources disagree, `time_anchor` says `conflicting`: say so in your report. A clock time with
+`utc: null` is a local time whose zone is not known; it cannot be matched with logs in UTC until you know the
+zone, and VSift never compares it with the other sources (a clock in a screen share may show another
+country's time). VSift never uses the date a file was saved or downloaded, and a time is never guessed.
+
+### Clocks on the screen
+
+Screen recordings often show a clock. After `vsift ocr`, `vsift clocks <session>` finds them and says how
+each moves against the video. VSift never mixes clock faces from different zones: each clock is a source of
+its own, and a time on the screen counts as a clock only if it moves with the video, so a chat message's time
+does not. Every claim names the frames that prove it, so you can open them with `vsift frame get`.
+
+- **Gaps.** When a clock jumps ahead, time may be missing from the video, or a different machine's clock may
+  have taken its place. VSift cannot tell which, so nothing changes: results after the gap carry a `segment`,
+  and only `--accept-gap` moves their clock times.
+- **Zones.** With a time from another source, `clocks` shows which UTC offsets a clock fits. That is an
+  inference and is never applied. Only `--screen-zone c1=-05:00`, from what you know, confirms one.
+- **Stretches that left and came back.** A clock's reading can leave its line and return: a misread digit, or
+  another clock's turn in the same place. VSift reports both explanations and does not choose.
+
+Most clocks show no date, so they tell you about gaps and pauses but give no clock time until you confirm a
+zone. The accuracy of these readings has been measured on synthetic screens only, not on a real taskbar.
+
+### Clock times in a report
+
+A report's citations can state the clock time of what they cite, and `vsift handoff check --session <session>`
+holds it to what VSift returns for that item now. Copy the item's `clock_time` whole: the check compares the
+exact text, refuses a dropped `segment`, and refuses a time with no zone written as an instant. If someone
+accepts a gap or confirms a zone after the report was written, the check says the value may be stale, and the
+fix is to read the item again. Only the structured value is checked: a time written in a sentence is not.
+
 ## Rules for good evidence
 
 1. **Quote the visible form.** When you copy words from a transcript, copy `display_text` (the line after

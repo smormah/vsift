@@ -3,19 +3,20 @@
 
 use std::{
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use vsift_application::{
-    DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability, ManagedPlanObservation,
-    ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability, OptionalComponent,
-    OptionalComponentSet, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
-    plan_managed_setup_including,
+    CorePartSet, DiagnoseRuntime, LocalAsrSetupStatus, ManagedPlanAvailability,
+    ManagedPlanObservation, ManagedSetupPlan, ManagedUpdate, ObservedModel, OptionalCapability,
+    OptionalComponent, OptionalComponentSet, RuntimeDiagnosis, SetupProfile, SetupSelectionState,
+    UserSuppliedKind, UserSuppliedTool, plan_managed_setup_of_parts,
 };
 use vsift_contract::{DependencyLookup, SavedSetupPlan, SetupPlanResponse};
 use vsift_domain::{ManagedComponent, RuntimeDependency};
 use vsift_infrastructure::{
-    ExplicitProbePaths, ProcessDependencyProbe, accepted_host_catalogue, detect_managed_target,
+    ExplicitProbePaths, ProcessCancellation, ProcessDependencyProbe, TrustedExecutable,
+    UserOnlineTool, accepted_host_catalogue, detect_managed_target, identify_user_online_tool,
 };
 
 use crate::{engine::Engine, error::EngineError};
@@ -201,6 +202,10 @@ pub struct SetupPlanRequest {
     /// The optional components to include (`setup plan --include`, #409);
     /// [`OptionalComponentSet::EMPTY`] for the default plan.
     pub include: OptionalComponentSet,
+    /// The core parts the plan may install: [`CorePartSet::ALL`] for `setup
+    /// plan`, fewer for an unattended setup that names them (ADR 0036
+    /// section 6).
+    pub parts: CorePartSet,
     /// Total deadline shared by the dependency probes of one look at the
     /// tools; hosts normally pass [`DEFAULT_PROBE_TIMEOUT`]. A probe that
     /// times out causes no managed action, and the plan says so.
@@ -321,7 +326,13 @@ impl Engine {
             request.probe_timeout,
             selections.clone().into_probe_paths(),
         );
+        let probes_started = Instant::now();
         let diagnosis = DiagnoseRuntime::new(probe).execute().await;
+        // What the tool checks share (`probe_timeout`) is spent once; the
+        // registered online tools get what is left of it.
+        let time_left = request
+            .probe_timeout
+            .saturating_sub(probes_started.elapsed());
         let managed_model = match store.read_model()? {
             Some(configured) => Some((configured, None)),
             None => lookup.model().map(|model| (model.path, Some(model.hold))),
@@ -340,7 +351,9 @@ impl Engine {
             vsift_infrastructure::accepted_ubuntu_catalogue()
                 .map_err(|_| EngineError::ReviewedPolicyInvalid)?,
         );
-        let optional = optional_capabilities(managed_install, catalogue.as_ref(), &mut lookup);
+        let mut optional = optional_capabilities(managed_install, catalogue.as_ref(), &mut lookup);
+        self.apply_user_supplied_tools(&store, time_left, &mut optional)
+            .await?;
         let managed_install_by_dependency = RuntimeDependency::ALL.map(|dependency| {
             let supplier = match dependency {
                 RuntimeDependency::Ffmpeg | RuntimeDependency::Ffprobe => {
@@ -508,11 +521,12 @@ impl Engine {
         };
         let probe =
             ProcessDependencyProbe::with_explicit_paths(request.probe_timeout, configured.clone());
-        let plan = plan_managed_setup_including(
+        let plan = plan_managed_setup_of_parts(
             request.profile,
             DiagnoseRuntime::new(probe).execute().await,
             detect_managed_target(),
             selections,
+            request.parts,
             request.include,
             now_unix_seconds,
             catalogue,
@@ -555,6 +569,86 @@ impl Engine {
             .map_err(EngineError::from)
     }
 
+    /// Reports what the user registered for the online-links row (ADR 0028
+    /// section 4.6): a yt-dlp of theirs is used instead of a managed one on
+    /// every host, with the JavaScript runtime they registered or none;
+    /// a runtime without a yt-dlp of theirs is unused (a managed yt-dlp
+    /// runs with the managed Deno only), and the row says so. Each
+    /// registered file is an untrusted program, identified with the fixed
+    /// version request; its first version line and its SHA-256 are all that
+    /// is reported.
+    async fn apply_user_supplied_tools(
+        &self,
+        store: &vsift_infrastructure::UserDependencyConfigStore,
+        time_left: Duration,
+        optional: &mut [(OptionalComponent, OptionalCapability)],
+    ) -> Result<(), EngineError> {
+        let yt_dlp = store.read_yt_dlp()?;
+        let runtime = store.read_js_runtime()?;
+        if yt_dlp.is_none() && runtime.is_none() {
+            return Ok(());
+        }
+        let workspace_parent = store
+            .media_tool_verification_state()?
+            .workspace_parent()
+            .to_path_buf();
+        let isolation = self.config().host_isolation.into_infrastructure();
+        let end = Instant::now() + time_left;
+        let identify = |kind: UserSuppliedKind, tool: UserOnlineTool, path: PathBuf| {
+            let workspace_parent = workspace_parent.clone();
+            let time_left = end.saturating_duration_since(Instant::now());
+            async move {
+                let executable = TrustedExecutable::explicit(&path).map_err(|_| "unreadable")?;
+                let facts = identify_user_online_tool(
+                    tool,
+                    &executable,
+                    &workspace_parent,
+                    isolation,
+                    time_left,
+                    ProcessCancellation::new(),
+                )
+                .await
+                .map_err(vsift_infrastructure::UserOnlineToolFault::identifier)?;
+                Ok::<UserSuppliedTool, &'static str>(UserSuppliedTool {
+                    kind,
+                    version_line: facts.version_line,
+                    sha256: facts.sha256.as_str().to_owned(),
+                })
+            }
+        };
+        let Some(yt_dlp) = yt_dlp else {
+            if let Some(path) = runtime {
+                let identified =
+                    identify(UserSuppliedKind::JsRuntime, UserOnlineTool::JsRuntime, path).await;
+                wrap_unused_runtime(optional, &identified);
+            }
+            return Ok(());
+        };
+        let mut tools = Vec::new();
+        for (kind, tool, path) in [
+            (UserSuppliedKind::YtDlp, UserOnlineTool::YtDlp, Some(yt_dlp)),
+            (
+                UserSuppliedKind::JsRuntime,
+                UserOnlineTool::JsRuntime,
+                runtime,
+            ),
+        ] {
+            let Some(path) = path else { continue };
+            match identify(kind, tool, path).await {
+                Ok(identified) => tools.push(identified),
+                Err(reason) => {
+                    set_online_links(
+                        optional,
+                        &OptionalCapability::UserSuppliedUnusable { tool: kind, reason },
+                    );
+                    return Ok(());
+                }
+            }
+        }
+        set_online_links(optional, &OptionalCapability::UserSupplied(tools));
+        Ok(())
+    }
+
     /// Saves one user-managed local ASR model path without reading its bytes.
     ///
     /// # Errors
@@ -565,6 +659,60 @@ impl Engine {
         self.user_configuration()?
             .configure_model(file)
             .map_err(EngineError::from)
+    }
+
+    /// Saves the user-supplied yt-dlp for public video pages without running
+    /// it (ADR 0028 section 4.6).
+    ///
+    /// # Errors
+    ///
+    /// Fails when the path is not an absolute regular file or the per-user
+    /// configuration cannot be written.
+    pub fn configure_yt_dlp(&self, executable: &Path) -> Result<(), EngineError> {
+        self.user_configuration()?
+            .configure_yt_dlp(executable)
+            .map_err(EngineError::from)
+    }
+
+    /// Saves the user-supplied JavaScript runtime that the user's yt-dlp
+    /// runs a page's player code with (Deno only in `0.3.0`), without
+    /// running it.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the path is not an absolute regular file or the per-user
+    /// configuration cannot be written.
+    pub fn configure_js_runtime(&self, executable: &Path) -> Result<(), EngineError> {
+        self.user_configuration()?
+            .configure_js_runtime(executable)
+            .map_err(EngineError::from)
+    }
+}
+
+/// Notes, on the online-links row as it stands, a registered JavaScript
+/// runtime that no registered yt-dlp uses.
+fn wrap_unused_runtime(
+    optional: &mut [(OptionalComponent, OptionalCapability)],
+    runtime: &Result<UserSuppliedTool, &'static str>,
+) {
+    for (component, current) in optional.iter_mut() {
+        if *component == OptionalComponent::OnlineLinks {
+            *current = OptionalCapability::WithUnusedRuntime {
+                base: Box::new(current.clone()),
+                runtime: runtime.clone(),
+            };
+        }
+    }
+}
+
+fn set_online_links(
+    optional: &mut [(OptionalComponent, OptionalCapability)],
+    capability: &OptionalCapability,
+) {
+    for (component, current) in optional.iter_mut() {
+        if *component == OptionalComponent::OnlineLinks {
+            *current = capability.clone();
+        }
     }
 }
 
@@ -1184,7 +1332,7 @@ mod tests {
     #[tokio::test]
     async fn unavailable_managed_targets_give_typed_manual_guidance()
     -> Result<(), Box<dyn std::error::Error>> {
-        // 2030-11, after the reviewed catalogue's 2028-08-01 stop-new-plans boundary.
+        // 2030-11, after the reviewed catalogue's 2028-10-01 stop-new-plans boundary.
         const AFTER_CATALOGUE_EXPIRY: u64 = 1_920_000_000;
         let schema = setup_plan_schema()?;
         let validator = jsonschema::validator_for(&schema)?;

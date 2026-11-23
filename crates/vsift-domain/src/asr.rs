@@ -115,6 +115,14 @@ const SEAM_EDGE_MICROS: u64 = 500_000;
 /// normal speaking rate), with no sign. The release before lost that and
 /// everything after the neighbour's end with it.
 pub const SEAM_COVERAGE_TOLERANCE_MICROS: u64 = SEAM_EDGE_MICROS;
+/// Most words in the unit of a loop that [`loops_on_its_own_words`] looks for.
+/// Recogniser loops repeat a word or a short phrase; a longer unit said eight
+/// times over is not a loop this rule needs to catch, and the bound keeps the
+/// search linear in the segment's words.
+const MAX_LOOP_UNIT_WORDS: usize = 4;
+/// Fewest times in a row a unit must be said for [`loops_on_its_own_words`] to
+/// call its segment a loop: well above a word said a few times for emphasis.
+const MIN_LOOP_REPEATS: usize = 8;
 /// Fewest shared words that identify seam text as a duplicate rather than a
 /// genuine repeat.
 const MIN_SEAM_DUPLICATE_WORDS: usize = 2;
@@ -1798,8 +1806,9 @@ enum Side {
 ///    from another chunk is kept only when the owning chunk has no segment at
 ///    that time at all, so a recognizer miss in one chunk never loses speech
 ///    the other chunk heard. A segment that repeats the one before it in its
-///    own chunk (a recogniser loop) does not count as a segment at that time
-///    (#485): it claims no time here or in rule 2.
+///    own chunk (a recogniser loop, #485), or that loops on its own words (one
+///    to four words said again and again, #539), does not count as a segment
+///    at that time: it claims no time here or in rule 2.
 /// 2. A kept segment within 0.5 s of an inner window edge was probably cut by
 ///    that edge. It is dropped when the neighbour across that edge has a
 ///    segment spanning the cut segment's midpoint that is not itself cut at
@@ -1872,8 +1881,8 @@ fn keep_by_rules_one_and_two(chunks: &[ChunkSegments]) -> BTreeSet<(usize, usize
             if owner != index {
                 // The owning chunk decides, unless it heard nothing at this
                 // time; then this copy is the only one and is kept. A segment
-                // of the owner that repeats the one before it claims no time
-                // (#485), so it does not count as hearing something here.
+                // of the owner that is a recogniser loop claims no time (#485,
+                // #539), so it does not count as hearing something here.
                 if !claims_time_over(&chunks[owner], segment) {
                     kept.insert((index, position));
                 }
@@ -2083,8 +2092,22 @@ fn claims_time_over(chunk: &ChunkSegments, segment: &AsrSegmentDraft) -> bool {
         .any(|(position, candidate)| {
             candidate.range.start() < segment.range.end()
                 && candidate.range.end() > segment.range.start()
-                && !repeats_the_segment_before(chunk, position)
+                && !claims_no_time(chunk, position)
         })
+}
+
+/// Whether the segment at `position` of `chunk` is a recogniser loop, which
+/// **claims no time** in rules 1 and 2 of [`merge_chunks`]: it repeats the
+/// segment before it ([`repeats_the_segment_before`], #485) or it loops on its
+/// own words ([`loops_on_its_own_words`], #539). It is still kept by its own
+/// chunk as any segment is; the rule only lets another chunk's words be kept
+/// as well.
+fn claims_no_time(chunk: &ChunkSegments, position: usize) -> bool {
+    repeats_the_segment_before(chunk, position)
+        || chunk
+            .segments
+            .get(position)
+            .is_some_and(loops_on_its_own_words)
 }
 
 /// Whether the segment at `position` of `chunk` repeats the segment just before
@@ -2118,6 +2141,45 @@ fn repeats_the_segment_before(chunk: &ChunkSegments, position: usize) -> bool {
     let words = normalized_words(segment.text.text());
     words.len() >= MIN_SEAM_DUPLICATE_WORDS
         && same_seam_words(&normalized_words(before.text.text()), &words)
+}
+
+/// Whether `segment` loops on its own words: a unit of one to
+/// [`MAX_LOOP_UNIT_WORDS`] normalised words said at least [`MIN_LOOP_REPEATS`]
+/// times in a row, the repeats making up at least half of the segment's words.
+/// Such a segment claims no time in rules 1 and 2 ([`claims_no_time`]; #539, the
+/// maintainer's decision of 2026-10-28).
+///
+/// Why. A recogniser that hears a chunk in the wrong language can write one word
+/// again and again over the whole window (RM03 at 75 to 105 s: one word fifty
+/// times over English speech; known limits L-188 and L-201). Such a segment owned the time
+/// of the previous chunk's last words in their overlap, so rule 1 dropped them,
+/// and the guard saw no hole because the loop covered it. The repeat rule of
+/// #485 did not see it, because the loop is inside one segment. The thresholds
+/// keep ordinary speech out: a word said a few times for emphasis ("no no no
+/// no") is far below eight repeats, and a loop that is a small part of a longer
+/// segment leaves the segment's own speech claiming its time. Where the rule
+/// errs on speech that really is repetitive (a chant), the cost is the
+/// neighbour's copy kept as well, a visible repeat, never lost words.
+fn loops_on_its_own_words(segment: &AsrSegmentDraft) -> bool {
+    let words = normalized_words(segment.text.text());
+    (1..=MAX_LOOP_UNIT_WORDS).any(|unit| {
+        // A stretch in which every word equals the one `unit` words later is
+        // a unit said again and again: `streak` such equal pairs in a row make
+        // `streak + unit` words, that is `(streak + unit) / unit` repeats.
+        let mut streak = 0_usize;
+        words
+            .iter()
+            .zip(words.iter().skip(unit))
+            .any(|(word, later)| {
+                if word == later {
+                    streak += 1;
+                } else {
+                    streak = 0;
+                }
+                let looped = streak + unit;
+                looped / unit >= MIN_LOOP_REPEATS && looped * 2 >= words.len()
+            })
+    })
 }
 
 /// Each chunk's `[start, end)` core: overlap midpoints to overlap midpoints.
@@ -2185,7 +2247,7 @@ fn covering(
             candidate.range.start().as_micros() <= middle
                 && candidate.range.end().as_micros() > middle
                 && !cut_at(chunks, neighbour, candidate, facing)
-                && !repeats_the_segment_before(&chunks[neighbour], *position)
+                && !claims_no_time(&chunks[neighbour], *position)
         })
         .map(|(position, _)| (neighbour, position))
         .collect()

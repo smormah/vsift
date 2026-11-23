@@ -1,7 +1,8 @@
 //! Public CLI contract for a paged read of an open revision (ADR 0033, RV-1
 //! finding 4): `transcript get` and `search` give `data.since` only on the
 //! answer that ends the read, and a reader who follows the pages and then the
-//! token is given every published segment exactly once.
+//! token is given every published segment exactly once. `handoff skeleton`
+//! names the same open revision the reads cite (ADR 0038 section 1).
 //!
 //! The session and its parts are committed directly through the session store,
 //! from a run recognised in memory by stand-ins, so the journey runs
@@ -285,6 +286,7 @@ impl Seeded {
             NonZeroU32::new(number).ok_or("zero")?,
             first,
             self.now,
+            vsift_application::CommitAdmission::Ordinary,
         )?;
         Ok(())
     }
@@ -426,5 +428,129 @@ async fn a_paged_read_of_an_open_revision_gives_its_since_token_on_the_last_page
         ],
     )?;
     assert_eq!(ids(&since)?, added);
+    Ok(())
+}
+
+/// ADR 0038 section 1 with ADR 0033 D2: while a background transcription
+/// runs, a plain read cites its open revision, and the skeleton names that
+/// same revision, so a handoff started from the skeleton and citing what the
+/// read gave passes `handoff check --session`, also once the run has
+/// published more.
+#[tokio::test]
+async fn a_skeleton_names_the_open_revision_a_read_cites() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root).await?;
+    let (first, later) = (&seeded.open[1], &seeded.open[3]);
+    seeded.publish(1, first, 1, 0)?;
+
+    let to = (SOURCE_SECONDS * SECOND).to_string();
+    let read = vsift(
+        &root,
+        &["transcript", "get", SESSION, "--from", "0", "--to", &to],
+    )?;
+    assert_eq!(read["revision"]["state"], "open");
+    let read_revision = read["revision"]["revision_id"].clone();
+    let cited = ids(&read)?;
+    let cited = cited
+        .get(..2)
+        .ok_or("the read gave fewer than two segments")?;
+
+    let skeleton = vsift(
+        &root,
+        &[
+            "handoff",
+            "skeleton",
+            SESSION,
+            "--question",
+            "What does the speaker say first?",
+        ],
+    )?;
+    let mut handoff = skeleton["handoff"].clone();
+    assert_eq!(
+        handoff["session"]["revision_id"], read_revision,
+        "the skeleton names another revision than the read cites"
+    );
+    assert_eq!(handoff["capabilities"]["transcript_basis"], "local_asr");
+
+    handoff["status"] = "partial".into();
+    handoff["claims"] = serde_json::json!([{
+        "id": "c1", "section": "actual", "kind": "observed", "support": "supported",
+        "certainty": "medium", "statement": "The speaker says signal 0 begins, then goes on.",
+        "citations": ["e1", "e2"]
+    }]);
+    handoff["citations"] = serde_json::json!([
+        {"id": "e1", "type": "transcript_segment", "segment_id": cited[0]},
+        {"id": "e2", "type": "transcript_segment", "segment_id": cited[1]}
+    ]);
+    handoff["gaps"] = serde_json::json!([
+        {"kind": "image_access", "reason": "image_access_unavailable", "note": null}
+    ]);
+    let report = root.path("report.md");
+    fs::write(
+        &report,
+        format!(
+            "## Problem\n\nThe speaker says signal 0 begins [c1: e1, e2].\n\n\
+             ```vsift-handoff\n{handoff}\n```\n"
+        ),
+    )?;
+    let report = report.to_str().ok_or("a non-UTF-8 temporary path")?;
+    let check = ["handoff", "check", "--session", SESSION, "--file", report];
+
+    let checked = vsift(&root, &check)?;
+    assert_eq!(checked["valid"], true, "{checked}");
+    assert_eq!(checked["session"]["resolved"], true, "{checked}");
+
+    // The run publishes its next part: what the handoff cites still resolves.
+    seeded.publish(2, later, 2, first.segments().len())?;
+    let checked = vsift(&root, &check)?;
+    assert_eq!(checked["valid"], true, "{checked}");
+    assert_eq!(checked["session"]["resolved"], true, "{checked}");
+    Ok(())
+}
+
+/// ADR 0031 note of 2026-11-18: `transcript speakers` refuses a revision that is still
+/// open, whatever is installed, with `BUSY` naming the job that publishes it, its `job
+/// status` as the suggested command and a fixed remediation; nothing is committed, and
+/// a read of the open revision carries no speaker labels.
+#[tokio::test]
+async fn transcript_speakers_refuses_an_open_revision_and_names_its_job() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let seeded = seed(&root).await?;
+    let first = seeded.open.get(1).ok_or("no second cut")?;
+    seeded.publish(1, first, 1, 0)?;
+    let base = root.path("user");
+    let output: Output = Command::cargo_bin("vsift")?
+        .env("LOCALAPPDATA", &base)
+        .env("XDG_CONFIG_HOME", &base)
+        .env("HOME", &base)
+        .arg("--session-root")
+        .arg(root.sessions())
+        .args(["transcript", "speakers", SESSION, "--json"])
+        .output()?;
+    assert!(!output.status.success());
+    let refused: Value = serde_json::from_slice(&output.stdout)?;
+    // The contract's example is this answer, byte for byte in meaning.
+    let example: Value = serde_json::from_str(&fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/v1/examples/transcript-speakers.revision-open.json"),
+    )?)?;
+    assert_eq!(refused, example);
+    assert_eq!(
+        refused["error"]["remediation"][0]["summary"],
+        vsift_contract::SPEAKERS_REVISION_OPEN_REMEDIATION
+    );
+    let read = vsift(
+        &root,
+        &[
+            "transcript",
+            "get",
+            SESSION,
+            "--from",
+            "0",
+            "--to",
+            "120000000",
+        ],
+    )?;
+    assert!(read.get("speakers").is_none());
     Ok(())
 }

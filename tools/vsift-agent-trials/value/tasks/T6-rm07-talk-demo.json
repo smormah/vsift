@@ -1,0 +1,24 @@
+{
+  "id": "T6-rm07-talk-demo",
+  "task": "T6",
+  "kind": "talk_with_demo",
+  "media": {
+    "source": "test_media_release",
+    "item": "RM07",
+    "file": "RM07-lexeme-forms-480p.webm",
+    "sha256": "afd191629e79c69508050c27ae90ef057c3b483de2488f5e580b0f8c46361ce5"
+  },
+  "transcript": null,
+  "phases": [
+    {
+      "question": "What changes on screen in {{video}}, and when?",
+      "truth": {
+        "kind": "pending_m2"
+      }
+    }
+  ],
+  "budget": {
+    "timeout_s": 1800,
+    "max_turns": 80
+  }
+}

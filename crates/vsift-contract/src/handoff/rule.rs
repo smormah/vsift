@@ -110,11 +110,18 @@ pub enum HandoffRule {
     EvidenceNotInSession,
     /// A cited evidence identity is in the session as another kind.
     EvidenceKindMismatch,
+    /// A stated clock time is not what `VSift` returns for the item.
+    ClockTimeDiffers,
+    /// A stated clock time turns a time with no zone into an instant.
+    ClockTimeNotAnInstant,
+    /// A stated clock time differs, and the session's clock record has changed
+    /// around the item. It says nothing about which happened first.
+    ClockTimeMayBeStale,
 }
 
 impl HandoffRule {
     /// Every rule, in declaration order.
-    pub const ALL: [Self; 39] = [
+    pub const ALL: [Self; 42] = [
         Self::HandoffBlockMissing,
         Self::HandoffBlockRepeated,
         Self::HandoffBlockUnclosed,
@@ -154,6 +161,9 @@ impl HandoffRule {
         Self::SegmentNotInSession,
         Self::EvidenceNotInSession,
         Self::EvidenceKindMismatch,
+        Self::ClockTimeDiffers,
+        Self::ClockTimeNotAnInstant,
+        Self::ClockTimeMayBeStale,
     ];
 
     /// The rule's published identifier.
@@ -199,6 +209,9 @@ impl HandoffRule {
             Self::SegmentNotInSession => "segment_not_in_session",
             Self::EvidenceNotInSession => "evidence_not_in_session",
             Self::EvidenceKindMismatch => "evidence_kind_mismatch",
+            Self::ClockTimeDiffers => "clock_time_differs",
+            Self::ClockTimeNotAnInstant => "clock_time_not_an_instant",
+            Self::ClockTimeMayBeStale => "clock_time_may_be_stale",
         }
     }
 
@@ -246,6 +259,9 @@ impl HandoffRule {
             Self::SegmentNotInSession => 36,
             Self::EvidenceNotInSession => 37,
             Self::EvidenceKindMismatch => 38,
+            Self::ClockTimeDiffers => 39,
+            Self::ClockTimeNotAnInstant => 40,
+            Self::ClockTimeMayBeStale => 41,
         }
     }
 
@@ -290,13 +306,20 @@ impl HandoffRule {
             Self::SessionMismatch
             | Self::SegmentNotInSession
             | Self::EvidenceNotInSession
-            | Self::EvidenceKindMismatch => HandoffRuleScope::Session,
+            | Self::EvidenceKindMismatch
+            | Self::ClockTimeDiffers
+            | Self::ClockTimeNotAnInstant
+            | Self::ClockTimeMayBeStale => HandoffRuleScope::Session,
         }
     }
 
     /// The rule's fixed prose. A schema rule may carry more specific fixed
     /// prose for one pattern or combination instead (`messages`).
     #[must_use]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "One exhaustive match holds the fixed prose of every rule"
+    )]
     pub const fn message(self) -> &'static str {
         match self {
             Self::HandoffBlockMissing => {
@@ -395,6 +418,15 @@ impl HandoffRule {
             }
             Self::EvidenceKindMismatch => {
                 "This evidence id is in the session as another kind of evidence; cite it with the type of the command that extracted it."
+            }
+            Self::ClockTimeDiffers => {
+                "This clock time is not what VSift returns for this item; copy clock_time whole from the result that returned the item."
+            }
+            Self::ClockTimeNotAnInstant => {
+                "VSift's time for this item has no zone, so it names no instant; state local as VSift printed it, never utc or utc_offset."
+            }
+            Self::ClockTimeMayBeStale => {
+                "This clock time differs from VSift's, and the session's clock record has changed around this item; read the item again and cite what VSift returns now."
             }
         }
     }

@@ -40,6 +40,11 @@ These files are the machine-readable public v1 boundary:
   `setup-repair.json`). The reserved-command examples `operation-error.json` and
   `terminal-event.json` (`setup.repair` answering `COMMAND_NOT_IMPLEMENTED`) stay as frozen
   v1 envelopes; since PR 6 no command answers that code;
+- `setup.schema.json` — the `data` of a `setup` result, one unattended run of the setup
+  door (`vsift setup --unattended --install <parts> --json`, ADR 0036 section 6, since
+  `0.3.0`): `outcome` (`pass`, `fail`), each core part and included extra with whether it
+  was named, its `status` and its `next_step`, and the `setup.install` data of the install
+  it ran, or `null` (examples `setup.pass.json` and `setup.fail.json`);
 - `setup-plan-unqualified.schema.json` â historical P06 check-first response
   before catalogue acceptance, retained for v1 compatibility evidence;
 - `operation-response.schema.json` â terminal result for new operations;
@@ -81,10 +86,37 @@ These files are the machine-readable public v1 boundary:
   findings (each a pointer, a line, a closed `rule`, the schema's `allowed` values and
   fixed prose, never text from the draft), `truncated` and, with `--session`, how the
   session was used (`resolved`, a `gap`, `identities_checked`);
+- `handoff-finish-data.schema.json` — the `data` of a complete `handoff.finish` result
+  (0.3.0, M5b): the `handoff.check` data with the session always resolved, whether every
+  requested step was done (`finished`), why it stopped before any write (`stopped_at`), the
+  lifecycle action stated against the one asked for, and `session retain`'s or `session
+  close`'s data when that one write was made;
+- `handoff-skeleton-data.schema.json` — the `data` of a complete `handoff.skeleton`
+  result (0.3.0, ADR 0038): a valid handoff that states nothing yet, with one open
+  session's ids filled in, and `fill`, the members only the agent can supply;
+- `skill-install-data.schema.json`, `skill-status-data.schema.json` and
+  `skill-show-data.schema.json` — the `data` of `skill.install` (what copying the embedded
+  skill did at each client skill folder; kept as the failure's data when a folder was left
+  as it was), `skill.status` (what is at each folder, read without following a link) and
+  `skill.show` (one text file of the skill, by its manifest name) (0.3.0, ADR 0038);
 - `config.schema.json` â strict explicit configuration document reserved for P06;
 - `ingest-data.schema.json` â the `data` member of a complete `ingest` result; its
   optional `transcript` member is present only when a supplied transcript was
-  imported (P07);
+  imported (P07), its optional `time_anchor` member only when the session has a
+  clock-time anchor (0.3.0), and its optional `origin` member only for a source fetched with
+  `ingest --url` (0.3.0, ADR 0028: a digest of the link and the hosts it reached,
+  never the link; example `ingest.url.json`). A link that cannot be fetched is the
+  code `SOURCE_FETCH_FAILED` with the optional `error.reason` of
+  `operation-response.schema.json` (example `ingest-url-address-refused.json`);
+  both examples are checked by `vsift-contract`'s `link_contract`;
+- `time-anchor.schema.json` — time anchoring (0.3.0, ADR 0029): the `time_anchor`
+  summary of `ingest` and `session status` (when the recording happened by the
+  real-world clock, from which source, how far the sources agree, every anchor), and
+  under `$defs` the `clock` reading and the `clock_time` member every timestamped item
+  (transcript segment, visual candidate, frame or crop, audio clip) carries when the
+  session has an anchor. Examples: `ingest.time-anchor.json` and
+  `transcript-get.clock-time.json`, checked by `vsift-contract`'s
+  `anchored_results_match_their_examples`;
 - `transcript-get-data.schema.json` â the `data` member of a complete or partial
   `transcript.get` result: one bounded page with its continuation cursor (P07). Since
   0.2.1 it also has `transcript_coverage` (what a transcript covers of the requested
@@ -131,6 +163,14 @@ These files are the machine-readable public v1 boundary:
   (0.3.0, ADR 0033): `job` (the `prepare` job's data), `start` (`state`, `mode`,
   `mode_basis`, `runner`, `detachment`) and `outcome` (the `transcript.retranscribe`
   data of a job that ran in the foreground, else `null`);
+- `watch-data.schema.json` — the `data` member of a complete `watch` result, from
+  `vsift <video>` or `vsift watch <video>` (0.3.0, ADR 0037): the run's ids (`source_id`,
+  `session_id` and `session_closed`, `job_id`, `transcript_revision_id`,
+  `visual_index_revision_id`), `outcome` (`complete` or `partial`, with `not_transcribed`,
+  `screen_changes_beyond_bound`, `frames_stopped_for_room` and, since Fable review C-2,
+  `frames_skipped_for_capacity`), `names_shortened`, `outputs` (each file's absolute
+  `path`, display `name` and `sha256`; the folder's `sha256` is `null`), `changes_found`
+  (every screen change found), `changes_listed` (the settled screens the list shows) and at most 180 `frames` (`time_us`, `candidate_id`, `evidence_id`, `path`, `sha256`);
 - `transcript-get-stream-data.schema.json` â the `data` member of the terminal
   event that ends a `transcript.get --events jsonl` stream: the page without its
   items, with `record_count`, the continuation cursor (P07) and, since 0.2.1, the
@@ -158,6 +198,16 @@ These files are the machine-readable public v1 boundary:
   `last_time_us`, `frames` and `candidate_ids`, then `total_hits`, the `state`
   (`not_run`, `partial`, `complete`) and the same coverage. The member is absent on a page a
   cursor continues and never changes a search's status;
+- `speakers.schema.json` - speaker labels (`0.3.0`, ADR 0031): the `speakers` block that
+  `transcript get`, `search`, `transcript speakers` and `transcript name-speaker` carry, the
+  per-segment `speaker_label` (full and brief) and the result data of the two speaker
+  commands. Labels are provisional, by voice, with segment precision; a verified name is
+  the user's statement. `count_shortfall` appears in the block only when a given speaker
+  count was not kept (voices may be merged). Both members are absent when a revision has no speaker record,
+  so an answer without labels is unchanged (examples `transcript-speakers.json`,
+  `transcript-get.speakers.json`, `search.speakers.json`);
+- `transcript-speakers-data.schema.json` - the `data` member of a complete or partial
+  `transcript speakers` or `transcript name-speaker` result;
 - `candidates-data.schema.json` â the `data` member of a complete or partial
   `candidates` result (P08 PR 4): the requested `range`, the `index` revision and its
   fixed sampling grid, `coverage` (the searched range, the `analyzed` ranges and every
@@ -168,6 +218,21 @@ These files are the machine-readable public v1 boundary:
 - `candidates-stream-data.schema.json` â the `data` member of the terminal event that
   ends a `candidates --events jsonl` stream: the page without its items, with
   `record_count` (P08);
+- `changes-data.schema.json` - the `data` member of a complete or partial `changes` result
+  (0.3.0, ADR 0034): the requested `range`, the `index` and `coverage` as `candidates` reports
+  them, the region `profile` (`screen-change-regions-v1` and its thresholds), the `changes` as
+  `screen-change.schema.json` records in time order, each distinct `frame_evidence` record they
+  cite in `frames`, one delivered file per frame in `files`, `partial_reason`, `next_cursor`
+  and `resume`; with `--crops`, the crops follow the frames in `frames` and `files` and `crops`
+  says how many were made and why cropping stopped. Its envelope `coverage` is `truncated`, and
+  its status `partial`, exactly when there is a gap or the page stopped (a crop stop never makes
+  it partial); `changes-stream-data.schema.json` is the terminal data of
+  `changes --events jsonl`: the page without `changes` and `frames`, with `record_count`;
+- `screen-change.schema.json` - one screen change, a published evidence record (record type
+  `screen_change`, key `change_id`): its kind, the index's `change_window`, the `evidence_id`
+  and time of the frame before and after it, and the rectangles where those two frames differ
+  (with `--crops`, the two largest name their `before_crop` and `after_crop`).
+  A change is cited by its two `evidence_id`s, never by `change_id`;
 - `transcript-get-brief-data.schema.json`, `search-brief-data.schema.json` and
   `candidates-brief-data.schema.json` - the `data` of `transcript get`, `search` and
   `candidates` asked for with `--view brief` (0.2.1, #365 and #367): the full answer's own
@@ -213,6 +278,15 @@ These files are the machine-readable public v1 boundary:
   bundle's `visual_index_record` artifact: one revision of the visual index with every
   recorded window and candidate, as stored (P08). A storage record, not a response:
   its `schema_version` is the integer record version `1`;
+- `bundle-search-data.schema.json` - the `data` member of a complete or partial `bundle.search`
+  result (0.3.0, ADR 0035): one page of a query's hits across retained bundles, with what each
+  recording could give.
+- `clocks-data.schema.json` - the `data` member of a `clocks` result (0.3.0, ADR 0029,
+  stage 2): the clocks found in what `ocr` read, each with its offset against the video
+  and the frames that prove it, its excursions, freezes and jumps, offset observations
+  (always inferences, never applied), conflicts, and the session's `time_anchor` after the
+  call. Examples: [`clocks.json`](examples/clocks.json),
+  [`clocks.not-run.json`](examples/clocks.not-run.json).
 - `ocr-search-data.schema.json` - the `data` member of a complete or partial `ocr.search`
   result (0.3.0, ADR 0030 decision 13): one page of the query's on-screen occurrences of one
   session, with or without a transcript (`query.terms`, `range`, `state`, `index`, `hits` as
@@ -257,13 +331,15 @@ from 0: for `transcript.get`, one `evidence` event per segment and then one
 `terminal` event; for `search`, one `evidence` event per matching segment (the same
 `transcript_segment` records, in rank order) and then one `terminal` event; for
 `candidates`, one `evidence` event per candidate (`visual_candidate` records, in time
-order) and then one `terminal` event; for `frame.get`, `frame.neighbours`,
+order) and then one `terminal` event; for `changes`, one `frame_evidence` event per distinct
+frame of the page, then one `screen_change` event per change, then one `terminal` event; for
+`frame.get`, `frame.neighbours`,
 `frame.burst` and `crop`, one `evidence` event per item (`frame_evidence` records, in the
 result's item order) and then one `terminal` event; for `audio`, one `audio_evidence`
 event and then one `terminal` event; for `transcript.retranscribe` and `job.resume`,
 `progress` events (P11) and then one `terminal` event; for every other command, the
 terminal event alone. Dispatch on `event`; the terminal event's `sequence` and, for `transcript.get`,
-`search`, `candidates` and the frame commands, its `record_count` equal the number of evidence events
+`search`, `candidates`, `changes` and the frame commands, its `record_count` equal the number of evidence events
 before it. The exact consumer
 rules (upsert keys, end of stream, paging) are in the CLI contract.
 
@@ -386,6 +462,14 @@ yet, so it is `partial` with both gaps. All three are checked by `vsift-contract
 `candidates_contract`, the stream byte for byte. `bundle-visual-index-record.json` is
 F02's stored index record, checked by `vsift-infrastructure`'s `visual_index_store`
 tests, which also validate the records of a real retained bundle.
+`changes.json`, `changes.events.jsonl` and `changes.partial.json` (0.3.0, ADR 0034) page
+synthetic visual indexes with written-out regions and stand-in frame digests: a 14 s,
+1440x900 recording whose screen changes at 7 s and 10 s (the second a status edit of one row),
+complete, as a result and as a stream; and a 150 s recording with an undecodable and a
+not-analysed window whose page stopped on the session's evidence room after its first change,
+`partial` with `resume`; `changes.crops.json` is the 14 s page asked for with `--crops`, its six
+crops listed after its four frames. They are checked by `vsift-contract`'s `screen_changes_contract`, the
+stream byte for byte; `changes_cli_contract` runs the binary.
 `ocr.json`, `ocr.partial.json` and `search.screen-text.json` (0.3.0, ADR 0030) read a
 synthetic 15 s video every 5 s plus one visual candidate at 6 s, built by `vsift-contract`'s
 `screen_text_contract`: the complete read of all four planned frames, a call stopped by its
@@ -395,6 +479,9 @@ transcript cue and two on-screen hits, one held over two frames in the same plac
 `search.screen-text-unavailable.json` is the same search on a session whose screen-text record
 fails verification: the transcript page is unchanged and the member is `unavailable`, naming the
 index and `integrity_failure`.
+`bundle-search.json` is one page across four bundles found: a transcript hit, an on-screen hit, a
+recording with a gap, a bundle that is not private and a bundle left out by the read budget.
+
 `ocr-search.json` pages the same index for `R-17` one hit at a time (the first page, with its
 cursor) and `ocr-search.not-run.json` is the answer before `ocr` has read the session (`partial`,
 reason `not_run`); both are built by `screen_text_contract`.

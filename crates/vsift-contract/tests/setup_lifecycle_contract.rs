@@ -26,7 +26,7 @@ use vsift_domain::{FailureCode, ManagedComponent, ManagedVersionKey};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-const MEDIA: &str = "n9.0.1-11-ge47273f4d9-20260831";
+const MEDIA: &str = "n9.0.2-39-g7adfbe40dc-20261031";
 const MEDIA_OLD: &str = "n8.1-2-g0123456789-20260601";
 const CLI: &str = "whisper.cpp-v1.9.2-ubuntu-x64";
 const MODEL: &str = "whisper-base-multilingual-80da2d8";

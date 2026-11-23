@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vsift.dev/schemas/v1/skill-show-data.schema.json",
+  "title": "VSift skill.show data v1",
+  "description": "The data of a skill.show result (0.3.0, ADR 0038 section 3): one text file of this release's embedded skill, named as the skill's manifest names it (skill status lists the names). Anything else, a path, a folder or the image, is INVALID_ARGUMENT; nothing on the disk is read.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "entry",
+    "text"
+  ],
+  "properties": {
+    "entry": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(/[A-Za-z0-9_-][A-Za-z0-9._-]*){0,2}$"
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 262144
+    }
+  }
+}

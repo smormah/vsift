@@ -42,6 +42,7 @@ The exit status is the command's own, so a script can tell the classes apart. Th
 | `COMMAND_NOT_IMPLEMENTED` | 2 | A command this version reserves but does not have. No command answers it in this release. | Nothing to fix; a page that names the command is ahead of your version. |
 | `IDEMPOTENCY_CONFLICT` | 2 | A worker request reused an operation id for a different request. | Use a new operation id. Operators only: [runbook](../operations/worker-host.md). |
 | `INVALID_SOURCE` | 3 | VSift cannot use the video or the transcript you named. | [Below](#invalid_source-the-video-or-the-transcript-cannot-be-used). |
+| `SOURCE_FETCH_FAILED` | 3 | From 0.3.0: a link given with `vsift ingest --url` could not be fetched. Nothing was opened; local video files are not affected. | Read `reason` and the `Fix:` line. [Below](#source_fetch_failed-a-video-link-could-not-be-fetched). |
 | `BUSY` | 4 | Another VSift process is using the same session or the machine's share of capacity. It is meant to be retried. | Wait for the `Retry after:` time and run the same command again. If it is still busy, a transcription or a visual analysis may hold the capacity (for minutes): wait for it to end. Running the commands for one session one at a time avoids it. Since 0.2.2, when a transcription of the same session is what holds it, the answer says so, names the job (`Affected:`) and gives `Run: vsift job status <job>`: run that, and ask again once the job is no longer running. |
 | `DEADLINE_EXCEEDED` | 5 | The command ran past its time limit. | Ask for a smaller range of the video and run it again. Work that was already finished, such as the chunks of a transcription, is kept. |
 | `RESOURCE_LIMIT` | 5 | The request is larger than a built-in limit: too many frames or results, a file over a size bound, a recogniser that ran out of memory. | Ask for less: a shorter range, fewer frames, a smaller file. [Limits](limits.md) lists the numbers. |
@@ -199,14 +200,14 @@ VSift setup check
 Your setup isn't complete: video and speech are missing.
 Speech needs two things, whisper.cpp and its model, and neither is set up yet.
 The installation guide shows where to get it: https://github.com/smormah/vsift/blob/main/docs/operations/install.md
-Next: vsift setup configure ffmpeg --executable <full-path-to-ffmpeg>
+Next: vsift setup
 ```
 
 *The error is from a Windows 11 machine whose `PATH` had no media tools; the table is the form VSift prints, taken from its
 own tests. Neither is checked automatically here, because they depend on the machine.* The last line names the one thing to
-do next: where VSift can install a part for you (Ubuntu 24.04), it is `vsift setup plan`; otherwise it is the `setup configure`
-command for the first part that is missing, and `setup check` then names the next. The fix is the same everywhere: install
-the tool, or tell VSift where it is:
+do next: `vsift setup`, the setup door (since `0.3.0`). Where VSift can install a part for you (Ubuntu 24.04), it offers to
+and installs it on your yes; otherwise it gives the `setup configure` command for the first part that is missing. The fix
+is the same everywhere: install the tool, or tell VSift where it is:
 
 ```console
 vsift setup configure ffmpeg --executable /absolute/path/to/ffmpeg
@@ -307,6 +308,47 @@ recogniser wrote words there whose times could not be placed, so VSift dropped t
 where they may lie, as an upper bound. Transcribing just that stretch again cuts the audio at other points and may cover
 it, but may give the same stretch; a transcript file you supply is the sure remedy (`vsift ingest <video> --transcript <file>`).
 
+## `SOURCE_FETCH_FAILED`: a video link could not be fetched
+
+From 0.3.0, `vsift ingest --url <link>` fetches one video from a direct `https://` link to the file (MP4, MOV,
+MKV or WebM), or from a public video page through yt-dlp when one is set up, into a new session. When it cannot,
+nothing is opened, no partial file is kept, local video files work as before, and the answer's `reason` says why.
+The link itself is never printed or stored.
+
+| `reason` | What happened | What to do |
+| --- | --- | --- |
+| `not_https`, `credentials_in_link`, `port_not_allowed` | The link is not `https://`, carries a user name or password, or names another port than 443. | Ask for a plain `https://` link to the file, or for the file. |
+| `address_refused` | The link, or a redirect, points at a private, local or internal address. VSift never fetches those. | If the video is on your own network, download it and open the file. |
+| `web_page` | The link is a web page and no yt-dlp is set up to read it. | On Ubuntu x86-64, add the optional part: `vsift setup plan --profile desktop --include online_links` shows it. Elsewhere, register your own: `vsift setup configure yt-dlp --executable <absolute-path>`. Each site's terms apply. Or use the link to the video file, or open a file you downloaded. |
+| `not_a_video` | What the link or the page served is not a video file. | Use the link to the video file itself, or download the video and open the file. |
+| `login_required`, `age_restricted`, `private` | The site shows this video only after a sign-in. VSift never signs in and uses no cookies. | Download the video yourself, if you may, and open the file. |
+| `bot_check` | The site asked for proof that a person is asking, which is common from shared and cloud addresses. | Download the video yourself and open the file. |
+| `drm`, `region_blocked` | The video is protected against copying, or not offered where you are. VSift does not get around either. | Use another copy you may use. |
+| `removed`, `unsupported_site` | The site says the video is gone, or yt-dlp has no way to read the site. | Check the link, or find the video file's own link. |
+| `extractor_broken` | yt-dlp could not read the site as it is today, which happens when a site changes. This is not a VSift defect. | With a yt-dlp VSift installed, run `vsift setup plan` for a newer reviewed one. A yt-dlp you supplied is yours to update. |
+| `js_runtime_missing` | The site needs a JavaScript runtime that yt-dlp could not use. | With a yt-dlp you supplied, register Deno: `vsift setup configure js-runtime --executable <absolute-path>`. Otherwise run `vsift setup check`. |
+| `playlist`, `live`, `too_long`, `not_https_format` | The link is a playlist or channel, a stream that is live or not finished, a video over four hours or with no stated length, or offered only as a stream VSift does not fetch. | Use the link to one finished video, or open a file. |
+| `media_tools_missing` | The site offers separate audio and video, and joining them needs FFmpeg. | Run `vsift setup check`, then the command again. |
+| `network`, `unexpected_output`, `online_step_failed` | yt-dlp could not reach the site, left something other than the file expected (all of it was removed), or failed for a cause VSift cannot name. | Run the command again later. If you supplied yt-dlp, it may be out of date. |
+| `tls`, `proxy_auth`, `offline`, `stalled`, `truncated` | The network: a certificate that is not trusted, a proxy that wants credentials, no connection, no data for 30 seconds, a connection that ended early. | Check the network and run the command again. Proxy settings come from `HTTPS_PROXY` (or `ALL_PROXY`) and `NO_PROXY` (see below). |
+| `proxy_unusable` | `HTTPS_PROXY` or `ALL_PROXY` is set, but not to a proxy VSift can use. VSift does not go around a proxy you set. | Set it to the proxy's URL (`http://proxy.example:3128`) or to `host:port`, or unset it to connect directly. |
+| `size`, `deadline` | The video is larger than the download limit (4 GiB by default) or took longer than the time limit (30 minutes). | `--max-download-bytes` (up to 20 GiB) and `--max-download-seconds` (up to 4 hours) raise them. |
+| `http_status`, `partial`, `compressed`, `redirect_policy` | The server did not send the whole video: an error, a part of it, a compressed body, or too many or unsafe redirects. | Check the link; a link that needs a sign-in does not work, because VSift never signs in. |
+| `strict_isolation` | This host allows no network for VSift. | Fetch the video elsewhere and give this host the file. |
+
+**Proxies.** VSift reads `HTTPS_PROXY` (or `https_proxy`), else `ALL_PROXY` (or `all_proxy`), as a proxy URL or as
+`host:port`. VSift uses `http` and `https` proxies only. `NO_PROXY` (or `no_proxy`) is a comma-separated list
+matched by host name only: an entry is a host (`videos.example.org`), a domain whose hosts it covers (`example.org` or
+`.example.org`), or `*` for every host. Other forms that some tools accept are not read: a wildcard inside an entry
+(`*.example.org`), an IP address or a CIDR range, and an entry with a port. A host they were meant to exclude is sent
+through the proxy. VSift decides this for the link and again for each redirect, by that address's own host, so a
+redirect can go direct while the link went through the proxy, or the other way round. Through a proxy, VSift cannot
+see the address a name resolves to, so it refuses internal-looking names (one label, `localhost`, `.local`,
+`.internal`, `.corp` and the like) on each request the proxy carries. The proxy itself may have a private address,
+as most company proxies do: its name is your setting, so VSift does not check it.
+yt-dlp gets the same proxy variables, in its environment and never on its command line. Whatever the proxy, yt-dlp
+makes its own connections, which VSift cannot see or limit.
+
 ## `INTEGRITY_FAILURE`: what is stored is not what VSift wrote
 
 Three causes cover nearly every case.
@@ -322,7 +364,9 @@ Three causes cover nearly every case.
   holds, [L-160](../planning/known-limits.md#l-160)) is damage to them. They read the newest revision first: if that one
   holds the member, nothing of the session can be read; if only an older revision does, the newest reads normally and the
   older ones fail when asked for by id, in `handoff check --session` and in `bundle validate`. Nothing is wrong with the
-  session. Use the newer VSift, or discard it.
+  session. Use the newer VSift, or discard it. The same holds for a session with speaker labels opened by a release
+  before `0.3.0`: it does not know the stored speaker record, so it refuses the whole session
+  ([L-218](../planning/known-limits.md#l-218)).
 
 ## Problems installing or starting VSift
 
