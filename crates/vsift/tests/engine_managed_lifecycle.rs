@@ -6,6 +6,8 @@
 //! must never create the root for these commands, must answer `BUSY`
 //! without waiting while another command holds the root's install guard,
 //! must keep a version a job holds, and `repair` must change nothing.
+//! `setup install` must refuse a plan it does not accept before it creates
+//! the root (the P06 journey on 0.3.0-rc.1).
 
 use std::{
     env,
@@ -22,11 +24,14 @@ use std::{
 use sha2::{Digest, Sha256};
 use tar::{Builder, Header};
 use vsift::{
-    Engine, EngineConfig, EngineError, EnginePorts, FailureCode, HostIsolation,
-    ManagedLifecycleRefusal, ManagedPlanAvailability, ManagedRemovalTarget, ManagedRootLocation,
-    RepairFindingKind, RepairFix, RepairStatus, SelectionStatus, SessionRootLocation,
+    Cancellation, CorePartSet, DEFAULT_PROBE_TIMEOUT, Engine, EngineConfig, EngineError,
+    EnginePorts, FailureCode, HostIsolation, ManagedLifecycleRefusal, ManagedPlanAvailability,
+    ManagedRemovalTarget, ManagedRootLocation, OptionalComponentSet, PlanAcceptanceError,
+    ProgressObserver, RepairFindingKind, RepairFix, RepairStatus, SelectionStatus,
+    SessionRootLocation, SetupInstallRequest, SetupPlanRequest, SetupProfile,
     UserConfigurationLocation, VersionRemovalStatus,
 };
+use vsift_contract::{OperationResponse, SavedSetupPlan};
 use vsift_domain::{
     ArtifactIntegrity, ManagedComponent, ManagedVersionKey, ManagedVersionKeyError,
 };
@@ -381,6 +386,130 @@ fn repair_plans_existing_commands_and_changes_nothing() -> TestResult {
             .map(|finding| finding.fix.clone())
             .collect::<Vec<_>>(),
         [RepairFix::RemoveVersion(CLI, String::from("1.1.0"))]
+    );
+    Ok(())
+}
+
+/// The current plan, saved as `setup plan --json` writes it, with its digest.
+async fn saved_plan(engine: &Engine) -> Built<(serde_json::Value, Option<String>)> {
+    let plan = engine
+        .plan_setup(SetupPlanRequest {
+            profile: SetupProfile::Desktop,
+            include: OptionalComponentSet::EMPTY,
+            parts: CorePartSet::ALL,
+            probe_timeout: DEFAULT_PROBE_TIMEOUT,
+        })
+        .await?;
+    let envelope = OperationResponse::complete("setup.plan", plan.presentation())?;
+    let saved = serde_json::to_value(envelope)?;
+    let digest = saved["data"]["plan_digest"].as_str().map(str::to_owned);
+    Ok((saved, digest))
+}
+
+/// What `setup install` answers for `saved` and `digest`.
+async fn install(
+    engine: &Engine,
+    saved: &serde_json::Value,
+    digest: &str,
+) -> Built<Result<vsift::SetupInstallOutcome, EngineError>> {
+    let saved_plan: SavedSetupPlan = serde_json::from_value(saved.clone())?;
+    Ok(engine
+        .install_setup(
+            SetupInstallRequest {
+                saved_plan,
+                accepted_digest: digest.to_owned(),
+                parts: CorePartSet::ALL,
+                artifact_directory: None,
+                probe_timeout: DEFAULT_PROBE_TIMEOUT,
+            },
+            &Cancellation::new(),
+            ProgressObserver::none(),
+        )
+        .await)
+}
+
+/// The P06 journey on 0.3.0-rc.1: a refused acceptance must change nothing.
+/// A wrong digest, then a saved plan that no longer matches, each return the
+/// typed acceptance error, and the managed root, its marker and its lock
+/// file are never created, because the plan is checked before the install
+/// guard is taken. Off a qualified host there is nothing to accept at all.
+#[tokio::test]
+async fn a_refused_acceptance_creates_no_managed_root() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = root.engine();
+    let qualified = engine.list_managed()?.availability() == ManagedPlanAvailability::Qualified;
+    let (saved, digest) = saved_plan(&engine).await?;
+
+    let wrong = install(&engine, &saved, &"0".repeat(64))
+        .await?
+        .err()
+        .ok_or("a wrong digest was accepted")?;
+    let expected = if qualified && digest.is_some() {
+        PlanAcceptanceError::DigestMismatch
+    } else {
+        PlanAcceptanceError::ManagedUnavailable
+    };
+    assert!(
+        matches!(wrong, EngineError::PlanAcceptance(error) if error == expected),
+        "{wrong:?}"
+    );
+    assert_eq!(wrong.failure_code(), FailureCode::InvalidArgument);
+    assert!(!root.managed().exists(), "a wrong digest created the root");
+
+    let mut changed = saved.clone();
+    changed["data"]["catalogue_revision"] = serde_json::Value::from("changed-2099-01-01-r9");
+    let digest = digest.unwrap_or_else(|| "0".repeat(64));
+    let stale = install(&engine, &changed, &digest)
+        .await?
+        .err()
+        .ok_or("a changed plan was accepted")?;
+    if qualified {
+        assert!(
+            matches!(
+                stale,
+                EngineError::SavedPlanRejected(FailureCode::InvalidArgument)
+            ),
+            "{stale:?}"
+        );
+    } else {
+        assert!(
+            matches!(
+                stale,
+                EngineError::PlanAcceptance(PlanAcceptanceError::ManagedUnavailable)
+            ),
+            "{stale:?}"
+        );
+    }
+    assert_eq!(stale.failure_code(), FailureCode::InvalidArgument);
+    assert!(!root.managed().exists(), "a changed plan created the root");
+    assert!(
+        !root.0.join("config").exists(),
+        "a refusal created the configuration"
+    );
+    Ok(())
+}
+
+/// The plan is checked before the guard is taken: a stale plan is refused as
+/// stale even while another installation holds the guard, not answered
+/// `BUSY` for a retry that could never succeed.
+#[tokio::test]
+async fn a_stale_plan_is_refused_before_a_held_guard_is_reached() -> TestResult {
+    let root = OwnedRoot::new()?;
+    let engine = root.engine();
+    if engine.list_managed()?.availability() != ManagedPlanAvailability::Qualified {
+        return Ok(());
+    }
+    let (saved, _) = saved_plan(&engine).await?;
+    let guard = root.store()?.try_install_guard()?;
+    let refused = install(&engine, &saved, &"0".repeat(64)).await;
+    drop(guard);
+    let error = refused?.err().ok_or("a wrong digest was accepted")?;
+    assert!(
+        matches!(
+            error,
+            EngineError::PlanAcceptance(PlanAcceptanceError::DigestMismatch)
+        ),
+        "{error:?}"
     );
     Ok(())
 }
