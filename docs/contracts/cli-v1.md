@@ -3724,12 +3724,18 @@ unmodified `setup.plan` result (`INVALID_ARGUMENT` otherwise; since #394 an `err
 `coverage` or `lifecycle` member that is not `null` is refused while the file is decoded,
 with the same code and remediation; an unreadable file is `STORAGE_IO`); `--artifact-dir` must be absolute (`INVALID_ARGUMENT`); a host whose
 target has no qualified catalogue has nothing to accept (`INVALID_ARGUMENT` with the
-manual `setup configure` path, and nothing is created); the managed root's install
-guard is taken and **never waited for**: a guard another installation holds is `BUSY`
-(exit 4, `retry_after_ms` 30000), and a root that cannot be created or proved private
-is `STORAGE_IO` with the manual path; the plan is then rebuilt from the machine as it
-is now, must equal the saved plan, and the digest must accept it (`INVALID_ARGUMENT`
-naming `setup plan --json` to run again).
+manual `setup configure` path, and nothing is created); the plan is rebuilt from the
+machine as it is now, must equal the saved plan, and the digest must accept it
+(`INVALID_ARGUMENT` naming `setup plan --json` to run again, and nothing is created);
+the managed root's install guard is taken and **never waited for**: a guard another
+installation holds is `BUSY` (exit 4, `retry_after_ms` 30000), and a root that cannot
+be created or proved private is `STORAGE_IO` with the manual path; under the guard the
+plan is rebuilt and accepted once more, with the same answer if the machine changed in
+between. Until `0.3.0-rc.2` the guard came before the first check, so a refused plan
+left the empty managed root (its marker and lock file) behind, and a stale plan met
+while another installation ran was `BUSY`. The plan is rebuilt twice, so tools that
+never answer can hold the install up to twice the tool checks' shared deadline (30
+seconds each time).
 
 **The transaction** installs the plan's components in its order: `ffmpeg_ffprobe`,
 then `whisper_cli`, then `whisper_model`. A component whose reviewed version is
