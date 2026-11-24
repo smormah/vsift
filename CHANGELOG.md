@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Tooling
 
-- The post-publish checks (`P14 verify release`, `P14 published artifacts`, `P14 journeys`) now wait until npm serves all four packages' tarballs for the version (every 30 seconds, at most 15 minutes) before they pack or install, and the release runbook says to dispatch them no sooner than 15 minutes after a publish and not to announce before then ([#618](https://github.com/smormah/vsift/issues/618) stays open; [L-258](docs/planning/known-limits.md#l-258)). No product change.
+- The post-publish checks (`P14 verify release`, `P14 published artifacts`, `P14 journeys`) now wait until npm serves all four packages for the version, each tarball and each metadata document listing the version (every 30 seconds, at most 15 minutes) before they pack or install, and the release runbook says to dispatch them no sooner than 15 minutes after a publish and not to announce before then ([#618](https://github.com/smormah/vsift/issues/618) stays open; [L-258](docs/planning/known-limits.md#l-258)). No product change.
 
 ## [0.3.0-rc.1] - 2026-11-24
 

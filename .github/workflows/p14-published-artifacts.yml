@@ -130,7 +130,8 @@ jobs:
       # Right after a publish npm may not yet serve every new tarball (#618: on Windows the
       # installs skipped @vsift/win32-x64 and the launcher said it was missing). Every job
       # that installs from the registry (clean-install, upgrade) needs this job, so the wait,
-      # at most 15 minutes until all four tarballs answer 200, is made once here and holds
+      # at most 15 minutes until all four tarballs answer 200 and all four metadata documents
+      # list the version, is made once here and holds
       # for all of them. The archive and offline-install jobs read the GitHub release, not
       # npm, and wait for it all the same by needing this job.
       - name: Wait until npm serves all four packages
