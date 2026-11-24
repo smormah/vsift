@@ -621,6 +621,8 @@ procedure (6.7), which starts from a published and accepted candidate.
 
 ### 6.4 Verifying provenance and attestations after publishing
 
+**Wait 15 minutes after the publish job ends (since 2026-11-24, [#618](https://github.com/smormah/vsift/issues/618), [L-258](../planning/known-limits.md#l-258)).** `registry.npmjs.org` can take some minutes to serve a new tarball after `npm publish` has returned. On 2026-11-24 the checks of `0.3.0-rc.1` were dispatched about two minutes after the publish: `npm pack @vsift/win32-x64@0.3.0-rc.1` got E404 in `P14 verify release`, and on Windows an install silently skipped the optional native package and the launcher said it was missing (`P14 published artifacts` and `P14 journeys`); all four tarballs answered 200 a little later and the re-runs passed. So **dispatch the post-publish checks no sooner than 15 minutes after the publish job ends, run the by-hand checks below no sooner than that, and do not announce a release before then.** The three workflows (`P14 verify release`, `P14 published artifacts`, `P14 journeys`) also wait for themselves, as a net: their first step, `tools/p14-published/wait-for-registry.cjs`, polls the four tarballs every 30 seconds for at most 15 minutes and fails naming the package that is still missing. A failure of that step is not a finding about the release until the publish run has been read: it means npm still did not serve the tarball after 15 minutes of waiting.
+
 From a machine with no npm credentials (an empty user and global configuration, as in
 ADR 0009's name checks), for a release candidate or other pre-release (the commands are
 those of 0.1.0; use the version you published):
@@ -988,7 +990,7 @@ not skip an item because the candidate's publish went well.
    four packages with `next` unchanged, and fails at once on any other answer (6.4); creates the GitHub release as a draft, publishes it marked
    latest, and requires GitHub's own latest release to be this tag.
 
-**After the publish** (the checks of 6.4 differ in four places):
+**After the publish** (the checks of 6.4 differ in four places; **wait 15 minutes after the publish job ends before them, the dispatches of the hosted checks included, and announce nothing before then**, 6.4, #618):
 
 1. `npm view vsift-cli dist-tags` (and the three platform packages) shows `latest:
    '0.2.0'` and `next` unchanged; npmjs.com shows each version as built and signed on
@@ -3026,7 +3028,7 @@ with `gh`, pass `--ref v<version>`. A wrong choice now costs seconds, not the tw
    publish). The `guard` job checks that the tag is on the release branch. **The publish waits for the maintainer's
    approval of the `release` environment; the supervisor never approves it and never runs an npm write.** The
    read-back of the dist-tags waits up to 20 minutes and fails at once on a wrong answer (6.4); if it runs out of time,
-   6.5 says how to finish. Then check the published bytes from outside (6.4) and run the quick checks: `P14 verify
+   6.5 says how to finish. **Then wait 15 minutes from the end of the publish job** (npm can take minutes to serve a new tarball, and a Windows install in that time can miss its native package: 6.4, #618, [L-258](../planning/known-limits.md#l-258); do not announce before then either), check the published bytes from outside (6.4) and run the quick checks: `P14 verify
    release` (within seven days of the publish), `P14 journeys`, `P13 managed smoke`, and `P14 published artifacts`
    from the previous release and from the candidate. **The records change after the publish is a pull request to
    `main`** that brings the release branch's work record (the ledger, the planning page, the changelog) **and the
@@ -3736,7 +3738,7 @@ gh api repos/smormah/vsift/releases/latest --jq .tag_name
 
 `npm audit signatures` reports verified signatures and attestations; `npx vsift --version` prints `vsift 0.3.0-rc.1 (<the first 12 digits of the commit>)`; the installed skill equals the tag's (`diff -r skills/vsift rc-check/node_modules/vsift-cli/skills/vsift` from a checkout of the tag prints nothing); `gh release view` prints `isPrerelease` true, `isDraft` false and ten assets, and the last command **`v0.2.4`** (if it prints `v0.3.0-rc.1`: `gh release edit v0.3.0-rc.1 --repo smormah/vsift --latest=false`, then `gh release edit v0.2.4 --repo smormah/vsift --latest`). Every `gh attestation verify` is 6.4's with `--source-ref refs/tags/v0.3.0-rc.1`, `--signer-workflow smormah/vsift/.github/workflows/release.yml` and `--deny-self-hosted-runners`.
 
-**The hosted runs** (the coordinator; each one dispatch, **on the tag**, once, on this candidate's published bytes or its source; nothing from `0.2.4-rc.1`'s or `0.2.4`'s runs is reused, and **none runs on the maintainer's machine**). The quick checks first, right after the publish (6.21's with this version). **`P14 verify release` (RQ-19) is dispatched within seven days of the publish, the same day if possible:** it reads the publish's `publish-plan` artifact, which is kept for seven days, and a later run has nothing to read.
+**The hosted runs** (the coordinator; each one dispatch, **on the tag**, once, on this candidate's published bytes or its source; nothing from `0.2.4-rc.1`'s or `0.2.4`'s runs is reused, and **none runs on the maintainer's machine**). The quick checks first, **no sooner than 15 minutes after the publish job ends** (6.21's with this version; **a note of 2026-11-24, written after the publish of `0.3.0-rc.1`:** the first dispatch, about two minutes after the publish, failed on Windows because npm was not yet serving `@vsift/win32-x64@0.3.0-rc.1`, and the re-runs 15 minutes later passed, so 6.4's wait applies to this step and to the stable release's, and nothing is announced before it; [#618](https://github.com/smormah/vsift/issues/618), [L-258](../planning/known-limits.md#l-258)). **`P14 verify release` (RQ-19) is dispatched within seven days of the publish, the same day if possible:** it reads the publish's `publish-plan` artifact, which is kept for seven days, and a later run has nothing to read.
 
 ```console
 gh workflow run p14-verify-release.yml --repo smormah/vsift --ref v0.3.0-rc.1 -f version=0.3.0-rc.1

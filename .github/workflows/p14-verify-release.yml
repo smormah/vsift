@@ -84,6 +84,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node tools/p14-published/resolve-release.cjs --work "${RUNNER_TEMP}/resolve"
 
+      # Right after a publish npm may not yet serve every new tarball (#618: `npm pack`
+      # got E404 for the Windows package two minutes after the publish). This waits, at most
+      # 15 minutes, until all four answer 200; the runbook still says to dispatch no sooner
+      # than 15 minutes after the publish.
+      - name: Wait until npm serves all four packages
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: node tools/p14-published/wait-for-registry.cjs --version "${VERSION}"
+
       - name: Verify the publish from outside
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
