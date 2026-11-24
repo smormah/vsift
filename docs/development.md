@@ -818,6 +818,8 @@ kept in the item's `prior`, L-179); `--complete-for 0.2.3-rc.1` is the check of 
 the candidate's evidence replaces it.
 Since the cut of `0.2.4-rc.1` (2026-11-04) it also names RQ-08, RQ-15 and RQ-16, `planned` for that candidate (their waivers for 0.2.3 are kept in each item's `prior`);
 `--complete-for 0.2.3` names them until the evidence for `0.2.4` replaces them.
+Since the cut of `0.3.0-rc.1` (2026-11-24) `--complete-for 0.2.4` also names RQ-07, RQ-08, RQ-09, RQ-11, RQ-12, RQ-15 and RQ-16, `planned` for that
+candidate (their waivers for 0.2.4 are kept in each item's `prior`); `--complete-for 0.3.0-rc.1` is the check of the candidate.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct
@@ -891,8 +893,8 @@ node tools/guide/check-examples.cjs --binary target/debug/vsift
   for the first identifier of that kind an earlier command printed on the same page;
   `<candidate:3>` picks the third. A placeholder with no value yet fails the check rather than
   being guessed.
-- **A version bump re-checks the guide.** The guide names a release (`0.2.4`), not a
-  candidate: `0.2.4-rc.1` and `0.2.4` are the same release to these tools (and `0.2.3-rc.1` and `0.2.3` were another, as `0.2.2-rc.1` and `0.2.2` were, as `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
+- **A version bump re-checks the guide.** The guide names a release (`0.3.0`), not a
+  candidate: `0.3.0-rc.1` and `0.3.0` are the same release to these tools (and `0.2.4-rc.1` and `0.2.4` were another, as `0.2.3-rc.1` and `0.2.3` were, as `0.2.2-rc.1` and `0.2.2` were, as `0.2.1-rc.1` to `0.2.1-rc.3` and `0.2.1` and `0.2.0-rc.1` to `0.2.0-rc.3` and `0.2.0` were), so the stable commit
   needs no guide change, which matters because it may differ from its accepted candidate only in
   version-string files, shipped documents and the work record, and the generated reference pages,
   which name the release, are in none of them ([release process, 6.8](operations/release.md)).

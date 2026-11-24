@@ -28,7 +28,8 @@ The table says which versions receive security fixes. It was a policy until `0.2
 | Version | What it is | Security fixes |
 | --- | --- | --- |
 | The newest `0.2.x` | The R0 release line, published under npm's `latest` tag (`0.2.4` is its newest patch; `0.2.0` was the first) | Yes. A fix is released as a new patch version of the line (`0.2.5` and so on) with a security advisory. Only the newest patch of the line is fixed, so `0.2.3` and every earlier version no longer receive fixes. |
-| `0.2.0-rc.N`, `0.2.1-rc.N`, `0.2.2-rc.N`, `0.2.3-rc.N`, `0.2.4-rc.N` | The release candidates, published under `next` and never announced (`0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.2-rc.1`, `0.2.3-rc.1` and `0.2.4-rc.1` are deprecated on npm) | No. The release replaces them. |
+| `0.3.0` | The next release line, not published yet: its first release candidate, `0.3.0-rc.1`, was cut on 2026-11-24 and goes to npm's `next` tag when it is published | Not yet. **Until `0.3.0` is published under `latest`, the newest `0.2.x` (`0.2.4`) keeps receiving security fixes**, from the branch `release/0.2.x`. The release records of `0.3.0` change this table. |
+| `0.2.0-rc.N`, `0.2.1-rc.N`, `0.2.2-rc.N`, `0.2.3-rc.N`, `0.2.4-rc.N`, `0.3.0-rc.N` | The release candidates, published under `next` and never announced (`0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.2-rc.1`, `0.2.3-rc.1` and `0.2.4-rc.1` are deprecated on npm) | No. The release replaces them. |
 | `0.1.0` | The first pre-release (2026-10-01) | No. Move to the newest release. |
 | The default branch | Source for building from the repository | Fixes land here first. |
 
