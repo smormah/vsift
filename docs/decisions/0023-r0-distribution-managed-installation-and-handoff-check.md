@@ -318,6 +318,17 @@ and power-loss tests PR 7.
   cannot be created or proved private is `STORAGE_IO` with the manual path, D-09 and
   D-10); rebuilds the plan and requires it to equal the saved one and the digest to
   accept it; only then installs.
+  **Note of 2026-11-24 (`0.3.0-rc.2`, the P06 journey on `0.3.0-rc.1`):** the acceptance
+  now comes before the guard as well as under it. Taking the guard creates the root, its
+  marker and its lock file, so with the order above a stale plan or a wrong digest left
+  an empty root behind. On macOS and Windows, which have had a catalogue since ADR 0032,
+  that root sits in the per-user VSift folder. The order is now: the relative folder; the
+  host without a catalogue; the plan rebuilt and accepted (this opens nothing managed and
+  writes nothing, as "Decided here: a plan's intent and its observed state" below
+  requires), so a refusal creates nothing; the guard (`BUSY`, `STORAGE_IO` as above); the
+  plan rebuilt and accepted once more under the guard, because the machine can change
+  between the two looks; only then the install. A stale plan is therefore refused as
+  stale while another installation holds the guard, not answered `BUSY`.
 - **Transaction** (`vsift-application/src/install.rs`, `install_managed_components`, over
   the port `ManagedComponentInstaller`). Components go in plan order: media tools, then
   the whisper.cpp CLI, then the model. A component whose reviewed version is already

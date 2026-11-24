@@ -979,10 +979,18 @@ fn saved_plan_acceptance_is_revalidated_without_mutation() -> Result<(), Box<dyn
     // digest does not accept the plan. Neither mutates state.
     let unchanged = install(&digest)?;
     assert_eq!(unchanged["error"]["code"], "INVALID_ARGUMENT");
-    // On Windows and macOS the managed root (taken for its install guard on
-    // a host with a catalogue, ADR 0032) shares the configuration's folder,
-    // so what must not exist is the configuration record.
-    assert!(!config_root(base).join("dependencies-v1.json").exists());
+    // On Windows and macOS the managed root shares the configuration's
+    // folder (ADR 0032); a refusal comes before the install guard, so that
+    // folder is not created at all (until 0.3.0-rc.2 the guard came first
+    // and created it).
+    assert!(
+        !config_root(base).exists(),
+        "a refusal created per-user state"
+    );
+    assert!(
+        !base.join("data").exists(),
+        "a refusal created the managed root"
+    );
 
     let binary = Command::cargo_bin("vsift")?.get_program().to_os_string();
     let configured = with_config_base(&mut Command::cargo_bin("vsift")?, base)
