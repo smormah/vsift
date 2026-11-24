@@ -1082,6 +1082,19 @@ failures are the scenario gap and are not counted against M5a or M5b. M5a's (#58
 
 **Re-grade of the six (read-only, not counted).** `grade` was run again, with the amended scenario files, on copies of the six failed trial folders (the originals under `C:\vsift-trials\` were not touched and no model was called): **all six now pass, mechanically and in interpretation** (A-08 `05014811`, `5296cf7a`, `8dc2d7e0`, `db33fe3d`, `ffddc64d` and H-02 `16807b3a`: `commands_required` and the new `commands_any_of` pass, `command_policy` and `image_check` pass as before, and no other check failed). Before the change each failed only `commands_required`. How it was done, for whoever repeats it: `grade --trial <copy> --output grade-s1.json --scenario <amended file> --repository .`, on copies of the harness folders with the recorded root renamed inside them and `trial.json`'s `vsift_executable` pointed at a debug build of this checkout (the runner's own build no longer exists), and each copy's `workspace` a junction to the original so that `bundle validate` could read the retained bundle (a copied bundle fails it: the folder must be private); the originals under `C:sift-trials` were only read, and no file there changed. It is a read-only check of the scenario fix, not a counted run, and says nothing about whether M5a's skill trim is good: that stays with the batch's other 11 full passes and the interpretation of all 17.
 
+### The freeze of `0.3.0-rc.1` (the cut, 2026-11-24)
+
+**The ninth candidate, `0.3.0-rc.1` (cut 2026-11-24, the first candidate of `0.3.0`), keeps the last development freeze byte for byte, and that freeze is the final freeze of
+`0.3.0`.** It is #500's, written at that pull request's merge rebase on 2026-11-18 (`freeze write` at `c177ef92a86d31fd5dcca9306df4f5cf9f00e55f`): whole-freeze digest
+`4f009d5ffb738b631d8dca7237ef1bfb36247b70428a532db408491cab9bbec2`, `skill` `5ee66624...`, `grader` `041f4360...`, `scenarios` `cc283886...`, `holdout` `f4d526ea...` (S1's),
+`cold` `31204791...`, `settings` `e04ee4cc...` and `truth` `ed1e41e1...`. Nothing frozen changed after it (the managed groups, the Windows runner, the pins and this cut touch no
+frozen input), so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged, the same bytes in both, both `freeze check` runs answer `nothing frozen has changed`, and
+`CUT_FREEZE_SHA256` in `committed_freeze` is the same. **The cut moves no records:** no counted batch ran under `batch-2/` or `batch-3/` after the cut of `0.2.3-rc.1` moved
+`0.2.2-rc.1`'s aside (RQ-15 and RQ-16 were waived for `0.2.3` and `0.2.4`), and the two development batches of 2026-11-15 are already in `batch-2-m5a/` and `batch-2-m5b/`; both
+folders hold only the freeze, so the campaign script finds no state file of another version. **No batch has run on `0.3.0-rc.1`;** batches 2 and 3 on the published candidate
+(`-Version 0.3.0-rc.1`, batch 3 with `-AllowGraderChange`, on the capped API keys) or a waiver of RQ-15 and RQ-16 for `0.3.0` are the maintainer's decision
+([`release-0.3.0.md`](../planning/release-0.3.0.md); [`release.md`](../operations/release.md) 6.24 step 8).
+
 ## Usage capture (P14)
 
 P12 recorded no tokens. Each record now carries `reported_usage`: input, output, cached and cache-write tokens,

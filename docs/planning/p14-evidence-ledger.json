@@ -1666,15 +1666,14 @@
       },
       "scope": ["fuzz", "crates", "Cargo.lock", ".github/workflows/fuzz.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
+      "status": "planned",
       "issues": [394, 521],
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-07 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-07 is Fuzz with seconds=3600. The scheduled Fuzz on main on Monday 9 November exercises the same raised archive bounds, because #573 carries them to main. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "Fuzz with seconds=3600 was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The two raised bounds (MAX_XZ_ARCHIVE_BYTES and the tar stream cap) sit in the code the xz_tar_inventory and tar_inventory targets fuzz; the scheduled Fuzz on main on Monday 9 November exercises the same raised bounds (#573); the run on 0.2.3-rc.1 is kept in prior as a record and is not counted.",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. 0.3.0 adds eight fuzz targets (39 in all, 31 before: the zip and bzip2/tar inventories of the managed installs, the OCR runner's output, the screen-text index record, PNG pixels, clock faces, transcript parts and yt-dlp's info JSON) and changes 457 files of this item's scope since v0.2.4, so the plan is the run on 0.3.0-rc.1 (Fuzz with seconds=3600, now 39 targets); the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-07 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-07 is Fuzz with seconds=3600. The scheduled Fuzz on main on Monday 9 November exercises the same raised archive bounds, because #573 carries them to main. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: Fuzz with seconds=3600 was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The two raised bounds (MAX_XZ_ARCHIVE_BYTES and the tar stream cap) sit in the code the xz_tar_inventory and tar_inventory targets fuzz; the scheduled Fuzz on main on Monday 9 November exercises the same raised bounds (#573); the run on 0.2.3-rc.1 is kept in prior as a record and is not counted."
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "Fuzz", "run_id": 40051241768 },
           "date": "2026-10-24",
@@ -1766,7 +1765,7 @@
           "note": "The first run of the Fuzz workflow passed all six targets of the time. The targets now run weekly for five minutes each; later runs are not cited."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-08",
@@ -1786,15 +1785,14 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
+      "status": "planned",
       "issues": [312, 314, 321, 519],
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-08 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-08 (stress) is waived for 0.2.4 only. Its workflow uses no FFmpeg, so the re-pin does not touch it. #519 stays a known issue (L-231) and stays open for 0.3.0. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "The stress campaign (P14 stress) was not run on 0.2.4-rc.1. Its workflow uses no FFmpeg, so the re-pin does not touch it, and the hot fix runs no stress campaign (release.md 6.18). #519 stays a known issue (L-231) and stays open for 0.3.0. The failed repetition on 0.2.3-rc.1 and the earlier waiver for 0.2.3 are kept in prior as records and are not counted.",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. 0.3.0 changes 423 files of this item's scope since v0.2.4, among them the run admission and the queue of the progress story (ADR 0033) that the stress suites exercise, and #519 stays open; the plan is the run on 0.3.0-rc.1 (P14 stress); the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-08 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-08 (stress) is waived for 0.2.4 only. Its workflow uses no FFmpeg, so the re-pin does not touch it. #519 stays a known issue (L-231) and stays open for 0.3.0. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: The stress campaign (P14 stress) was not run on 0.2.4-rc.1. Its workflow uses no FFmpeg, so the re-pin does not touch it, and the hot fix runs no stress campaign (release.md 6.18). #519 stays a known issue (L-231) and stays open for 0.3.0. The failed repetition on 0.2.3-rc.1 and the earlier waiver for 0.2.3 are kept in prior as records and are not counted."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
@@ -1914,7 +1912,7 @@
           "note": "The delivery ledger's P10 entry records 40 of 40 macOS stress rounds after the lock-anchor fix. Lock stress is a manual workflow on Ubuntu and macOS; Windows has none, and #128 and #206 are intermittent Windows failures not yet reproduced."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-09",
@@ -1934,14 +1932,13 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/p14-load.yml", "tools/p14-campaigns/load.cjs", "tools/p14-campaigns/prepare-host.cjs", "tools/p14-campaigns/worker.Dockerfile", "tools/p14-campaigns/lib/requests.cjs", "tools/p14-campaigns/lib/events.cjs", "tools/p14-campaigns/lib/cgroup-sampler.cjs", "tools/p14-campaigns/lib/load-verdict.cjs", "tools/p14-campaigns/lib/host.cjs", "tools/p14-campaigns/lib/container.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-09 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-09 is the load run (P14 load). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "P14 load was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The run on 0.2.3-rc.1 is kept in prior as a record and is not counted.",
+      "status": "planned",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. 0.3.0 changes 423 files of this item's scope since v0.2.4 (the worker path's crates among them); the plan is the run on 0.3.0-rc.1 (P14 load); the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-09 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-09 is the load run (P14 load). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: P14 load was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The run on 0.2.3-rc.1 is kept in prior as a record and is not counted."
+        },
         {
           "reference": { "type": "workflow_run", "workflow": "P14 load", "run_id": 40051920177 },
           "date": "2026-10-24",
@@ -2023,7 +2020,7 @@
           "note": "The admission ladder ran at 1, 2 and 4 jobs once, on one Windows machine; the 8-job rung, the 100-request batch and the soak never ran."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-10",
@@ -2219,14 +2216,13 @@
       },
       "scope": ["crates", "Cargo.lock", "tools/p10-crash-campaign", ".github/workflows/p10-durability-campaign.yml", ".github/workflows/p13-managed-power-loss.yml"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-11 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-11 is P13 managed power loss and the P10 durability campaign. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "P13 managed power loss and the P10 durability campaign were not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The runs on 0.2.3-rc.1 are kept in prior as a record and are not counted.",
+      "status": "planned",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. 0.3.0 changes 433 files of this item's scope since v0.2.4, among them the open and stopped revisions of the progress story whose crash campaign (#513) is part of the P10 durability campaign, and the managed installs' new groups; the plan is the runs on 0.3.0-rc.1 (P13 managed power loss and P10 durability campaign, the full durability campaign of the monthly round); the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-11 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-11 is P13 managed power loss and the P10 durability campaign. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: P13 managed power loss and the P10 durability campaign were not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The runs on 0.2.3-rc.1 are kept in prior as a record and are not counted."
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2383,7 +2379,7 @@
           "note": "1,812 points, 0 lost acknowledgements, 0 damaged, negative control 36 lost, stand-in versions for the managed store. Ubuntu 24.04 ext4 only."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-12",
@@ -2402,14 +2398,13 @@
       },
       "scope": ["crates", "Cargo.lock", "docs/operations/worker-host.md", ".github/workflows/p14-runbook-walk.yml", "tools/p14-campaigns/runbook-walk.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-12 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-12 is the runbook walk (P14 runbook walk). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "P14 runbook walk was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The run on 0.2.3-rc.1 is kept in prior as a record and is not counted.",
+      "status": "planned",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. 0.3.0 changes 424 files of this item's scope since v0.2.4; the plan is the run on 0.3.0-rc.1 (P14 runbook walk); the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-12 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the six long runs for 0.2.4 and run them in the next window?\". They answered: \"Yes, waive all six\". The six are RQ-04's P14 compatibility and P14 local upgrade, RQ-07 (Fuzz, 3,600 s), RQ-09 (load), RQ-11 (P13 managed power loss and the P10 durability campaign) and RQ-12 (the runbook walk). RQ-12 is the runbook walk (P14 runbook walk). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: P14 runbook walk was not run on 0.2.4-rc.1. The FFmpeg re-pin touches what this item proves (see the plan page), and the hot fix runs no long run before the stable (release.md 6.18), so the run is made in the next window. The run on 0.2.3-rc.1 is kept in prior as a record and is not counted."
+        },
         {
           "reference": {
             "type": "workflow_run",
@@ -2499,7 +2494,7 @@
           "note": "Section 18.5: the walk, the runbook corrections and what the hosted runner cannot show (a real disk, other distributions)."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-13",
@@ -2841,15 +2836,14 @@
       },
       "scope": ["Cargo.lock", "crates", "skills/vsift", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
+      "status": "planned",
       "issues": [224, 336, 395],
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-15 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-15 (agent-trial batch 2) is waived for 0.2.4 only. The skill is unchanged since v0.2.3 (nothing under skills/vsift/ differs), the freeze of 2026-10-19 is kept, a hot fix runs no agent batches (release.md 6.18) and the batches run at the 0.3.0 cut. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "Agent-trial batch 2 was not run on 0.2.4-rc.1. The skill did not change since v0.2.3 and the freeze of 2026-10-19 is kept byte for byte, a hot fix runs no agent batches (release.md 6.18), and the batches run at the 0.3.0 cut. The earlier records are kept in prior and are not counted.",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. The skill changed in the 0.3.0 cycle (25 files under skills/vsift/ differ from v0.2.4: the lighter skill M5a, the finishing command M5b, job start, the workflows, speaker labels and online-video consent), the freeze committed at the cut is the one CUT_FREEZE_SHA256 pins (4f009d5f...), and the batches were planned for the 0.3.0 cut since 2026-10-25; the plan is agent-trial batch 2 on the published 0.3.0-rc.1, on the maintainer's go; the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-15 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-15 (agent-trial batch 2) is waived for 0.2.4 only. The skill is unchanged since v0.2.3 (nothing under skills/vsift/ differs), the freeze of 2026-10-19 is kept, a hot fix runs no agent batches (release.md 6.18) and the batches run at the 0.3.0 cut. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: Agent-trial batch 2 was not run on 0.2.4-rc.1. The skill did not change since v0.2.3 and the freeze of 2026-10-19 is kept byte for byte, a hot fix runs no agent batches (release.md 6.18), and the batches run at the 0.3.0 cut. The earlier records are kept in prior and are not counted."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
@@ -2936,7 +2930,7 @@
           "note": "Section 27: the results of 0.2.0-rc.2's batch by gate and by model, the cases, the decision and what the third candidate was planned to contain."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-16",
@@ -2956,15 +2950,14 @@
       },
       "scope": ["Cargo.lock", "crates", "tools/vsift-agent-trials"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "waived",
+      "status": "planned",
       "issues": [340, 396, 397, 454],
-      "decision": {
-        "statement": "Decision of the maintainer, 2026-11-04: RQ-16 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-16 (agent-trial batch 3) is waived for 0.2.4 only, for the same reasons as RQ-15: the skill is unchanged since v0.2.3, the freeze of 2026-10-19 is kept, a hot fix runs no agent batches (release.md 6.18) and the batches run at the 0.3.0 cut. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass.",
-        "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
-        "date": "2026-11-04"
-      },
-      "reason": "Agent-trial batch 3 was not run on 0.2.4-rc.1. The skill did not change since v0.2.3 and the freeze of 2026-10-19 is kept byte for byte, a hot fix runs no agent batches (release.md 6.18), and the batches run at the 0.3.0 cut. The earlier records are kept in prior and are not counted.",
       "prior": [
+        {
+          "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
+          "date": "2026-11-04",
+          "note": "NOT COUNTED for 0.3.0-rc.1, kept as a record: the waiver that was this item's status until the cut of 0.3.0-rc.1 (2026-11-24). It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later. Why the item is planned again: a waived item names no version, so the completeness check would have passed it for this candidate silently (L-179), and the waiver's own text limits it to 0.2.4. The cold help changed in the 0.3.0 cycle (W6c, #454's help for people first; L-178) and the cold scenarios gained C-04 to C-08, under the freeze CUT_FREEZE_SHA256 pins (4f009d5f...), and the batches were planned for the 0.3.0 cut since 2026-10-25; the plan is agent-trial batch 3 on the published 0.3.0-rc.1, on the maintainer's go (with -AllowGraderChange as before); the maintainer decides run or waive. The waiver, as recorded: Decision of the maintainer, 2026-11-04: RQ-16 is WAIVED for 0.2.4. The question put to the maintainer was: \"Waive the stress test and both agent-trial batches for 0.2.4?\". They answered: \"Yes, waive all three\". The three are RQ-08 (stress), RQ-15 and RQ-16 (agent-trial batches 2 and 3). RQ-16 (agent-trial batch 3) is waived for 0.2.4 only, for the same reasons as RQ-15: the skill is unchanged since v0.2.3, the freeze of 2026-10-19 is kept, a hot fix runs no agent batches (release.md 6.18) and the batches run at the 0.3.0 cut. It covers 0.2.4 (the candidate 0.2.4-rc.1 and the stable 0.2.4 cut from it) and nothing later; a waived item names no version, so the completeness check would pass it for any (L-179), and this text is what limits it; the next cut sets the item back to planned. It is not a pass. The reason recorded with it: Agent-trial batch 3 was not run on 0.2.4-rc.1. The skill did not change since v0.2.3 and the freeze of 2026-10-19 is kept byte for byte, a hot fix runs no agent batches (release.md 6.18), and the batches run at the 0.3.0 cut. The earlier records are kept in prior and are not counted."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.3.md" },
           "date": "2026-10-25",
@@ -3046,7 +3039,7 @@
           "note": "Batch 1 baseline on the published 0.1.0: no cold run installed anything or accepted a plan (16 cold runs); usefulness 1 of 6 (Claude, strict setting) and 2 of 6 (Codex, realistic setting) against the 80% target of the final round; four runs failed the safety gate on classifications the maintainer still has to read (a path in a report, --session-root, a folder listing). Nothing passed."
         }
       ],
-      "date": "2026-11-04"
+      "date": "2026-11-24"
     },
     {
       "id": "RQ-17",
