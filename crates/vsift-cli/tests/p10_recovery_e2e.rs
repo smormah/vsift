@@ -18,19 +18,25 @@
 //!   cited segment, then `session retain` and `bundle validate` with every
 //!   citation checked against the frozen truth (spec item 7);
 //! - `p10_kill_and_resume`: a retranscription killed once its first chunk
-//!   checkpoint exists leaves its job `interrupted` (`job status`), and the
-//!   same command resumes it to the control run's segments; afterwards a
-//!   committed transcript artifact altered on disk is `INTEGRITY_FAILURE`;
+//!   checkpoint exists leaves its job `interrupted` (`job status`) and what
+//!   it published in an `open` revision (since 0.3.0, ADR 0033 D1: the
+//!   control run's first segments, or nothing when it was killed before its
+//!   first part), and the same command resumes it to the control run's
+//!   segments; afterwards a committed transcript artifact altered on disk is
+//!   `INTEGRITY_FAILURE`;
 //! - `p10_interrupt_and_job_resume`: Ctrl-C (`SIGINT` on Unix, the console
 //!   helper's Ctrl-Break on Windows) during a retranscription after its
 //!   first checkpoint: `CANCELLED` (exit 6) naming the session and job and
-//!   suggesting `job resume <job>`, nothing committed, no provider left
-//!   running; one checkpoint is then altered, and `job resume` discards it
+//!   suggesting `job resume <job>`, what was published left `open` as after
+//!   a kill, no provider left running; one checkpoint is then altered, and
+//!   `job resume` discards it
 //!   (`checkpoint_discarded`) and commits the control run's segments;
 //! - `p10_job_cancel_twice`: `job cancel` twice while a retranscription runs
 //!   in another process: the owner stops within the poll interval and its
 //!   provider is stopped, the job ends `cancelled` with no checkpoint, the
-//!   run answers `CANCELLED` and nothing is committed;
+//!   run answers `CANCELLED`, and what it published is sealed `stopped`
+//!   (since 0.3.0, ADR 0033 D1; nothing, when it stopped before its first
+//!   part);
 //! - `p10_operation_replay`: a retranscription with `--operation-id` killed
 //!   as soon as its commit's pointer moved, before it could acknowledge
 //!   (X-02 through the binary), is replayed by the same request and id
@@ -404,6 +410,52 @@ fn spoken(
 fn session_generation(base: &Path, session: &str) -> Result<u64, StageStop> {
     let (status, _) = ok_json(base, &["session", "status", session])?;
     u64_of(&status["data"]["generation"])
+}
+
+/// What a run that ended early left published, since 0.3.0 (ADR 0033 D1): a
+/// run publishes its revision as it goes, so one stopped after its first
+/// part leaves that revision in `state` (`open` after a kill or Ctrl-C,
+/// `stopped` after `job cancel`) holding the control run's first segments
+/// and no others; one stopped before its first part leaves nothing, the
+/// session still at the generation its ingest made. Returns how many
+/// segments were published.
+fn published_so_far(
+    base: &Path,
+    session: &str,
+    state: &str,
+    control: &Control,
+) -> Result<usize, StageStop> {
+    if session_generation(base, session)? == 1 {
+        return Ok(0);
+    }
+    let (read, _) = ok_json(
+        base,
+        &[
+            "transcript",
+            "get",
+            session,
+            "--from",
+            "0",
+            "--to",
+            "100000000",
+            "--limit",
+            "1",
+        ],
+    )?;
+    let revision = &read["data"]["revision"];
+    ensure(
+        revision["state"] == state && u64_of(&revision["published_until_us"])? > 0,
+        &format!(
+            "the run's revision is not {state} with a published part: {}",
+            bounded(&revision.to_string())
+        ),
+    )?;
+    let segments = spoken(base, session, None)?;
+    ensure(
+        !segments.is_empty() && control.segments.starts_with(&segments),
+        "the published segments are not the control run's first ones",
+    )?;
+    Ok(segments.len())
 }
 
 /// The session's only job, from `session status`.
@@ -991,10 +1043,7 @@ fn kill_stage(base: &Path, control: &Control) -> StageResult {
     )?;
     let kept = u64_of(&interrupted["progress"]["chunks_checkpointed"])?;
     ensure(kept >= 1, "the killed run kept no checkpoint")?;
-    ensure(
-        session_generation(base, &session)? == 1,
-        "the killed run committed",
-    )?;
+    let published_before_kill = published_so_far(base, &session, "open", control)?;
 
     let (resumed, resume_time) = ok_json(base, &["transcript", "retranscribe", &session])?;
     ensure(
@@ -1009,16 +1058,18 @@ fn kill_stage(base: &Path, control: &Control) -> StageResult {
         "the resumed revision's segments differ from the control run's",
     )?;
 
-    // Damage the committed transcript record: reads fail closed.
+    // Damage the committed transcript record: reads fail closed. Since
+    // 0.3.0 the record may lie beside the parts the seal retired (ADR 0033),
+    // which are JSON artifacts too, so every one of them is damaged.
     let artifacts = base
         .join("sessions")
         .join("sessions")
         .join(&session)
         .join("artifacts");
-    let record = fs::read_dir(&artifacts)?
+    let records: Vec<PathBuf> = fs::read_dir(&artifacts)?
         .flatten()
         .map(|entry| entry.path())
-        .find(|path| {
+        .filter(|path| {
             path.file_name()
                 .and_then(OsStr::to_str)
                 .is_some_and(|name| name.starts_with("artifact-"))
@@ -1026,11 +1077,14 @@ fn kill_stage(base: &Path, control: &Control) -> StageResult {
                     .extension()
                     .is_some_and(|extension| extension == "json")
         })
-        .ok_or_else(|| failed("no committed transcript record"))?;
-    let mut bytes = fs::read(&record)?;
-    let middle = bytes.len() / 2;
-    bytes[middle] ^= 0x20;
-    fs::write(&record, bytes)?;
+        .collect();
+    ensure(!records.is_empty(), "no committed transcript record")?;
+    for record in &records {
+        let mut bytes = fs::read(record)?;
+        let middle = bytes.len() / 2;
+        bytes[middle] ^= 0x20;
+        fs::write(record, bytes)?;
+    }
     let (code, damaged) = run_json(
         vsift(base)?
             .args([
@@ -1051,6 +1105,7 @@ fn kill_stage(base: &Path, control: &Control) -> StageResult {
     Ok(json!({
         "job": job,
         "checkpoints_after_kill": kept,
+        "segments_published_before_kill": published_before_kill,
         "chunks_reused": resumed["data"]["job"]["chunks_reused"],
         "resume_ms": resume_time.as_millis(),
         "segments": segments.len(),
@@ -1087,10 +1142,7 @@ fn interrupt_stage(base: &Path, control: &Control) -> StageResult {
             && error["remediation"][0]["command"]["arguments"] == json!(["job", "resume", job]),
         "the cancellation does not name the session and job and suggest job resume",
     )?;
-    ensure(
-        session_generation(base, &session)? == 1,
-        "the interrupted run committed",
-    )?;
+    let published_before_interrupt = published_so_far(base, &session, "open", control)?;
     let status = job_status(base, &job)?;
     ensure(
         status["state"] == "interrupted" && status["failure"]["code"] == "CANCELLED",
@@ -1129,6 +1181,7 @@ fn interrupt_stage(base: &Path, control: &Control) -> StageResult {
         "interruption": if cfg!(windows) { "console Ctrl-Break (helper)" } else { "SIGINT" },
         "stopped_after_ms": ended.stopped_after.as_millis(),
         "providers_seen": ended.providers.len(),
+        "segments_published_before_interrupt": published_before_interrupt,
         "resume_ms": resume_time.as_millis(),
         "checkpoint_discarded": true,
     }))
@@ -1169,10 +1222,7 @@ fn cancel_stage(base: &Path, control: &Control) -> StageResult {
             && checkpoints(base, &session).is_empty(),
         &format!("the job is not cancelled without checkpoints: {status}"),
     )?;
-    ensure(
-        session_generation(base, &session)? == 1,
-        "the cancelled run committed",
-    )?;
+    let published_before_cancel = published_so_far(base, &session, "stopped", control)?;
     ensure(
         !job_directory(base, &session, &job).join("chunks").exists()
             || checkpoints(base, &session).is_empty(),
@@ -1184,6 +1234,7 @@ fn cancel_stage(base: &Path, control: &Control) -> StageResult {
         "second_answer": second["data"]["state"],
         "stopped_after_ms": ended.stopped_after.as_millis(),
         "providers_seen": ended.providers.len(),
+        "segments_kept_stopped": published_before_cancel,
     }))
 }
 

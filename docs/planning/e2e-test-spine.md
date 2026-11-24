@@ -283,15 +283,17 @@ manifest entry and speech provenance) and from an uninterrupted control run. Sta
 the control run, `search`, `candidates`, `frame get --candidate`, `crop`, `audio`, then
 `session retain` and `bundle validate` with every citation checked against the truth);
 `p10_kill_and_resume` (a run killed once its first checkpoint exists is `interrupted`
-in `job status`; the same command resumes it to the control segments; a committed
+in `job status`, and what it published is an `open` revision holding the control run's
+first segments, or nothing if it was killed before its first part (ADR 0033 D1, since
+0.3.0; until then nothing was committed); the same command resumes it to the control segments; a committed
 transcript artifact altered on disk is then `INTEGRITY_FAILURE`);
 `p10_interrupt_and_job_resume` (Ctrl-C after the first checkpoint: `SIGINT` on Unix, a
 console Ctrl-Break through `tools/send-console-ctrl.ps1` on Windows; `CANCELLED`, exit
-6, the session and job named and `vsift job resume <job>` suggested, nothing committed,
-no provider alive 10 s later; one checkpoint then altered, and `job resume` discards it
+6, the session and job named and `vsift job resume <job>` suggested, what was published
+left `open` as after a kill, no provider alive 10 s later; one checkpoint then altered, and `job resume` discards it
 and commits the control segments); `p10_job_cancel_twice` (`job cancel` twice while a
 run is live: the owner stops within the budget, the job ends `cancelled` without
-checkpoints); `p10_operation_replay` (a run with `--operation-id` killed as its commit's
+checkpoints, and what it published is sealed `stopped`); `p10_operation_replay` (a run with `--operation-id` killed as its commit's
 pointer moves is replayed by the same request without a new generation, and the same
 id with another range is `IDEMPOTENCY_CONFLICT`; the fault-injection kill at the
 pointer rename itself is in the storage kill test, because the release binary cannot

@@ -241,16 +241,14 @@ fn refused_acceptance_changes_nothing() -> TestResult {
     assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
     assert!(summary(&value).contains("--artifact-dir must be the absolute path"));
 
-    // The install guard is taken before the plan is revalidated, so on the
-    // managed target the refusals may leave the empty marked root; nothing
-    // is ever staged or published. Elsewhere nothing is created at all.
-    let root = base.managed_root();
-    if qualified() {
-        assert!(!root.join("versions-v1").exists());
-        assert!(!root.join("current-v1").exists());
-    } else {
-        assert!(!root.exists(), "a refusal created the root");
-    }
+    // The plan is revalidated before the install guard is taken, so no
+    // refusal creates the managed root, its marker or its lock file, on the
+    // managed target or elsewhere (until 0.3.0-rc.2 the guard came first and
+    // left the empty marked root: the P06 journey on 0.3.0-rc.1).
+    assert!(
+        !base.managed_root().exists(),
+        "a refusal created the managed root"
+    );
     Ok(())
 }
 

@@ -1,10 +1,13 @@
 //! `setup install`: the guarded managed-install transaction (P13, ADR 0023
 //! §3 step 3).
 //!
-//! The order is fixed. The install guard is taken first and never waits (a
-//! held guard is [`EngineError::ManagedInstallBusy`]). The plan is then
-//! rebuilt from the machine as it is now and must equal the saved plan the
-//! user reviewed, and the supplied digest must accept it; only then does the
+//! The order is fixed. The plan is first rebuilt from the machine as it is
+//! now and must equal the saved plan the user reviewed, and the supplied
+//! digest must accept it; a refusal changes nothing, not even the managed
+//! root (until 0.3.0-rc.2 the guard came first and a refusal left an empty
+//! `managed-v1` behind). Only then is the install guard taken, which never
+//! waits (a held guard is [`EngineError::ManagedInstallBusy`]), and the
+//! acceptance is checked once more under it; only then does the
 //! application transaction install the plan's components, video and
 //! speech side by side (ADR 0036 section 4), each fetched from its reviewed
 //! publisher (or the user's artifact folder, or a download an earlier run
@@ -16,8 +19,8 @@ use std::{path::PathBuf, time::Duration};
 
 use vsift_application::{
     CorePartSet, InstallObserver, ManagedInstallReport, ManagedPlanAvailability,
-    ManagedSetupAction, PieceProgress, PlanAcceptanceError, ProgressSink,
-    install_observed_managed_plan,
+    ManagedSetupAction, OptionalComponentSet, PieceProgress, PlanAcceptanceError, ProgressSink,
+    SetupProfile, install_observed_managed_plan,
 };
 use vsift_contract::{InstallSource, SavedSetupPlan};
 use vsift_domain::{FailureCode, ManagedComponent, ProgressUpdate, RuntimeDependency};
@@ -33,7 +36,7 @@ use crate::{
     error::EngineError,
     lifecycle::{InstallCleanup, clean_up_after_install, sweep_before_install},
     progress::{JobProgress, ProgressObserver},
-    setup::SetupPlanRequest,
+    setup::{EvaluatedSetupPlan, SetupPlanRequest},
     transcripts::resolve_media_tool,
     verification::Cancellation,
 };
@@ -52,8 +55,10 @@ pub struct SetupInstallRequest {
     /// An absolute folder holding the plan's artifact files, for an offline
     /// install; `None` downloads each from its reviewed publisher.
     pub artifact_directory: Option<PathBuf>,
-    /// Total deadline shared by the dependency probes that rebuild the plan;
-    /// hosts normally pass [`crate::DEFAULT_PROBE_TIMEOUT`]. A tool that
+    /// Total deadline shared by the dependency probes of one rebuild of the
+    /// plan; hosts normally pass [`crate::DEFAULT_PROBE_TIMEOUT`]. The plan
+    /// is rebuilt twice, before and under the install guard, so tools that
+    /// never answer can hold the install up to twice this long. A tool that
     /// answered when the plan was made and times out now changes the plan,
     /// so the saved one is refused as stale and nothing is installed.
     pub probe_timeout: Duration,
@@ -108,11 +113,14 @@ impl Engine {
     /// # Errors
     ///
     /// Fails before any change when the artifact folder is not absolute, the
-    /// host has no managed installation, the managed root cannot be used or
-    /// is held by another installation, or the saved plan or digest does not
-    /// accept the current plan. A component that fails during the
-    /// transaction is not an error: it is reported in the outcome, with every
-    /// component activated before it still active.
+    /// host has no managed installation, or the saved plan or digest does not
+    /// accept the current plan; none of these creates the managed root. Fails
+    /// next, having created at most the empty marked root and its lock file,
+    /// when the managed root cannot be used or is held by another
+    /// installation, or when the plan no longer accepts under the guard. A
+    /// component that fails during the transaction is not an error: it is
+    /// reported in the outcome, with every component activated before it
+    /// still active.
     pub async fn install_setup(
         &self,
         request: SetupInstallRequest,
@@ -143,6 +151,10 @@ impl Engine {
         let store = self
             .managed_store()
             .ok_or(EngineError::ManagedStorageUnavailable)?;
+        // Taking the guard creates the managed root, its marker and its lock
+        // file, so a plan that is refused is refused before it: rebuilding
+        // the intent opens nothing managed and writes nothing.
+        self.accepted_plan(&request, profile, include).await?;
         let guard = store.try_install_guard().map_err(|error| match error {
             ManagedArtifactError::Busy => EngineError::ManagedInstallBusy,
             ManagedArtifactError::Unavailable
@@ -150,15 +162,10 @@ impl Engine {
             | ManagedArtifactError::Io
             | ManagedArtifactError::Transfer(_) => EngineError::ManagedStorageUnavailable,
         })?;
-        let current = self
-            .plan_setup_intent(SetupPlanRequest {
-                profile,
-                include,
-                parts: request.parts,
-                probe_timeout: request.probe_timeout,
-            })
-            .await?;
-        current.validate_acceptance(&request.saved_plan, &request.accepted_digest)?;
+        // The machine can change between the first look and the guard (a
+        // tool replaced, a selection configured), so the plan the
+        // transaction acts on is the one rebuilt under the guard.
+        let current = self.accepted_plan(&request, profile, include).await?;
         let plan = current.authority();
         // The plan was accepted for this host, so its target has a catalogue.
         let catalogue = accepted_host_catalogue()
@@ -195,13 +202,15 @@ impl Engine {
             &guard,
         );
         let optional: Vec<ManagedSetupAction> = plan.optional_actions().cloned().collect();
-        let report = install_observed_managed_plan(
+        // Boxed: the transaction's state is most of this future, which every
+        // host awaits inside its own (clippy's `large_futures`).
+        let report = Box::pin(install_observed_managed_plan(
             &installer,
             &plan.actions,
             &optional,
             &sink,
             &OperationPieces(&progress),
-        )
+        ))
         .await;
         drop(installer);
         let versions = clean_up_after_install(&store, &guard);
@@ -212,6 +221,26 @@ impl Engine {
             report,
             cleanup: InstallCleanup { stages, versions },
         })
+    }
+
+    /// The plan rebuilt from the machine as it is now, when it equals the
+    /// saved plan and the supplied digest accepts it.
+    async fn accepted_plan(
+        &self,
+        request: &SetupInstallRequest,
+        profile: SetupProfile,
+        include: OptionalComponentSet,
+    ) -> Result<EvaluatedSetupPlan, EngineError> {
+        let current = self
+            .plan_setup_intent(SetupPlanRequest {
+                profile,
+                include,
+                parts: request.parts,
+                probe_timeout: request.probe_timeout,
+            })
+            .await?;
+        current.validate_acceptance(&request.saved_plan, &request.accepted_digest)?;
+        Ok(current)
     }
 }
 
