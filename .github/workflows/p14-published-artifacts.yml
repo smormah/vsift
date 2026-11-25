@@ -97,7 +97,7 @@ jobs:
   resolve:
     name: Choose the versions
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     outputs:
@@ -126,6 +126,18 @@ jobs:
           INPUT_FROM_VERSION: ${{ inputs.from_version }}
           GH_TOKEN: ${{ github.token }}
         run: node tools/p14-published/resolve-release.cjs --work "${RUNNER_TEMP}/resolve"
+
+      # Right after a publish npm may not yet serve every new tarball (#618: on Windows the
+      # installs skipped @vsift/win32-x64 and the launcher said it was missing). Every job
+      # that installs from the registry (clean-install, upgrade) needs this job, so the wait,
+      # at most 15 minutes until all four tarballs answer 200 and all four metadata documents
+      # list the version, is made once here and holds
+      # for all of them. The archive and offline-install jobs read the GitHub release, not
+      # npm, and wait for it all the same by needing this job.
+      - name: Wait until npm serves all four packages
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: node tools/p14-published/wait-for-registry.cjs --version "${VERSION}"
 
   clean-install:
     name: RQ-01 clean install (${{ matrix.os }}, ${{ matrix.manager }})
