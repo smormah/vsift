@@ -1,21 +1,22 @@
 # The minor release 0.3.0: the plan
 
-Status: **the plan for the minor release `0.3.0` and the record of its evidence. Position on 2026-11-24: the first candidate, `0.3.0-rc.1`, is being cut by the pull request "The release candidate 0.3.0-rc.1" into `main`. It is not branched, tagged or published, and no evidence is recorded for it yet.** It is a normal cut by [`release.md`](../operations/release.md) 6.18, the first on a new release line, `release/0.3.x`; the maintainer's runbook for it is `release.md` 6.24. `0.2.4` stays npm `latest` until the stable `0.3.0` is published; nothing is announced.
+Status: **the plan for the minor release `0.3.0` and the record of its evidence. Position on 2026-11-25: the first candidate, `0.3.0-rc.1`, was published on 2026-11-24 from the new `release/0.3.x` and is npm `next`; its journeys found a defect ([#620](https://github.com/smormah/vsift/issues/620)), so the second candidate, `0.3.0-rc.2`, is being cut by the pull request "The release candidate 0.3.0-rc.2" into `release/0.3.x` ("The second candidate", below). It is not tagged or published, and no evidence is recorded for either candidate yet.** The first candidate was a normal cut by [`release.md`](../operations/release.md) 6.18, the first on a new release line, `release/0.3.x` (runbook `release.md` 6.24); the second is 6.18 step 4 (runbook `release.md` 6.25). `0.2.4` stays npm `latest` until the stable `0.3.0` is published; nothing is announced.
 
 ## What this release is, and why
 
 `0.2.4` (the hot fix of `0.2.3`, published 2026-11-05) is the current release. The road to 1.0 ([ADR 0027](../decisions/0027-the-road-to-1-0.md), the first section of [`backlog-iterations.md`](backlog-iterations.md)) makes `0.3.0` a **normal stable release**: OCR, speaker labels, online links, time anchoring, what changed on screen, search across kept sessions and progress during long transcriptions, built in slices that each stand on their own. The maintainer decided on 2026-11-04 that it **is cut when it is ready**, with about 27 November as the latest date: every item of the readiness list of that day is done but this cut (the readiness list is the planner's record; the cut items, the Fable review's fixes H3 to H6 and the bounded settled cut H8 among them, are in the table below). **It is a minor release, not a work packet:** P00 to P14 stay complete, the claims rung stays `candidate`, and nothing here is a statement of support.
 
-## Where things stand (2026-11-24, at the cut)
+## Where things stand (2026-11-25, at the cut of the second candidate)
 
 | Version or branch | State |
 | --- | --- |
-| `0.2.4` | The current release: npm `latest` on all four packages, GitHub's latest release `v0.2.4`, tag `v0.2.4` at `709de47b4650` on `release/0.2.x`. Checked on 2026-11-24. |
-| `0.2.4-rc.1` | npm `next` on all four packages (tag `v0.2.4-rc.1` at `d44d71532967`), deprecated since 2026-11-06. Checked on 2026-11-24. |
+| `0.2.4` | The current release: npm `latest` on all four packages, GitHub's latest release `v0.2.4`, tag `v0.2.4` at `709de47b4650` on `release/0.2.x`. Checked on 2026-11-25. |
+| `0.2.4-rc.1` | Deprecated since 2026-11-06 (tag `v0.2.4-rc.1` at `d44d71532967`); no longer `next` since the publish of `0.3.0-rc.1`. |
 | `release/0.2.x` | At `709de47b4650` (the stable `0.2.4`). **It stays** for hot fixes of `0.2.x` until `0.3.0` is stable (6.24 step 3). |
-| `release/0.3.x` | **Does not exist yet.** The maintainer creates it at the cut's merge commit (6.24 step 3); the branch and tag rulesets and the `release` environment already cover `release/*` and `v*` (read on 2026-11-23 by the coordinator and again on 2026-11-24 for this page). |
-| `0.3.0-rc.1` | **Being cut.** On npm it answers 404; there is no `v0.3*` tag. |
-| `main` | At `07a5e829` (#616) before the cut, green: the push runs and the Nightly of 2026-11-24 (45314335777). It carries `0.3.0-rc.1` from the merge of the cut until the next bump. |
+| `release/0.3.x` | Created on 2026-11-24 at `89d3ea7c9845` (the cut of `0.3.0-rc.1`, #617); since then #621 (`2657e128`) and #623 (`099ad615244a`). The second candidate's bump goes into it by pull request; no new branch (6.25). |
+| `0.3.0-rc.1` | **Published on 2026-11-24** (Release run 45466267152; tag `v0.3.0-rc.1` at `89d3ea7c98452358e412b93c950b52600b1091e4`): npm `next` on all four packages, a GitHub pre-release. Superseded by `0.3.0-rc.2` once that is published; deprecated at the stable release, not before. Checked on 2026-11-25. |
+| `0.3.0-rc.2` | **Being cut** by a bump into `release/0.3.x`. On npm it answers 404; there is no `v0.3.0-rc.2` tag. |
+| `main` | At `0.3.0-rc.1` since the cut of the first candidate (#617). The fixes reached it by their counterparts (#622, #619); the bump to `0.3.0-rc.2` does not (6.18 step 4), and reaches `main` with the records change after the stable release. |
 
 ## What is in it
 
@@ -115,7 +116,7 @@ For each item: what `0.3.0` changed in its scope (read from the item's scope in 
 
 ## For the maintainer: run or waive
 
-These are not decided by this page or the cut. Each needs the maintainer's word before the stable `0.3.0`:
+These are not decided by this page or the cut. Each needs the maintainer's word before the stable `0.3.0`. **Since the cut of the second candidate (2026-11-25) every run named here and in the table above is made on `0.3.0-rc.2`'s tag** ("The second candidate"): read "on `0.3.0-rc.1`" there as "on `0.3.0-rc.2`".
 
 - RQ-04's `P14 compatibility` and `P14 local upgrade`;
 - the monthly round's long runs: RQ-07 (`Fuzz`, 3,600 s), RQ-08 (`P14 stress`), RQ-09 (`P14 load`), RQ-11 (`P13 managed power loss`, `P10 durability campaign`), RQ-12 (`P14 runbook walk`);
@@ -123,6 +124,56 @@ These are not decided by this page or the cut. Each needs the maintainer's word 
 - RQ-14: carry the standing waiver to `0.3.0`, or not;
 - RQ-17: the LOKI try-out before the stable, or carry the waiver.
 
-## The evidence on 0.3.0-rc.1
+## The second candidate (cut 2026-11-25)
 
-Not yet recorded. The records pull request into `release/0.3.x` adds this section after the runs of the route, from what each run computed and never earlier (6.24 step 9).
+**Why.** `P14 journeys` on the published `0.3.0-rc.1` (run 45471095687, RQ-05) failed: on Windows for the registry lag of [#618](https://github.com/smormah/vsift/issues/618) ([L-258](known-limits.md#l-258)); on Ubuntu and macOS for a test defect (the P10 checkpoint test still expected a stopped retranscription to commit nothing, against ADR 0033 D1) and **a product defect, [#620](https://github.com/smormah/vsift/issues/620): a refused `setup install` left an empty `managed-v1` folder behind**, which the journey saw on macOS. On 2026-11-24 the maintainer ruled "Fix now, rc.2". A fix that changes code means a new candidate (`release.md` 6.8, 6.18 step 4).
+
+**What it is.** **`0.3.0-rc.2` is `0.3.0-rc.1` plus exactly these and the bump:** #621 into `release/0.3.x` (the P06 fix: the engine checks the plan and the acceptance before it takes the install guard; and the P10 test fix, D1), whose counterpart on `main` is #622; and #623 into `release/0.3.x` (the post-publish checks wait until npm serves the new version, for #618), whose counterpart on `main` is #619. Nothing else of `main`, no skill change (the agent-trial freeze is kept byte for byte), no dependency change, no workflow change but #623's. The cut is a pull request into `release/0.3.x`; `main` stays at `0.3.0-rc.1`. The runbook is [`release.md`](../operations/release.md) 6.25, which has the diff against `v0.3.0-rc.1`, the numbers and every command line. [#620](https://github.com/smormah/vsift/issues/620) and [#618](https://github.com/smormah/vsift/issues/618) stay open; each closes with the stable release's evidence.
+
+**What it changes in the plan.** Every run of the route above is made on `0.3.0-rc.2`'s tag, and nothing from `0.3.0-rc.1`'s runs is recorded for it (its code differs, and `crates/` is in the scope of every item but RQ-18). The ledger does not change at this cut: `release-evidence --complete-for 0.3.0-rc.2` (at `099ad615244a`, before the cut) names the same 17 of the 20 items. The publish moves `next` from `0.3.0-rc.1` to `0.3.0-rc.2`; `latest` stays `0.2.4`. `0.3.0-rc.1` stays published and is deprecated at the stable release, not before. Agent-trial batches 2 and 3 are the maintainer's decision on `0.3.0-rc.2` (`-Version 0.3.0-rc.2`). The stable commit `0.3.0` is compared with `v0.3.0-rc.2`.
+
+## The runs on 0.3.0-rc.1
+
+**A record, not evidence.** These are the hosted runs made on the first candidate (tag `v0.3.0-rc.1`, commit `89d3ea7c98452358e412b93c950b52600b1091e4`), as the coordinator kept them on 2026-11-24 and 2026-11-25. **None is recorded in the ledger, and none counts for `0.3.0-rc.2`**, whose code differs: every one is superseded and is run again on `0.3.0-rc.2`'s tag (`release.md` 6.25 step 7). All were dispatched on the tag unless noted.
+
+**Before the publish.**
+
+| Step | Workflow | Run | Result |
+| --- | --- | --- | --- |
+| 6.24 step 1 | Nightly (dispatched on `main` at the commit) | 45394868964 | success |
+| 6.24 step 1 | `CI result` on the commit | the push of #617 | success |
+| 6.24 step 5 | Release, dry run | 45411027240 | success (the plan: `next` from `0.2.4-rc.1` to `0.3.0-rc.1`, `latest` stays `0.2.4`) |
+| 6.24 step 6 | Release, publish (approved by the maintainer) | 45466267152 | success; the plan byte-identical to the dry run's; the publish job ended 19:29:57 UTC |
+
+**The quick checks (6.24 step 7), dispatched about two minutes after the publish.**
+
+| Item | Workflow | Run | Result |
+| --- | --- | --- | --- |
+| RQ-19 | `P14 verify release` | 45471088261 | attempt 1 failure (registry lag: E404 on the `@vsift/win32-x64` tarball, #618); attempt 2 success |
+| RQ-01 to RQ-04 | `P14 published artifacts`, `from_version=0.2.4` | 45471111535 | attempt 1 failure on Windows only (registry lag, #618); attempt 2 success |
+| RQ-01 to RQ-04 | `P14 published artifacts`, `from_version=0.2.3` | 45477254332 | success |
+| RQ-05 | `P14 journeys` | 45471095687 | **failure:** Windows, the registry lag (#618); Ubuntu and macOS, the P10 test defect (D1) and the P06 refused-install defect ([#620](https://github.com/smormah/vsift/issues/620)), fixed for `0.3.0-rc.2` by #621 (#622 on `main`); not re-run on `0.3.0-rc.1` (the planner) |
+| RQ-06 | `P13 managed smoke`, `published_version=0.3.0-rc.1` | 45471103709 | success |
+| RQ-06 (the new parts) | `P13 managed smoke` from the tag's source (three systems, the `ocr` and `speakers` groups) | 45474433859 | success |
+| the new parts | `P16 speakers end to end` | 45474438878 | success |
+| the new parts | `P16 OCR runner` | 45474444215 | success |
+
+The checks from outside after the publish: `next` `0.3.0-rc.1` and `latest` `0.2.4` on all four packages; a GitHub pre-release, not a draft, with ten assets; GitHub's latest release `v0.2.4`; every earlier version's npm integrity values and the fourteen tag commits unchanged. The local `npm install`, `npm audit signatures` and `npx vsift --version` were replaced by the hosted `P14 published artifacts` and `P14 verify release` runs (the planner, 2026-11-24: no downloads on the development machine).
+
+**The long runs and the monthly round (the maintainer: run all but RQ-14).**
+
+| Item | Workflow | Run | Result |
+| --- | --- | --- | --- |
+| RQ-10, RQ-13 (monthly) | `P07 local ASR` | 45479182426 | success |
+| RQ-10 | `P14 malicious media` | 45482113011 | success |
+| RQ-13 | `P14 scan reading` | 45482895848 | success |
+| RQ-04 (part) | `P14 compatibility` | 45483304866 | success |
+| RQ-04 (part) | `P14 local upgrade` | 45483547684 | success |
+| RQ-07 | `Fuzz`, 3,600 s a target | 45484827667 | success |
+| RQ-08 | `P14 stress` | 45495740864 | success (started before #621 merged and left to finish; it passed on 2026-11-25) |
+
+**Not run on `0.3.0-rc.1`** (the planner, 2026-11-24: run once, on `0.3.0-rc.2`'s tag): `P13 managed power loss` and `P10 durability campaign` (RQ-11), `P14 load` (RQ-09) and `P14 runbook walk` (RQ-12). Agent-trial batches 2 and 3 (RQ-15, RQ-16) were held until `0.3.0-rc.2` is published. RQ-14 stays waived ([#188](https://github.com/smormah/vsift/issues/188) stays open). RQ-17 is the maintainer's LOKI try-out before the stable. Related issues: [#618](https://github.com/smormah/vsift/issues/618), [#620](https://github.com/smormah/vsift/issues/620) and [#624](https://github.com/smormah/vsift/issues/624), which stay open.
+
+## The evidence on 0.3.0-rc.2
+
+Not yet recorded. The records pull request into `release/0.3.x` adds it after the runs of the route on `0.3.0-rc.2`'s tag, from what each run computed and never earlier (`release.md` 6.25 step 9). Nothing is recorded for `0.3.0-rc.1`: its runs are the record above.
