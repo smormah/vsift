@@ -261,6 +261,7 @@ Each entry has these fields:
 | [L-252](#l-252) | The value measurement's tool time and model time come from when each line of the client's stream arrived, so the client's own work counts as the model's | process/CI | low | value measurement | none | open |
 | [L-253](#l-253) | `handoff finish` makes at most one write: retaining a session and then closing it takes a second call (`session close`) | contract/UX | low | unscheduled | none | open |
 | [L-254](#l-254) | An upstream repository move breaks the managed installs of already-published versions until `0.3.0` (the maintainer decided on 2026-11-09 that there is no `0.2.5`), because a pin is a URL and a strict redirect policy refuses an address nobody has read | security/trust | medium | `0.3.0` cut | [#593](https://github.com/smormah/vsift/issues/593) | open |
+| [L-258](#l-258) | In the first minutes after a publish, a Windows install can skip the native package and the launcher then says it is missing, because npm does not yet serve the new tarball | platform/distribution | low | the release runbook (6.4) | [#618](https://github.com/smormah/vsift/issues/618) | open |
 | [L-242](#l-242) | The six workflows, the Claude Code plugin, `vsift skill install` and the help's ready-made outcomes are untried by agents until the 0.3.0 cut: the text ships and its commands are held to the CLI by tests, but how agents follow it is unmeasured; C-04, the cold scenario that asks for a bug report, first runs in batch 3 at the cut and has no baseline | process/CI | low | 0.3.0 cut | none | open |
 | [L-205](#l-205) | One diarization hears at most two hours (it holds the whole stretch in memory, about 1 GiB an hour); a longer recording is labelled a part at a time, and labels of two parts are not linked | performance | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
 | [L-206](#l-206) | Speaker-label accuracy rests on synthetic voices and two real recordings, both NASA space-to-ground links | accuracy/ASR | medium | `0.3.0` (speaker labels) | [#108](https://github.com/smormah/vsift/issues/108) | open |
@@ -5944,6 +5945,18 @@ arrived.**
   298/298 on both synthetic videos, Windows and macOS 288/288 lines equal to Linux's, each `describe` naming runtime
   1.31.0; the `Engines` pull-request run 44370590981 built all three `ocr-runner` legs twice and compared them.
 - **Owner:** the `0.3.0` cut (the fix) and H1b (the test set-up). **Issue:** [#593](https://github.com/smormah/vsift/issues/593). **Status:** open. **Review:** pending.
+
+### L-258
+
+**In the first minutes after a publish, a Windows install can skip the native package, and the launcher then says it is missing (found on `0.3.0-rc.1`, 2026-11-24).**
+
+- **What:** `registry.npmjs.org` can take some minutes to serve a new tarball after `npm publish` has returned. An install in that time resolves the launcher and treats the native platform package as an optional dependency it cannot fetch: npm skips an optional dependency without failing, so the install succeeds without it. The launcher then reports that `@vsift/<platform>` is not installed, and `vsift` does not run. It is npm's optional-dependency behaviour, not a bad publish: the tarballs answered 200 a little later and a clean install then works.
+- **What a user sees:** `vsift` reporting "The native package @vsift/win32-x64@<version> is not installed" (or, from a clean install check, "@vsift/win32-x64 was not found in the install") right after a release, on a machine that installed within the first minutes. Only Windows was seen to do it; macOS and Ubuntu installs in the same minutes passed.
+- **Evidence:** the checks of `0.3.0-rc.1`, dispatched about two minutes after the publish of Release run 45466267152 (ended 19:29:57 UTC): `P14 verify release` run 45471088261 (`npm pack` E404), `P14 published artifacts` run 45471111535 (RQ-01 on all four Windows package managers; RQ-04's upgrade on Windows, exit 127) and `P14 journeys` run 45471095687 (Windows). The re-runs about 15 minutes later passed. [#618](https://github.com/smormah/vsift/issues/618).
+- **Impact: low by the rubric:** it needs an install in the first minutes after a publish, the install is repeated by running it again, and nothing unverified runs.
+- **Mitigation:** wait before announcing: the runbook (`release.md` 6.4) says to dispatch the post-publish checks no sooner than 15 minutes after the publish job ends and not to announce a release before then. The three post-publish workflows also wait for themselves (`tools/p14-published/wait-for-registry.cjs`: the four tarballs and the four metadata documents, every 30 seconds, at most 15 minutes) before they pack or install. The metadata is polled as well because npm decides whether an optional native package exists from a package's metadata document, which is cached separately and can lag the tarball. A user who hits it reinstalls (`npm install --global vsift-cli@<version>` again, or `npm install --global @vsift/win32-x64@<version>`).
+- **Next step:** none planned; VSift cannot change what npm serves. Closed with the evidence of the stable `0.3.0`'s checks.
+- **Owner:** the release runbook. **Issue:** [#618](https://github.com/smormah/vsift/issues/618). **Status:** open. **Review:** pending.
 
 ### L-205
 

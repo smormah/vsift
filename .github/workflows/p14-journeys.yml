@@ -164,6 +164,16 @@ jobs:
           TESTS_FROM: ${{ inputs.tests_from }}
         run: python workflow-source/tools/p14_journeys.py select-source --version "$VERSION" --tests-from "${TESTS_FROM:-auto}"
 
+      # Right after a publish npm may not yet serve every new tarball (#618: the Windows
+      # install skipped @vsift/win32-x64 and the launcher said it was missing). Waits, at
+      # most 15 minutes, until all four tarballs answer 200 and all four metadata documents
+      # list the version (npm reads those to decide whether an optional package exists).
+      # The Node.js above is the pinned one.
+      - name: Wait until npm serves all four packages
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: node workflow-source/tools/p14-published/wait-for-registry.cjs --version "$VERSION"
+
       - name: Install the published package from the real npm registry
         run: python workflow-source/tools/p14_journeys.py install
 
