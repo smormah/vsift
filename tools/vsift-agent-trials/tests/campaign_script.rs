@@ -16,6 +16,11 @@
 //! (`-Credential ApiKey`). The checkout tests name `-Credential SignIn`, which
 //! needs no key; the credential tests at the end use fake keys and fake
 //! client homes, and check that no key value is ever printed.
+//!
+//! PowerShell colours a refusal and wraps it to the console's width, so where
+//! the line breaks depends on the length of the paths the message names,
+//! which differs from run to run (#624). Every assertion on what the script
+//! wrote therefore reads it through [`says`], never as written.
 
 #![cfg(windows)]
 
@@ -38,6 +43,8 @@ const SCRIPT: &str = "tools/vsift-agent-trials/campaigns/run-campaign.ps1";
 const OUTPUT_TREE: &str = "docs/planning/p14-agent-trials";
 /// Only the script's neutral-path rule reads this: nothing is created there.
 const NEUTRAL_ROOT: &str = r"C:\p14-campaign-script-test-root";
+/// The fake client's file name, in the folder outside the repository.
+const FAKE_CLIENT: &str = "fake-claude.cmd";
 /// The version the config pins and the fake client does not report.
 const PINNED_CLAUDE: &str = "2.1.284";
 /// The user environment variable the script reads Claude Code's key from.
@@ -87,23 +94,13 @@ impl Checkout {
         fs::create_dir_all(&tree)?;
         fs::write(tree.join("README.md"), "the batches' folder\n")?;
 
-        let fake_client = outside.join("fake-claude.cmd");
+        let fake_client = outside.join(FAKE_CLIENT);
         fs::write(&fake_client, "@echo off\r\necho 0.0.1 (Fake Client)\r\n")?;
         let claude_home = outside.join("claude-home");
         let codex_home = outside.join("codex-home");
         fs::create_dir(&claude_home)?;
         fs::create_dir(&codex_home)?;
         let config = outside.join("campaign.json");
-        fs::write(
-            &config,
-            serde_json::to_vec_pretty(&json!({
-                "root": NEUTRAL_ROOT,
-                "clientHome": claude_home,
-                "codexClientHome": codex_home,
-                "claudeExecutable": fake_client,
-                "claudeVersion": PINNED_CLAUDE,
-            }))?,
-        )?;
 
         let checkout = Self {
             repository,
@@ -113,6 +110,7 @@ impl Checkout {
             codex_home,
             scratch,
         };
+        checkout.write_config(&checkout.claude_home, &checkout.codex_home)?;
         checkout.git(&["init", "--quiet"])?;
         checkout.git(&["add", "--all"])?;
         checkout.git(&[
@@ -128,6 +126,22 @@ impl Checkout {
             "the checkout under test",
         ])?;
         Ok(checkout)
+    }
+
+    /// Writes the campaign configuration, naming these two client homes. The
+    /// script reads a relative one against the repository, where it runs.
+    fn write_config(&self, claude_home: &Path, codex_home: &Path) -> TestResult {
+        fs::write(
+            &self.config,
+            serde_json::to_vec_pretty(&json!({
+                "root": NEUTRAL_ROOT,
+                "clientHome": claude_home,
+                "codexClientHome": codex_home,
+                "claudeExecutable": self.outside.join(FAKE_CLIENT),
+                "claudeVersion": PINNED_CLAUDE,
+            }))?,
+        )?;
+        Ok(())
     }
 
     /// Runs Git in the throwaway repository, isolated from the machine's
@@ -222,6 +236,7 @@ impl Checkout {
     }
 }
 
+/// Both streams as they were written: what a failed assertion shows.
 fn text(output: &Output) -> String {
     format!(
         "{}\n{}",
@@ -230,26 +245,62 @@ fn text(output: &Output) -> String {
     )
 }
 
+/// `written` without its ANSI control sequences (escape, `[`, parameters and
+/// the character that ends them), the only kind PowerShell's error view uses.
+fn without_colour(written: &str) -> String {
+    let mut plain = String::with_capacity(written.len());
+    let mut characters = written.chars();
+    while let Some(character) = characters.next() {
+        if character != '\u{1b}' {
+            plain.push(character);
+        } else if characters.next() == Some('[') {
+            for part in characters.by_ref() {
+                if ('@'..='~').contains(&part) {
+                    break;
+                }
+            }
+        }
+    }
+    plain
+}
+
+/// `written` as one line of plain words (#624): no colour codes, no `|` gutter
+/// at the start of a wrapped line, and every run of white space one space.
+fn unwrapped(written: &str) -> String {
+    without_colour(written)
+        .lines()
+        .map(str::trim_start)
+        .map(|line| line.strip_prefix('|').unwrap_or(line))
+        .flat_map(str::split_whitespace)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Whether the script wrote `words`, wherever PowerShell wrapped or coloured
+/// them.
+fn says(output: &Output, words: &str) -> bool {
+    unwrapped(&text(output)).contains(words)
+}
+
 fn assert_dry_run_passed(output: &Output) {
     assert!(output.status.success(), "{}", text(output));
-    assert!(text(output).contains("Dry run:"), "{}", text(output));
+    assert!(says(output, "Dry run:"), "{}", text(output));
 }
 
 /// A real run reached the client-version pin, so the checkout check passed.
 fn assert_stopped_at_the_version_pin(output: &Output) {
-    let shown = text(output);
-    assert!(!output.status.success(), "{shown}");
-    assert!(shown.contains("the campaign pins"), "{shown}");
-    assert!(!shown.contains("uncommitted changes"), "{shown}");
+    assert!(!output.status.success(), "{}", text(output));
+    assert!(says(output, "the campaign pins"), "{}", text(output));
+    assert!(!says(output, "uncommitted changes"), "{}", text(output));
 }
 
 fn assert_refused_as_uncommitted(output: &Output, expected_path: &str) {
-    let shown = text(output);
-    assert!(!output.status.success(), "{shown}");
-    assert!(shown.contains("uncommitted changes"), "{shown}");
+    assert!(!output.status.success(), "{}", text(output));
+    assert!(says(output, "uncommitted changes"), "{}", text(output));
     assert!(
-        shown.contains(expected_path),
-        "the refusal names the change: {shown}"
+        says(output, expected_path),
+        "the refusal names the change: {}",
+        text(output)
     );
 }
 
@@ -330,9 +381,12 @@ fn an_unreadable_checkout_is_refused_not_taken_for_clean() -> TestResult {
     let checkout = Checkout::new()?;
     fs::remove_dir_all(checkout.repository.join(".git"))?;
     let output = checkout.dry_run(1)?;
-    let shown = text(&output);
-    assert!(!output.status.success(), "{shown}");
-    assert!(shown.contains("cannot be shown to be clean"), "{shown}");
+    assert!(!output.status.success(), "{}", text(&output));
+    assert!(
+        says(&output, "cannot be shown to be clean"),
+        "{}",
+        text(&output)
+    );
     assert!(!checkout.batch_directory(1).exists());
     Ok(())
 }
@@ -347,9 +401,8 @@ fn a_batch_directory_must_be_the_campaign_output_or_outside_the_checkout() -> Te
     let inside = checkout.repository.join("tools").join("elsewhere");
     let inside_argument = inside.to_string_lossy().into_owned();
     let refused = checkout.run(1, &["-DryRun", "-BatchDirectory", &inside_argument])?;
-    let shown = text(&refused);
-    assert!(!refused.status.success(), "{shown}");
-    assert!(shown.contains("-BatchDirectory"), "{shown}");
+    assert!(!refused.status.success(), "{}", text(&refused));
+    assert!(says(&refused, "-BatchDirectory"), "{}", text(&refused));
     assert!(!inside.exists(), "nothing was written there");
 
     // Outside the checkout, anywhere: nothing it writes is a change.
@@ -370,16 +423,10 @@ fn a_batch_directory_must_be_the_campaign_output_or_outside_the_checkout() -> Te
 #[test]
 fn the_realistic_claude_cold_setting_needs_a_machine_declared_isolated() -> TestResult {
     let checkout = Checkout::new()?;
-    let mentions = |output: &Output, words: &str| text(output).contains(words);
-
     // The default is the strict setting.
     let strict = checkout.dry_run(1)?;
     assert_dry_run_passed(&strict);
-    assert!(
-        mentions(&strict, "Cold setting: strict"),
-        "{}",
-        text(&strict)
-    );
+    assert!(says(&strict, "Cold setting: strict"), "{}", text(&strict));
 
     // The realistic one is refused without the statement, in a dry run and a
     // real one, and nothing is written.
@@ -390,7 +437,7 @@ fn the_realistic_claude_cold_setting_needs_a_machine_declared_isolated() -> Test
         let refused = checkout.run(2, extra)?;
         assert!(!refused.status.success(), "{}", text(&refused));
         assert!(
-            mentions(&refused, "isolated machine") && mentions(&refused, "-IsolatedMachine"),
+            says(&refused, "isolated machine") && says(&refused, "-IsolatedMachine"),
             "{}",
             text(&refused)
         );
@@ -404,7 +451,7 @@ fn the_realistic_claude_cold_setting_needs_a_machine_declared_isolated() -> Test
     )?;
     assert_dry_run_passed(&accepted);
     assert!(
-        mentions(&accepted, "Cold setting: realistic"),
+        says(&accepted, "Cold setting: realistic"),
         "{}",
         text(&accepted)
     );
@@ -416,7 +463,7 @@ fn the_realistic_claude_cold_setting_needs_a_machine_declared_isolated() -> Test
     ] {
         let refused = checkout.run(1, extra)?;
         assert!(!refused.status.success(), "{}", text(&refused));
-        assert!(mentions(&refused, "only goes with"), "{}", text(&refused));
+        assert!(says(&refused, "only goes with"), "{}", text(&refused));
     }
     Ok(())
 }
@@ -428,7 +475,7 @@ fn the_codex_cold_run_is_the_container_setting_and_has_no_strict_variant() -> Te
     let codex = checkout.run_as("codex", 1, &["-DryRun"])?;
     assert_dry_run_passed(&codex);
     assert!(
-        text(&codex).contains("Cold setting: realistic (the container)"),
+        says(&codex, "Cold setting: realistic (the container)"),
         "{}",
         text(&codex)
     );
@@ -439,7 +486,7 @@ fn the_codex_cold_run_is_the_container_setting_and_has_no_strict_variant() -> Te
     let strict = checkout.run_as("codex", 1, &["-DryRun", "-ColdVariant", "strict"])?;
     assert!(!strict.status.success(), "{}", text(&strict));
     assert!(
-        text(&strict).contains("no strict Codex variant"),
+        says(&strict, "no strict Codex variant"),
         "{}",
         text(&strict)
     );
@@ -542,11 +589,7 @@ fn a_summary_only_run_calls_no_client_and_plans_nothing() -> TestResult {
     // No batch folder: nothing to summarise, and nothing is made.
     let refused = checkout.run(3, &["-SummaryOnly"])?;
     assert!(!refused.status.success(), "{}", text(&refused));
-    assert!(
-        text(&refused).contains("nothing to summarise"),
-        "{}",
-        text(&refused)
-    );
+    assert!(says(&refused, "nothing to summarise"), "{}", text(&refused));
     assert!(!checkout.batch_directory(3).exists());
 
     // A folder with one client's plan: the other client gets none.
@@ -563,11 +606,16 @@ fn a_summary_only_run_calls_no_client_and_plans_nothing() -> TestResult {
     Ok(())
 }
 
-/// Asserts that no fake key value appears in the script's output.
+/// Asserts that no fake key value appears in the script's output, not even
+/// one broken over two lines: the search ignores every space.
 fn assert_no_key_shown(output: &Output) {
-    let shown = text(output);
+    let joined = unwrapped(&text(output)).replace(' ', "");
     for key in [FAKE_CLAUDE_KEY, FAKE_OPENAI_KEY] {
-        assert!(!shown.contains(key), "a key value was printed: {shown}");
+        assert!(
+            !joined.contains(key),
+            "a key value was printed: {}",
+            text(output)
+        );
     }
 }
 
@@ -603,7 +651,10 @@ fn a_claude_batch_on_the_api_key_needs_the_key_and_a_home_without_a_sign_in() ->
     )?;
     assert_dry_run_passed(&accepted);
     assert!(
-        text(&accepted).contains("Credential: the API key in VSIFT_TRIALS_ANTHROPIC_API_KEY"),
+        says(
+            &accepted,
+            "Credential: the API key in VSIFT_TRIALS_ANTHROPIC_API_KEY"
+        ),
         "{}",
         text(&accepted)
     );
@@ -620,11 +671,7 @@ fn a_claude_batch_on_the_api_key_needs_the_key_and_a_home_without_a_sign_in() ->
     for extra in [&["-DryRun", "-Credential", "ApiKey"][..], &api_key[..]] {
         let refused = checkout.run_with_key("claude", 3, extra, Some(FAKE_CLAUDE_KEY))?;
         assert!(!refused.status.success(), "{}", text(&refused));
-        assert!(
-            text(&refused).contains("holds a sign-in"),
-            "{}",
-            text(&refused)
-        );
+        assert!(says(&refused, "holds a sign-in"), "{}", text(&refused));
         assert_no_key_shown(&refused);
     }
     assert!(!checkout.batch_directory(3).exists(), "nothing was written");
@@ -639,8 +686,7 @@ fn a_claude_batch_on_the_api_key_needs_the_key_and_a_home_without_a_sign_in() ->
             checkout.run_with_key("claude", 3, &["-DryRun", "-Credential", "ApiKey"], None)?;
         assert!(!refused.status.success(), "{}", text(&refused));
         assert!(
-            text(&refused).contains("No Claude API key")
-                && text(&refused).contains(CLAUDE_KEY_VARIABLE),
+            says(&refused, "No Claude API key") && says(&refused, CLAUDE_KEY_VARIABLE),
             "{}",
             text(&refused)
         );
@@ -652,7 +698,7 @@ fn a_claude_batch_on_the_api_key_needs_the_key_and_a_home_without_a_sign_in() ->
         checkout.run_with_key("claude", 3, &["-DryRun", "-Credential", "SignIn"], None)?;
     assert_dry_run_passed(&signed_in);
     assert!(
-        text(&signed_in).contains("Credential: the client homes' own sign-ins"),
+        says(&signed_in, "Credential: the client homes' own sign-ins"),
         "{}",
         text(&signed_in)
     );
@@ -678,7 +724,10 @@ fn the_api_key_is_the_default_credential() -> TestResult {
         .output()?;
     assert_dry_run_passed(&output);
     assert!(
-        text(&output).contains("Credential: the API key in VSIFT_TRIALS_ANTHROPIC_API_KEY"),
+        says(
+            &output,
+            "Credential: the API key in VSIFT_TRIALS_ANTHROPIC_API_KEY"
+        ),
         "{}",
         text(&output)
     );
@@ -698,7 +747,7 @@ fn a_codex_batch_on_the_api_key_needs_an_api_key_login_only() -> TestResult {
     let missing = checkout.run_as("codex", 2, &api_key)?;
     assert!(!missing.status.success(), "{}", text(&missing));
     assert!(
-        text(&missing).contains("No Codex API-key login"),
+        says(&missing, "No Codex API-key login"),
         "{}",
         text(&missing)
     );
@@ -711,7 +760,7 @@ fn a_codex_batch_on_the_api_key_needs_an_api_key_login_only() -> TestResult {
         let refused = checkout.run_as("codex", 2, &api_key)?;
         assert!(!refused.status.success(), "{}", text(&refused));
         assert!(
-            text(&refused).contains("not an API-key login only"),
+            says(&refused, "not an API-key login only"),
             "{}",
             text(&refused)
         );
@@ -728,10 +777,94 @@ fn a_codex_batch_on_the_api_key_needs_an_api_key_login_only() -> TestResult {
     let accepted = checkout.run_as("codex", 2, &api_key)?;
     assert_dry_run_passed(&accepted);
     assert!(
-        text(&accepted).contains("Credential: the API-key login in the Codex trial home"),
+        says(
+            &accepted,
+            "Credential: the API-key login in the Codex trial home"
+        ),
         "{}",
         text(&accepted)
     );
     assert_no_key_shown(&accepted);
+    Ok(())
+}
+
+/// A refusal as PowerShell 7 wrote it on a console 120 columns wide (the paths
+/// shortened and the source line left out): coloured, and broken inside the
+/// words a test looks for.
+const WRAPPED_REFUSAL: &str = concat!(
+    "\x1b[31;1mException: \x1b[0mC:\\checkout\\run-campaign.ps1:339\x1b[0m\r\n",
+    "\x1b[31;1m\x1b[0m\x1b[36;1mLine |\x1b[0m\r\n",
+    "\x1b[31;1m\x1b[0m\x1b[36;1m     | \x1b[31;1mThe Claude Code trial home\x1b[0m\r\n",
+    "\x1b[31;1m\x1b[0m\x1b[36;1m     | \x1b[31;1m../outside/claude-home holds\x1b[0m\r\n",
+    "\x1b[31;1m\x1b[0m\x1b[36;1m     | \x1b[31;1ma sign-in (.credentials.json)\x1b[0m\r\n",
+);
+
+#[test]
+fn a_wrapped_and_coloured_refusal_reads_as_one_line() {
+    assert!(!without_colour(WRAPPED_REFUSAL).contains("holds a sign-in"));
+    assert_eq!(
+        unwrapped(WRAPPED_REFUSAL),
+        "Exception: C:\\checkout\\run-campaign.ps1:339 Line | The Claude Code trial home \
+         ../outside/claude-home holds a sign-in (.credentials.json)"
+    );
+}
+
+/// The width PowerShell wraps an error to, asked the way the script runs.
+fn console_width() -> Result<usize, Box<dyn Error>> {
+    let output = Command::new("pwsh")
+        .args(["-NoProfile", "-NonInteractive", "-Command"])
+        .arg("$Host.UI.RawUI.WindowSize.Width")
+        .output()?;
+    Ok(unwrapped(&String::from_utf8(output.stdout)?).parse()?)
+}
+
+/// #624: both credential refusals are read when the real script's message is
+/// wrapped inside the asserted words. A client home 16 characters shorter than
+/// the console is wide cannot share a line with the words after it, and puts
+/// the break among them. It is named relative to the repository, so its length
+/// does not depend on where the temporary folder is.
+#[test]
+fn a_refusal_wrapped_inside_the_asserted_words_is_still_read() -> TestResult {
+    const PARENT: &str = "../outside/";
+    let width = console_width()?;
+    // A folder name has at most 255 characters, and a width of 0 means that
+    // PowerShell does not wrap at all.
+    let Some(length @ 1..=200) = width.checked_sub(16 + PARENT.len()) else {
+        eprintln!("no wrap forced: a console {width} columns wide is out of this test's range");
+        return Ok(());
+    };
+    let checkout = Checkout::new()?;
+    let name = "h".repeat(length);
+    let long_home = checkout.outside.join(&name);
+    fs::create_dir(&long_home)?;
+    fs::write(long_home.join(".credentials.json"), "{}")?;
+    fs::write(
+        long_home.join("auth.json"),
+        serde_json::to_vec(&json!({ "tokens": { "access_token": "fake" } }))?,
+    )?;
+    let home = format!("{PARENT}{name}");
+    checkout.write_config(Path::new(&home), Path::new(&home))?;
+
+    for (client, words) in [
+        ("claude", "holds a sign-in"),
+        ("codex", "is not an API-key login only"),
+    ] {
+        let refused = checkout.run_with_key(
+            client,
+            3,
+            &["-DryRun", "-Credential", "ApiKey"],
+            Some(FAKE_CLAUDE_KEY),
+        )?;
+        assert!(!refused.status.success(), "{}", text(&refused));
+        let message = format!("{home} {words}");
+        assert!(
+            !text(&refused).contains(&message),
+            "the message was not wrapped, so this run proves nothing: {}",
+            text(&refused)
+        );
+        assert!(says(&refused, &message), "{}", text(&refused));
+        assert_no_key_shown(&refused);
+    }
+    assert!(!checkout.batch_directory(3).exists(), "nothing was written");
     Ok(())
 }
