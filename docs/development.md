@@ -819,7 +819,8 @@ the candidate's evidence replaces it.
 Since the cut of `0.2.4-rc.1` (2026-11-04) it also names RQ-08, RQ-15 and RQ-16, `planned` for that candidate (their waivers for 0.2.3 are kept in each item's `prior`);
 `--complete-for 0.2.3` names them until the evidence for `0.2.4` replaces them.
 Since the cut of `0.3.0-rc.1` (2026-11-24) `--complete-for 0.2.4` also names RQ-07, RQ-08, RQ-09, RQ-11, RQ-12, RQ-15 and RQ-16, `planned` for that
-candidate (their waivers for 0.2.4 are kept in each item's `prior`); `--complete-for 0.3.0-rc.1` is the check of the candidate.
+candidate (their waivers for 0.2.4 are kept in each item's `prior`); `--complete-for 0.3.0-rc.1` was the check of the first candidate, and since the cut of
+`0.3.0-rc.2` (2026-11-25) `--complete-for 0.3.0-rc.2` is the check of the second, which names the same 17 items.
 
 - **The ledger's shape** (schema version 1; the Rust types in
   `tools/vsift-governance/src/release_evidence/schema.rs` are the schema, and every struct

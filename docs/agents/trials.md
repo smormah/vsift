@@ -1095,6 +1095,15 @@ folders hold only the freeze, so the campaign script finds no state file of anot
 (`-Version 0.3.0-rc.1`, batch 3 with `-AllowGraderChange`, on the capped API keys) or a waiver of RQ-15 and RQ-16 for `0.3.0` are the maintainer's decision
 ([`release-0.3.0.md`](../planning/release-0.3.0.md); [`release.md`](../operations/release.md) 6.24 step 8).
 
+### The freeze of `0.3.0-rc.2` (the cut, 2026-11-25)
+
+**The tenth candidate, `0.3.0-rc.2` (cut 2026-11-25 by a bump into `release/0.3.x`), keeps the freeze of `0.3.0-rc.1` byte for byte.** It is `0.3.0-rc.1` plus the fix of a refused
+`setup install` (#621), the post-publish checks' registry wait (#623) and the version text; none of them touches the skill, the grader, the scenarios, the hold-outs, the cold set, the
+settings or the truth files, so `batch-2/freeze.json` and `batch-3/freeze.json` are unchanged, both `freeze check` runs answer `nothing frozen has changed`, and `CUT_FREEZE_SHA256` is
+the same (`4f009d5f...`). **No batch ran on `0.3.0-rc.1`,** so both folders still hold only the freeze and no records are moved. Batches 2 and 3 on the published `0.3.0-rc.2`
+(`-Version 0.3.0-rc.2`, batch 3 with `-AllowGraderChange`, on the capped API keys) or a waiver of RQ-15 and RQ-16 for `0.3.0` are the maintainer's decision
+([`release.md`](../operations/release.md) 6.25).
+
 ## Usage capture (P14)
 
 P12 recorded no tokens. Each record now carries `reported_usage`: input, output, cached and cache-write tokens,
