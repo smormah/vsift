@@ -559,6 +559,17 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   **Untried:** the workflows, the plugin and the help's pointers by any agent until the cut
   ([L-242](../planning/known-limits.md#l-242)).
 
+## The change for 0.3.0: the help says when an assistant may run `watch` (#629, 2026-11-27)
+
+- **Without the skill.** Help text only. Directly under `watch`, among the first lines of `-h` and `--help`:
+  `AI assistants: run watch or vsift <video> only if the user asked for its files`. The part of `--help` for an
+  assistant without the skill opens with the same rule. A CLI test holds both. The reason is an agent-trial
+  finding on `0.3.0-rc.2`: a cold agent that read only the first 50 lines of the help ran `vsift watch`.
+  [ADR 0037](../decisions/0037-vsift-video-the-action.md) has the note.
+- **The skill does not change:** `references/commands.md` still classes `vsift watch` as never. The help of
+  `watch` still says it is not for AI assistants.
+  **Untried:** no agent has read the new lines until batches 2 and 3 run on `0.3.0-rc.3`.
+
 ## The change for 0.3.0: a video on a web page is the user's decision (ADR 0028, #409; draft, 2026-11-02)
 
 - **`references/commands.md`, in one place:** a section "A video on a web page", with one line in `SKILL.md`'s

@@ -45,7 +45,10 @@ vsift <video> [--output <folder>] [--keep <folder>]
        vsift <command> [options]";
 
 /// `-h` and `--help`: the commands in groups, most common first. clap has no
-/// groups of subcommands, so the template lists them by hand.
+/// groups of subcommands, so the template lists them by hand. The sentence
+/// under `watch` is not a command: it tells an assistant when it may run it,
+/// among the first lines because an agent may cut the help off before the
+/// guidance [`TYPICAL_INVESTIGATION_HELP`] gives it (#629).
 pub(crate) const ROOT_HELP_TEMPLATE: &str = "\
 {about-with-newline}
 {usage-heading} {usage}
@@ -53,6 +56,7 @@ pub(crate) const ROOT_HELP_TEMPLATE: &str = "\
 Get started
   setup       Check and set up what you need (run it any time)
   watch       Make a transcript, subtitles and screen changes beside a video
+  AI assistants: run watch or vsift <video> only if the user asked for its files
 
 Explore a video step by step (what AI assistants use; you can too)
   ingest      Open a video as a private session
@@ -87,6 +91,9 @@ An AI assistant without the VSift skill: read  vsift --help  to the end.";
 /// reader (often an agent) that has only this help (P14 PR 7, #454).
 pub(crate) const TYPICAL_INVESTIGATION_HELP: &str = "\
 For an AI assistant without the VSift skill, and for scripts:
+
+An AI assistant runs watch (also run as vsift <video>) only if the user asked
+for the files it writes; for anything else it uses the commands below.
 
 Cite every fact. Each fact you report states the exact words, number or label
 (an error code, a button's name), gives its time, and names the id that says or
