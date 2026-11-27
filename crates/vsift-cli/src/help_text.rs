@@ -22,13 +22,16 @@ macro_rules! command_help {
     };
 }
 
-/// What plain `vsift` prints: no tool check, so it is instant.
+/// What plain `vsift` prints: no tool check, so it is instant. It offers the
+/// action, so the line under the two commands gives an assistant the same rule
+/// the root help does and sends it there (#629).
 pub(crate) const BARE_HELP: &str = "\
 VSift: point it at a video; get back what was said, what changed on screen,
 and the proof.
 
   vsift setup            Check what's installed and set up what's missing
   vsift ./meeting.mp4    Transcript, subtitles and screen changes beside it
+AI assistants: vsift <video> only if the user asked for files; read vsift --help
 
 New here? Start with  vsift setup
 More:  vsift --help  or  https://github.com/smormah/vsift#readme
@@ -45,7 +48,10 @@ vsift <video> [--output <folder>] [--keep <folder>]
        vsift <command> [options]";
 
 /// `-h` and `--help`: the commands in groups, most common first. clap has no
-/// groups of subcommands, so the template lists them by hand.
+/// groups of subcommands, so the template lists them by hand. The sentence
+/// under `watch` is not a command: it tells an assistant when it may run it,
+/// among the first lines because an agent may cut the help off before the
+/// guidance [`TYPICAL_INVESTIGATION_HELP`] gives it (#629).
 pub(crate) const ROOT_HELP_TEMPLATE: &str = "\
 {about-with-newline}
 {usage-heading} {usage}
@@ -53,6 +59,7 @@ pub(crate) const ROOT_HELP_TEMPLATE: &str = "\
 Get started
   setup       Check and set up what you need (run it any time)
   watch       Make a transcript, subtitles and screen changes beside a video
+  AI assistants: run watch or vsift <video> only if the user asked for its files
 
 Explore a video step by step (what AI assistants use; you can too)
   ingest      Open a video as a private session
@@ -87,6 +94,9 @@ An AI assistant without the VSift skill: read  vsift --help  to the end.";
 /// reader (often an agent) that has only this help (P14 PR 7, #454).
 pub(crate) const TYPICAL_INVESTIGATION_HELP: &str = "\
 For an AI assistant without the VSift skill, and for scripts:
+
+An AI assistant runs watch (also run as vsift <video>) only if the user asked
+for the files it writes; for anything else it uses the commands below.
 
 Cite every fact. Each fact you report states the exact words, number or label
 (an error code, a button's name), gives its time, and names the id that says or
