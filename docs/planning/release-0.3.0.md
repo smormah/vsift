@@ -141,21 +141,21 @@ These are not decided by this page or the cut. Each needs the maintainer's word 
 
 **What it changes in the plan.** The quick checks run again on `0.3.0-rc.3`'s tag (6.26). Nothing from `0.3.0-rc.2`'s runs is recorded for it; they are the record below. RQ-08 is `waived` for `0.3.0` (the maintainer, 2026-11-27, on #519 and #627), so `release-evidence --complete-for 0.3.0-rc.3` (at `16e2f4a8176928ae2339f028af3aeebb5fda2957`, before the cut) names **16 of the 20 items**: RQ-01 to RQ-07, RQ-09 to RQ-13, RQ-15, RQ-16, RQ-18 and RQ-19. The publish moves `next` from `0.3.0-rc.2` to `0.3.0-rc.3`; `latest` stays `0.2.4`. `0.3.0-rc.1` and `0.3.0-rc.2` stay published and are deprecated at the stable release, not before. Batches 2 and 3 run again on `0.3.0-rc.3` (`-Version 0.3.0-rc.3`, batch 3 with `-AllowGraderChange`), each on the maintainer's go, under #630's freeze. The stable commit `0.3.0` is compared with `v0.3.0-rc.3`.
 
-**For the maintainer: run on `0.3.0-rc.3`, or waive with `0.3.0-rc.2`'s run as the reason.** Each long run that passed on `0.3.0-rc.2` ran on a tree that differs from this candidate only in the help text, the skill text, their tests, the freeze, the fuzz seed and documents. The planner's proposal is to **waive each of them for `0.3.0-rc.3`, citing its `0.3.0-rc.2` run**, because none of them exercises the help or the skill's wording. The maintainer decides each line.
+**For the maintainer: run on `0.3.0-rc.3`, or waive with `0.3.0-rc.2`'s run as the reason.** Each long run that passed on `0.3.0-rc.2` ran on a tree that differs from this candidate only in the help text, the skill text, their tests, the freeze, the fuzz seed and documents. The planner's proposal is to **waive each of them for `0.3.0-rc.3`, citing its `0.3.0-rc.2` run**, because none of them exercises the help or the skill's wording. The checks that the shipped skill is the tag's, byte for byte, are in `P14 published artifacts` (`archive.cjs`, `clean-install.cjs`), a quick check that runs on `0.3.0-rc.3`'s tag anyway. The maintainer decides each line.
 
 | Item | Long run | Its run on `0.3.0-rc.2` | What differs in its scope since | Proposal |
 | --- | --- | --- | --- | --- |
-| RQ-10, RQ-13 (monthly) | `P07 local ASR` | 45715483611, success | the help constants and their tests | waive for rc.3, with 45715483611 as the reason |
-| RQ-10 | `P14 malicious media` | 45718984705, success | the same | waive for rc.3, with 45718984705 as the reason |
+| RQ-10, RQ-13 (monthly) | `P07 local ASR` | 45715483611, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45715483611 as the reason |
+| RQ-10 | `P14 malicious media` | 45718984705, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45718984705 as the reason |
 | RQ-13 | `P14 scan reading` | 45719455339, success | no dependency moved | waive for rc.3, with 45719455339 as the reason |
-| RQ-04 (part) | `P14 compatibility` | 45719927132, success | the help constants and their tests | waive for rc.3, with 45719927132 as the reason |
-| RQ-04 (part) | `P14 local upgrade` | 45720111771, success | the same | waive for rc.3, with 45720111771 as the reason |
-| RQ-07 | `Fuzz`, 3,600 s a target | 45720987273, success | the same, and the `handoff_check` target's seed `fuzz/seeds/handoff_check/SKILL.md` (a byte copy of the skill) | waive for rc.3, with 45720987273 as the reason; it is the one run whose input differs, so it is the one to run if the maintainer wants the new seed fuzzed |
-| RQ-08 | `P14 stress` | 45728904838, failure (#627) | the same | **decided: waived for `0.3.0`** on 2026-11-27; no run on rc.3 |
-| RQ-11 | `P13 managed power loss` | 45755211983, success | the same | waive for rc.3, with 45755211983 as the reason |
-| RQ-11 | `P10 durability campaign` | 45755911399, success | the same | waive for rc.3, with 45755911399 as the reason |
-| RQ-09 | `P14 load` | 45763905008, success | the same | waive for rc.3, with 45763905008 as the reason |
-| RQ-12 | `P14 runbook walk` | 45765575764, success | the same (`worker-host.md` is unchanged) | waive for rc.3, with 45765575764 as the reason |
+| RQ-04 (part) | `P14 compatibility` | 45719927132, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45719927132 as the reason |
+| RQ-04 (part) | `P14 local upgrade` | 45720111771, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45720111771 as the reason |
+| RQ-07 | `Fuzz`, 3,600 s a target | 45720987273, success | the help constants, the skill text the binary embeds and the packages ship, and their tests, and the `handoff_check` target's seed `fuzz/seeds/handoff_check/SKILL.md` (a byte copy of the skill) | waive for rc.3, with 45720987273 as the reason; it is the one run whose input differs, so it is the one to run if the maintainer wants the new seed fuzzed |
+| RQ-08 | `P14 stress` | 45728904838, failure (#627) | the help constants, the skill text the binary embeds and the packages ship, and their tests | **decided: waived for `0.3.0`** on 2026-11-27; no run on rc.3 |
+| RQ-11 | `P13 managed power loss` | 45755211983, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45755211983 as the reason |
+| RQ-11 | `P10 durability campaign` | 45755911399, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45755911399 as the reason |
+| RQ-09 | `P14 load` | 45763905008, success | the help constants, the skill text the binary embeds and the packages ship, and their tests | waive for rc.3, with 45763905008 as the reason |
+| RQ-12 | `P14 runbook walk` | 45765575764, success | the help constants, the skill text the binary embeds and the packages ship, and their tests (`worker-host.md` is unchanged) | waive for rc.3, with 45765575764 as the reason |
 
 RQ-14 and RQ-17 stay as above. Agent-trial batches 2 and 3 (RQ-15, RQ-16) are this candidate's test and are not proposed for a waiver.
 
