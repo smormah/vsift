@@ -668,9 +668,8 @@ read as done once that command succeeds. This is the likely cause, not a proven 
 
 `references/lifecycle.md` was read for the same ambiguity and needs no change: it names `handoff finish` only as
 where the flags go. `SKILL.md` grew by 201 bytes and 35 words, to 18,498 of the 18,500 its guard allows (two lines
-more). The plugin copy was copied again, and the guard
-`the_reply_after_handoff_finish_is_the_checked_report` holds the new wording in REPORT, CLOSE_OR_RETAIN, both
-references and every workflow, and the old wording's absence. The `skill` freeze component moved ([trials.md](trials.md),
+more). The plugin copy was copied again, and a guard in `crates/vsift-cli/src/skill_contract.rs` holds the new
+wording in REPORT, CLOSE_OR_RETAIN, both references and every workflow, and the old wording's absence. The `skill` freeze component moved ([trials.md](trials.md),
 "The freeze of `0.3.0-rc.3`"). No agent has run this text.
 
 ## Keeping it in step with the CLI
