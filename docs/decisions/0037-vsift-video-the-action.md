@@ -1031,7 +1031,9 @@ FFmpeg and wrote nothing. The maintainer chose a third candidate with the fix.
 
 - **What changes.** `-h` and `--help` say directly under `watch`: `AI assistants: run watch or vsift <video>
   only if the user asked for its files`. The part of `--help` for an assistant without the skill opens with
-  the same rule. A CLI test holds both, the first within the first 50 lines of `--help`.
+  the same rule. And plain `vsift`, which offers the action as its second command, says under it: `AI
+  assistants: vsift <video> only if the user asked for files; read vsift --help`. A CLI test holds all
+  three, the first within the first 50 lines of `--help`.
 - **What stays.** Section 11's last point is the skill's command policy, which does not change: `vsift
   watch`, and so `vsift <video>`, is **never** for an assistant that has the skill. The help of `watch`
   still says "Not for AI assistants: they use the session commands". The new lines speak to an assistant

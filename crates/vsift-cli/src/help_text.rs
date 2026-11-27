@@ -22,13 +22,16 @@ macro_rules! command_help {
     };
 }
 
-/// What plain `vsift` prints: no tool check, so it is instant.
+/// What plain `vsift` prints: no tool check, so it is instant. It offers the
+/// action, so the line under the two commands gives an assistant the same rule
+/// the root help does and sends it there (#629).
 pub(crate) const BARE_HELP: &str = "\
 VSift: point it at a video; get back what was said, what changed on screen,
 and the proof.
 
   vsift setup            Check what's installed and set up what's missing
   vsift ./meeting.mp4    Transcript, subtitles and screen changes beside it
+AI assistants: vsift <video> only if the user asked for files; read vsift --help
 
 New here? Start with  vsift setup
 More:  vsift --help  or  https://github.com/smormah/vsift#readme

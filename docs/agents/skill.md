@@ -563,8 +563,10 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
 
 - **Without the skill.** Help text only. Directly under `watch`, among the first lines of `-h` and `--help`:
   `AI assistants: run watch or vsift <video> only if the user asked for its files`. The part of `--help` for an
-  assistant without the skill opens with the same rule. A CLI test holds both. The reason is an agent-trial
-  finding on `0.3.0-rc.2`: a cold agent that read only the first 50 lines of the help ran `vsift watch`.
+  assistant without the skill opens with the same rule. And plain `vsift`, which offers the action, says under
+  its two commands: `AI assistants: vsift <video> only if the user asked for files; read vsift --help`. A CLI
+  test holds all three. The reason is an agent-trial finding on `0.3.0-rc.2`: a cold agent that read only the
+  first 50 lines of the help ran `vsift watch`.
   [ADR 0037](../decisions/0037-vsift-video-the-action.md) has the note.
 - **The skill does not change:** `references/commands.md` still classes `vsift watch` as never. The help of
   `watch` still says it is not for AI assistants.
