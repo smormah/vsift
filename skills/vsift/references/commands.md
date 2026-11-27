@@ -205,8 +205,8 @@ The result is `data.valid` (`handoff finish`: `data.check.valid`, and `data.fini
 written, and `data.stopped_at` says why: `draft`, or `lifecycle` when `lifecycle.action` is not the write's; a
 bundle it retained is already validated). When false, fix each item of `data.errors` (`pointer` names the JSON
 member, `line` the line of your report, `allowed` the words the schema accepts) and send; do not check again and
-again. `data.case_notes` are values read in another letter case: write them as listed. The check never repeats your
-text.
+again. `data.case_notes` are values read in another letter case: write them as listed. The check never repeats or
+sends your text: your reply is the checked message, whole and unchanged.
 
 Only on the user's explicit instruction:
 

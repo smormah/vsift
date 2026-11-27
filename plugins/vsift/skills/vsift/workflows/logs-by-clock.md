@@ -92,4 +92,4 @@ vsift handoff skeleton <session> --question "<question>" --json
   happened.
 - Check the whole message once with `vsift handoff check --json`, which reads it from standard input
   (with the skill, in a form of its REPORT state), with `--session <session>` added before `--json`, so
-  that each clock time is held to what VSift returns now. Fix what it reports, then send it.
+  that each clock time is held to what VSift returns now. Fix what it reports, then send it, unchanged, as your reply.

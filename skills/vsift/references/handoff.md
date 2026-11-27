@@ -261,7 +261,8 @@ the reason `not_inspected` and the code `BUSY`, and the resume card ([resume.md]
 ## Before you send it
 
 - Check the whole draft once with `vsift handoff finish` (with no session, `vsift handoff check`; [commands.md](commands.md),
-  "Checking the draft") and fix what it reports.
+  "Checking the draft") and fix what it reports. Then your reply is that checked text, whole and unchanged, never
+  a summary or a rewrite: the command does not send it.
 - The final message ends with exactly one `vsift-handoff` block, also when you stop early; never save the report to
   a file.
 - Every claim has `id`, `section`, `kind`, `support`, `certainty`, `statement` and `citations`; every instruction has

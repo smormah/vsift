@@ -73,4 +73,4 @@ vsift handoff skeleton <session> --question "<question>" --json
 - A stretch you did not read, where more of the bug could be, is a `transcript` gap with reason
   `not_inspected` and its `range`; a frame you did not open there is a `visual` gap.
 - Check the whole message once with `vsift handoff check --json`, which reads it from standard input
-  (with the skill, in a form of its REPORT state), fix what it reports, then send it.
+  (with the skill, in a form of its REPORT state), fix what it reports, then send it, unchanged, as your reply.
