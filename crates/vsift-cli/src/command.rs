@@ -2027,6 +2027,62 @@ mod tests {
         assert_eq!(listed, commands);
     }
 
+    /// #629: an agent that cuts the help off after its first lines still reads
+    /// when it may run `watch`, in `-h` and in `--help`; the assistant's part
+    /// states the same rule before anything else it says, and plain `vsift`
+    /// states it too.
+    #[test]
+    fn a_cut_off_help_still_says_when_an_assistant_may_run_watch()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const LINES_SHOWN: usize = 50;
+        let short = parser(false).render_help().to_string();
+        let long = parser(false).render_long_help().to_string();
+        let cut_off = long
+            .lines()
+            .take(LINES_SHOWN)
+            .collect::<Vec<_>>()
+            .join("\n");
+        for (help, text) in [("-h", &short), ("the first lines of --help", &cut_off)] {
+            let rule = text
+                .lines()
+                .find(|line| line.contains("AI assistants:"))
+                .ok_or_else(|| format!("{help} has no line for assistants:\n{text}"))?;
+            for needle in ["watch", "vsift <video>", "only if the user asked"] {
+                assert!(rule.contains(needle), "{help}: {rule}");
+            }
+        }
+
+        let guidance = TYPICAL_INVESTIGATION_HELP
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let (opening, _) = guidance
+            .split_once("Cite every fact.")
+            .ok_or("the assistant's part no longer opens before citing")?;
+        for needle in [
+            "An AI assistant runs watch",
+            "vsift <video>",
+            "only if the user asked for the files",
+        ] {
+            assert!(opening.contains(needle), "{needle}: {opening}");
+        }
+
+        // Plain `vsift`, the shortest screen, offers the action too: it gives
+        // the rule and sends an assistant to the help.
+        let bare = BARE_HELP
+            .lines()
+            .find(|line| line.contains("AI assistants:"))
+            .ok_or("plain vsift has no line for assistants")?;
+        for needle in [
+            "vsift <video>",
+            "only if the user asked",
+            "read vsift --help",
+        ] {
+            assert!(bare.contains(needle), "plain vsift: {bare}");
+        }
+        Ok(())
+    }
+
     /// Piped help is printed as written, so these texts are written to fit 80
     /// columns. A link cannot be wrapped.
     #[test]
