@@ -1,22 +1,23 @@
 # The minor release 0.3.0: the plan
 
-Status: **the plan for the minor release `0.3.0` and the record of its evidence. Position on 2026-11-25: the first candidate, `0.3.0-rc.1`, was published on 2026-11-24 from the new `release/0.3.x` and is npm `next`; its journeys found a defect ([#620](https://github.com/smormah/vsift/issues/620)), so the second candidate, `0.3.0-rc.2`, is being cut by the pull request "The release candidate 0.3.0-rc.2" into `release/0.3.x` ("The second candidate", below). It is not tagged or published, and no evidence is recorded for either candidate yet.** The first candidate was a normal cut by [`release.md`](../operations/release.md) 6.18, the first on a new release line, `release/0.3.x` (runbook `release.md` 6.24); the second is 6.18 step 4 (runbook `release.md` 6.25). `0.2.4` stays npm `latest` until the stable `0.3.0` is published; nothing is announced.
+Status: **the plan for the minor release `0.3.0` and the record of its evidence. Position on 2026-11-27: the first candidate, `0.3.0-rc.1`, was published on 2026-11-24 from the new `release/0.3.x`; its journeys found a defect ([#620](https://github.com/smormah/vsift/issues/620)), so the second, `0.3.0-rc.2`, was cut and published on 2026-11-25 and is npm `next`. Two agent-trial gates failed on it ([#629](https://github.com/smormah/vsift/issues/629), [#628](https://github.com/smormah/vsift/issues/628)), so the third candidate, `0.3.0-rc.3`, is being cut by the pull request "The release candidate 0.3.0-rc.3" into `release/0.3.x` ("The third candidate", below). It is not tagged or published, and no evidence is recorded for any candidate yet; the runs on the first two are records (below).** The first candidate was a normal cut by [`release.md`](../operations/release.md) 6.18, the first on a new release line, `release/0.3.x` (runbook `release.md` 6.24); the second and third are 6.18 step 4 (runbooks `release.md` 6.25 and 6.26). `0.2.4` stays npm `latest` until the stable `0.3.0` is published; nothing is announced.
 
 ## What this release is, and why
 
 `0.2.4` (the hot fix of `0.2.3`, published 2026-11-05) is the current release. The road to 1.0 ([ADR 0027](../decisions/0027-the-road-to-1-0.md), the first section of [`backlog-iterations.md`](backlog-iterations.md)) makes `0.3.0` a **normal stable release**: OCR, speaker labels, online links, time anchoring, what changed on screen, search across kept sessions and progress during long transcriptions, built in slices that each stand on their own. The maintainer decided on 2026-11-04 that it **is cut when it is ready**, with about 27 November as the latest date: every item of the readiness list of that day is done but this cut (the readiness list is the planner's record; the cut items, the Fable review's fixes H3 to H6 and the bounded settled cut H8 among them, are in the table below). **It is a minor release, not a work packet:** P00 to P14 stay complete, the claims rung stays `candidate`, and nothing here is a statement of support.
 
-## Where things stand (2026-11-25, at the cut of the second candidate)
+## Where things stand (2026-11-27, at the cut of the third candidate)
 
 | Version or branch | State |
 | --- | --- |
-| `0.2.4` | The current release: npm `latest` on all four packages, GitHub's latest release `v0.2.4`, tag `v0.2.4` at `709de47b4650` on `release/0.2.x`. Checked on 2026-11-25. |
+| `0.2.4` | The current release: npm `latest` on all four packages, GitHub's latest release `v0.2.4`, tag `v0.2.4` at `709de47b4650` on `release/0.2.x`. Checked on 2026-11-27. |
 | `0.2.4-rc.1` | Deprecated since 2026-11-06 (tag `v0.2.4-rc.1` at `d44d71532967`); no longer `next` since the publish of `0.3.0-rc.1`. |
 | `release/0.2.x` | At `709de47b4650` (the stable `0.2.4`). **It stays** for hot fixes of `0.2.x` until `0.3.0` is stable (6.24 step 3). |
-| `release/0.3.x` | Created on 2026-11-24 at `89d3ea7c9845` (the cut of `0.3.0-rc.1`, #617); since then #621 (`2657e128`) and #623 (`099ad615244a`). The second candidate's bump goes into it by pull request; no new branch (6.25). |
-| `0.3.0-rc.1` | **Published on 2026-11-24** (Release run 45466267152; tag `v0.3.0-rc.1` at `89d3ea7c98452358e412b93c950b52600b1091e4`): npm `next` on all four packages, a GitHub pre-release. Superseded by `0.3.0-rc.2` once that is published; deprecated at the stable release, not before. Checked on 2026-11-25. |
-| `0.3.0-rc.2` | **Being cut** by a bump into `release/0.3.x`. On npm it answers 404; there is no `v0.3.0-rc.2` tag. |
-| `main` | At `0.3.0-rc.1` since the cut of the first candidate (#617). The fixes reached it by their counterparts (#622, #619); the bump to `0.3.0-rc.2` does not (6.18 step 4), and reaches `main` with the records change after the stable release. |
+| `release/0.3.x` | Created on 2026-11-24 at `89d3ea7c9845` (the cut of `0.3.0-rc.1`, #617); since then #621 (`2657e128`), #623 (`099ad615244a`), the cut of `0.3.0-rc.2` (#625, `0372d2ad7baa`), #632 (`5385b40a`) and #630 (`16e2f4a8`). The third candidate's bump goes into it by pull request; no new branch (6.26). |
+| `0.3.0-rc.1` | **Published on 2026-11-24** (Release run 45466267152; tag `v0.3.0-rc.1` at `89d3ea7c98452358e412b93c950b52600b1091e4`), a GitHub pre-release. Superseded by `0.3.0-rc.2`; deprecated at the stable release, not before. |
+| `0.3.0-rc.2` | **Published on 2026-11-25** (Release run 45684249571; tag `v0.3.0-rc.2` at `0372d2ad7baa1213b3a64db831ad1ac9890f7d62`, tag object `2ba119ea`): npm `next` on all four packages, a GitHub pre-release. Superseded by `0.3.0-rc.3` once that is published; deprecated at the stable release, not before. Checked on 2026-11-27. |
+| `0.3.0-rc.3` | **Being cut** by a bump into `release/0.3.x`. On npm it answers 404; there is no `v0.3.0-rc.3` tag. |
+| `main` | At `0.3.0-rc.1` since the cut of the first candidate (#617). The fixes reached it by their counterparts (#622, #619, #633, #631); the bumps to `0.3.0-rc.2` and `0.3.0-rc.3` do not (6.18 step 4), and reaches `main` with the records change after the stable release. |
 
 ## What is in it
 
@@ -116,10 +117,10 @@ For each item: what `0.3.0` changed in its scope (read from the item's scope in 
 
 ## For the maintainer: run or waive
 
-These are not decided by this page or the cut. Each needs the maintainer's word before the stable `0.3.0`. **Since the cut of the second candidate (2026-11-25) every run named here and in the table above is made on `0.3.0-rc.2`'s tag** ("The second candidate"): read "on `0.3.0-rc.1`" there as "on `0.3.0-rc.2`".
+These are not decided by this page or the cut. Each needs the maintainer's word before the stable `0.3.0`. **Since the cut of the third candidate (2026-11-27) every run named here and in the table above is made on `0.3.0-rc.3`'s tag, or waived for it** ("The third candidate", which proposes for each long run whether it runs on `0.3.0-rc.3` or is waived with `0.3.0-rc.2`'s run as the reason): read "on `0.3.0-rc.1`" there as "on `0.3.0-rc.3`". **RQ-08 (stress) is decided: the maintainer waived it for `0.3.0` on 2026-11-27** ("Waived", on #519 and #627; the ledger records it `waived`, which is not a pass).
 
 - RQ-04's `P14 compatibility` and `P14 local upgrade`;
-- the monthly round's long runs: RQ-07 (`Fuzz`, 3,600 s), RQ-08 (`P14 stress`), RQ-09 (`P14 load`), RQ-11 (`P13 managed power loss`, `P10 durability campaign`), RQ-12 (`P14 runbook walk`);
+- the monthly round's long runs: RQ-07 (`Fuzz`, 3,600 s), RQ-09 (`P14 load`), RQ-11 (`P13 managed power loss`, `P10 durability campaign`), RQ-12 (`P14 runbook walk`);
 - agent-trial batches 2 and 3 (RQ-15, RQ-16), with C-04, the online-video consent runs and the cold-agent reruns;
 - RQ-14: carry the standing waiver to `0.3.0`, or not;
 - RQ-17: the LOKI try-out before the stable, or carry the waiver.
@@ -131,6 +132,32 @@ These are not decided by this page or the cut. Each needs the maintainer's word 
 **What it is.** **`0.3.0-rc.2` is `0.3.0-rc.1` plus exactly these and the bump:** #621 into `release/0.3.x` (the P06 fix: the engine checks the plan and the acceptance before it takes the install guard; and the P10 test fix, D1), whose counterpart on `main` is #622; and #623 into `release/0.3.x` (the post-publish checks wait until npm serves the new version, for #618), whose counterpart on `main` is #619. Nothing else of `main`, no skill change (the agent-trial freeze is kept byte for byte), no dependency change, no workflow change but #623's. The cut is a pull request into `release/0.3.x`; `main` stays at `0.3.0-rc.1`. The runbook is [`release.md`](../operations/release.md) 6.25, which has the diff against `v0.3.0-rc.1`, the numbers and every command line. [#620](https://github.com/smormah/vsift/issues/620) and [#618](https://github.com/smormah/vsift/issues/618) stay open; each closes with the stable release's evidence.
 
 **What it changes in the plan.** Every run of the route above is made on `0.3.0-rc.2`'s tag, and nothing from `0.3.0-rc.1`'s runs is recorded for it (its code differs, and `crates/` is in the scope of every item but RQ-18). The ledger does not change at this cut: `release-evidence --complete-for 0.3.0-rc.2` (at `099ad615244a`, before the cut) names the same 17 of the 20 items. The publish moves `next` from `0.3.0-rc.1` to `0.3.0-rc.2`; `latest` stays `0.2.4`. `0.3.0-rc.1` stays published and is deprecated at the stable release, not before. Agent-trial batches 2 and 3 are the maintainer's decision on `0.3.0-rc.2` (`-Version 0.3.0-rc.2`). The stable commit `0.3.0` is compared with `v0.3.0-rc.2`.
+
+## The third candidate (cut 2026-11-27)
+
+**Why.** Agent-trial batches 2 and 3 ran on the published `0.3.0-rc.2` on 2026-11-27 and each missed one gate ("The runs on 0.3.0-rc.2", below). **Batch 3's hard cold-safety gate** ([#629](https://github.com/smormah/vsift/issues/629)): an agent without the skill ran `vsift watch`, which the skill classes as never for an agent; it had read only the first 50 lines of `vsift --help`, and the help's guidance for assistants came later. **Batch 2's compact regression gate** ([#628](https://github.com/smormah/vsift/issues/628)): two compact Sonnet runs finished a valid handoff and then replied with a summary or rewritten prose instead of the checked report. On 2026-11-27 the maintainer chose "B: make rc.3": the two text fixes, a new trial freeze, and batches 2 and 3 again on `0.3.0-rc.3`. A change to the help and the skill means a new candidate (`release.md` 6.8, 6.18 step 4).
+
+**What it is.** **`0.3.0-rc.3` is `0.3.0-rc.2` plus exactly these and the bump:** #632 into `release/0.3.x` (H16: `vsift --help`, plain `vsift` and the section for an assistant without the skill say that an assistant runs `watch` or `vsift <video>` only if the user asked for its files), whose counterpart on `main` is #633; and #630 into `release/0.3.x` (H17: after `handoff finish` the skill's reply is the checked report, whole and unchanged, and the agent-trial freeze is written again, whole-freeze digest `47b87f56...`), whose counterpart on `main` is #631. **The diff from `v0.3.0-rc.2` is limited to help text, skill text, their tests, the freeze, one fuzz seed that is a byte copy of the skill, and documents**: the only production source that differs is `crates/vsift-cli/src/help_text.rs`, three string constants and their comments. Nothing else of `main`, no dependency change, no workflow change. The cut is a pull request into `release/0.3.x`; `main` stays at `0.3.0-rc.1`. The runbook is [`release.md`](../operations/release.md) 6.26, which has the diff count, the numbers and every command line. #629 and #628 stay open; each is settled by this candidate's batches and the stable release's evidence.
+
+**What it changes in the plan.** The quick checks run again on `0.3.0-rc.3`'s tag (6.26). Nothing from `0.3.0-rc.2`'s runs is recorded for it; they are the record below. RQ-08 is `waived` for `0.3.0` (the maintainer, 2026-11-27, on #519 and #627), so `release-evidence --complete-for 0.3.0-rc.3` (at `16e2f4a8176928ae2339f028af3aeebb5fda2957`, before the cut) names **16 of the 20 items**: RQ-01 to RQ-07, RQ-09 to RQ-13, RQ-15, RQ-16, RQ-18 and RQ-19. The publish moves `next` from `0.3.0-rc.2` to `0.3.0-rc.3`; `latest` stays `0.2.4`. `0.3.0-rc.1` and `0.3.0-rc.2` stay published and are deprecated at the stable release, not before. Batches 2 and 3 run again on `0.3.0-rc.3` (`-Version 0.3.0-rc.3`, batch 3 with `-AllowGraderChange`), each on the maintainer's go, under #630's freeze. The stable commit `0.3.0` is compared with `v0.3.0-rc.3`.
+
+**For the maintainer: run on `0.3.0-rc.3`, or waive with `0.3.0-rc.2`'s run as the reason.** Each long run that passed on `0.3.0-rc.2` ran on a tree that differs from this candidate only in the help text, the skill text, their tests, the freeze, the fuzz seed and documents. The planner's proposal is to **waive each of them for `0.3.0-rc.3`, citing its `0.3.0-rc.2` run**, because none of them exercises the help or the skill's wording. The maintainer decides each line.
+
+| Item | Long run | Its run on `0.3.0-rc.2` | What differs in its scope since | Proposal |
+| --- | --- | --- | --- | --- |
+| RQ-10, RQ-13 (monthly) | `P07 local ASR` | 45715483611, success | the help constants and their tests | waive for rc.3, with 45715483611 as the reason |
+| RQ-10 | `P14 malicious media` | 45718984705, success | the same | waive for rc.3, with 45718984705 as the reason |
+| RQ-13 | `P14 scan reading` | 45719455339, success | no dependency moved | waive for rc.3, with 45719455339 as the reason |
+| RQ-04 (part) | `P14 compatibility` | 45719927132, success | the help constants and their tests | waive for rc.3, with 45719927132 as the reason |
+| RQ-04 (part) | `P14 local upgrade` | 45720111771, success | the same | waive for rc.3, with 45720111771 as the reason |
+| RQ-07 | `Fuzz`, 3,600 s a target | 45720987273, success | the same, and the `handoff_check` target's seed `fuzz/seeds/handoff_check/SKILL.md` (a byte copy of the skill) | waive for rc.3, with 45720987273 as the reason; it is the one run whose input differs, so it is the one to run if the maintainer wants the new seed fuzzed |
+| RQ-08 | `P14 stress` | 45728904838, failure (#627) | the same | **decided: waived for `0.3.0`** on 2026-11-27; no run on rc.3 |
+| RQ-11 | `P13 managed power loss` | 45755211983, success | the same | waive for rc.3, with 45755211983 as the reason |
+| RQ-11 | `P10 durability campaign` | 45755911399, success | the same | waive for rc.3, with 45755911399 as the reason |
+| RQ-09 | `P14 load` | 45763905008, success | the same | waive for rc.3, with 45763905008 as the reason |
+| RQ-12 | `P14 runbook walk` | 45765575764, success | the same (`worker-host.md` is unchanged) | waive for rc.3, with 45765575764 as the reason |
+
+RQ-14 and RQ-17 stay as above. Agent-trial batches 2 and 3 (RQ-15, RQ-16) are this candidate's test and are not proposed for a waiver.
 
 ## The runs on 0.3.0-rc.1
 
@@ -174,6 +201,59 @@ The checks from outside after the publish: `next` `0.3.0-rc.1` and `latest` `0.2
 
 **Not run on `0.3.0-rc.1`** (the planner, 2026-11-24: run once, on `0.3.0-rc.2`'s tag): `P13 managed power loss` and `P10 durability campaign` (RQ-11), `P14 load` (RQ-09) and `P14 runbook walk` (RQ-12). Agent-trial batches 2 and 3 (RQ-15, RQ-16) were held until `0.3.0-rc.2` is published. RQ-14 stays waived ([#188](https://github.com/smormah/vsift/issues/188) stays open). RQ-17 is the maintainer's LOKI try-out before the stable. Related issues: [#618](https://github.com/smormah/vsift/issues/618), [#620](https://github.com/smormah/vsift/issues/620) and [#624](https://github.com/smormah/vsift/issues/624), which stay open.
 
-## The evidence on 0.3.0-rc.2
+## The runs on 0.3.0-rc.2
 
-Not yet recorded. The records pull request into `release/0.3.x` adds it after the runs of the route on `0.3.0-rc.2`'s tag, from what each run computed and never earlier (`release.md` 6.25 step 9). Nothing is recorded for `0.3.0-rc.1`: its runs are the record above.
+**A record, not evidence.** These are the hosted runs and the agent-trial batches made on the second candidate (tag `v0.3.0-rc.2`, tag object `2ba119ea`, commit `0372d2ad7baa1213b3a64db831ad1ac9890f7d62`), as the coordinator kept them from 2026-11-25 to 2026-11-27. **None is recorded in the ledger as evidence, and none counts for `0.3.0-rc.3`.** The one exception to "not in the ledger" is the stress failure, which RQ-08 keeps in its `prior` as the record of the failure its waiver covers, marked "NOT A PASS". All runs were dispatched on the tag unless noted.
+
+**Before the publish.**
+
+| Step | Workflow | Run | Result |
+| --- | --- | --- | --- |
+| 6.25 step 0 | `CI result` on the commit (the push to `release/0.3.x`) | 45641798943 | success |
+| 6.25 step 1 | Nightly, dispatched on `release/0.3.x` | 45646877908 | success |
+| 6.25 step 5 | Release, dry run | 45681847685 | success (the plan: `next` from `0.3.0-rc.1` to `0.3.0-rc.2`, `latest` stays `0.2.4`) |
+| 6.25 step 6 | Release, publish (approved by the maintainer) | 45684249571 | success; the plan equal to the dry run's but the mode line; the publish job ended 20:51:49 UTC |
+
+The checks from outside, at 21:08 UTC (16 minutes after the publish job): `next` `0.3.0-rc.2` and `latest` `0.2.4` on all four packages, `npm view vsift-cli version` `0.2.4`; every earlier version's integrity values and the fifteen tag commits unchanged; a GitHub pre-release, not a draft, with ten assets; GitHub's latest release `v0.2.4`. As on `0.3.0-rc.1`, the local install was replaced by the hosted runs.
+
+**The quick checks (6.25 step 7), dispatched from 21:14 UTC.**
+
+| Item | Workflow | Run | Result |
+| --- | --- | --- | --- |
+| RQ-19 | `P14 verify release` | 45702500516 | success |
+| RQ-05 | `P14 journeys` (the tests from the tag) | 45702544407 | success on macOS, Ubuntu and Windows (#620's fix checked on macOS) |
+| RQ-06 | `P13 managed smoke`, `published_version=0.3.0-rc.2` | 45702585651 | success |
+| RQ-01 to RQ-04 | `P14 published artifacts`, `from_version=0.2.4` | 45702627594 | success |
+| RQ-01 to RQ-04 | `P14 published artifacts`, `from_version=0.2.3` | 45703281300 | success |
+| RQ-06 (the new parts) | `P13 managed smoke` from the tag's source | 45702668175 | success |
+| the new parts | `P16 speakers end to end` | 45702711655 | success |
+| the new parts | `P16 OCR runner` | 45702754285 | success |
+
+**The long runs (2026-11-25 and 2026-11-26; the maintainer: as on `0.3.0-rc.1`, all but RQ-14).**
+
+| Item | Workflow | Run | Result |
+| --- | --- | --- | --- |
+| RQ-10, RQ-13 (monthly) | `P07 local ASR` | 45715483611 | success |
+| RQ-10 | `P14 malicious media` | 45718984705 | success |
+| RQ-13 | `P14 scan reading` | 45719455339 | success |
+| RQ-04 (part) | `P14 compatibility` | 45719927132 | success |
+| RQ-04 (part) | `P14 local upgrade` | 45720111771 | success |
+| RQ-07 | `Fuzz`, 3,600 s a target | 45720987273 | success |
+| RQ-08 | `P14 stress` | 45728904838 | **failure:** one job, `roots-loaded (windows-2025)`, 1 of 1,500 repetitions: `an_unmarked_directory_with_content_is_rejected_and_left_untouched` failed the 4-second bound of `assert_rejected_promptly` after its outcome assertion had passed; every other job passed. [#627](https://github.com/smormah/vsift/issues/627) was filed first (governance rule 14); only that job was re-run once, as attempt 2 (job 140048207912), and failed the same way, 1 of 1,500 (`a_foreign_ownership_marker_is_rejected`, the test of #519). The planner's reading: a starved runner, not a product wait ([L-231](known-limits.md#l-231)). **The maintainer waived RQ-08 for `0.3.0` on 2026-11-27** |
+| RQ-11 | `P13 managed power loss` | 45755211983 | success |
+| RQ-11 | `P10 durability campaign` | 45755911399 | success |
+| RQ-09 | `P14 load` | 45763905008 | success |
+| RQ-12 | `P14 runbook walk` | 45765575764 | success |
+
+**The agent-trial batches (2026-11-27, on the published `0.3.0-rc.2`, each on the maintainer's go, on the capped API key; Claude only, Codex not run by decision).** The records, summaries, state files and the freeze they ran under (`4f009d5f...`) are in [`p14-agent-trials/batch-2-0.3.0-rc.2/`](p14-agent-trials/batch-2-0.3.0-rc.2/) and [`p14-agent-trials/batch-3-0.3.0-rc.2/`](p14-agent-trials/batch-3-0.3.0-rc.2/), with readings [batch-2-reading-0.3.0-rc.2.md](p14-agent-trials/batch-2-reading-0.3.0-rc.2.md) and [batch-3-reading-0.3.0-rc.2.md](p14-agent-trials/batch-3-reading-0.3.0-rc.2.md). No run installed anything.
+
+| Batch | Runs | Gates met | Gate missed |
+| --- | --- | --- | --- |
+| 2 (RQ-15, with the skill) | 17 counted and 1 reserve run | safety (hard, 0 failures in 18 runs), the review-tier journey (6 of 6), the blurred banner (2 of 3), both hold-outs | **compact regression: 4 of 5 as graded, 4 of 6 pooled with the reserve run** (needs 90%): both `SEC-T02-f12-webvtt` runs finished a valid handoff and then did not reply with the checked report ([#628](https://github.com/smormah/vsift/issues/628)) |
+| 3 (RQ-16, cold) | 13 counted (11 cold) | cold usefulness, compact, final round (6 of 6) | **cold safety (hard): 1 of 11 cold runs failed** (`never_command`: an agent without the skill ran `vsift watch` after reading only the first 50 lines of the help; [#629](https://github.com/smormah/vsift/issues/629)) |
+
+Batches 2 and 3 cost about $9.91 by the client's estimate. Both misses are fixed for `0.3.0-rc.3` (#630, #632), and both batches run again on it. Related issues: [#627](https://github.com/smormah/vsift/issues/627), [#628](https://github.com/smormah/vsift/issues/628), [#629](https://github.com/smormah/vsift/issues/629) and [#519](https://github.com/smormah/vsift/issues/519), which stay open.
+
+## The evidence on 0.3.0-rc.3
+
+Not yet recorded. The records pull request into `release/0.3.x` adds it after the runs of the route on `0.3.0-rc.3`'s tag, from what each run computed and never earlier, with the maintainer's decision for each long run proposed above (`release.md` 6.26 step 9). Nothing is recorded for `0.3.0-rc.1` or `0.3.0-rc.2`: their runs are the records above. The ledger holds one decision made at this cut: RQ-08 `waived` for `0.3.0`.

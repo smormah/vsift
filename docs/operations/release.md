@@ -3926,3 +3926,128 @@ The last four were not run on `0.3.0-rc.1` (the planner, 2026-11-24: run once, o
 **If something fails.** 6.24's readings with these numbers: the `guard` refusing a dispatch names its reason (the wrong ref, a tag off `release/0.3.x`, a branch without its rule types, or the nightly of the commit); step 5's plan must move `next` from **`0.3.0-rc.1`** (anything else: do not publish; tell the maintainer); the **Registry** guard failing ("`0.3.0-rc.2` is already on npm, and not with these bytes") means the number is used for good and the next candidate is `0.3.0-rc.3`; a bad published version is deprecated on all four packages (never unpublished) and `0.3.0-rc.3` is cut on the branch by this section again.
 
 **What is irreversible:** the four published `0.3.0-rc.2` versions and their provenance records; the Sigstore attestations of the ten files and four tarballs (they exist from the end of `attest`, before the approval); the tag once anything was published from it; and every published integrity value, `0.3.0-rc.1`'s included, which this section does not change. **What is reversible:** `next` (`npm dist-tag add vsift-cli@0.3.0-rc.1 next` for each package, with the maintainer's login and second factor; the workflow never does it), the notes, and a deprecation. No branch is created or deleted by this section.
+
+### 6.26 The release candidate `0.3.0-rc.3`: the cut, the numbers and the command lines (the third candidate of `0.3.0`, the second `rc.N+1` made on a release branch; cut 2026-11-27)
+
+**Status when written: cut, not tagged, not published.** This section was written before the candidate existed anywhere but in the pull request that cuts it; nothing in it has been run. **How to use it: follow 6.25 (which follows 6.24's steps 0 to 9, its "If something fails" and its list of what is irreversible) with the numbers in the table below and the command lines under "The command lines that change", spelled out so that they can be pasted** (Git Bash; in PowerShell write `"$t^^{commit}"` for `"$t^{commit}"`). It is 6.18 step 4 again, made on the release branch as 6.25 was: the fixes into `release/0.3.x` with their counterparts to `main`, then the bump `rc.N+1` by pull request into the branch, the nightly on the branch and the tag on its head. **What differs from 6.25 is only the numbers, the hosted runs' plan and the agent-trial freeze:** no branch is created, the nightly is dispatched on `release/0.3.x`, and `0.3.0-rc.2` is on `next` and is superseded. 6.3, 6.4, 6.5 and 6.8 are unchanged. The plan is [`release-0.3.0.md`](../planning/release-0.3.0.md) ("The third candidate"). Nothing is announced. **No npm write and no dispatch was made for this section;** the dist-tags, the tag commits, the branches and the rulesets below were read on 2026-11-27.
+
+**Why there is a third candidate.** Agent-trial batches 2 and 3 on the published `0.3.0-rc.2` (2026-11-27; records and readings in [`p14-agent-trials/`](../planning/p14-agent-trials/README.md), `batch-2-0.3.0-rc.2/` and `batch-3-0.3.0-rc.2/`) each missed a gate. **Batch 3's hard cold-safety gate** ([#629](https://github.com/smormah/vsift/issues/629)): an agent without the skill ran `vsift watch` after reading only the first 50 lines of `vsift --help`, which said nothing to an assistant about `watch` there. **Batch 2's compact regression gate** ([#628](https://github.com/smormah/vsift/issues/628)): two compact runs of `sec-t02-f12-webvtt` finished a valid handoff and then replied with a summary or rewritten prose instead of the checked report (4 of 6 pooled). On 2026-11-27 the maintainer chose "B: make rc.3". A change to the help and the skill means a new candidate (6.8). **`0.3.0-rc.3` is `0.3.0-rc.2` plus exactly these changes and the bump:**
+
+| Change | Pull request | What it is |
+| --- | --- | --- |
+| The help says when an AI assistant may run `watch` | #632 into `release/0.3.x` (H16, `5385b40a`, #629); its counterpart on `main` is #633 | a line under `watch` in `-h`/`--help`, the same rule opening the section for an assistant without the skill, and a line in plain `vsift` (`crates/vsift-cli/src/help_text.rs`, three string constants); a test that the first holds within the first 50 lines; ADR 0037's note of 2026-11-27, the guide's command reference, the skill guide |
+| After `handoff finish` the skill's reply is the checked report, and the agent-trial freeze is written again | #630 into `release/0.3.x` (H17, `16e2f4a8`, #628); its counterpart on `main` is #631 | REPORT, CLOSE_OR_RETAIN's stop, `references/handoff.md`, `references/commands.md` and the six workflows, in both copies of the skill (`skills/vsift/` and `plugins/vsift/skills/vsift/`); the fuzz seed `fuzz/seeds/handoff_check/SKILL.md`, a byte copy of the skill; a skill guard in `skill_contract.rs` (test-only); `batch-2/freeze.json`, `batch-3/freeze.json` and `CUT_FREEZE_SHA256` (`committed_freeze.rs`); the trials and skill guides |
+| The version, the pages that name the candidate and the work record | this cut | the version text in the five files of 6.8 (`Cargo.lock` and `fuzz/Cargo.lock` only in the workspace crates' lines), the guide's first page, `SECURITY.md`, the installation guide and the launcher's README (worded to be true before and after the publish), this section, the plan, the changelog's `[0.3.0-rc.3]` section (the branch's `[Unreleased]` entries of #632 and #630 moved into it), `0.3.0-rc.2`'s batch records with their readings, the trial documents, the ledger's RQ-08 waiver, the register's date line, L-046, L-108, L-133 and L-231, the backlog's position, the development guide's line and the two memory files |
+
+Against the tag `v0.3.0-rc.2` (counted from the cut's tree with `git diff --stat v0.3.0-rc.2`): **89 files (+22,684, −110): one production source file, `crates/vsift-cli/src/help_text.rs` (+12, −2), and three test files (+146, −4), from #632 and #630; the skill's 18 files in its two copies (+34, −28) and the fuzz seed (+7, −5), all #630's; the two freeze files (+6, −6), #630's; the five version-string files (+29, −29, the version text only); `0.3.0-rc.2`'s batch records, 39 new files (+21,973: 31 records and, for each batch, its summary in two forms, its state file and the freeze it ran under), committed by this cut as a record; and 20 documents and work-record files (+477, −36): ADR 0037, the skill and trials guides, the guide's command reference and first page, the two readings, the trial records' README, the ledger, the register, this runbook, the plan, the changelog, `SECURITY.md`, the installation guide, the launcher's README, the development guide, the backlog and the two memory files.** **The only production source that differs is `crates/vsift-cli/src/help_text.rs` (+12, −2: three string constants and their doc comments); the other Rust files are tests** (`command.rs`'s `mod tests`, `skill_contract.rs`, which compiles only under `cfg(test)`, and `tools/vsift-agent-trials/tests/committed_freeze.rs`). **So the diff is limited to help text, skill text, their tests, the freeze, one fuzz seed and documents.** **This time the skill, the freeze and one fuzz seed do differ:** `skills/vsift/` and its plugin copy (#630), `batch-2/freeze.json` and `batch-3/freeze.json` (only the `skill` component and the whole digest), and `fuzz/seeds/handoff_check/SKILL.md`. **Nothing under `fixtures/`, `schemas/`, `.github/`, `deny.toml` or `rust-toolchain.toml` differs from `v0.3.0-rc.2`**, under `tools/` only `committed_freeze.rs`, under `fuzz/` only that seed and the version text, and under `npm/` only the launcher's `package.json` (the version) and README. `Cargo.lock` and `fuzz/Cargo.lock` differ only in the version text of the workspace crates, so no dependency moved.
+
+**What this candidate carries over from `0.3.0-rc.2`: nothing as evidence.** Every hosted run and both agent batches made on `0.3.0-rc.2` are listed in the plan ("The runs on 0.3.0-rc.2"), as a record. None is recorded as evidence for this candidate, and the ledger holds nothing for `0.3.0-rc.2`. **The ledger changes at this cut only for the maintainer's decision of 2026-11-27: RQ-08 (stress) is `waived` for `0.3.0`** ("Waived", on #519 and #627), recorded the way 0.2.3's waiver on #519 was: a `decision`, a `reason` and the failed run 45728904838 and #627 kept in `prior` as "NOT A PASS". The reason: `P14 stress` on `0.3.0-rc.2` failed one repetition in each of two attempts, in the session-root rejection tests' 4-second bound, with the outcome right, and the planner read the product path as unable to wait ([L-231](../planning/known-limits.md#l-231), owner moved to the next release). **A waiver is not a pass.** **No stress run is made on `0.3.0-rc.3`.** The other six items 6.24's cut set to `planned` (RQ-07, RQ-09, RQ-11, RQ-12, RQ-15, RQ-16) are still `planned`, and RQ-14 and RQ-17 stay `waived`. **`release-evidence --complete-for 0.3.0-rc.3`** (run for this cut with `--commit 16e2f4a8176928ae2339f028af3aeebb5fda2957`, the branch's head before it, on 2026-11-27, after the ledger change; **a reading, not a gate**: it fails until the runs of step 7 are recorded or waived) names **16 of the 20** items: RQ-01 to RQ-06, RQ-13, RQ-18 and RQ-19, each `passed` for `0.2.4` with 133 to 920 files of its scope changed since; RQ-10, `passed` for `0.2.4-rc.1` with 424 files changed; and RQ-07, RQ-09, RQ-11, RQ-12, RQ-15 and RQ-16, `planned`. It does not name RQ-08 (now waived), RQ-14 and RQ-17 (standing waivers) or RQ-20.
+
+**What is not in this candidate.** Nothing else of `main`: no other fix, no merge from `main`, no skill change beyond #630's, no grader or scenario change, no workflow change, no dependency change. **`main` stays at `0.3.0-rc.1`:** 6.18 step 4 brings each fix to `main` by its counterpart pull request (#633, #631) and asks for no counterpart bump, and 6.8 asks for none either; the bumps and 6.25 and 6.26 reach `main` with the records change after the stable release (6.18 step 5). #629, #628, #627 and #519 stay open.
+
+**The numbers (read 6.25 with this table).**
+
+| | 6.25 (`0.3.0-rc.2`, 2026-11-25) | This candidate (6.26) |
+| --- | --- | --- |
+| The version, the tag | `0.3.0-rc.2`, `v0.3.0-rc.2` | **`0.3.0-rc.3`, `v0.3.0-rc.3`** (annotated, message `VSift 0.3.0-rc.3`) |
+| The commit to tag | the merge commit of "The release candidate 0.3.0-rc.2" on `release/0.3.x` | **the merge commit of the pull request whose title starts "The release candidate 0.3.0-rc.3" on `release/0.3.x`**, which is the branch's head; it is not on `main` |
+| The release branch before the tag | no new branch | **no new branch:** `release/0.3.x` is at `16e2f4a8` (#630) before this cut and at the cut's merge commit after it; `release/0.2.x` stays at `709de47b4650`; nothing is created or deleted |
+| The rulesets and the environment | read at step 0, read-only | **the same, read-only.** On 2026-11-27: `release branches: changes` (25284873), `release branches: creation` (25284869) and `release tags` (24325516), all active |
+| The nightly | dispatched on `release/0.3.x` and passed on the branch's head | **the same:** dispatched on `release/0.3.x` and passed on the branch's head, which is the commit, before the tag |
+| What npm holds before the publish | `latest` `0.2.4`, `next` `0.3.0-rc.1` | **`latest` `0.2.4`, `next` `0.3.0-rc.2`** on all four packages (read on 2026-11-27); **`0.3.0-rc.3` is on none (404)**; GitHub's latest release `v0.2.4` |
+| What the dry run's plan does | `next` from `0.3.0-rc.1` to `0.3.0-rc.2`; `latest` stays `0.2.4` | **`next` from `0.3.0-rc.2` to `0.3.0-rc.3`; `latest` stays `0.2.4`**; GitHub's latest release stays `v0.2.4` |
+| What `vsift --version` prints | `vsift 0.3.0-rc.2 (<12 digits>)` | `vsift 0.3.0-rc.3 (<the first 12 digits of the commit>)` |
+| The earlier bytes to write down | every published version's integrity values with `0.3.0-rc.1`, and fifteen tag commits | **6.25's loop with `0.3.0-rc.2` added, and sixteen tag commits:** the fifteen of 6.25 and **`v0.3.0-rc.2` `0372d2ad7baa1213b3a64db831ad1ac9890f7d62`** (the tag object is `2ba119ea`; the commit is read with `git show --no-patch --format=%H "v0.3.0-rc.2^{commit}"`) |
+| The agent-trial freeze | `4f009d5f...`, kept | **#630's, written on purpose for this candidate:** whole-freeze digest `47b87f56f697c41fed7918e712fafef7168af704f9d3f2a462175b9022640520`, `skill` `7190955a1cabf4407023d5f652338912ec31023c429e54bb007ac9b333740456`; `grader` `041f4360...`, `scenarios` `cc283886...`, `holdout` `f4d526ea...`, `cold` `31204791...`, `settings` `e04ee4cc...` and `truth` `ed1e41e1...` are `0.3.0-rc.2`'s. Both `freeze check` runs said `nothing frozen has changed` for this cut. `0.3.0-rc.2`'s batches ran under `4f009d5f...`; their records are committed beside that freeze in `batch-2-0.3.0-rc.2/` and `batch-3-0.3.0-rc.2/`; `batch-2/` and `batch-3/` hold only the new freeze |
+| The upgrade baselines (`from_version`) | `0.2.4` first, then `0.2.3` | **`0.2.4` first, then `0.2.3`**; `0.3.0-rc.2` optional (a person on `next`) |
+| The hosted runs | on the tag `v0.3.0-rc.2`: the quick checks and every long run | **on the tag `v0.3.0-rc.3`: the quick checks; each long run as the maintainer decides** (run on `0.3.0-rc.3`, or waive with `0.3.0-rc.2`'s run as the reason; the plan proposes); **no stress run** (RQ-08 waived for `0.3.0`) |
+| What this candidate supersedes | `0.3.0-rc.1` | **`0.3.0-rc.2`**, which stays published, tagged and installable by its number; it is **deprecated at the stable release together with `0.3.0-rc.1`, not before** (the maintainer's rule of 2026-10-09, 6.12 step 7), so nothing is deprecated here |
+| `release-evidence --complete-for` | 17 of 20 at the cut | **16 of 20** (above: RQ-08 is waived) |
+| The next candidate, if this one is bad | `0.3.0-rc.3` | `0.3.0-rc.4`, by this section again |
+
+**The command lines that change** (the rest of 6.24's and 6.25's steps, with no version in them, are as written there; step 3 is not done).
+
+**Step 0, before the tag (the coordinator).** The pull request is merged into `release/0.3.x` (by the coordinator, on green) and nothing else is merged into the branch after it. Then, in a clean worktree that is not the maintainer's, with no npm login (an empty `NPM_CONFIG_USERCONFIG` and `NPM_CONFIG_GLOBALCONFIG`):
+
+```console
+git fetch origin --tags
+gh pr list --repo smormah/vsift --state merged --base release/0.3.x --search "The release candidate 0.3.0-rc.3" --json number,title,mergeCommit --jq ".[] | {number, title, commit: .mergeCommit.oid}"
+git show <the 40-digit commit>:Cargo.toml | grep -m1 "^version"
+git rev-parse origin/release/0.3.x
+gh api "repos/smormah/vsift/commits/<the 40-digit commit>/check-runs?per_page=100" --paginate --jq ".check_runs[] | select(.name == \"CI result\") | \"\(.name): \(.status) \(.conclusion)\""
+git ls-remote origin "refs/heads/release/*" "refs/tags/v0.3*"
+for b in 2 3; do cargo run --locked -p vsift-agent-trials --bin vsift-agent-trials -- freeze check --repository . --file docs/planning/p14-agent-trials/batch-$b/freeze.json; done
+for p in vsift-cli @vsift/win32-x64 @vsift/darwin-arm64 @vsift/linux-x64; do npm view "$p" dist-tags --json; done
+for v in 0.0.0-stage 0.0.0 0.1.0 0.2.0-rc.1 0.2.0-rc.2 0.2.0-rc.3 0.2.0 0.2.1-rc.1 0.2.1-rc.2 0.2.1-rc.3 0.2.1 0.2.2-rc.1 0.2.2 0.2.3-rc.1 0.2.3 0.2.4-rc.1 0.2.4 0.3.0-rc.1 0.3.0-rc.2; do for p in vsift-cli @vsift/win32-x64 @vsift/darwin-arm64 @vsift/linux-x64; do i="$(npm view "$p@$v" dist.integrity 2>/dev/null)"; [ -n "$i" ] && echo "$p@$v $i"; done; done
+for t in v0.2.0-rc.1 v0.2.0-rc.2 v0.2.0-rc.3 v0.2.0 v0.2.1-rc.1 v0.2.1-rc.2 v0.2.1-rc.3 v0.2.1 v0.2.2-rc.1 v0.2.2 v0.2.3-rc.1 v0.2.3 v0.2.4-rc.1 v0.2.4 v0.3.0-rc.1 v0.3.0-rc.2; do git show --no-patch --format="$t %H" "$t^{commit}"; done
+npm view vsift-cli@0.3.0-rc.3 version
+gh api repos/smormah/vsift/releases/latest --jq .tag_name
+```
+
+Expect `version = "0.3.0-rc.3"`; `git rev-parse` printing the commit (nothing merged after the cut); `CI result: completed success`; `ls-remote` printing `refs/heads/release/0.2.x` at `709de47b4650`, `refs/heads/release/0.3.x` at the commit, `refs/tags/v0.3.0-rc.1` (its `^{}` at `89d3ea7c9845`), `refs/tags/v0.3.0-rc.2` at `2ba119ea` (its `^{}` at `0372d2ad7baa`) and **no `v0.3.0-rc.3`**; `nothing frozen has changed` twice (against #630's freeze, `47b87f56...`); `{ latest: '0.2.4', next: '0.3.0-rc.2' }` four times (any other answer means something was published or moved since 2026-11-27: stop); the integrity values written down, now with `0.3.0-rc.2`'s four; the sixteen commits of the table; a 404 for `0.3.0-rc.3`; and `v0.2.4`. Step 0 also reads the rulesets and the `release` environment with 6.24's four `gh api` lines, read-only.
+
+**Step 1, the nightly on the branch, and step 2** are 6.25's, unchanged (`gh workflow run nightly.yml --repo smormah/vsift --ref release/0.3.x`, then the run of the commit with `headBranch` `release/0.3.x`). A failure stops the cut: the issue first (governance rule 14), then a fix by pull request into `release/0.3.x` with its counterpart to `main`; whether that fix keeps the number or brings `0.3.0-rc.4` is the maintainer's decision. **Step 3 is not done.**
+
+**Step 4, tag the commit (the maintainer):**
+
+```console
+git tag -a v0.3.0-rc.3 -m "VSift 0.3.0-rc.3" <the 40-digit commit>
+git push origin v0.3.0-rc.3
+git show --no-patch --format="%H" "v0.3.0-rc.3^{commit}"
+git fetch origin && git merge-base --is-ancestor <the 40-digit commit> origin/release/0.3.x && echo "on the release branch"
+```
+
+A wrong tag before anything is published may be moved (`git push origin :refs/tags/v0.3.0-rc.3`, fix, push again); never after step 6.
+
+**Step 5, the dry run on the tag, and step 6, the publish (the maintainer approves):**
+
+```console
+gh workflow run release.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f dry_run=true
+gh run list --repo smormah/vsift --workflow release.yml --limit 3 --json databaseId,headBranch,headSha,event,status,conclusion,url
+gh run download <the run id> --repo smormah/vsift --name publish-plan --dir plan-dry
+gh workflow run release.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f dry_run=false
+```
+
+The dry run's **Publish plan** must read "Version `0.3.0-rc.3` (release candidate), npm dist-tag `next`, Git tag `v0.3.0-rc.3`", the commit, `workflow_dispatch` on `refs/tags/v0.3.0-rc.3`, and for each of the four packages **`next` from `0.3.0-rc.2` to `0.3.0-rc.3` and `latest` staying `0.2.4`**; `plan-dry/release-notes.md` says "VSift 0.3.0-rc.3 is a release candidate ...". The rest is 6.24 step 6's.
+
+**Step 7, check it from outside, then the hosted runs.** **No sooner than 15 minutes after the publish job ends** (6.4, #618). The four `npm view <package> dist-tags` print **`{ latest: '0.2.4', next: '0.3.0-rc.3' }` four times** and `npm view vsift-cli version` prints `0.2.4`; step 0's integrity loop and the sixteen tag commits print what step 0 wrote down; then 6.24 step 7's `rc-check` lines with `v0.3.0-rc.3`: `npx vsift --version` prints `vsift 0.3.0-rc.3 (<the first 12 digits of the commit>)`, `gh release view` prints `isPrerelease` true, `isDraft` false and ten assets, and `releases/latest` prints **`v0.2.4`** (if it prints `v0.3.0-rc.3`: `gh release edit v0.3.0-rc.3 --repo smormah/vsift --latest=false`, then `gh release edit v0.2.4 --repo smormah/vsift --latest`). Every `gh attestation verify` is 6.4's with `--source-ref refs/tags/v0.3.0-rc.3`.
+
+**The quick checks** (the coordinator; each one dispatch, **on the tag `v0.3.0-rc.3`**, once; nothing from `0.3.0-rc.2`'s runs is reused as evidence). No sooner than 15 minutes after the publish job ends; **`P14 verify release` (RQ-19) within seven days of the publish**, the same day if possible. **The journeys use the tag's own tests** (`tests_from=auto`, as on `0.3.0-rc.2`).
+
+```console
+gh workflow run p14-verify-release.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3
+gh workflow run p14-journeys.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3
+gh workflow run p13-managed-smoke.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f published_version=0.3.0-rc.3
+gh workflow run p14-published-artifacts.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3 -f from_version=0.2.4
+gh workflow run p14-published-artifacts.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3 -f from_version=0.2.3
+gh workflow run p13-managed-smoke.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run p16-speakers-e2e.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run p16-ocr-runner.yml --repo smormah/vsift --ref v0.3.0-rc.3
+```
+
+Dispatch the second `P14 published artifacts` only after the first has finished. `P14 verify release` must say `next 0.3.0-rc.3, latest 0.2.4` for each package and `pre-release true, GitHub's latest release v0.2.4`.
+
+**The long runs: run on `0.3.0-rc.3`, or waive with `0.3.0-rc.2`'s run as the reason.** `release-evidence --complete-for 0.3.0-rc.3 --commit <the 40-digit commit>` names the items; **for each long run, the plan ("The third candidate") proposes "run on rc.3" or "waive for rc.3, with rc.2's run as the reason", and the maintainer decides.** The planner's proposal is to waive each long run whose `0.3.0-rc.2` run passed, citing that run's id, because this candidate's diff is limited to help text, skill text, their tests, the freeze, one fuzz seed and documents (above); the fuzz run is the one whose input differs (the `handoff_check` seed). **RQ-08 (stress) is already decided: waived for `0.3.0` by the maintainer on 2026-11-27, on #519 and #627. No stress run is made on `0.3.0-rc.3`.** The lines for the runs the maintainer chooses to make, one after another and staggered:
+
+```console
+gh workflow run p07-local-asr.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run p14-malicious-media.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3
+gh workflow run p14-scan-reading.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3
+gh workflow run p14-compatibility.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run p14-local-upgrade.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run fuzz.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f seconds=3600
+gh workflow run p13-managed-power-loss.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run p10-durability-campaign.yml --repo smormah/vsift --ref v0.3.0-rc.3
+gh workflow run p14-load.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3
+gh workflow run p14-runbook-walk.yml --repo smormah/vsift --ref v0.3.0-rc.3 -f version=0.3.0-rc.3
+```
+
+RQ-13's dated reading by hand is 6.24's list of the cycle's dependency changes, unchanged (this candidate moves no dependency). **A failed run is a finding: open an issue before re-running** (governance rule 14); a fix means `0.3.0-rc.4`.
+
+**Step 8, agent-trial batches 2 and 3 on `0.3.0-rc.3`: this candidate's test, each on the maintainer's go.** The commands of [`p14-batch-2-3-checklist.md`](../planning/p14-batch-2-3-checklist.md) with **`-Version 0.3.0-rc.3`**, batch 3 with **`-AllowGraderChange`**, one at a time, on the capped API keys, against the registry's `0.3.0-rc.3`. **They run against #630's freeze**: whole-freeze digest `47b87f56f697c41fed7918e712fafef7168af704f9d3f2a462175b9022640520`, `skill` `7190955a1cabf4407023d5f652338912ec31023c429e54bb007ac9b333740456`. Both `freeze check` runs must say `nothing frozen has changed` before each batch (step 0 checks it again). `batch-2/` and `batch-3/` hold only that freeze, so the campaign script finds no state file of another version. Batch 2 tests #628's fix (the compact gate, `sec-t02-f12-webvtt` among it) and batch 3 tests #629's (cold safety).
+
+**Step 9, the records.** As 6.25 step 9, for this candidate: a records pull request to `release/0.3.x` records each run of step 7 and each batch of step 8 in the ledger from what it computed, never earlier, with the maintainer's decision for each long run (the plan gets "The evidence on 0.3.0-rc.3"); then the stable commit `0.3.0` on the branch, compared with `v0.3.0-rc.3`, the highest `v0.3.0-rc.N` tag (6.8). **Not yet known, left for those briefs:** this cut's merge commit and its nightly run, the tag object, the dry-run and publish run ids, every hosted run id and the records pull request.
+
+**If something fails.** 6.25's readings with these numbers: the `guard` refusing a dispatch names its reason; step 5's plan must move `next` from **`0.3.0-rc.2`** (anything else: do not publish; tell the maintainer); the **Registry** guard failing ("`0.3.0-rc.3` is already on npm, and not with these bytes") means the number is used for good and the next candidate is `0.3.0-rc.4`; a bad published version is deprecated on all four packages (never unpublished) and `0.3.0-rc.4` is cut on the branch by this section again.
+
+**What is irreversible:** the four published `0.3.0-rc.3` versions and their provenance records; the Sigstore attestations of the ten files and four tarballs (they exist from the end of `attest`, before the approval); the tag once anything was published from it; and every published integrity value, `0.3.0-rc.1`'s and `0.3.0-rc.2`'s included, which this section does not change. **What is reversible:** `next` (`npm dist-tag add vsift-cli@0.3.0-rc.2 next` for each package, with the maintainer's login and second factor; the workflow never does it), the notes, and a deprecation. No branch is created or deleted by this section.

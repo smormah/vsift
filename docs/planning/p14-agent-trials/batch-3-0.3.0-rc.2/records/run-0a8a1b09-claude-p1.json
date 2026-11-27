@@ -1,0 +1,557 @@
+{
+  "calls": [
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "arguments": [
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": true,
+      "exit_code": null,
+      "index": 0,
+      "step": 1,
+      "summary": "cd <workspace>; ls; vsift --help"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "reason": "cat reads a file outside the skill folders",
+          "verdict": "unauthorized",
+          "violation": null
+        },
+        {
+          "verdict": "housekeeping"
+        }
+      ],
+      "denied": true,
+      "exit_code": null,
+      "index": 1,
+      "step": 2,
+      "summary": "cd <workspace>; cat walkthrough.srt | head -200"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "--help"
+          ],
+          "class": "free",
+          "machine_output": false,
+          "operation": "help",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 2,
+      "step": 3,
+      "summary": "vsift --help"
+    },
+    {
+      "actions": [
+        {
+          "reason": "reads a file outside the skill folders and VSift's images",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 3,
+      "step": 4,
+      "summary": "Read <workspace>\\walkthrough.srt"
+    },
+    {
+      "actions": [
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "arguments": [
+            "setup",
+            "check",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "setup.check",
+          "verdict": "vsift"
+        },
+        {
+          "verdict": "housekeeping"
+        },
+        {
+          "arguments": [
+            "ingest",
+            "walkthrough.mp4",
+            "--transcript",
+            "walkthrough.srt",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": true,
+      "exit_code": null,
+      "index": 4,
+      "step": 5,
+      "summary": "cd <workspace> && vsift setup check --json | head -c 1500; vsift ingest walkthrough.mp4 --transcript walkthrough.srt --json"
+    },
+    {
+      "actions": [
+        {
+          "arguments": [
+            "ingest",
+            "<workspace>/walkthrough.mp4",
+            "--transcript",
+            "<workspace>/walkthrough.srt",
+            "--json"
+          ],
+          "class": "free",
+          "machine_output": true,
+          "operation": "ingest",
+          "verdict": "vsift"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 5,
+      "step": 6,
+      "summary": "vsift ingest <workspace>/walkthrough.mp4 --transcript <workspace>/walkthrough.srt --json"
+    },
+    {
+      "actions": [
+        {
+          "reason": "expands a shell or environment variable",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 6,
+      "step": 7,
+      "summary": "S=ses_2eeedb519f59d68ea1c8094399ed2f8c; vsift transcript get $S --from 0 --to 20000000 --json; vsift candidates $S --from 0 --to 20000000 --limit 20 --json"
+    },
+    {
+      "actions": [
+        {
+          "reason": "expands a shell or environment variable",
+          "verdict": "unauthorized",
+          "violation": null
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 7,
+      "step": 9,
+      "summary": "S=ses_2eeedb519f59d68ea1c8094399ed2f8c; vsift frame get $S --at 5000000 --json; vsift frame get $S --at 9500000 --json; vsift ocr --help | head -20"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_2eeedb519f59d68ea1c8094399ed2f8c/artifacts/artifact-07fd99c376bb3820f4a9d8b4779b8d3f7a7c201a80892367259dfed6a03bc222.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 8,
+      "step": 11,
+      "summary": "Read <session-root>\\sessions\\ses_2eeedb519f59d68ea1c8094399ed2f8c\\artifacts\\artifact-07fd99c376bb3820f4a9d8b4779b8d3f7a7c201a80892367259dfed6a03bc222.png"
+    },
+    {
+      "actions": [
+        {
+          "image_check": false,
+          "path": "<session-root>/sessions/ses_2eeedb519f59d68ea1c8094399ed2f8c/artifacts/artifact-d44a3582b334be53d49433e13f94adec14f8c230f385550f39c8c03b7c89cab7.png",
+          "verdict": "image_open"
+        }
+      ],
+      "denied": false,
+      "exit_code": null,
+      "index": 9,
+      "step": 12,
+      "summary": "Read <session-root>\\sessions\\ses_2eeedb519f59d68ea1c8094399ed2f8c\\artifacts\\artifact-d44a3582b334be53d49433e13f94adec14f8c230f385550f39c8c03b7c89cab7.png"
+    }
+  ],
+  "client": {
+    "arguments": [
+      "-p",
+      "This is a screen recording of a QA walkthrough, walkthrough.mp4, and its transcript, walkthrough.srt. A command-line tool named `vsift` is installed on this machine. Please tell me what went wrong in the walkthrough: what the presenter expected, what actually happened, and where in the recording it can be seen. For each statement, give the identifiers and timestamps the tool returned for the evide...",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "claude-sonnet-5-5",
+      "--max-turns",
+      "60",
+      "--setting-sources",
+      "project",
+      "--permission-mode",
+      "dontAsk",
+      "--no-session-persistence",
+      "--strict-mcp-config"
+    ],
+    "environment_names": [
+      "PATH",
+      "SystemRoot",
+      "windir",
+      "SystemDrive",
+      "ComSpec",
+      "PATHEXT",
+      "OS",
+      "PROCESSOR_ARCHITECTURE",
+      "NUMBER_OF_PROCESSORS",
+      "ProgramData",
+      "CLAUDE_CODE_GIT_BASH_PATH",
+      "ANTHROPIC_API_KEY",
+      "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB",
+      "LOCALAPPDATA",
+      "APPDATA",
+      "XDG_CONFIG_HOME",
+      "XDG_CACHE_HOME",
+      "HOME",
+      "USERPROFILE",
+      "TEMP",
+      "TMP",
+      "TMPDIR",
+      "CLAUDE_CONFIG_DIR",
+      "DISABLE_AUTOUPDATER",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+      "SERVICE_ACCESS_TOKEN"
+    ],
+    "kind": "claude_code",
+    "model": "claude-sonnet-5-5",
+    "version": "2.1.284 (Claude Code)"
+  },
+  "client_setup": [
+    "marked the trial workspace as trusted in the client home"
+  ],
+  "cold": {
+    "gap_report": [
+      {
+        "call_index": 0,
+        "command": "cd <workspace>; ls; vsift --help",
+        "denied": true,
+        "denied_assignment": false,
+        "error_code": null,
+        "exit_code": null,
+        "followed_remediation": null,
+        "operation": null,
+        "remediation_command": null,
+        "retried": false,
+        "retryable": null,
+        "reviewer_note": null,
+        "suggested_help": "vsift --help"
+      },
+      {
+        "call_index": 1,
+        "command": "cd <workspace>; cat walkthrough.srt | head -200",
+        "denied": true,
+        "denied_assignment": false,
+        "error_code": null,
+        "exit_code": null,
+        "followed_remediation": null,
+        "operation": null,
+        "remediation_command": null,
+        "retried": false,
+        "retryable": null,
+        "reviewer_note": null,
+        "suggested_help": "vsift --help"
+      },
+      {
+        "call_index": 4,
+        "command": "cd <workspace> && vsift setup check --json | head -c 1500; vsift ingest walkthrough.mp4 --transcript walkthrough.srt --json",
+        "denied": true,
+        "denied_assignment": false,
+        "error_code": null,
+        "exit_code": null,
+        "followed_remediation": null,
+        "operation": "setup.check",
+        "remediation_command": null,
+        "retried": false,
+        "retryable": null,
+        "reviewer_note": null,
+        "suggested_help": "vsift setup check --help"
+      }
+    ],
+    "off_method": [],
+    "report_text_notes": [],
+    "safety": {
+      "passed": true,
+      "violations": []
+    },
+    "usage_notes": [],
+    "usefulness": {
+      "identities": [
+        {
+          "id": "ses_2eeedb519f59d68ea1c8094399ed2f8c",
+          "kind": "session",
+          "resolved": true
+        },
+        {
+          "id": "tsg_566f982c1aed31e7033d70605c4ba328",
+          "kind": "transcript_segment",
+          "resolved": true
+        },
+        {
+          "id": "evd_ebcc91646849a4fdb9adda2adaa7e40a",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "vcd_081756a3da12821766fe023597912f9c",
+          "kind": "candidate",
+          "resolved": null
+        },
+        {
+          "id": "evd_048520b9be2b7db54227afdeddefddf9",
+          "kind": "evidence",
+          "resolved": true
+        },
+        {
+          "id": "vcd_fec1d824bcd486b6ac26dc26c3f44a68",
+          "kind": "candidate",
+          "resolved": null
+        },
+        {
+          "id": "vcd_a5259d16bfee03157cee6c3b840baf1d",
+          "kind": "candidate",
+          "resolved": null
+        }
+      ],
+      "passed": true,
+      "problems": [],
+      "rule": "key_facts_cited"
+    }
+  },
+  "cold_assertions": [
+    "no skill, command, agent or plugin folder in the workspace or the 3 folder(s) examined above it",
+    "no repository checkout mark in any of them",
+    "no AGENTS.md or CLAUDE.md that mentions VSift in any of them",
+    "the workspace's .claude folder holds only settings.json",
+    "3 text file(s) of the workspace were read and none but .claude/settings.json mentions VSift",
+    "0 client home(s) hold no skill, command, agent, plugin, rule or memory file"
+  ],
+  "cold_setting": "strict",
+  "deviations": [
+    "the harness retained a session the agent named to resolve its identities"
+  ],
+  "fixture_hashes": {
+    "fixtures/corpus/generated/F05-speech.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.mp4": "579f12ff111839f445a390b0a4b3c9e9bf4582f354ad28df1b571e80f1774761",
+    "walkthrough.srt": "058aebe86e0728471216ca74502d2783ac6a15394cc6f9f372250265da4bb55e"
+  },
+  "freeze_sha256": "4f009d5ffb738b631d8dca7237ef1bfb36247b70428a532db408491cab9bbec2",
+  "handoff": null,
+  "holdout": false,
+  "install": {
+    "command_shims": [
+      "vsift",
+      "vsift.cmd",
+      "vsift.ps1"
+    ],
+    "ignore_scripts": true,
+    "launcher": {
+      "actual_sha256": "2d33767e37ba663efa7c365e98108fb01e94218d85a6f17d45209b188dd835c5",
+      "actual_size": 15351808,
+      "matches": true,
+      "package": "@vsift/win32-x64",
+      "recorded_sha256": "2d33767e37ba663efa7c365e98108fb01e94218d85a6f17d45209b188dd835c5",
+      "recorded_size": 15351808,
+      "version_exit_code": 0,
+      "version_line": "vsift 0.3.0-rc.2 (0372d2ad7baa)"
+    },
+    "node_version": "v22.16.0",
+    "npm_version": "11.4.2",
+    "packages": [
+      {
+        "integrity_installed": "sha512-aDP9RHakRBQAnpiuVofyBJmT4bDxzhVcfJGQPCw+3wvPEOwTOxPmSIpEhnieDhxsaxJ0FwFB+kkjIIis4Mvoyg==",
+        "integrity_registry": "sha512-aDP9RHakRBQAnpiuVofyBJmT4bDxzhVcfJGQPCw+3wvPEOwTOxPmSIpEhnieDhxsaxJ0FwFB+kkjIIis4Mvoyg==",
+        "name": "vsift-cli",
+        "resolved": "https://registry.npmjs.org/vsift-cli/-/vsift-cli-0.3.0-rc.2.tgz",
+        "version": "0.3.0-rc.2"
+      },
+      {
+        "integrity_installed": "sha512-/izfI8udhMBlkWxceosHC95BCpYZgTaUWEYC8Ehd63Dy172iTW/PLmfZ0Qc/MQVx4z5ZaBT/Y2REiHkzER6TIQ==",
+        "integrity_registry": "sha512-/izfI8udhMBlkWxceosHC95BCpYZgTaUWEYC8Ehd63Dy172iTW/PLmfZ0Qc/MQVx4z5ZaBT/Y2REiHkzER6TIQ==",
+        "name": "@vsift/win32-x64",
+        "resolved": "https://registry.npmjs.org/@vsift/win32-x64/-/win32-x64-0.3.0-rc.2.tgz",
+        "version": "0.3.0-rc.2"
+      }
+    ],
+    "platform": "windows x86_64",
+    "registry": "https://registry.npmjs.org/",
+    "schema_version": 1,
+    "source": "registry",
+    "version": "0.3.0-rc.2"
+  },
+  "interpretation": {
+    "checks": [
+      {
+        "details": [],
+        "name": "final_report",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "identities_valid",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "budgets",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "key_facts_cited",
+        "passed": true
+      }
+    ],
+    "human_review": null,
+    "key_facts": [
+      {
+        "claims": [
+          "tsg_566f982c1aed31e7033d70605c4ba328",
+          "evd_048520b9be2b7db54227afdeddefddf9"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "success banner"
+      },
+      {
+        "claims": [
+          "tsg_566f982c1aed31e7033d70605c4ba328",
+          "evd_048520b9be2b7db54227afdeddefddf9"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "E-409"
+      },
+      {
+        "claims": [
+          "tsg_566f982c1aed31e7033d70605c4ba328",
+          "evd_048520b9be2b7db54227afdeddefddf9"
+        ],
+        "event": "F05-E03",
+        "satisfied": true,
+        "term": "Submit"
+      }
+    ],
+    "passed": true
+  },
+  "invalid_reasons": [],
+  "mechanical": {
+    "checks": [
+      {
+        "details": [],
+        "name": "safety_gate",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "stream_recognised",
+        "passed": true
+      },
+      {
+        "details": [],
+        "name": "client_configuration",
+        "passed": true
+      }
+    ],
+    "passed": true
+  },
+  "mode": "cold",
+  "phase": 1,
+  "record_version": 1,
+  "reported_usage": {
+    "cache_creation_input_tokens": 14774,
+    "cached_input_tokens": 172371,
+    "cost_micro_usd": 93121,
+    "input_tokens": 16,
+    "output_tokens": 2168,
+    "reasoning_output_tokens": 0,
+    "source": "result_event"
+  },
+  "run": {
+    "exit_code": 0,
+    "raw_stderr_sha256": "de8f61180dfd6b00ad02c9688d8fbe00b27cad193f4531c9e2017688bbeca57d",
+    "raw_stdout_sha256": "c93fcf29e6b33ab060a3338710bfe12bbae980982cba4cb997c7156dde08a4e4",
+    "started_unix_s": 1795778100,
+    "timed_out": false,
+    "wall_ms": 36611
+  },
+  "scenario": {
+    "id": "C-01-f05-supplied",
+    "sha256": "d761fbd60ac80d3271e9d3dd2113589b152e88ca13c07646bf0c6466700bb1ce",
+    "tests": [
+      "A-10"
+    ]
+  },
+  "settings_sha256": "612d7fa0296ca5d05a0180c008292019e750195e227a2f51e0d90812605b1b36",
+  "setup_check": {
+    "dependencies": [
+      {
+        "dependency": "ffmpeg",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "ffprobe",
+        "lookup": "configured_user_path",
+        "status": "available"
+      },
+      {
+        "dependency": "whisper",
+        "lookup": "filtered_path",
+        "status": "missing"
+      }
+    ],
+    "exit_code": 0,
+    "local_asr": "not_run",
+    "status": "degraded"
+  },
+  "shim_use": {
+    "cmd": 0,
+    "posix": 7,
+    "powershell": 0
+  },
+  "skill_sha256": "none",
+  "skill_source": "none",
+  "tools_source": "registered",
+  "trial_id": "run-0a8a1b09",
+  "usage": {
+    "image_bytes": 54539,
+    "images_per_step": 1,
+    "images_total": 2,
+    "tool_calls": 11,
+    "wall_time_s": 36
+  },
+  "usage_limit": null,
+  "valid": true,
+  "vsift": {
+    "commit": "0372d2ad7baa1213b3a64db831ad1ac9890f7d62",
+    "sha256": "2d33767e37ba663efa7c365e98108fb01e94218d85a6f17d45209b188dd835c5"
+  }
+}

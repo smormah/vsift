@@ -26,8 +26,8 @@ published, so Yarn users get 0.2.4 a day after the publish (the installation gui
 The dist-tag `next` is for release candidates and you do not need it: it names a candidate of
 the next release, `0.3.0-rc.1` (since 2026-11-24) or a later one. The older
 candidates stay published; `0.2.0-rc.1`, `0.2.0-rc.2`, `0.2.1-rc.1`, `0.2.1-rc.2`, `0.2.1-rc.3` and `0.2.2-rc.1` are deprecated and superseded, and so are `0.2.3-rc.1` and `0.2.4-rc.1` since 2026-11-06.
-The release candidates of later releases go to `next` when they are published and never to `latest`. The second
-candidate of the next release, `0.3.0-rc.2`, was cut on 2026-11-25; until 0.3.0 itself is published, a plain install gets 0.2.4.
+The release candidates of later releases go to `next` when they are published and never to `latest`. The third
+candidate of the next release, `0.3.0-rc.3`, was cut on 2026-11-27; until 0.3.0 itself is published, a plain install gets 0.2.4.
 
 ## What changed since 0.2.3
 
