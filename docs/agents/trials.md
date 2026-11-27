@@ -1116,6 +1116,19 @@ fix's two pull requests, into `release/0.3.x` and into `main`, carry the same by
 frozen has changed`, and `committed_freeze` pins the new value. `0.3.0-rc.2`'s batch records are not in the repository; the cut of `0.3.0-rc.3` records them and moves nothing
 here. No trial ran for this change: `0.3.0-rc.3`'s batches 2 and 3 are its test.
 
+### The freeze of `0.3.0-rc.3` at the cut, and `0.3.0-rc.2`'s records (2026-11-27)
+
+**The eleventh candidate, `0.3.0-rc.3` (cut 2026-11-27 by a bump into `release/0.3.x`), keeps #630's freeze byte for byte:** whole-freeze digest
+`47b87f56f697c41fed7918e712fafef7168af704f9d3f2a462175b9022640520`, `skill` `7190955a...`; `grader`, `scenarios`, `holdout`, `cold`, `settings` and `truth` are `0.3.0-rc.2`'s. The
+cut changes nothing frozen (the help text of #632 is not a frozen input), so both `freeze check` runs answer `nothing frozen has changed` and `CUT_FREEZE_SHA256` is the same.
+**The cut commits `0.3.0-rc.2`'s batch records, as a record:** batch 2's 18 records, summary and state file in
+[`batch-2-0.3.0-rc.2/`](../planning/p14-agent-trials/batch-2-0.3.0-rc.2/) and batch 3's 13 in [`batch-3-0.3.0-rc.2/`](../planning/p14-agent-trials/batch-3-0.3.0-rc.2/), each
+with the freeze it ran under as `freeze.json` (the tag's file, `4f009d5f...`), and the readings
+[batch-2-reading-0.3.0-rc.2.md](../planning/p14-agent-trials/batch-2-reading-0.3.0-rc.2.md) and
+[batch-3-reading-0.3.0-rc.2.md](../planning/p14-agent-trials/batch-3-reading-0.3.0-rc.2.md). They never were in `batch-2/` or `batch-3/`, which still hold only the freeze,
+so the campaign script finds no state file of another version. Batches 2 and 3 on the published `0.3.0-rc.3` (`-Version 0.3.0-rc.3`, batch 3 with `-AllowGraderChange`, on
+the capped API keys), each on the maintainer's go, are the candidate's test ([`release.md`](../operations/release.md) 6.26).
+
 ## Usage capture (P14)
 
 P12 recorded no tokens. Each record now carries `reported_usage`: input, output, cached and cache-write tokens,

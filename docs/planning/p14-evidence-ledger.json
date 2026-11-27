@@ -1785,9 +1785,25 @@
       },
       "scope": ["crates", "Cargo.lock", ".github/workflows/lock-stress.yml", ".github/workflows/p14-stress.yml", "tools/p14-campaigns/stress.cjs", "tools/p14-campaigns/lib/repeat.cjs"],
       "gate": { "candidate": "required", "stable": "carry" },
-      "status": "planned",
-      "issues": [312, 314, 321, 519],
+      "status": "waived",
+      "decision": {
+        "statement": "Decision of the maintainer, 2026-11-27: RQ-08 is WAIVED for 0.3.0, on #519 and #627. As given: \"Waived\". It covers the release 0.3.0 (its candidates 0.3.0-rc.2 and 0.3.0-rc.3, and the stable 0.3.0 cut from the last of them) and nothing later: no stress run is made on 0.3.0-rc.3. A waived item names no version, so the completeness check passes it for any (L-179); this text is what limits it, and the cut of the next release sets the item back to planned. It is not a pass. The planner's reading, which the decision follows (#627, 2026-11-26): a test defect on a starved runner, not a product wait. For a root that fails validation, the product path cannot wait: such a root is never Starting or InProgress, so adopt_existing_root validates once more and returns; the 4-second bound measures how busy the runner was. #519 and #627 stay open; L-231 is their register entry, owned by the next release, where the planned change on main (tests only: the bound in assert_rejected_promptly widened) is their fix.",
+        "reference": { "type": "record", "path": "docs/planning/release-0.3.0.md" },
+        "date": "2026-11-27"
+      },
+      "reason": "RQ-08's pass rule (zero failures in at least 200 repetitions per system, and the 1,500-repetition runs for #128 and #206 clean) was not met on 0.3.0-rc.2: P14 stress run 45728904838 failed one job, roots-loaded (windows-2025), in each of its two attempts, 1 of 1,500 repetitions each time, in the session-root rejection tests' 4-second bound (assert_rejected_promptly, \"rejection waited for a creator\"): an_unmarked_directory_with_content_is_rejected_and_left_untouched in attempt 1 and a_foreign_ownership_marker_is_rejected in attempt 2 (the test of #519), each after the assertion on the outcome had passed, so the rejection was the right one. Every other job passed. The maintainer waived the item for 0.3.0 rather than run it again, so it is waived and not passed; the run is kept in prior as the record of the failure, not as evidence.",
+      "issues": [312, 314, 321, 519, 627],
       "prior": [
+        {
+          "reference": { "type": "workflow_run", "workflow": "P14 stress", "run_id": 45728904838 },
+          "date": "2026-11-26",
+          "note": "NOT A PASS, and NOT COUNTED for 0.3.0-rc.3: kept as the record of the failure the waiver for 0.3.0 covers. Eight suites on each of Windows Server 2025, Ubuntu 24.04 and macOS 15, dispatched on the tag v0.3.0-rc.2 (0372d2ad7baa) with the same parameters as for the earlier candidates. Every job passed but one: roots-loaded (windows-2025), the session_root_provisioning suite with eight busy processes, 1,499 of 1,500 repetitions passed, 1 failed, 0 hung (repetition 135, 15.1 s against a median of 3.3 s): an_unmarked_directory_with_content_is_rejected_and_left_untouched failed the assertion elapsed < PROMPT (4 s) at session_root_provisioning.rs line 302, after the assertion on the outcome (OwnershipMarkerMissing) had passed. #627 was filed before any re-run (governance rule 14). Only that job was re-run once, as attempt 2 (job 140048207912): 1,499 of 1,500 again, none hung; repetition 983 (8.5 s against a median of 3.2 s) failed a_foreign_ownership_marker_is_rejected at the same line, the test of #519 on 0.2.3-rc.1. The same job passed on 0.3.0-rc.1 (run 45495740864), which is not recorded here either."
+        },
+        {
+          "reference": { "type": "issue", "number": 627 },
+          "date": "2026-11-26",
+          "note": "NOT A PASS, kept as the record of the failure the waiver for 0.3.0 covers: the tracking issue for both failed repetitions of run 45728904838 (governance rule 14), with the planner's reading of the rejection path (no product wait; the bound measures the runner's load) and the re-run. It is #519 recurring (L-231)."
+        },
         {
           "reference": { "type": "record", "path": "docs/planning/release-0.2.4.md" },
           "date": "2026-11-04",
@@ -1912,7 +1928,7 @@
           "note": "The delivery ledger's P10 entry records 40 of 40 macOS stress rounds after the lock-anchor fix. Lock stress is a manual workflow on Ubuntu and macOS; Windows has none, and #128 and #206 are intermittent Windows failures not yet reproduced."
         }
       ],
-      "date": "2026-11-24"
+      "date": "2026-11-27"
     },
     {
       "id": "RQ-09",

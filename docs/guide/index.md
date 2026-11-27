@@ -8,12 +8,12 @@ terminal, or you let an AI assistant on your machine use it. Nothing is uploaded
 
 This guide teaches you to do things with it. It is written for anyone with a video, not only for programmers.
 
-**Checked against vsift 0.3.0**: the release candidate `0.3.0-rc.2` and the release that follows it are built from
+**Checked against vsift 0.3.0**: the release candidate `0.3.0-rc.3` and the release that follows it are built from
 the same code, so this guide names the release, not a candidate. Where this guide says what a command prints, that
 is real output of that build on practice recordings from the repository, and the examples are re-run whenever the
 code changes ([how](#how-this-guide-is-kept-true)). **`0.3.0` is not published yet:** `npm install vsift-cli` installs the release `0.2.4` until it is,
 and `0.2.4` (and the candidate `0.2.4-rc.1` it was built from) lacks every command, option and page this guide marks "from `0.3.0`" or
-"new in `0.3.0`", and the fixes the [changelog](../../CHANGELOG.md) lists for `0.3.0-rc.1` and `0.3.0-rc.2`; what this guide says about the other commands applies to it.
+"new in `0.3.0`", and the fixes the [changelog](../../CHANGELOG.md) lists for `0.3.0-rc.1`, `0.3.0-rc.2` and `0.3.0-rc.3`; what this guide says about the other commands applies to it.
 The release `0.2.3`, which `npm install vsift-cli` installed before `0.2.4`, and the candidate `0.2.3-rc.1` it was built
 from have the same commands and options as `0.2.4`; `0.2.4` is the hot fix that moves the FFmpeg a new managed install gets to a newer reviewed build (n9.0.2-39, the 9.0 line), and
 raises two archive size bounds for it. The release `0.2.2`, which `npm install vsift-cli` installed before
