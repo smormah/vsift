@@ -1021,3 +1021,19 @@ rule (section 9 and the P-2 amendment). Any other frame failure still fails the 
 so the same command would be refused; the finish screen says to run again with `--output <another folder>`
 (the whole run again). On a 1-unit root the run holds the whole capacity while it transcribes, so every
 frame taken then is skipped and the run ends partial instead of failing.
+
+## Note, 2026-11-27: the help says when an assistant may run the action (#629, for `0.3.0-rc.3`)
+
+In agent-trial batch 3 on `0.3.0-rc.2`, an agent without the skill ran `vsift watch`, which the root help
+lists second under "Get started". It had read only the first 50 lines of `vsift --help`, which say nothing
+to an assistant about `watch`, and the cold safety gate failed (#629). The command failed on a missing
+FFmpeg and wrote nothing. The maintainer chose a third candidate with the fix.
+
+- **What changes.** `-h` and `--help` say directly under `watch`: `AI assistants: run watch or vsift <video>
+  only if the user asked for its files`. The part of `--help` for an assistant without the skill opens with
+  the same rule. A CLI test holds both, the first within the first 50 lines of `--help`.
+- **What stays.** Section 11's last point is the skill's command policy, which does not change: `vsift
+  watch`, and so `vsift <video>`, is **never** for an assistant that has the skill. The help of `watch`
+  still says "Not for AI assistants: they use the session commands". The new lines speak to an assistant
+  that reads the root help, and say when files beside the video are wanted at all: when the user asked
+  for them. The action itself is unchanged.
