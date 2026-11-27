@@ -60,6 +60,15 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// visible: changing this constant is the decision to cut another candidate and write a new freeze
 /// (`docs/operations/release.md` section 6.8), and it shows in the diff of a test, not only of a data file.
 ///
+/// **The freeze of `0.3.0-rc.3` (#628, 2026-11-27):** after `handoff finish` the skill's reply is the checked report,
+/// whole and unchanged (REPORT and `CLOSE_OR_RETAIN` in `SKILL.md`, `references/handoff.md`, `references/commands.md`
+/// and the six workflows; `docs/agents/skill.md`, "The change for `0.3.0-rc.3`"), so only the `skill` component moved,
+/// `5ee66624...` to `7190955a...`, and this digest `4f009d5f...` (#500's, the freeze of `0.3.0-rc.1` and `0.3.0-rc.2`)
+/// to the value below; the other six components are unchanged. `freeze write` with `--commit` naming the head of
+/// `release/0.3.x` the fix branched from (`0372d2ad7baa1213b3a64db831ad1ac9890f7d62`, the tag `v0.3.0-rc.2`), the
+/// same bytes on `release/0.3.x` and `main`. `0.3.0-rc.2`'s batches 2 and 3 ran under `4f009d5f...`; their records
+/// are not in the repository, and the cut of `0.3.0-rc.3` records them.
+///
 /// **#500's freeze (speaker labels): 0.3.0 development freeze, written at #500's merge rebase onto `main` at
 /// `25ab0407` (2026-11-18):** `references/commands.md` gains the rows `transcript speakers` (free) and `transcript
 /// name-speaker` (explicit), so only the `skill` component moved, `14b6ddd6...` (M5b's) to `5ee66624...`, and this
@@ -206,7 +215,7 @@ fn the_committed_freezes_still_hold() -> TestResult {
 /// in `batch-2-rc.3/` and `batch-3-rc.3/`); the first two candidates' was
 /// `1e89b5cc488e7245d1a6d63ec8809c1f8a5c137ee87f5ed05f9b692c2af6e392` (copies in `batch-2-rc.1/` and
 /// `batch-2-rc.2/`).
-const CUT_FREEZE_SHA256: &str = "4f009d5ffb738b631d8dca7237ef1bfb36247b70428a532db408491cab9bbec2";
+const CUT_FREEZE_SHA256: &str = "47b87f56f697c41fed7918e712fafef7168af704f9d3f2a462175b9022640520";
 
 #[test]
 fn the_committed_freezes_are_the_ones_written_at_the_cut() -> TestResult {
