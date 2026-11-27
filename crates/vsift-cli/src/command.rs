@@ -2028,8 +2028,9 @@ mod tests {
     }
 
     /// #629: an agent that cuts the help off after its first lines still reads
-    /// when it may run `watch`, in `-h` and in `--help`, and the assistant's
-    /// part states the same rule before anything else it says.
+    /// when it may run `watch`, in `-h` and in `--help`; the assistant's part
+    /// states the same rule before anything else it says, and plain `vsift`
+    /// states it too.
     #[test]
     fn a_cut_off_help_still_says_when_an_assistant_may_run_watch()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -2064,6 +2065,20 @@ mod tests {
             "only if the user asked for the files",
         ] {
             assert!(opening.contains(needle), "{needle}: {opening}");
+        }
+
+        // Plain `vsift`, the shortest screen, offers the action too: it gives
+        // the rule and sends an assistant to the help.
+        let bare = BARE_HELP
+            .lines()
+            .find(|line| line.contains("AI assistants:"))
+            .ok_or("plain vsift has no line for assistants")?;
+        for needle in [
+            "vsift <video>",
+            "only if the user asked",
+            "read vsift --help",
+        ] {
+            assert!(bare.contains(needle), "plain vsift: {bare}");
         }
         Ok(())
     }
