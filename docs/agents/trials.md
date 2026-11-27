@@ -1104,6 +1104,18 @@ the same (`4f009d5f...`). **No batch ran on `0.3.0-rc.1`,** so both folders stil
 (`-Version 0.3.0-rc.2`, batch 3 with `-AllowGraderChange`, on the capped API keys) or a waiver of RQ-15 and RQ-16 for `0.3.0` are the maintainer's decision
 ([`release.md`](../operations/release.md) 6.25).
 
+### The freeze of `0.3.0-rc.3` (#628, 2026-11-27)
+
+**The freeze is written again, on purpose, for the next candidate, `0.3.0-rc.3`.** Batch 2 on `0.3.0-rc.2` missed its compact gate (#628): two compact Sonnet runs of
+`sec-t02-f12-webvtt` finished and retained a valid draft with `handoff finish`, then replied with a summary or rewritten prose instead of the checked report. The skill's REPORT step,
+CLOSE_OR_RETAIN's stop, `references/handoff.md`, `references/commands.md` and the six workflows now say that the reply is that checked report, whole and unchanged
+([`skill.md`](skill.md), "The change for `0.3.0-rc.3`"). `freeze write --commit 0372d2ad7baa1213b3a64db831ad1ac9890f7d62` (the head of `release/0.3.x` the fix branched from, tag
+`v0.3.0-rc.2`) gave the `skill` digest `7190955a1cabf4407023d5f652338912ec31023c429e54bb007ac9b333740456` (it was `5ee66624...`) and the whole-freeze digest
+`47b87f56f697c41fed7918e712fafef7168af704f9d3f2a462175b9022640520` (it was `4f009d5f...`); `grader`, `scenarios`, `holdout`, `cold`, `settings` and `truth` are unchanged. The
+fix's two pull requests, into `release/0.3.x` and into `main`, carry the same bytes in `batch-2/freeze.json` and `batch-3/freeze.json`, both `freeze check` runs answer `nothing
+frozen has changed`, and `committed_freeze` pins the new value. `0.3.0-rc.2`'s batch records are not in the repository; the cut of `0.3.0-rc.3` records them and moves nothing
+here. No trial ran for this change: `0.3.0-rc.3`'s batches 2 and 3 are its test.
+
 ## Usage capture (P14)
 
 P12 recorded no tokens. Each record now carries `reported_usage`: input, output, cached and cache-write tokens,

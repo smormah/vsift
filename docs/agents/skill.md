@@ -135,7 +135,9 @@ select the skill; the user can also name it.
 - **Reporting.** Every stop, including a missing tool, an expired session or an
   exhausted budget, ends with the handoff as the final message: one `vsift-handoff`
   block, never a file, with no web address, Markdown link or local path (added
-  2026-09-29 after the diagnostic passes). `SKILL.md`'s skeleton shows one filled-in
+  2026-09-29 after the diagnostic passes). After `handoff finish` the reply is that
+  checked report, whole and unchanged, never a summary or a rewrite (#628,
+  2026-11-27). `SKILL.md`'s skeleton shows one filled-in
   claim, a segment and a frame citation and one untrusted instruction, and says what a
   stop before any evidence holds (2026-09-30, issue #218: compact models had invented
   the claim's shape from an empty list). Each claim names its subject and value and
@@ -644,6 +646,32 @@ unknown, which the skill says. **Agents ran this text once, in batch 2 on `0.2.2
   while those scenarios still require `transcript.retranscribe`. That is a gap in the scenarios, not a regression of
   this change; a separate cut item (S1) brings the scenarios in step, and A-09 and H-01 get the matching check so a
   needless re-transcription cannot pass them. Cost by the client's own estimate: $7.76.
+
+## The change for `0.3.0-rc.3`: the reply is the checked report (#628, 2026-11-27)
+
+In batch 2 on `0.3.0-rc.2`, `sec-t02-f12-webvtt` on Sonnet 5.5 (compact) failed 2 runs of 2, the reserve included,
+and the compact regression gate came to 4 of 6 pooled against 90%. In both runs `vsift handoff finish --retain`
+succeeded on a valid draft; the final reply was then once a short summary ("the full report lists each one") and
+once rewritten prose with its own headings, neither with a `vsift-handoff` block. Before M5b the closing step was
+`handoff check`, and sending plainly followed it; since M5b `handoff finish` also retains or closes, so the step can
+read as done once that command succeeds. This is the likely cause, not a proven one: `0.3.0-rc.3`'s batches test it.
+
+| Place | Before | Now |
+| --- | --- | --- |
+| REPORT, the command | "**Then run `vsift handoff finish` on your draft once, fix what it reports, then send**: your whole message as `<report>`, in bash or sh exactly so, …" | "**Then run `vsift handoff finish` on your draft once**, your whole message in place of `<report>`, in bash or sh exactly so, … Fix what it reports." |
+| REPORT, after the command | (nothing) | "**Then your reply is that checked report, whole and unchanged**, `vsift-handoff` block included: never a summary, a rewrite or a pointer to it. The command does not send it." |
+| REPORT, stop | "**Stop when** the handoff is written." | "**Stop when** the checked report is your reply." |
+| CLOSE_OR_RETAIN, stop | "… stated in the handoff." | "… stated in the handoff you reply with." |
+| `references/handoff.md`, "Before you send it" | "… and fix what it reports." | adds "Then your reply is that checked text, whole and unchanged, never a summary or a rewrite: the command does not send it." |
+| `references/commands.md`, "Checking the draft" | "The check never repeats your text." | "The check never repeats or sends your text: your reply is the checked message, whole and unchanged." |
+| the six workflows | "fix what it reports, then send it." | "fix what it reports, then send it, unchanged, as your reply." |
+
+`references/lifecycle.md` was read for the same ambiguity and needs no change: it names `handoff finish` only as
+where the flags go. `SKILL.md` grew by 201 bytes and 35 words, to 18,498 of the 18,500 its guard allows (two lines
+more). The plugin copy was copied again, and the guard
+`the_reply_after_handoff_finish_is_the_checked_report` holds the new wording in REPORT, CLOSE_OR_RETAIN, both
+references and every workflow, and the old wording's absence. The `skill` freeze component moved ([trials.md](trials.md),
+"The freeze of `0.3.0-rc.3`"). No agent has run this text.
 
 ## Keeping it in step with the CLI
 

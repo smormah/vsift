@@ -89,4 +89,4 @@ vsift handoff skeleton <session> --question "<question>" --json
 - At most 50 claims: with more items, keep the 50 of highest priority, end `partial`, and give the
   number left out in a gap's note. Never list the rest in prose.
 - Check the whole message once with `vsift handoff check --json`, which reads it from standard input
-  (with the skill, in a form of its REPORT state), fix what it reports, then send it.
+  (with the skill, in a form of its REPORT state), fix what it reports, then send it, unchanged, as your reply.

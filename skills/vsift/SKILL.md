@@ -243,9 +243,9 @@ vsift transcript retranscribe <session> --from <from-us> --to <to-us> --operatio
   evidence appears only in the Markdown, as `hxxps://...` inside a code span, and the JSON never holds an address,
   not even a defanged one: it describes the link; no other address, Markdown link, absolute path, drive letter or
   home folder; a retained bundle is "the folder you named".
-- **Then run `vsift handoff finish` on your draft once, fix what it reports, then send**: your whole message as
-  `<report>`, in bash or sh exactly so, CLOSE_OR_RETAIN's flag before `--json`; it checks the draft against your
-  session, then retains or closes (no session: `vsift handoff check --json`). PowerShell, long reports: commands.md.
+- **Then run `vsift handoff finish` on your draft once**, your whole message in place of `<report>`, in bash or sh
+  exactly so, CLOSE_OR_RETAIN's flag before `--json`; it checks the draft against your session, then retains or
+  closes (no session: `vsift handoff check --json`). PowerShell, long reports: commands.md. Fix what it reports.
 
 ```sh
 vsift handoff finish <session> --json <<'VSIFT_HANDOFF'
@@ -253,7 +253,9 @@ vsift handoff finish <session> --json <<'VSIFT_HANDOFF'
 VSIFT_HANDOFF
 ```
 
-- **Stop when** the handoff is written.
+- **Then your reply is that checked report, whole and unchanged**, `vsift-handoff` block included: never a
+  summary, a rewrite or a pointer to it. The command does not send it.
+- **Stop when** the checked report is your reply.
 
 ### 8. CLOSE_OR_RETAIN
 
@@ -262,7 +264,7 @@ VSIFT_HANDOFF
   the folder the user named (`--include-source` only if they asked for the video): retain after your last evidence
   command, and never cite evidence you extract after it. `data.finished` false: fix, run once more, else (or to
   renew or clean) see [references/lifecycle.md](references/lifecycle.md).
-- **Stop when** the lifecycle action is done and stated in the handoff.
+- **Stop when** the lifecycle action is done and stated in the handoff you reply with.
 
 ## Reading results and errors
 

@@ -1160,10 +1160,87 @@ fn the_handoff_check_forms_are_the_only_input_exception() -> Result<(), String> 
         problems.add("SKILL.md's REPORT does not show the POSIX handoff finish form".to_owned());
     }
     let flat = flattened_skill_md()?;
-    if !flat
-        .contains("run `vsift handoff finish` on your draft once, fix what it reports, then send")
-    {
+    if !flat.contains("run `vsift handoff finish` on your draft once**") {
         problems.add("SKILL.md's REPORT does not say to finish the draft once".to_owned());
+    }
+    problems.into_result()
+}
+
+/// After `handoff finish` the reply is the checked report itself (#628). In
+/// batch 2 on `0.3.0-rc.2` two compact runs finished and retained a valid
+/// draft, then replied with a summary and with rewritten prose, neither
+/// holding the `vsift-handoff` block. REPORT read "fix what it reports, then
+/// send: your whole message as `<report>`", which can mean sending the
+/// report to the command, and stopped "when the handoff is written", which
+/// `handoff finish` alone satisfies. REPORT, `CLOSE_OR_RETAIN`, `handoff.md`,
+/// `commands.md` and every workflow now say that the reply is the checked
+/// text, whole and unchanged, and the old wording is gone.
+#[test]
+fn the_reply_after_handoff_finish_is_the_checked_report() -> Result<(), String> {
+    let mut problems = Problems::default();
+    let text = read_text(&skill_directory().join("SKILL.md"))?;
+    let start = text.find("### 7. REPORT").ok_or("SKILL.md lacks REPORT")?;
+    let end = text[start..]
+        .find("## Reading results and errors")
+        .map(|length| start + length)
+        .ok_or("SKILL.md lacks the section after CLOSE_OR_RETAIN")?;
+    let closing = text[start..end]
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for needle in [
+        "your whole message in place of `<report>`",
+        "**Then your reply is that checked report, whole and unchanged**, `vsift-handoff` block included",
+        "never a summary, a rewrite or a pointer to it. The command does not send it.",
+        "**Stop when** the checked report is your reply.",
+        "stated in the handoff you reply with.",
+    ] {
+        if !closing.contains(needle) {
+            problems.add(format!("REPORT or CLOSE_OR_RETAIN does not say {needle:?}"));
+        }
+    }
+    let flat = flattened_skill_md()?;
+    for retired in [
+        "then send**: your whole message as",
+        "**Stop when** the handoff is written.",
+    ] {
+        if flat.contains(retired) {
+            problems.add(format!("SKILL.md still says {retired:?}"));
+        }
+    }
+    let references = [
+        (
+            "references/handoff.md",
+            "Then your reply is that checked text, whole and unchanged",
+        ),
+        (
+            "references/commands.md",
+            "your reply is the checked message, whole and unchanged",
+        ),
+    ];
+    for (name, needle) in references {
+        let flat_reference = read_text(&skill_directory().join(name))?
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !flat_reference.contains(needle) {
+            problems.add(format!("{name} does not say {needle:?}"));
+        }
+    }
+    for path in workflow_files()? {
+        let flat_workflow = read_text(&path)?
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !flat_workflow
+            .to_lowercase()
+            .contains("fix what it reports, then send it, unchanged, as your reply.")
+        {
+            problems.add(format!(
+                "{} does not send the checked report unchanged as the reply",
+                path.display()
+            ));
+        }
     }
     problems.into_result()
 }
