@@ -9,6 +9,11 @@
 //! the test. The runner's life is bounded ([`RUNNER_LIFETIME`]) and it ends as
 //! soon as the test creates the `stop` file, so no test leaves it behind.
 //!
+//! The runner works in this executable's own folder, as `job start`'s runner
+//! does (#469), never in the scratch folder: it lives a moment after it
+//! releases its lock, and Windows cannot remove the working folder of a live
+//! process (#636). It reaches the scratch folder only through [`ROLE`].
+//!
 //! The CLI-level test of the same defect (`job start` answering within
 //! seconds while a queued job's runner waits behind a live one) is
 //! `a_captured_queued_job_start_answers_while_its_runner_waits` in
@@ -19,7 +24,7 @@ use std::{
     error::Error,
     ffi::OsString,
     fs::{self, File},
-    io::{self, BufRead as _, BufReader},
+    io::{self, BufRead as _, BufReader, Write as _},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc::{self, Receiver, RecvTimeoutError},
@@ -74,7 +79,16 @@ impl Drop for Scratch {
             thread::sleep(Duration::from_millis(20));
         }
         let _ = wait_for_end(&self.file("runner.lock"));
-        let _ = fs::remove_dir_all(&self.0);
+        if let Err(error) = fs::remove_dir_all(&self.0) {
+            // Written to the stream itself: the test harness captures
+            // `eprintln!` and shows it only for a failed test, and a folder
+            // can be left behind by a test that passed.
+            let _ = writeln!(
+                io::stderr(),
+                "could not remove the scratch folder {}: {error}",
+                self.0.display()
+            );
+        }
     }
 }
 
@@ -98,14 +112,18 @@ fn role_runner() -> TestResult {
 /// does, reports its detachment on its standard output, and exits.
 #[test]
 fn role_caller() -> TestResult {
-    let Some(folder) = env::var_os(ROLE).map(PathBuf::from) else {
+    if env::var_os(ROLE).is_none() {
         return Ok(());
-    };
+    }
     let arguments: Vec<OsString> = ["--exact", "role_runner", "--nocapture"]
         .into_iter()
         .map(OsString::from)
         .collect();
-    let runner = launch_detached(&env::current_exe()?, &arguments, &folder)?;
+    let executable = env::current_exe()?;
+    let working_directory = executable
+        .parent()
+        .ok_or("the test executable has no folder")?;
+    let runner = launch_detached(&executable, &arguments, working_directory)?;
     println!("{REPORT}{}", runner.detachment().identifier());
     Ok(())
 }
