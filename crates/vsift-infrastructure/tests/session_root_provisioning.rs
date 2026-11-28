@@ -18,7 +18,7 @@ use std::{
 
 use vsift_infrastructure::{
     FilesystemSessionStore, SessionRootError, SessionRootProvisioning, SessionStoreOpenError,
-    open_session_root, open_session_root_within,
+    open_session_root_within,
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -28,20 +28,28 @@ const CHILD_GATE: &str = "VSIFT_ROOT_RACE_GATE";
 const CHILD_MODE: &str = "VSIFT_ROOT_RACE_MODE";
 const CREATORS: usize = 6;
 const READERS: usize = 2;
-/// How long the racing openers of the two race tests wait for the creator.
+/// How long the openers in these tests wait for a creator.
 ///
 /// The product waits five seconds and then refuses with the documented `BUSY`
 /// (`open_session_root`; the bound itself is tested with small waits in the
 /// store's unit tests). A creator that was not scheduled for longer than that
 /// in a test with every CPU kept busy made one opener give up in 1 of 1,500
-/// repetitions on a hosted Windows runner (#312), so these tests, which assert
-/// that the race converges on one root, wait far longer than the product does
-/// (as `open_session_root_within` says a test whose creators may be slowed
-/// can, #144). A creator that really never finishes still fails them.
+/// repetitions on a hosted Windows runner (#312), so the race tests, which
+/// assert that the race converges on one root, wait far longer than the product
+/// does (as `open_session_root_within` says a test whose creators may be slowed
+/// can, #144). A creator that really never finishes still fails them. The
+/// rejection tests open with the same wait, so that one spent waiting for a
+/// creator shows in their elapsed time ([`REJECTION_BOUND`]).
 const RACE_WAIT: Duration = Duration::from_secs(60);
-/// Well under the five-second provisioning wait: a rejection that arrives
-/// sooner than this was not spent waiting for a creator.
-const PROMPT: Duration = Duration::from_secs(4);
+/// What a rejection must take less than: half of [`RACE_WAIT`].
+///
+/// A rejected root has no creator at work, so the product must not wait for
+/// one. A rejection that did wait takes at least [`RACE_WAIT`] and fails this
+/// bound, while a starved runner has the whole bound to spare. A bound of a few
+/// seconds measured the runner and not the product: with every CPU kept busy,
+/// correct rejections on a hosted Windows runner took longer than the earlier
+/// four seconds (#519, #627).
+const REJECTION_BOUND: Duration = Duration::from_secs(RACE_WAIT.as_secs() / 2);
 const MARKER: &[u8] =
     br#"{"schema_version":1,"application":"vsift","layout_version":1,"admission_capacity":4}"#;
 
@@ -286,20 +294,25 @@ fn concurrent_threads_create_one_root_and_every_one_adopts_it() -> TestResult {
     assert_single_valid_root(&scratch)
 }
 
+/// Asserts that both kinds of open reject `root` with `expected`, and without
+/// waiting for a creator.
 fn assert_rejected_promptly(root: &Path, expected: SessionStoreOpenError) {
     for provisioning in [
         SessionRootProvisioning::ExistingOnly,
         SessionRootProvisioning::CreateIfMissing,
     ] {
         let started = Instant::now();
-        let result = open_session_root(root, provisioning);
+        let result = open_session_root_within(root, provisioning, RACE_WAIT);
         let elapsed = started.elapsed();
         let described = outcome(&result);
         assert!(
             matches!(result, Err(SessionRootError::Store(error)) if error == expected),
             "unexpected outcome: {described}"
         );
-        assert!(elapsed < PROMPT, "rejection waited for a creator");
+        assert!(
+            elapsed < REJECTION_BOUND,
+            "rejection waited for a creator: it took {elapsed:?}, the bound is {REJECTION_BOUND:?}"
+        );
     }
 }
 
